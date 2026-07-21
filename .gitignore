@@ -1,6 +1,7 @@
-# IRIP 平台仓库忽略规则（Python + Node + IDE + 环境产物）
+# IRIP 平台仓库忽略规则（Python + Node + Docker + 密钥 + IDE + 系统）
+# 原则：依赖可重建的、含密钥的、机器/系统生成的，一律不入库。
 
-# ---- Python ----
+## ===== Python =====
 __pycache__/
 *.py[cod]
 *$py.class
@@ -17,26 +18,66 @@ ENV/
 .coverage.*
 htmlcov/
 coverage.xml
+coverage.lcov
 *.egg-info/
 .eggs/
+*.egg
 dist/
 build/
 pip-wheel-metadata/
+pip-log.txt
+.tox/
+.nox/
+.hypothesis/
+.ipynb_checkpoints/
 
-# ---- Node / 前端 ----
+## ===== Node / 前端（apps/web）=====
 node_modules/
 apps/web/dist/
 apps/web/coverage/
 apps/web/playwright-report/
 apps/web/test-results/
+apps/web/.vite/
+.vite/
 .pnpm-store/
+.npm
+.yarn/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
 
-# ---- 环境配置（真实密钥绝不入库）----
+## ===== 密钥 / 证书 / 凭据（绝不入库）=====
 .env
 .env.local
 .env.*.local
+.env.secret
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+secrets/
+credentials*
+*.secret
 
-# ---- IDE / 编辑器 ----
+## ===== Docker / 本地覆盖 =====
+compose.override.yml
+docker-compose.override.yml
+.docker/
+
+## ===== 数据库 / 本地数据 =====
+*.sqlite3
+*.sqlite
+*.db
+data/
+tmp/
+
+## ===== 测试 / 覆盖率 =====
+.pytest_cache/
+.nyc_output/
+
+## ===== IDE / 编辑器 =====
 .idea/
 .vscode/
 *.swp
@@ -44,11 +85,18 @@ apps/web/test-results/
 *.sublime-project
 *.sublime-workspace
 
-# ---- 操作系统 ----
+## ===== 操作系统 =====
 .DS_Store
+._*
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
-# ---- 本地数据/临时产物 ----
+## ===== 日志 / 临时 =====
 *.log
-tmp/
-data/
+logs/
