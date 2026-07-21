@@ -1,0 +1,245 @@
+"""实验室数据仓库：Department 的数据库操作。
+
+所有方法接受 AsyncSession 参数，由调用方（DepartmentService）管理事务边界。
+查询使用乐观锁（lock_version）和条件 UPDATE 保证并发安全。
+
+关键操作（docs/arch-department.md §3.9 类图）：
+- insert: INSERT department；
+- select_by_id: SELECT department by id；
+- select_by_org_and_code: SELECT department by (organization_id, code) — 编码唯一性校验；
+- select_list: 分页列表 + member_count 聚合（LEFT JOIN + GROUP BY + COUNT）；
+- update: UPDATE with lock_version（乐观锁，不含 code 列）；
+- update_status: UPDATE status with lock_version（乐观锁，软禁用）。
+"""
+
+from datetime import datetime
+from uuid import UUID
+
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from packages.departments.entities import AppUserDepartment, Department
+
+
+class DepartmentRepository:
+    """实验室持久化仓库。
+
+    所有方法为纯数据访问，不含业务逻辑——业务编排由 DepartmentService 负责。
+    """
+
+    @staticmethod
+    async def insert(session: AsyncSession, dept: Department) -> Department:
+        """INSERT 实验室记录。
+
+        Args:
+            session: 异步会话（事务由调用方管理）。
+            dept: 待插入的 Department 实体。
+
+        Returns:
+            Department: 插入后的实体（含数据库生成的默认值）。
+        """
+        session.add(dept)
+        await session.flush()
+        return dept
+
+    @staticmethod
+    async def select_by_id(
+        session: AsyncSession, department_id: UUID
+    ) -> Department | None:
+        """按 ID 查询实验室。
+
+        Args:
+            session: 异步会话。
+            department_id: 实验室 UUID。
+
+        Returns:
+            Department | None: 实验室实体，不存在返回 None。
+        """
+        result = await session.execute(
+            sa.select(Department).where(Department.id == department_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def select_by_org_and_code(
+        session: AsyncSession,
+        organization_id: UUID,
+        code: str,
+    ) -> Department | None:
+        """按组织 ID 和编码查询实验室（编码唯一性校验）。
+
+        Args:
+            session: 异步会话。
+            organization_id: 组织 ID。
+            code: 实验室编码。
+
+        Returns:
+            Department | None: 实验室实体，不存在返回 None。
+        """
+        result = await session.execute(
+            sa.select(Department).where(
+                Department.organization_id == organization_id,
+                Department.code == code,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def select_list(
+        session: AsyncSession,
+        organization_id: UUID,
+        status: str | None = None,
+        cursor_sort_order: int | None = None,
+        cursor_created_at: datetime | None = None,
+        cursor_id: UUID | None = None,
+        limit: int = 20,
+    ) -> list[tuple[Department, int]]:
+        """分页查询实验室列表（含成员数聚合）。
+
+        通过 LEFT JOIN app_user_department + GROUP BY + COUNT 一次查询返回
+        每个实验室及其成员数，避免 N+1。
+
+        排序：sort_order ASC, created_at ASC, id ASC。
+        Keyset 分页：cursor 编码 (sort_order, created_at, id)。
+
+        Args:
+            session: 异步会话。
+            organization_id: 组织 ID（过滤条件）。
+            status: 状态筛选（None = 不过滤，"active" / "disabled"）。
+            cursor_sort_order: 游标 sort_order（None = 第一页）。
+            cursor_created_at: 游标 created_at（None = 第一页）。
+            cursor_id: 游标 id（None = 第一页）。
+            limit: 每页数量。
+
+        Returns:
+            list[tuple[Department, int]]: (Department, member_count) 列表。
+        """
+        member_count = sa.func.count(AppUserDepartment.department_id).label(
+            "member_count"
+        )
+
+        query = (
+            sa.select(Department, member_count)
+            .select_from(Department)
+            .outerjoin(
+                AppUserDepartment,
+                AppUserDepartment.department_id == Department.id,
+            )
+            .where(Department.organization_id == organization_id)
+            .group_by(Department.id)
+            .order_by(
+                Department.sort_order.asc(),
+                Department.created_at.asc(),
+                Department.id.asc(),
+            )
+            .limit(limit)
+        )
+
+        if status is not None:
+            query = query.where(Department.status == status)
+
+        # Keyset 分页条件
+        if (
+            cursor_sort_order is not None
+            and cursor_created_at is not None
+            and cursor_id is not None
+        ):
+            query = query.where(
+                sa.or_(
+                    Department.sort_order > cursor_sort_order,
+                    sa.and_(
+                        Department.sort_order == cursor_sort_order,
+                        Department.created_at > cursor_created_at,
+                    ),
+                    sa.and_(
+                        Department.sort_order == cursor_sort_order,
+                        Department.created_at == cursor_created_at,
+                        Department.id > cursor_id,
+                    ),
+                )
+            )
+
+        result = await session.execute(query)
+        rows = result.all()
+        return [
+            (row[0], int(row[1])) for row in rows
+        ]
+
+    @staticmethod
+    async def update(
+        session: AsyncSession,
+        department_id: UUID,
+        display_name: str,
+        description: str | None,
+        sort_order: int,
+        lock_version: int,
+    ) -> Department | None:
+        """UPDATE 实验室（乐观锁，不含 code 列）。
+
+        UPDATE department SET display_name=?, description=?, sort_order=?,
+        updated_at=now(), lock_version=lock_version+1
+        WHERE id=? AND lock_version=?
+
+        Args:
+            session: 异步会话。
+            department_id: 实验室 UUID。
+            display_name: 新显示名。
+            description: 新描述。
+            sort_order: 新排序权重。
+            lock_version: 客户端持有的乐观锁版本号。
+
+        Returns:
+            Department | None: 更新后的实体；None 表示 lock_version 不匹配或不存在。
+        """
+        result = await session.execute(
+            sa.update(Department)
+            .values(
+                display_name=display_name,
+                description=description,
+                sort_order=sort_order,
+                updated_at=sa.func.now(),
+                lock_version=Department.lock_version + 1,
+            )
+            .where(
+                Department.id == department_id,
+                Department.lock_version == lock_version,
+            )
+            .returning(Department)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def update_status(
+        session: AsyncSession,
+        department_id: UUID,
+        status: str,
+        lock_version: int,
+    ) -> Department | None:
+        """UPDATE 实验室状态（乐观锁，软禁用/启用）。
+
+        UPDATE department SET status=?, updated_at=now(), lock_version=lock_version+1
+        WHERE id=? AND lock_version=?
+
+        Args:
+            session: 异步会话。
+            department_id: 实验室 UUID。
+            status: 新状态（"active" / "disabled"）。
+            lock_version: 客户端持有的乐观锁版本号。
+
+        Returns:
+            Department | None: 更新后的实体；None 表示 lock_version 不匹配或不存在。
+        """
+        result = await session.execute(
+            sa.update(Department)
+            .values(
+                status=status,
+                updated_at=sa.func.now(),
+                lock_version=Department.lock_version + 1,
+            )
+            .where(
+                Department.id == department_id,
+                Department.lock_version == lock_version,
+            )
+            .returning(Department)
+        )
+        return result.scalar_one_or_none()

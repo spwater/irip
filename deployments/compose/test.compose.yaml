@@ -1,0 +1,49 @@
+# IRIP 本地开发/测试 Compose
+# 启动 PostgreSQL、MinIO、Redis 测试容器。
+# 端口映射避免与本机服务冲突：PG 55432, MinIO 59000/59001, Redis 56379。
+# 用法：docker compose -f deployments/compose/test.compose.yaml up -d
+
+services:
+  postgres-test:
+    build:
+      context: .
+      dockerfile: postgres.Dockerfile
+    environment:
+      POSTGRES_USER: irip
+      POSTGRES_PASSWORD: irip_dev_password
+      POSTGRES_DB: irip_test
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U irip -d irip_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  minio-test:
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: irip
+      MINIO_ROOT_PASSWORD: irip_dev_password
+    ports:
+      - "59000:9000"
+      - "59001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis-test:
+    image: docker.m.daocloud.io/redis:7-alpine
+    ports:
+      - "56379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped

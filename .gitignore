@@ -1,0 +1,54 @@
+# IRIP 平台仓库忽略规则（Python + Node + IDE + 环境产物）
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+
+# ---- Node / 前端 ----
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+apps/web/playwright-report/
+apps/web/test-results/
+.pnpm-store/
+
+# ---- 环境配置（真实密钥绝不入库）----
+.env
+.env.local
+.env.*.local
+
+# ---- IDE / 编辑器 ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# ---- 操作系统 ----
+.DS_Store
+Thumbs.db
+
+# ---- 本地数据/临时产物 ----
+*.log
+tmp/
+data/

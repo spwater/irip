@@ -1,0 +1,109 @@
+%% IRIP 增量架构 — 机构/实验室管理类图
+%% 作者：高见远（Gao, 架构师）
+%% 日期：2026-07-21
+
+classDiagram
+    class DepartmentStatus {
+        <<enumeration>>
+        ACTIVE
+        DISABLED
+    }
+
+    class Department {
+        +UUID id
+        +UUID organization_id
+        +str code
+        +str display_name
+        +str~|None~ description
+        +str status
+        +int sort_order
+        +datetime created_at
+        +datetime updated_at
+        +int lock_version
+    }
+
+    class AppUserDepartment {
+        +UUID user_id
+        +UUID department_id
+        +bool is_primary
+        +datetime created_at
+    }
+
+    class DepartmentRepository {
+        +insert(session, dept) Department
+        +select_by_id(session, id) Department~|None~
+        +select_by_org_and_code(session, org_id, code) Department~|None~
+        +select_list(session, org_id, status, cursor, limit) list
+        +update(session, dept) Department
+        +update_status(session, id, status, lock_version) Department~|None~
+        +count_members(session, department_ids) dict
+    }
+
+    class DepartmentService {
+        -factory async_sessionmaker
+        -org_id UUID
+        -clock Clock
+        +create(code, display_name, description, sort_order) Department
+        +list(status, cursor, limit) DepartmentListResponse
+        +get(department_id) Department
+        +update(department_id, display_name, description, sort_order, lock_version) Department
+        +set_status(department_id, status, lock_version) Department
+    }
+
+    class UserDepartmentService {
+        -factory async_sessionmaker
+        -org_id UUID
+        +set_user_departments(user_id, department_ids, primary_id) None
+        +get_user_departments(user_id) list~UserDepartmentItem~
+        +get_department_users(department_id) list~DepartmentUserItem~
+    }
+
+    class ResourceRef {
+        +UUID organization_id
+        +UUID~|None~ object_id
+        +str resource_type
+        +UUID~|None~ department_id
+    }
+
+    class ScopeGrant {
+        +UUID id
+        +UUID~|None~ user_id
+        +UUID~|None~ role_id
+        +UUID organization_id
+        +UUID~|None~ object_root_id
+        +UUID~|None~ department_id
+        +str resource_type
+        +str action
+    }
+
+    class AuthorizationService {
+        +require(user, action, resource) None
+        +has_grant(user, action, resource) bool
+    }
+
+    class Permission {
+        +DEPARTMENT_MANAGE str
+        +DEPARTMENT_READ str
+        +all() list~str~
+    }
+
+    class BUILTIN_ROLES {
+        +platform_administrator → all permissions
+        +standard_owner → +department:read
+        +data_steward → +department:read
+        +researcher → +department:read
+        +model_engineer → +department:read
+        +reviewer → +department:read
+        +read_only_user → +department:read
+    }
+
+    Department --> DepartmentStatus : status
+    AppUserDepartment --> Department : department_id FK
+    AppUserDepartment --> AppUser : user_id FK
+    ScopeGrant --> Department : department_id FK (nullable, P1)
+    DepartmentService --> DepartmentRepository : uses
+    DepartmentService --> Department : manages
+    UserDepartmentService --> AppUserDepartment : manages
+    AuthorizationService --> ScopeGrant : queries
+    AuthorizationService --> ResourceRef : checks
+    Permission --> BUILTIN_ROLES : referenced by

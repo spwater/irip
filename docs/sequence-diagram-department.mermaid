@@ -1,0 +1,128 @@
+%% IRIP 增量架构 — 机构/实验室管理时序图
+%% 作者：高见远（Gao, 架构师）
+%% 日期：2026-07-21
+
+%% ===== 4.1 创建实验室（P0 — D2）=====
+
+sequenceDiagram
+    actor Admin as 管理员
+    participant W as React Web
+    participant API as FastAPI /departments
+    participant DS as DepartmentService
+    participant DR as DepartmentRepository
+    participant DB as PostgreSQL
+    participant AUD as AuditRecorder
+
+    Admin->>W: 点击"新建实验室"
+    W->>W: 弹出 Modal 表单
+    Admin->>W: 填写 code/display_name/description/sort_order
+    W->>API: POST /api/v1/departments
+    API->>API: require_permission("department:manage") ✅
+    API->>DS: create(code, display_name, description, sort_order)
+    DS->>DR: select_by_org_and_code(org_id, code)
+    DR->>DB: SELECT department WHERE organization_id=? AND code=?
+    alt 编码已存在
+        DS-->>API: AppError(conflict, "实验室编码已存在")
+        API-->>W: 409 {error:{code:"conflict"}}
+    else 编码可用
+        DS->>DS: new_id() 生成 UUID
+        DS->>DR: insert(department)
+        DR->>DB: INSERT INTO department (...) VALUES (...)
+        DS->>AUD: record("department.created", resource_id=dept.id)
+        DS-->>API: Department
+        API-->>W: 201 DepartmentResponse
+    end
+    W->>W: 关闭 Modal + 刷新列表
+
+%% ===== 4.2 编辑/禁用实验室（P0 — D2/D4）=====
+
+sequenceDiagram
+    actor Admin as 管理员
+    participant W as React Web
+    participant API as FastAPI /departments
+    participant DS as DepartmentService
+    participant DR as DepartmentRepository
+    participant DB as PostgreSQL
+
+    Note over Admin,DB: 场景 A：编辑实验室名称/描述/排序
+
+    Admin->>W: 点击行"编辑"按钮
+    W->>W: 弹出 Modal（code 字段只读锁定）
+    Admin->>W: 修改 display_name/description/sort_order
+    W->>API: PATCH /api/v1/departments/{id}
+    API->>API: require_permission("department:manage") ✅
+    API->>DS: update(id, display_name, description, sort_order, lock_version)
+    DS->>DR: update(department)
+    DR->>DB: UPDATE department SET display_name=?, description=?, sort_order=?, updated_at=now(), lock_version=lock_version+1 WHERE id=? AND lock_version=?
+    alt 影响行数 = 0（lock_version 不匹配）
+        DS-->>API: AppError(conflict, "数据已被修改，请刷新后重试")
+        API-->>W: 409 {error:{code:"conflict"}}
+    else 更新成功
+        DS-->>API: Department (新 lock_version)
+        API-->>W: 200 DepartmentResponse
+    end
+
+    Note over Admin,DB: 场景 B：禁用实验室（软禁用）
+
+    Admin->>W: 点击行"禁用"按钮 → Popconfirm 确认
+    W->>API: PATCH /api/v1/departments/{id}/status
+    API->>API: require_permission("department:manage") ✅
+    API->>DS: set_status(id, "disabled", lock_version)
+    DS->>DR: update_status(id, "disabled", lock_version)
+    DR->>DB: UPDATE department SET status='disabled', updated_at=now(), lock_version=lock_version+1 WHERE id=? AND lock_version=?
+    DS-->>API: Department (status=disabled)
+    API-->>W: 200 DepartmentResponse
+    W->>W: 刷新列表（该行灰色标签）
+
+%% ===== 4.3 用户-实验室关联管理（P1 — D9/D11）=====
+
+sequenceDiagram
+    actor Admin as 管理员
+    participant W as React Web
+    participant API as FastAPI /departments
+    participant UDS as UserDepartmentService
+    participant DB as PostgreSQL
+
+    Note over Admin,DB: 场景 A：查看实验室下用户
+
+    Admin->>W: 点击行"成员"按钮
+    W->>API: GET /api/v1/departments/{id}/users
+    API->>API: require_permission("department:read") ✅
+    API->>UDS: get_department_users(department_id)
+    UDS->>DB: SELECT au.id, au.email, au.display_name, aud.is_primary FROM app_user_department aud JOIN app_user au ON aud.user_id = au.id WHERE aud.department_id = ?
+    UDS-->>API: list[DepartmentUserItem]
+    API-->>W: 200 [users]
+    W->>W: 展开成员管理抽屉
+
+    Note over Admin,DB: 场景 B：添加/移除用户（批量设置）
+
+    Admin->>W: 在抽屉中添加/移除用户
+    W->>API: PUT /api/v1/users/{user_id}/departments
+    API->>API: require_permission("user:manage") ✅
+    API->>UDS: set_user_departments(user_id, department_ids, primary_department_id)
+    UDS->>DB: BEGIN;
+    UDS->>DB: DELETE FROM app_user_department WHERE user_id = ? AND department_id NOT IN (...)
+    UDS->>DB: INSERT INTO app_user_department (user_id, department_id, is_primary) VALUES (...) ON CONFLICT DO NOTHING
+    UDS->>DB: UPDATE app_user_department SET is_primary = (department_id = ?) WHERE user_id = ?
+    UDS->>DB: COMMIT;
+    UDS-->>API: ok
+    API-->>W: 200 {ok: true}
+    W->>W: 刷新抽屉用户列表
+
+%% ===== 4.4 Bootstrap 种子实验室创建（P0 — D7）=====
+
+sequenceDiagram
+    participant BOOT as bootstrap.py
+    participant DB as PostgreSQL
+    participant ENV as 环境变量
+
+    BOOT->>ENV: 读取 IRIP_SEED_DEPARTMENTS
+    alt 环境变量未设置
+        BOOT->>BOOT: logger.info("IRIP_SEED_DEPARTMENTS not set, skipping")
+    else 环境变量已设置
+        BOOT->>BOOT: json.loads(IRIP_SEED_DEPARTMENTS) → [{code, name}, ...]
+        loop 每个种子实验室
+            BOOT->>DB: INSERT INTO department (organization_id, code, display_name, status, sort_order) VALUES (org_id, ?, ?, 'active', ?) ON CONFLICT (organization_id, code) DO NOTHING
+        end
+        BOOT->>BOOT: logger.info("Seeded N departments")
+    end

@@ -1,0 +1,160 @@
+# IRIP 生产编排（全量服务）
+# 用法：docker compose up --build -d
+# 镜像固定 tag（架构文档 §6.3），Docker registry mirror 走 daocloud。
+# 环境变量从 .env 读取。
+
+services:
+  postgres:
+    image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
+      POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:-irip_dev_password}
+      POSTGRES_DB: ${IRIP_DATABASE_NAME:-irip}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${IRIP_DATABASE_USER:-irip} -d ${IRIP_DATABASE_NAME:-irip}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: docker.m.daocloud.io/redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      MINIO_ROOT_PASSWORD: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:-dev_only_insecure_jwt_secret_change_me}
+      IRIP_API_CORS_ORIGINS: ${IRIP_API_CORS_ORIGINS:-http://localhost}
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:-Admin-IRIP-2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:-dev_only_insecure_jwt_secret_change_me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info"]
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:-dev_only_insecure_jwt_secret_change_me}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: deployments/compose/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    restart: unless-stopped
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    command: ["python", "-m", "deployments.compose.bootstrap"]
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:-dev_only_insecure_jwt_secret_change_me}
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:-Admin-IRIP-2026}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  pgdata:
+  miniodata:

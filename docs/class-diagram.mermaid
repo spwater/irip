@@ -1,0 +1,149 @@
+classDiagram
+    class Clock {
+        <<Protocol>>
+        +now() datetime
+    }
+    class SystemClock {
+        +now() datetime
+    }
+    class FixedClock {
+        +instant datetime
+        +now() datetime
+    }
+    Clock <|.. SystemClock
+    Clock <|.. FixedClock
+
+    class AppError {
+        +code str
+        +message str
+        +retryable bool
+        +fields dict
+        +to_dict() dict
+    }
+
+    class User {
+        +UUID id
+        +UUID organization_id
+        +str email
+        +str display_name
+        +str password_hash
+        +str status
+    }
+    class RefreshSession {
+        +UUID id
+        +UUID family_id
+        +UUID user_id
+        +str token_digest
+        +datetime expires_at
+        +datetime revoked_at
+        +UUID replaced_by
+    }
+    class Role {
+        +UUID id
+        +str code
+        +list permissions
+    }
+    class ScopeGrant {
+        +UUID id
+        +UUID user_id
+        +UUID role_id
+        +UUID organization_id
+        +UUID object_root_id
+        +str resource_type
+        +str action
+    }
+    class AuditEvent {
+        +UUID id
+        +datetime occurred_at
+        +UUID actor_user_id
+        +str action
+        +dict payload
+    }
+    class ArtifactBlob {
+        +str sha256
+        +str object_key
+        +int size_bytes
+        +str media_type
+    }
+    class Artifact {
+        +UUID id
+        +str sha256
+        +str filename
+        +str media_type
+        +int size_bytes
+    }
+    class Job {
+        +UUID id
+        +str kind
+        +JobStatus status
+        +dict payload
+        +str idempotency_key
+        +int attempt
+        +str lease_owner
+        +datetime lease_expires_at
+        +dict result
+    }
+    class OutboxEvent {
+        +UUID id
+        +str aggregate_type
+        +UUID aggregate_id
+        +str event_type
+        +dict payload
+        +datetime delivered_at
+    }
+
+    User "1" --> "*" RefreshSession : owns
+    User "*" --> "*" Role : via user_role
+    ScopeGrant --> User : subject
+    ScopeGrant --> Role : subject
+    Job "1" --> "*" OutboxEvent : emits
+    Artifact "*" --> "1" ArtifactBlob : references
+
+    class AuthService {
+        +login(email, password) TokenPair
+        +refresh(refresh_token) TokenPair
+        +logout(refresh_token) None
+    }
+    class AuthBackend {
+        <<Protocol>>
+        +authenticate(credentials) AuthenticatedIdentity
+    }
+    class LocalAuthBackend
+    AuthBackend <|.. LocalAuthBackend
+    AuthService --> AuthBackend
+
+    class AuthorizationService {
+        +require(user, action, resource) None
+    }
+    class AuditRecorder {
+        +record(event) None
+    }
+    class ArtifactService {
+        +put_bytes(data, media_type, filename) ArtifactRef
+        +presign_upload(meta) PresignedURL
+        +presign_download(artifact_id) PresignedURL
+        +verify(artifact_id) bool
+    }
+    class JobService {
+        +accept(kind, payload, idempotency_key) JobRef
+        +request_cancel(job_id, actor_id) JobRef
+        +get(job_id) Job
+    }
+    class OutboxDispatcher {
+        +dispatch_pending() int
+    }
+    class WorkerLease {
+        +acquire(job_id, owner, ttl) bool
+        +heartbeat(job_id, owner) bool
+        +release(job_id, owner) None
+        +reap_expired() int
+    }
+
+    JobService --> OutboxEvent : same-tx insert
+    JobService --> Job
+    AuthorizationService --> ScopeGrant
+    AuditRecorder --> AuditEvent
+    ArtifactService --> Artifact
+    ArtifactService --> ArtifactBlob
+    AuthService --> User
+    AuthService --> RefreshSession
