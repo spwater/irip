@@ -208,9 +208,10 @@ export type Department = {
   created_at: string;
   updated_at: string;
   lock_version: number;
+  parent_id: string | null;
 };
 
-/** 实验室列表项（含成员数） */
+/** 实验室列表项（含成员数、子部门数、仪器数） */
 export type DepartmentListItem = {
   id: string;
   code: string;
@@ -218,6 +219,9 @@ export type DepartmentListItem = {
   status: string;
   sort_order: number;
   member_count: number;
+  parent_id: string | null;
+  children_count: number;
+  equipment_count: number;
 };
 
 /** 实验室分页列表响应 */
@@ -261,6 +265,7 @@ export async function apiCreateDepartment(body: {
   display_name: string;
   description?: string;
   sort_order?: number;
+  parent_id?: string | null;
 }): Promise<Department> {
   const res = await http.post<Department>('/departments', body);
   return res.data;
@@ -273,6 +278,7 @@ export async function apiUpdateDepartment(
     description?: string;
     sort_order?: number;
     lock_version: number;
+    parent_id?: string | null;
   },
 ): Promise<Department> {
   const res = await http.patch<Department>(`/departments/${id}`, body);

@@ -48,14 +48,14 @@ class DepartmentListResult:
     """实验室分页列表结果。
 
     Attributes:
-        items: (Department, member_count) 元组列表。
+        items: (Department, member_count, children_count, equipment_count) 元组列表。
         next_cursor: 下一页游标（base64url 字符串），无更多数据时为 None。
         has_more: 是否还有更多数据。
     """
 
     def __init__(
         self,
-        items: list[tuple[Department, int]],
+        items: list[tuple[Department, int, int, int]],
         next_cursor: str | None,
         has_more: bool,
     ) -> None:
@@ -99,6 +99,7 @@ class DepartmentService:
         display_name: str,
         description: str | None,
         sort_order: int,
+        parent_id: UUID | None = None,
     ) -> Department:
         """创建实验室。
 
@@ -111,6 +112,7 @@ class DepartmentService:
             display_name: 中文显示名。
             description: 描述（可选）。
             sort_order: 排序权重。
+            parent_id: 上级部门 ID（None 表示顶级部门）。
 
         Returns:
             Department: 新创建的实验室实体。
@@ -142,6 +144,7 @@ class DepartmentService:
                 created_at=now,
                 updated_at=now,
                 lock_version=0,
+                parent_id=parent_id,
             )
             return await DepartmentRepository.insert(session, dept)
 
@@ -195,7 +198,7 @@ class DepartmentService:
 
         next_cursor: str | None = None
         if has_more and page_items:
-            last_dept, _ = page_items[-1]
+            last_dept, _, _, _ = page_items[-1]
             next_cursor = _encode_cursor(
                 last_dept.sort_order, last_dept.created_at, last_dept.id
             )
@@ -236,6 +239,7 @@ class DepartmentService:
         description: str | None,
         sort_order: int,
         lock_version: int,
+        parent_id: UUID | None = None,
     ) -> Department:
         """编辑实验室（code 不可修改，乐观锁）。
 
@@ -248,6 +252,7 @@ class DepartmentService:
             description: 新描述。
             sort_order: 新排序权重。
             lock_version: 客户端持有的乐观锁版本号。
+            parent_id: 上级部门 ID（None 表示顶级部门）。
 
         Returns:
             Department: 更新后的实体（含新 lock_version）。
@@ -264,6 +269,7 @@ class DepartmentService:
                 description=description,
                 sort_order=sort_order,
                 lock_version=lock_version,
+                parent_id=parent_id,
             )
             if updated is not None:
                 return updated

@@ -19,6 +19,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.departments.entities import AppUserDepartment, Department
+from packages.equipment.entities import Equipment
 
 
 class DepartmentRepository:
@@ -93,11 +94,12 @@ class DepartmentRepository:
         cursor_created_at: datetime | None = None,
         cursor_id: UUID | None = None,
         limit: int = 20,
-    ) -> list[tuple[Department, int]]:
-        """分页查询实验室列表（含成员数聚合）。
+    ) -> list[tuple[Department, int, int, int]]:
+        """分页查询实验室列表（含成员数、子部门数、仪器数聚合）。
 
         通过 LEFT JOIN app_user_department + GROUP BY + COUNT 一次查询返回
-        每个实验室及其成员数，避免 N+1。
+        每个实验室及其成员数，同时用相关标量子查询计算子部门数和仪器数，
+        避免 N+1。
 
         排序：sort_order ASC, created_at ASC, id ASC。
         Keyset 分页：cursor 编码 (sort_order, created_at, id)。
@@ -112,14 +114,36 @@ class DepartmentRepository:
             limit: 每页数量。
 
         Returns:
-            list[tuple[Department, int]]: (Department, member_count) 列表。
+            list[tuple[Department, int, int, int]]: (Department, member_count,
+            children_count, equipment_count) 列表。
         """
         member_count = sa.func.count(AppUserDepartment.department_id).label(
             "member_count"
         )
 
+        # 子部门数：相关标量子查询，统计 parent_id = department.id 的子部门数量
+        child_dept = Department.__table__.alias("child")
+        children_count = (
+            sa.select(sa.func.count())
+            .select_from(child_dept)
+            .where(child_dept.c.parent_id == Department.__table__.c.id)
+            .correlate(Department.__table__)
+            .scalar_subquery()
+            .label("children_count")
+        )
+
+        # 仪器数：相关标量子查询，统计 department_id = department.id 的设备数量
+        equipment_count = (
+            sa.select(sa.func.count())
+            .select_from(Equipment.__table__)
+            .where(Equipment.__table__.c.department_id == Department.__table__.c.id)
+            .correlate(Department.__table__)
+            .scalar_subquery()
+            .label("equipment_count")
+        )
+
         query = (
-            sa.select(Department, member_count)
+            sa.select(Department, member_count, children_count, equipment_count)
             .select_from(Department)
             .outerjoin(
                 AppUserDepartment,
@@ -162,7 +186,7 @@ class DepartmentRepository:
         result = await session.execute(query)
         rows = result.all()
         return [
-            (row[0], int(row[1])) for row in rows
+            (row[0], int(row[1]), int(row[2]), int(row[3])) for row in rows
         ]
 
     @staticmethod
@@ -173,11 +197,12 @@ class DepartmentRepository:
         description: str | None,
         sort_order: int,
         lock_version: int,
+        parent_id: UUID | None = None,
     ) -> Department | None:
         """UPDATE 实验室（乐观锁，不含 code 列）。
 
         UPDATE department SET display_name=?, description=?, sort_order=?,
-        updated_at=now(), lock_version=lock_version+1
+        parent_id=?, updated_at=now(), lock_version=lock_version+1
         WHERE id=? AND lock_version=?
 
         Args:
@@ -187,6 +212,7 @@ class DepartmentRepository:
             description: 新描述。
             sort_order: 新排序权重。
             lock_version: 客户端持有的乐观锁版本号。
+            parent_id: 上级部门 ID（None 表示顶级部门）。
 
         Returns:
             Department | None: 更新后的实体；None 表示 lock_version 不匹配或不存在。
@@ -197,6 +223,7 @@ class DepartmentRepository:
                 display_name=display_name,
                 description=description,
                 sort_order=sort_order,
+                parent_id=parent_id,
                 updated_at=sa.func.now(),
                 lock_version=Department.lock_version + 1,
             )

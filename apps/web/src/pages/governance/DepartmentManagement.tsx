@@ -24,17 +24,73 @@ import {
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
 
 /**
+ * 树形节点类型：DepartmentListItem + children 数组。
+ */
+type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[] };
+
+/**
  * 实验室管理组件（P0）
  *
  * 功能：
- * - Ant Design Table 列表（编码 / 名称 / 状态 / 成员数 / 操作）
+ * - Ant Design Table 树形列表（编码 / 名称 / 状态 / 成员数 / 子部门数 / 仪器数 / 排序 / 操作）
  * - 按 sort_order + created_at 排序
  * - 顶部"新建实验室"按钮 + 状态筛选 Select
  * - Modal + Form 创建/编辑弹窗（code 编辑时 disabled）
+ * - 新建/编辑可选上级部门（Select 树形选项）
+ * - 编辑时排除自己及子孙防循环引用
  * - Popconfirm 启用/禁用确认
  * - 禁用行灰色标签
  * - 成员管理抽屉（P1，MemberDrawer）
  */
+
+/**
+ * 将扁平列表构建为树形结构。
+ *
+ * @param items 扁平的部门列表项。
+ * @returns 根节点列表（每个节点附带 children 数组）。
+ */
+function buildTree(items: DepartmentListItem[]): DepartmentTreeNode[] {
+  const map = new Map<string, DepartmentTreeNode>();
+  items.forEach((item) => map.set(item.id, { ...item, children: [] }));
+  const roots: DepartmentTreeNode[] = [];
+  map.forEach((item) => {
+    if (item.parent_id && map.has(item.parent_id)) {
+      const parent = map.get(item.parent_id)!;
+      parent.children!.push(item);
+    } else {
+      roots.push(item);
+    }
+  });
+  return roots;
+}
+
+/**
+ * 获取指定部门的所有后代 ID（含自身）。
+ *
+ * 用于编辑时排除自己及子孙作为上级选项，防止循环引用。
+ *
+ * @param items 扁平的部门列表项。
+ * @param id 要查找后代的部门 ID。
+ * @returns 包含该部门及其所有后代 ID 的 Set。
+ */
+function getDescendantIds(
+  items: DepartmentListItem[],
+  id: string,
+): Set<string> {
+  const result = new Set<string>([id]);
+  const queue = [id];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    items.forEach((item) => {
+      if (item.parent_id === current && !result.has(item.id)) {
+        result.add(item.id);
+        queue.push(item.id);
+      }
+    });
+  }
+  return result;
+}
+
 export function DepartmentManagement(): JSX.Element {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
@@ -46,10 +102,13 @@ export function DepartmentManagement(): JSX.Element {
   // ---- 数据查询 ----
   const { data, isLoading } = useQuery({
     queryKey: ['departments', statusFilter],
-    queryFn: () => apiListDepartments({ status: statusFilter }),
+    queryFn: () => apiListDepartments({ status: statusFilter, limit: 100 }),
   });
 
   const items: DepartmentListItem[] = data?.items ?? [];
+
+  // 树形数据
+  const treeData = buildTree(items);
 
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
@@ -70,7 +129,13 @@ export function DepartmentManagement(): JSX.Element {
   const updateMutation = useMutation({
     mutationFn: (params: {
       id: string;
-      body: { display_name: string; description?: string; sort_order: number; lock_version: number };
+      body: {
+        display_name: string;
+        description?: string;
+        sort_order: number;
+        lock_version: number;
+        parent_id?: string | null;
+      };
     }) => apiUpdateDepartment(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
@@ -101,17 +166,28 @@ export function DepartmentManagement(): JSX.Element {
     },
   });
 
+  // ---- 上级部门选项（编辑时排除自己及子孙防循环）----
+  const excludeIds = editingDept
+    ? getDescendantIds(items, editingDept.id)
+    : new Set<string>();
+  const parentOptions = items
+    .filter((item) => !excludeIds.has(item.id))
+    .map((item) => ({
+      value: item.id,
+      label: item.display_name,
+    }));
+
   // ---- 事件处理 ----
 
   const handleCreate = (): void => {
     setEditingDept(null);
     form.resetFields();
-    form.setFieldsValue({ sort_order: 0 });
+    form.setFieldsValue({ sort_order: 0, parent_id: undefined });
     setModalOpen(true);
   };
 
   const handleEdit = async (record: DepartmentListItem): Promise<void> => {
-    // 获取详情以拿到 lock_version + description（列表项不含这两个字段）
+    // 获取详情以拿到 lock_version + description + parent_id（列表项不含这些字段）
     const { apiGetDepartment } = await import('@/api/client');
     const detail = await apiGetDepartment(record.id);
     setEditingDept(record);
@@ -120,6 +196,7 @@ export function DepartmentManagement(): JSX.Element {
       display_name: record.display_name,
       description: detail.description ?? '',
       sort_order: record.sort_order,
+      parent_id: detail.parent_id,
     });
     setModalOpen(true);
   };
@@ -128,8 +205,7 @@ export function DepartmentManagement(): JSX.Element {
     try {
       const values = await form.validateFields();
       if (editingDept) {
-        // 编辑：需要 lock_version，从列表项无法获取，需先查询详情
-        // 这里通过详情接口获取完整数据
+        // 编辑：需要 lock_version，从详情接口获取
         const { apiGetDepartment } = await import('@/api/client');
         const detail = await apiGetDepartment(editingDept.id);
         updateMutation.mutate({
@@ -139,6 +215,7 @@ export function DepartmentManagement(): JSX.Element {
             description: values.description ?? detail.description ?? null,
             sort_order: values.sort_order ?? 0,
             lock_version: detail.lock_version,
+            parent_id: values.parent_id ?? null,
           },
         });
       } else {
@@ -148,6 +225,7 @@ export function DepartmentManagement(): JSX.Element {
           display_name: values.display_name,
           description: values.description ?? null,
           sort_order: values.sort_order ?? 0,
+          parent_id: values.parent_id ?? null,
         });
       }
     } catch {
@@ -171,7 +249,7 @@ export function DepartmentManagement(): JSX.Element {
   };
 
   // ---- 表格列定义 ----
-  const columns: ColumnsType<DepartmentListItem> = [
+  const columns: ColumnsType<DepartmentTreeNode> = [
     {
       title: '编码',
       dataIndex: 'code',
@@ -203,6 +281,20 @@ export function DepartmentManagement(): JSX.Element {
       align: 'center',
     },
     {
+      title: '子部门数',
+      dataIndex: 'children_count',
+      key: 'children_count',
+      width: 90,
+      align: 'center',
+    },
+    {
+      title: '仪器数',
+      dataIndex: 'equipment_count',
+      key: 'equipment_count',
+      width: 80,
+      align: 'center',
+    },
+    {
       title: '排序',
       dataIndex: 'sort_order',
       key: 'sort_order',
@@ -213,7 +305,7 @@ export function DepartmentManagement(): JSX.Element {
       title: '操作',
       key: 'action',
       width: 240,
-      render: (_: unknown, record: DepartmentListItem) => (
+      render: (_: unknown, record: DepartmentTreeNode) => (
         <Space size="small">
           <Button
             type="link"
@@ -267,13 +359,15 @@ export function DepartmentManagement(): JSX.Element {
         />
       </Space>
 
-      <Table<DepartmentListItem>
+      <Table<DepartmentTreeNode>
         columns={columns}
-        dataSource={items}
+        dataSource={treeData}
         rowKey="id"
         loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
+        pagination={false}
         size="middle"
+        expandable={{ childrenColumnName: 'children' }}
+        scroll={{ y: 600 }}
       />
 
       <Modal
@@ -327,6 +421,17 @@ export function DepartmentManagement(): JSX.Element {
               placeholder="实验室描述（可选）"
               maxLength={2000}
               rows={3}
+            />
+          </Form.Item>
+          <Form.Item
+            name="parent_id"
+            label="上级部门"
+            tooltip="选择上级部门构建树形结构，留空表示顶级部门"
+          >
+            <Select
+              placeholder="留空为顶级部门"
+              allowClear
+              options={parentOptions}
             />
           </Form.Item>
           <Form.Item

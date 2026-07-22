@@ -49,6 +49,7 @@ class Department(Base):
         created_at: 创建时间。
         updated_at: 更新时间。
         lock_version: 乐观锁版本号。
+        parent_id: 上级部门 ID（nullable，顶级部门为 NULL）。
     """
 
     __tablename__ = "department"
@@ -72,6 +73,9 @@ class Department(Base):
     )
     lock_version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
+    )
+    parent_id: Mapped[UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("department.id"), nullable=True
     )
 
     def __repr__(self) -> str:

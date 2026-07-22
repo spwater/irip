@@ -62,6 +62,9 @@ class CreateDepartmentRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     sort_order: int = Field(0, ge=0)
+    parent_id: str | None = Field(
+        None, description="上级部门ID，顶级部门为null"
+    )
 
 
 class UpdateDepartmentRequest(BaseModel):
@@ -71,6 +74,9 @@ class UpdateDepartmentRequest(BaseModel):
     description: str | None = Field(None, max_length=2000)
     sort_order: int = Field(0, ge=0)
     lock_version: int = Field(..., ge=0)
+    parent_id: str | None = Field(
+        None, description="上级部门ID，顶级部门为null"
+    )
 
 
 class UpdateDepartmentStatusRequest(BaseModel):
@@ -96,10 +102,11 @@ class DepartmentResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     lock_version: int
+    parent_id: str | None
 
 
 class DepartmentListItem(BaseModel):
-    """实验室列表项（含成员数）。"""
+    """实验室列表项（含成员数、子部门数、仪器数）。"""
 
     id: str
     code: str
@@ -107,6 +114,9 @@ class DepartmentListItem(BaseModel):
     status: str
     sort_order: int
     member_count: int
+    parent_id: str | None
+    children_count: int
+    equipment_count: int
 
 
 class DepartmentListResponse(BaseModel):
@@ -122,6 +132,7 @@ class DepartmentListResponse(BaseModel):
 
 def _to_response(dept: object) -> DepartmentResponse:
     """将 Department ORM 实体转换为响应模型。"""
+    parent_id_val = getattr(dept, "parent_id", None)
     return DepartmentResponse(
         id=str(dept.id),  # type: ignore[attr-defined]
         organization_id=str(dept.organization_id),  # type: ignore[attr-defined]
@@ -133,6 +144,7 @@ def _to_response(dept: object) -> DepartmentResponse:
         created_at=dept.created_at,  # type: ignore[attr-defined]
         updated_at=dept.updated_at,  # type: ignore[attr-defined]
         lock_version=dept.lock_version,  # type: ignore[attr-defined]
+        parent_id=str(parent_id_val) if parent_id_val is not None else None,
     )
 
 
@@ -165,6 +177,7 @@ async def create_department(
         display_name=body.display_name,
         description=body.description,
         sort_order=body.sort_order,
+        parent_id=UUID(body.parent_id) if body.parent_id else None,
     )
     return _to_response(dept)
 
@@ -198,8 +211,11 @@ async def list_departments(
             status=dept.status,
             sort_order=dept.sort_order,
             member_count=member_count,
+            parent_id=str(dept.parent_id) if dept.parent_id is not None else None,
+            children_count=children_count,
+            equipment_count=equipment_count,
         )
-        for dept, member_count in result.items
+        for dept, member_count, children_count, equipment_count in result.items
     ]
     return DepartmentListResponse(
         items=items,
@@ -259,6 +275,7 @@ async def update_department(
         description=body.description,
         sort_order=body.sort_order,
         lock_version=body.lock_version,
+        parent_id=UUID(body.parent_id) if body.parent_id else None,
     )
     return _to_response(dept)
 
