@@ -187,6 +187,9 @@ class FlowNodeExecutionResponse(BaseModel):
     id: str
     node_id: str
     status: str
+    input_summary: dict[str, Any] | None = None
+    output_summary: dict[str, Any] | None = None
+    diagnostics: dict[str, Any] | None = None
     duration_ms: int | None
     started_at: datetime | None
     completed_at: datetime | None
@@ -295,6 +298,9 @@ def _execution_to_response(
         id=str(exec_record.id),
         node_id=exec_record.node_id,
         status=exec_record.status,
+        input_summary=exec_record.input_summary,
+        output_summary=exec_record.output_summary,
+        diagnostics=exec_record.diagnostics,
         duration_ms=exec_record.duration_ms,
         started_at=exec_record.started_at,
         completed_at=exec_record.completed_at,
