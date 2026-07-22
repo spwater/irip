@@ -87,7 +87,7 @@ export function AssistantPage(): JSX.Element {
   // ---- 创建对话 Mutation ----
   const createConvMutation = useMutation({
     mutationFn: (title: string) =>
-      apiCreateConversation({ title, provider_mode: 'offline' }),
+      apiCreateConversation({ title, provider_mode: 'openai_compatible' }),
     onSuccess: (conv: ConversationSummary) => {
       void queryClient.invalidateQueries({
         queryKey: ['assistant-conversations'],

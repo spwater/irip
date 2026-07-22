@@ -4,6 +4,7 @@ import { UsersPage } from '@/governance/UsersPage';
 import { ScopeGrantsPage } from '@/governance/ScopeGrantsPage';
 import { AuditPage } from '@/governance/AuditPage';
 import { SystemHealthPage } from '@/governance/SystemHealthPage';
+import { AIConfigPage } from '@/governance/AIConfigPage';
 
 const { Title, Paragraph } = Typography;
 
@@ -58,6 +59,11 @@ export function GovernanceConsole(): JSX.Element {
             key: 'health',
             label: '系统健康',
             children: <SystemHealthPage />,
+          },
+          {
+            key: 'ai-config',
+            label: 'AI 配置',
+            children: <AIConfigPage />,
           },
         ]}
       />

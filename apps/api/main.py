@@ -31,6 +31,7 @@ from apps.api.routers.auth import auth_router, get_auth_service, get_me_session_
 from apps.api.routers.audit import audit_router, get_audit_session_factory
 from apps.api.routers.backups import backups_router, get_backups_session_factory
 from apps.api.routers.assistant import assistant_router, get_ai_service
+from apps.api.routers.ai_config import ai_config_router, set_session_factory as set_ai_config_session_factory, get_active_ai_config
 from apps.api.routers.components import (
     components_router,
     get_component_registry_service,
@@ -114,6 +115,7 @@ from packages.components.builtin import register_builtin_components
 from packages.models.service import ModelService
 from packages.ai.service import AIService
 from packages.ai.offline_provider import OfflineProvider
+from packages.ai.openai_compatible import OpenAICompatibleProvider
 from packages.ai.tools import ToolRegistry
 
 #: AppError code → HTTP 状态码映射（docs/arch-v0.md §7.2）。
@@ -584,9 +586,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.dependency_overrides[get_model_service] = _get_model_service_dep
 
-    # AI 助手服务（离线模式，不需要外部 API）
-    def _get_ai_service_dep() -> AIService:
-        provider = OfflineProvider()
+    # AI 助手服务（优先从配置读取真实模型，未配置时用离线模式）
+    set_ai_config_session_factory(session_factory)
+
+    async def _get_ai_service_dep() -> AIService:
+        config = await get_active_ai_config()
+        if config and config.get("base_url") and config.get("api_key"):
+            provider = OpenAICompatibleProvider(
+                api_key=config["api_key"],
+                base_url=config["base_url"],
+                model=config["model_name"],
+            )
+        else:
+            provider = OfflineProvider()
         tool_registry = ToolRegistry()
         return AIService(
             provider=provider,
@@ -693,6 +705,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(backups_router)
     app.include_router(assistant_router)
+    app.include_router(ai_config_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

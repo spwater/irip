@@ -1815,7 +1815,7 @@ export async function apiSendMessage(
 ): Promise<AskResponse> {
   const res = await http.post<AskApiResponse>(
     `/assistant/conversations/${conversationId}/messages`,
-    { question: body.question, provider_name: body.provider_name ?? 'offline' },
+    { question: body.question, provider_name: body.provider_name ?? 'openai_compatible' },
   );
   return res.data;
 }
