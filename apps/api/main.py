@@ -110,6 +110,7 @@ from packages.standards.templates import TemplateService
 from packages.components.registry import ComponentRegistryService
 from packages.components.flow_runtime import FlowRuntimeService
 from packages.components.runner import PythonComponentRunner
+from packages.components.builtin import register_builtin_components
 from packages.models.service import ModelService
 from packages.ai.service import AIService
 from packages.ai.offline_provider import OfflineProvider
@@ -534,15 +535,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
 
     # 流程运行时服务（需当前用户上下文 + 组件注册表 + 执行器 + 作业服务）
+    # PythonComponentRunner 是无状态的，使用模块级单例避免每次请求重复注册 29 个组件
+    _flow_runner: PythonComponentRunner | None = None
+
     async def _get_flow_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> FlowRuntimeService:
+        nonlocal _flow_runner
         org_id = await _lookup_org_id(session_factory, current_user.user_id)
         registry = ComponentRegistryService(
             session_factory=session_factory,
             organization_id=org_id,
         )
-        runner = PythonComponentRunner()
+        if _flow_runner is None:
+            _flow_runner = PythonComponentRunner()
+            register_builtin_components(_flow_runner)
         job_svc = JobService(
             session_factory=session_factory,
             organization_id=org_id,
@@ -552,7 +559,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             session_factory=session_factory,
             organization_id=org_id,
             registry=registry,
-            runner=runner,
+            runner=_flow_runner,
             job_service=job_svc,
         )
 

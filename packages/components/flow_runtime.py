@@ -472,8 +472,9 @@ def _serialize_output_summary(
     summary: dict[str, Any] = {}
     for key, value in result.outputs.items():
         try:
-            json.dumps(value, ensure_ascii=False, default=str)
-            summary[key] = value
+            summary[key] = json.loads(
+                json.dumps(value, ensure_ascii=False, default=str)
+            )
         except (TypeError, ValueError):
             summary[key] = str(value)
     summary["_metadata"] = result.metadata
@@ -495,8 +496,9 @@ def _serialize_input_summary(
     summary: dict[str, Any] = {}
     for key, value in inputs.items():
         try:
-            json.dumps(value, ensure_ascii=False, default=str)
-            summary[key] = value
+            summary[key] = json.loads(
+                json.dumps(value, ensure_ascii=False, default=str)
+            )
         except (TypeError, ValueError):
             summary[key] = str(value)
     return summary
@@ -1141,9 +1143,12 @@ class FlowRuntimeService:
                 workdir=Path("/tmp/irip-flow"),
             )
 
+            # 合并节点参数与解析后的输入（输入端口数据注入 params）
+            merged_params: dict[str, Any] = {**node.params, **inputs}
+
             # 运行组件
             result: ComponentResult = await self._runner.run(
-                manifest, context, node.params
+                manifest, context, merged_params
             )
 
             # 序列化输出摘要
