@@ -11,62 +11,25 @@ import {
   message,
 } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  extractApiError,
-} from '@/api/client';
+import { http, extractApiError } from '@/api/client';
 
 const { Title, Paragraph, Text } = Typography;
 
-/** AI 配置 API 函数（内联，避免 client.ts 修改） */
-async function apiGetAIConfig(): Promise<{
+/** AI 配置类型 */
+type AIConfig = {
   base_url: string;
   api_key_masked: string;
   model_name: string;
   enabled: boolean;
   updated_at: string | null;
-}> {
-  const res = await fetch('/api/v1/ai-config', {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('irip_token') ?? ''}`,
-    },
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
+};
 
-async function apiUpdateAIConfig(body: {
-  base_url: string;
-  api_key: string;
-  model_name: string;
-  enabled: boolean;
-}): Promise<void> {
-  const res = await fetch('/api/v1/ai-config', {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${localStorage.getItem('irip_token') ?? ''}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-}
-
-async function apiTestAIConfig(body: {
-  base_url: string;
-  api_key: string;
-  model_name: string;
-}): Promise<{ success: boolean; message: string; model_response: string | null }> {
-  const res = await fetch('/api/v1/ai-config/test', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${localStorage.getItem('irip_token') ?? ''}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
-}
+/** 测试连接响应 */
+type AITestResult = {
+  success: boolean;
+  message: string;
+  model_response: string | null;
+};
 
 /**
  * AI 大模型配置页面
@@ -81,14 +44,17 @@ export function AIConfigPage(): JSX.Element {
 
   const { data: config } = useQuery({
     queryKey: ['ai-config'],
-    queryFn: apiGetAIConfig,
+    queryFn: async () => {
+      const res = await http.get<AIConfig>('/ai-config');
+      return res.data;
+    },
   });
 
   useEffect(() => {
     if (config) {
       form.setFieldsValue({
         base_url: config.base_url,
-        api_key: '', // 不回填密钥，用户需重新输入
+        api_key: '',
         model_name: config.model_name,
         enabled: config.enabled,
       });
@@ -96,7 +62,15 @@ export function AIConfigPage(): JSX.Element {
   }, [config, form]);
 
   const saveMutation = useMutation({
-    mutationFn: apiUpdateAIConfig,
+    mutationFn: async (values: {
+      base_url: string;
+      api_key: string;
+      model_name: string;
+      enabled: boolean;
+    }) => {
+      const res = await http.put<AIConfig>('/ai-config', values);
+      return res.data;
+    },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['ai-config'] });
       message.success('AI 配置保存成功');
@@ -108,18 +82,18 @@ export function AIConfigPage(): JSX.Element {
     try {
       const values = await form.validateFields();
       setTestLoading(true);
-      const result = await apiTestAIConfig({
+      const res = await http.post<AITestResult>('/ai-config/test', {
         base_url: values.base_url,
         api_key: values.api_key,
         model_name: values.model_name,
       });
-      if (result.success) {
-        message.success(`连接成功！模型回复: ${result.model_response ?? 'OK'}`);
+      if (res.data.success) {
+        message.success(`连接成功！模型回复: ${res.data.model_response ?? 'OK'}`);
       } else {
-        message.error(`连接失败: ${result.message}`);
+        message.error(`连接失败: ${res.data.message}`);
       }
-    } catch {
-      // 校验失败
+    } catch (err: unknown) {
+      message.error(extractApiError(err));
     } finally {
       setTestLoading(false);
     }
