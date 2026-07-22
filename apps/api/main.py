@@ -558,10 +558,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ModelService:
         org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        art_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=session_factory,
+            organization_id=org_id,
+            uploaded_by=current_user.user_id,
+        )
         return ModelService(
             session_factory=session_factory,
             organization_id=org_id,
-            artifact_service=artifact_service,
+            artifact_service=art_svc,
         )
 
     app.dependency_overrides[get_model_service] = _get_model_service_dep

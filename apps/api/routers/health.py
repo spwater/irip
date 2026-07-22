@@ -26,8 +26,8 @@ from packages.common.s3_repository import S3Repository
 #: 路由实例。
 health_router = APIRouter(prefix="/api/v1/health", tags=["health"])
 
-#: 期望的 Alembic 迁移 head 版本（0006 = 机构/实验室管理迁移）。
-EXPECTED_MIGRATION_HEAD: str = "0006"
+#: 期望的 Alembic 迁移 head 版本（0021 = AI 对话持久化迁移）。
+EXPECTED_MIGRATION_HEAD: str = "0021"
 
 #: Outbox 心跳阈值：超过此秒数仍未投递的事件视为 dispatcher 不健康。
 OUTBOX_HEARTBEAT_MAX_AGE_SECONDS: int = 120
