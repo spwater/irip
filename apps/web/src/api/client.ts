@@ -1431,6 +1431,9 @@ export type FlowNodeExecution = {
   id: string;
   node_id: string;
   status: string;
+  input_summary: Record<string, unknown> | null;
+  output_summary: Record<string, unknown> | null;
+  diagnostics: Record<string, unknown> | null;
   duration_ms: number | null;
   started_at: string | null;
   completed_at: string | null;
@@ -1438,6 +1441,7 @@ export type FlowNodeExecution = {
 
 /** 流程运行详情（含节点执行列表）。 */
 export type FlowRunDetail = FlowRunSummary & {
+  node_executions: FlowNodeExecution[];
   nodes: FlowNodeExecution[];
 };
 
@@ -1535,16 +1539,9 @@ export async function apiGetFlowRun(runId: string): Promise<FlowRunDetail> {
     created_at: string;
     node_executions: FlowNodeExecution[];
   }>(`/flows/runs/${runId}`);
-  // 后端字段 node_executions → 前端字段 nodes
+  // 后端字段 node_executions → 前端字段 nodes（兼容两个字段名）
   return {
-    id: res.data.id,
-    flow_version_id: res.data.flow_version_id,
-    status: res.data.status,
-    job_id: res.data.job_id,
-    output_digest: res.data.output_digest,
-    started_at: res.data.started_at,
-    completed_at: res.data.completed_at,
-    created_at: res.data.created_at,
+    ...res.data,
     nodes: res.data.node_executions,
   };
 }

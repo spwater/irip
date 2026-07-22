@@ -301,12 +301,12 @@ export function FlowDetail(): JSX.Element {
   ];
 
   const nodeColumns: ColumnsType<FlowNodeExecution> = [
-    { title: '节点 ID', dataIndex: 'node_id', key: 'node_id', width: 180 },
+    { title: '节点 ID', dataIndex: 'node_id', key: 'node_id', width: 140 },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 80,
       render: (v: string) => (
         <Tag color={NODE_STATUS_COLOR[v] ?? 'default'}>
           {NODE_STATUS_LABEL[v] ?? v}
@@ -314,25 +314,69 @@ export function FlowDetail(): JSX.Element {
       ),
     },
     {
-      title: '耗时 (ms)',
+      title: '耗时',
       dataIndex: 'duration_ms',
       key: 'duration_ms',
-      width: 120,
-      render: (v: number | null) => (v != null ? v : '-'),
+      width: 70,
+      render: (v: number | null) => (v != null ? `${v}ms` : '-'),
     },
     {
-      title: '开始时间',
-      dataIndex: 'started_at',
-      key: 'started_at',
+      title: '摘要',
+      key: 'summary',
       width: 200,
-      render: (v: string | null) => v ?? '-',
+      ellipsis: true,
+      render: (_: unknown, record: FlowNodeExecution) => {
+        const out = record.output_summary;
+        if (!out) return '-';
+        return out._summary_text || '-';
+      },
     },
     {
-      title: '完成时间',
-      dataIndex: 'completed_at',
-      key: 'completed_at',
-      width: 200,
-      render: (v: string | null) => v ?? '-',
+      title: '输出数据',
+      key: 'output',
+      render: (_: unknown, record: FlowNodeExecution) => {
+        const out = record.output_summary;
+        if (!out) {
+          // 看看是否有错误
+          const diag = record.diagnostics;
+          if (diag && diag.error_message) {
+            return <Text type="danger" style={{ fontSize: 12 }}>{String(diag.error_message)}</Text>;
+          }
+          return '-';
+        }
+        // 提取输出端口数据（排除 _metadata 和 _summary_text）
+        const entries = Object.entries(out)
+          .filter(([k]) => k !== '_metadata' && k !== '_summary_text');
+        if (entries.length === 0) return '-';
+
+        return (
+          <Space direction="vertical" size={4} style={{ width: '100%' }}>
+            {entries.map(([portName, portValue]) => {
+              let displayValue: string;
+              if (portName === 'statistics') {
+                // 统计组件输出特殊处理
+                const stats = portValue as Record<string, Record<string, number>>;
+                displayValue = Object.entries(stats)
+                  .map(([col, vals]) => `${col}: mean=${vals.mean?.toFixed(3)}, std=${vals.std?.toFixed(3)}, median=${vals.median?.toFixed(3)}`)
+                  .join('\n');
+              } else if (typeof portValue === 'string') {
+                displayValue = portValue.length > 200 ? portValue.slice(0, 200) + '...' : portValue;
+              } else {
+                displayValue = JSON.stringify(portValue, null, 2);
+                if (displayValue.length > 300) displayValue = displayValue.slice(0, 300) + '...';
+              }
+              return (
+                <div key={portName}>
+                  <Text type="secondary" style={{ fontSize: 11, fontWeight: 500 }}>{portName}:</Text>
+                  <pre style={{ fontSize: 11, margin: '2px 0', padding: '4px 8px', background: '#f5f5f5', borderRadius: 4, overflow: 'auto', maxHeight: 120 }}>
+                    {displayValue}
+                  </pre>
+                </div>
+              );
+            })}
+          </Space>
+        );
+      },
     },
     {
       title: '操作',
