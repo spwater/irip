@@ -257,3 +257,47 @@ async def get_component(
         published_at=ver.published_at,
         created_at=ver.created_at,
     )
+
+
+class ComponentVersionListItem(BaseModel):
+    """组件版本列表项响应。"""
+
+    id: str
+    version: str
+    status: str
+    manifest_sha256: str
+    created_at: datetime
+
+
+@components_router.get(
+    "/{component_id}/versions",
+    response_model=list[ComponentVersionListItem],
+)
+async def list_component_versions(
+    component_id: UUID,
+    current_user: ReadUserDep,
+    service: ComponentRegistryServiceDep,
+) -> list[ComponentVersionListItem]:
+    """列出指定组件的所有版本（按创建时间降序）。
+
+    Args:
+        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录 ID，
+                       然后列出同组件的所有版本）。
+        current_user: 当前认证用户（需 component:read 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        list[ComponentVersionListItem]: 版本列表。
+    """
+    comp, ver = await service.get_version_by_id(component_id)
+    versions = await service.list_versions(comp.id)
+    return [
+        ComponentVersionListItem(
+            id=str(v.id),
+            version=v.version,
+            status=v.status,
+            manifest_sha256=v.manifest_sha256,
+            created_at=v.created_at,
+        )
+        for v in versions
+    ]

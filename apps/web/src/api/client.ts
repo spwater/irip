@@ -1378,6 +1378,24 @@ export async function apiPublishComponent(body: {
   return res.data;
 }
 
+/** 组件版本列表项。 */
+export type ComponentVersionItem = {
+  id: string;
+  version: string;
+  status: string;
+  manifest_sha256: string;
+  created_at: string;
+};
+
+export async function apiListComponentVersions(
+  componentId: string,
+): Promise<ComponentVersionItem[]> {
+  const res = await http.get<ComponentVersionItem[]>(
+    `/components/${componentId}/versions`,
+  );
+  return res.data;
+}
+
 // ============================================================
 // V2 流程编排 API（/flows）— IRIP V2-T03
 // ============================================================
@@ -1397,6 +1415,9 @@ export type FlowSummary = {
     digest: string;
     status: string;
     published_at: string | null;
+    nodes?: Record<string, unknown>[];
+    edges?: Record<string, unknown>[];
+    random_seed?: number;
   } | null;
 };
 
@@ -1550,6 +1571,33 @@ export async function apiGetFlowRun(runId: string): Promise<FlowRunDetail> {
 // V2 模型管理 API（/models）— IRIP V2-T04
 // ============================================================
 
+// ============================================================
+// 文件浏览 API（/files）— 组件参数文件选择器
+// ============================================================
+
+export type FileItem = {
+  name: string;
+  type: string; // "file" | "dir"
+  size: number | null;
+};
+
+export type BrowseResponse = {
+  current_path: string;
+  parent_path: string | null;
+  items: FileItem[];
+};
+
+export async function apiBrowseFiles(path?: string): Promise<BrowseResponse> {
+  const res = await http.get<BrowseResponse>('/files/browse', {
+    params: path ? { path } : {},
+  });
+  return res.data;
+}
+
+// ============================================================
+// V2 模型管理 API — end
+// ============================================================
+
 /** 模型摘要。 */
 export type ModelSummary = {
   id: string;
@@ -1693,6 +1741,8 @@ export type ConversationSummary = {
   id: string;
   title: string;
   provider_mode: string;
+  pinned: boolean;
+  archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -1740,6 +1790,8 @@ type ConversationApiResponse = {
   id: string;
   title: string;
   provider_mode: string;
+  pinned: boolean;
+  archived: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -1797,13 +1849,35 @@ export async function apiCreateConversation(
  * 列出对话
  */
 export async function apiListConversations(
-  params?: { limit?: number },
+  params?: { limit?: number; includeArchived?: boolean; archivedOnly?: boolean },
 ): Promise<ConversationSummary[]> {
   const res = await http.get<ConversationListApiResponse>(
     '/assistant/conversations',
-    { params: { limit: params?.limit ?? 50 } },
+    { params: {
+      limit: params?.limit ?? 50,
+      include_archived: params?.includeArchived ?? false,
+      archived_only: params?.archivedOnly ?? false,
+    } },
   );
   return res.data.items;
+}
+
+export async function apiTogglePin(conversationId: string): Promise<ConversationSummary> {
+  const res = await http.patch<ConversationSummary>(`/assistant/conversations/${conversationId}/pin`);
+  return res.data;
+}
+
+export async function apiToggleArchive(conversationId: string): Promise<ConversationSummary> {
+  const res = await http.patch<ConversationSummary>(`/assistant/conversations/${conversationId}/archive`);
+  return res.data;
+}
+
+export async function apiDeleteConversation(conversationId: string): Promise<void> {
+  await http.delete(`/assistant/conversations/${conversationId}`);
+}
+
+export async function apiCancelRequest(conversationId: string): Promise<void> {
+  await http.post(`/assistant/conversations/${conversationId}/cancel`);
 }
 
 /**
@@ -1811,11 +1885,13 @@ export async function apiListConversations(
  */
 export async function apiSendMessage(
   conversationId: string,
-  body: { question: string; provider_name?: string },
+  body: { question: string; provider_name?: string; thinking_enabled?: boolean },
+  signal?: AbortSignal,
 ): Promise<AskResponse> {
   const res = await http.post<AskApiResponse>(
     `/assistant/conversations/${conversationId}/messages`,
-    { question: body.question, provider_name: body.provider_name ?? 'openai_compatible' },
+    { question: body.question, provider_name: body.provider_name ?? 'openai_compatible', thinking_enabled: body.thinking_enabled ?? false },
+    { signal },
   );
   return res.data;
 }

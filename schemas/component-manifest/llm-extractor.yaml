@@ -1,0 +1,47 @@
+name: llm_extractor
+version: "1.0.0"
+kind: ingestion
+runtime: python
+description: "大模型驱动的通用数据提取组件，用自然语言 prompt 从文件中提取结构化数据"
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+    schema: {}
+parameters:
+  type: object
+  required:
+    - path
+    - prompt
+    - schema
+  properties:
+    path:
+      type: string
+      description: "文件路径"
+    prompt:
+      type: string
+      description: '提取指令，如"提取粒度数据"'
+    schema:
+      type: array
+      description: "目标字段定义"
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            description: "字段名称"
+          type:
+            type: string
+            enum: [string, number, integer, boolean]
+            description: "字段类型"
+        required:
+          - name
+          - type
+    timeout:
+      type: integer
+      description: "LLM 调用超时秒数"
+      default: 60
+timeout_seconds: 120
+network_policy:
+  allowed_hosts: []

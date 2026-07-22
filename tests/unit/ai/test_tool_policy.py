@@ -1,7 +1,7 @@
 """单元测试：AI 工具白名单策略。
 
 覆盖：
-- 工具白名单验证（7 个只读工具 + 4 个候选工具已注册）；
+- 工具白名单验证（8 个只读工具 + 4 个候选工具已注册）；
 - 未知工具拒绝（防注入）；
 - 候选工具标记为 candidate=True；
 - 工具参数 schema 记录（parameters_schema 非空）；
@@ -25,9 +25,9 @@ from packages.common.errors import AppError
 class TestToolWhitelist:
     """工具白名单验证。"""
 
-    def test_whitelist_has_seven_tools(self) -> None:
-        """白名单包含 7 个只读工具。"""
-        assert len(WHITELIST_TOOLS) == 7
+    def test_whitelist_has_eight_tools(self) -> None:
+        """白名单包含 8 个只读工具。"""
+        assert len(WHITELIST_TOOLS) == 8
 
     def test_candidate_has_four_tools(self) -> None:
         """候选工具包含 4 个需审批工具。"""
@@ -35,7 +35,7 @@ class TestToolWhitelist:
 
     def test_all_tools_is_union(self) -> None:
         """全部工具 = 白名单 + 候选。"""
-        assert len(ALL_TOOL_NAMES) == 11
+        assert len(ALL_TOOL_NAMES) == 12
 
     def test_whitelist_tool_names_match(self) -> None:
         """白名单工具名称集合正确。"""
@@ -47,6 +47,7 @@ class TestToolWhitelist:
             "compare_experiments",
             "run_published_model",
             "draft_report",
+            "extract_data",
         }
         assert WHITELIST_TOOL_NAMES == expected
 
@@ -64,14 +65,37 @@ class TestToolWhitelist:
         """白名单与候选工具不重叠。"""
         assert WHITELIST_TOOL_NAMES.isdisjoint(CANDIDATE_TOOL_NAMES)
 
+    def test_extract_data_tool_properties(self) -> None:
+        """extract_data 工具属性正确（V2-T03 新增白名单工具）。"""
+        registry = ToolRegistry()
+        spec = registry.get("extract_data")
+        assert spec.name == "extract_data"
+        assert spec.candidate is False
+        assert spec.required_permission == "ingestion:write"
+        # 参数 schema 包含 path/prompt/schema 三个必填参数
+        assert spec.parameters_schema["type"] == "object"
+        props = spec.parameters_schema["properties"]
+        assert "path" in props
+        assert "prompt" in props
+        assert "schema" in props
+        required = spec.parameters_schema["required"]
+        assert "path" in required
+        assert "prompt" in required
+        assert "schema" in required
+        # 显示名含中文
+        assert any("\u4e00" <= ch <= "\u9fff" for ch in spec.display_name)
+        # 属于白名单工具（可直接执行）
+        assert registry.is_whitelist("extract_data") is True
+        assert registry.is_candidate("extract_data") is False
+
 
 class TestToolRegistryValidation:
     """ToolRegistry 验证逻辑。"""
 
     def test_default_registry_has_all_tools(self) -> None:
-        """默认注册表包含全部 11 个工具。"""
+        """默认注册表包含全部 12 个工具。"""
         registry = ToolRegistry()
-        assert len(registry.list_tools()) == 11
+        assert len(registry.list_tools()) == 12
 
     def test_get_known_tool(self) -> None:
         """按名称获取已知工具。"""
@@ -138,10 +162,10 @@ class TestCandidateToolMarking:
         assert all(s.candidate for s in candidates)
 
     def test_list_whitelist_tools(self) -> None:
-        """list_whitelist_tools 返回 7 个只读工具。"""
+        """list_whitelist_tools 返回 8 个只读工具。"""
         registry = ToolRegistry()
         whitelist = registry.list_whitelist_tools()
-        assert len(whitelist) == 7
+        assert len(whitelist) == 8
         assert all(not s.candidate for s in whitelist)
 
 
@@ -180,6 +204,7 @@ class TestToolParametersRecord:
         """names() 返回全部工具名称元组。"""
         registry = ToolRegistry()
         names = registry.names()
-        assert len(names) == 11
+        assert len(names) == 12
         assert "search_standards" in names
         assert "suggest_mapping" in names
+        assert "extract_data" in names

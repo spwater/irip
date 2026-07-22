@@ -1,0 +1,50 @@
+sequenceDiagram
+    participant FRT as FlowRuntimeService
+    participant Runner as PythonComponentRunner
+    participant LLE as LLMExtractor
+    participant DB as ai_config 表
+    participant LLM as OpenAICompatibleProvider
+    participant API as LLM API
+
+    FRT->>Runner: run(manifest, context, params)
+    Runner->>LLE: execute(context, params)
+
+    Note over LLE: 1. 检查取消信号
+    LLE->>LLE: cancel_event.is_set() ?
+
+    Note over LLE: 2. 读取文件内容
+    LLE->>LLE: _read_file(path, encoding, max_content_length)
+    LLE-->>LLE: file_content (str, 可能截断)
+
+    Note over LLE: 3. 获取 AI 配置
+    LLE->>DB: get_active_ai_config()
+    alt 配置不存在或未启用
+        DB-->>LLE: None
+        LLE-->>Runner: AppError(code="ai_not_configured")
+    else 配置存在
+        DB-->>LLE: {base_url, api_key, model_name, thinking_enabled}
+    end
+
+    Note over LLE: 4. 构建 LLM 消息
+    LLE->>LLE: _build_messages(content, prompt, schema)
+    LLE-->>LLE: messages = [system, user]
+
+    Note over LLE: 5. 调用大模型
+    LLE->>LLM: OpenAICompatibleProvider(config)
+    LLE->>LLM: complete(AIRequest(messages), cancel_event)
+    LLM->>API: POST {base_url}/chat/completions
+    API-->>LLM: JSON response
+    LLM-->>LLE: AIResponse(answer=raw_json_text)
+
+    Note over LLE: 6. 解析 JSON 响应
+    LLE->>LLE: _parse_json_response(answer)
+    LLE-->>LLE: list[dict] extracted_rows
+
+    Note over LLE: 7. 类型转换 + 构建 ObservationTable
+    LLE->>LLE: _coerce_value (per field per row)
+    LLE->>LLE: _build_observation_table(data, schema, path)
+    LLE-->>LLE: ObservationTable(columns, rows, source_locations)
+
+    Note over LLE: 8. 返回结果
+    LLE-->>Runner: ComponentResult(outputs={"observations": table})
+    Runner-->>FRT: ComponentResult

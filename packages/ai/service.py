@@ -16,6 +16,7 @@ AIService 是 AI 助手的业务编排层，职责：
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -58,6 +59,12 @@ class AIConversation(Base):
     title: Mapped[str] = mapped_column(sa.Text, nullable=False, default="")
     provider_mode: Mapped[str] = mapped_column(
         sa.Text, nullable=False, default="offline"
+    )
+    pinned: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
+    )
+    archived: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, default=lambda: SystemClock().now()
@@ -118,6 +125,8 @@ class ConversationRef:
     id: UUID
     title: str
     provider_mode: str
+    pinned: bool
+    archived: bool
     created_at: datetime
     updated_at: datetime
 
@@ -145,6 +154,11 @@ class MessageRef:
     citations: list[dict[str, str]]
     uncertainty: str | None
     created_at: datetime
+
+
+# ---- 模块级取消注册表 ----
+# conversation_id → asyncio.Event，用于取消正在进行的 AI 请求
+_active_requests: dict[UUID, asyncio.Event] = {}
 
 
 class AIService:
@@ -250,6 +264,8 @@ class AIService:
                 id=conv.id,
                 title=conv.title,
                 provider_mode=conv.provider_mode,
+                pinned=False,
+                archived=False,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
             )
@@ -259,25 +275,38 @@ class AIService:
         user_id: UUID,
         organization_id: UUID,
         limit: int = 50,
+        include_archived: bool = False,
+        archived_only: bool = False,
     ) -> list[ConversationRef]:
-        """列出用户的对话（按更新时间倒序）。
+        """列出用户的对话（置顶优先，然后按更新时间倒序）。
 
         Args:
             user_id: 用户 ID（仅返回该用户的对话）。
             organization_id: 组织 ID。
             limit: 最大返回数。
+            include_archived: 是否包含已归档对话（默认不含）。
+            archived_only: 是否只返回已归档对话（优先于 include_archived）。
 
         Returns:
             list[ConversationRef]: 对话引用列表。
         """
+        conditions = [
+            AIConversation.user_id == user_id,
+            AIConversation.organization_id == organization_id,
+        ]
+        if archived_only:
+            conditions.append(AIConversation.archived == sa.true())
+        elif not include_archived:
+            conditions.append(AIConversation.archived == sa.false())
+
         async with self._factory() as session:
             result = await session.execute(
                 sa.select(AIConversation)
-                .where(
-                    AIConversation.user_id == user_id,
-                    AIConversation.organization_id == organization_id,
+                .where(*conditions)
+                .order_by(
+                    sa.desc(AIConversation.pinned),
+                    sa.desc(AIConversation.updated_at),
                 )
-                .order_by(sa.desc(AIConversation.updated_at))
                 .limit(limit)
             )
             rows = result.scalars().all()
@@ -286,11 +315,126 @@ class AIService:
                     id=r.id,
                     title=r.title,
                     provider_mode=r.provider_mode,
+                    pinned=r.pinned,
+                    archived=r.archived,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                 )
                 for r in rows
             ]
+
+    async def toggle_pin(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        pinned: bool | None = None,
+    ) -> bool:
+        """切换对话置顶状态。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 用户 ID（权限检查）。
+            pinned: 目标状态，None 时切换当前值。
+
+        Returns:
+            bool: 新的置顶状态。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            conv = await session.scalar(
+                sa.select(AIConversation).where(
+                    AIConversation.id == conversation_id,
+                    AIConversation.user_id == user_id,
+                )
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在或无权操作",
+                    retryable=False,
+                    fields={},
+                )
+            new_val = (not conv.pinned) if pinned is None else pinned
+            conv.pinned = new_val
+            conv.updated_at = now
+            return new_val
+
+    async def toggle_archive(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        archived: bool | None = None,
+    ) -> bool:
+        """切换对话归档状态。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 用户 ID（权限检查）。
+            archived: 目标状态，None 时切换当前值。
+
+        Returns:
+            bool: 新的归档状态。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            conv = await session.scalar(
+                sa.select(AIConversation).where(
+                    AIConversation.id == conversation_id,
+                    AIConversation.user_id == user_id,
+                )
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在或无权操作",
+                    retryable=False,
+                    fields={},
+                )
+            new_val = (not conv.archived) if archived is None else archived
+            conv.archived = new_val
+            conv.updated_at = now
+            return new_val
+
+    async def delete_conversation(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> None:
+        """永久删除对话及其所有消息。
+
+        仅允许删除已归档的对话，防止误删活跃对话。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 用户 ID（权限检查）。
+
+        Raises:
+            AppError: code="not_found"，对话不存在或无权操作。
+            AppError: code="forbidden"，对话未归档，不允许删除。
+        """
+        async with session_scope(self._factory) as session:
+            conv = await session.scalar(
+                sa.select(AIConversation).where(
+                    AIConversation.id == conversation_id,
+                    AIConversation.user_id == user_id,
+                )
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在或无权操作",
+                    retryable=False,
+                    fields={},
+                )
+            if not conv.archived:
+                raise AppError(
+                    code="forbidden",
+                    message="仅允许删除已归档的对话",
+                    retryable=False,
+                    fields={},
+                )
+            # 消息通过外键 CASCADE 自动删除
+            await session.delete(conv)
 
     async def list_messages(
         self,
@@ -361,6 +505,7 @@ class AIService:
         question: str,
         conversation_id: UUID | None = None,
         provider_name: str = "offline",
+        thinking_enabled: bool = False,
     ) -> AIResponse:
         """处理用户问题，返回 AI 回答。
 
@@ -431,8 +576,39 @@ class AIService:
             provider_mode=provider_name,
         )
 
-        # 调用 Provider
-        response: AIResponse = await self._provider.complete(ai_request)
+        # 思考模式：全局配置 AND 对话框开关，两者都开启才思考
+        global_thinking = getattr(self._provider, "_thinking_enabled", False)
+        actual_thinking = global_thinking and thinking_enabled
+        if hasattr(self._provider, "_thinking_enabled"):
+            self._provider._thinking_enabled = actual_thinking
+
+        # 创建取消事件并注册到模块级字典
+        cancel_event = asyncio.Event()
+        _active_requests[conversation_id] = cancel_event
+
+        try:
+            # 调用 Provider（支持取消）
+            response: AIResponse = await self._provider.complete(
+                ai_request, cancel_event=cancel_event
+            )
+        except AppError as exc:
+            if exc.code == "ai_cancelled":
+                # 用户取消，不持久化 AI 回答，但保留用户消息
+                await self._persist_messages(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    question=question,
+                    response=AIResponse(
+                        answer="[已取消]",
+                        tool_calls=(),
+                        citations=(),
+                        uncertainty=None,
+                        provider_mode=provider_name,
+                    ),
+                )
+            raise
+        finally:
+            _active_requests.pop(conversation_id, None)
 
         # 执行工具调用（权限检查 + 白名单工具执行）
         executed_tool_calls: list[dict[str, Any]] = []
@@ -514,6 +690,18 @@ class AIService:
             question=question,
             response=final_response,
         )
+
+        # 首次对话后自动生成标题
+        if not history_messages:
+            try:
+                await self._auto_generate_title(
+                    conversation_id=conversation_id,
+                    question=question,
+                    answer=final_response.answer,
+                )
+            except Exception:
+                # 标题生成失败不影响主流程
+                pass
 
         return final_response
 
@@ -629,7 +817,112 @@ class AIService:
                 .where(AIConversation.id == conversation_id)
             )
 
+    async def _auto_generate_title(
+        self,
+        conversation_id: UUID,
+        question: str,
+        answer: str,
+    ) -> None:
+        """首次对话后自动生成标题。
+
+        直接用 httpx 调用 LLM API 生成标题（不走 thinking 模式），
+        然后更新数据库中的对话标题。失败时静默跳过。
+
+        Args:
+            conversation_id: 对话 ID。
+            question: 用户问题。
+            answer: AI 回答。
+        """
+        # 从 provider 提取 API 配置
+        api_key = getattr(self._provider, "_api_key", None)
+        base_url = getattr(self._provider, "_base_url", None)
+        model = getattr(self._provider, "_model", None)
+
+        if not api_key or not base_url or not model:
+            # 离线模式或其他无 API 配置的 provider，用问题前 30 字做标题
+            title = question[:30].strip()
+            if not title:
+                return
+        else:
+            # 直接 httpx 调用，不走 thinking 模式
+            import httpx
+
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.post(
+                        f"{base_url}/chat/completions",
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json={
+                            "model": model,
+                            "messages": [
+                                {
+                                    "role": "system",
+                                    "content": (
+                                        "请用一句话概括以下对话的主题，不超过15个字。"
+                                        "直接返回标题文本，不要解释、不要引号。"
+                                    ),
+                                },
+                                {
+                                    "role": "user",
+                                    "content": (
+                                        f"用户问题：{question[:500]}\n"
+                                        f"AI回答：{answer[:500]}"
+                                    ),
+                                },
+                            ],
+                            "max_tokens": 200,
+                            # 关闭思考模式，避免 token 浪费在思考过程
+                            "chat_template_kwargs": {"enable_thinking": False},
+                        },
+                    )
+                if resp.status_code != 200:
+                    return
+                data = resp.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    return
+                msg = choices[0].get("message", {})
+                # 优先取 content，回退到 reasoning_content（Qwen3 思考模式）
+                title = (msg.get("content") or msg.get("reasoning_content") or "").strip()
+            except Exception:
+                return
+
+        # 清理标题
+        title = title.strip("\"'""''「」『』 \n\r\t")
+        title = title.split("\n")[0].strip()
+        if len(title) > 60:
+            title = title[:60]
+        if not title:
+            return
+
+        # 更新数据库
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            await session.execute(
+                sa.update(AIConversation)
+                .values(title=title, updated_at=now)
+                .where(AIConversation.id == conversation_id)
+            )
+
     # ---- Provider 状态 ----
+
+    def cancel_request(self, conversation_id: UUID) -> bool:
+        """取消正在进行的 AI 请求。
+
+        Args:
+            conversation_id: 对话 ID。
+
+        Returns:
+            bool: 是否成功取消（False 表示没有正在进行的请求）。
+        """
+        event = _active_requests.get(conversation_id)
+        if event is not None:
+            event.set()
+            return True
+        return False
 
     def get_provider_status(self) -> dict[str, Any]:
         """返回当前 Provider 状态信息。

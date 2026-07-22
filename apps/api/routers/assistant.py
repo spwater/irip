@@ -18,12 +18,31 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.ai.service import AIService
+from packages.common.database import session_scope as _ai_session_scope
+from packages.common.errors import AppError
+
+
+# session_factory 由 main.py 注入
+_ai_factory: Any = None
+
+
+def set_ai_session_factory(factory: Any) -> None:
+    """设置会话工厂（由 main.py lifespan 调用）。"""
+    global _ai_factory
+    _ai_factory = factory
+
+
+def _get_ai_factory() -> Any:
+    if _ai_factory is None:
+        raise RuntimeError("AI session factory not set")
+    return _ai_factory
 
 #: 路由实例。
 assistant_router = APIRouter(
@@ -50,6 +69,41 @@ def get_ai_service() -> AIService:
 AIServiceDep = Annotated[AIService, Depends(get_ai_service)]
 
 
+async def _resolve_org_id(current_user: CurrentUser) -> UUID:
+    """从数据库查询用户的 organization_id，回退到 IRIP-DEMO 组织。"""
+    from packages.common.ids import new_id
+
+    user_id = current_user.user_id
+    org_id = getattr(current_user, "organization_id", None)
+    if org_id is not None:
+        return UUID(str(org_id))
+
+    try:
+        from packages.auth.entities import AppUser
+
+        async with _ai_session_scope(_get_ai_factory()) as session:
+            user = await session.scalar(
+                sa.select(AppUser).where(AppUser.id == user_id)
+            )
+            if user is not None and user.organization_id is not None:
+                return user.organization_id
+    except Exception:
+        pass
+
+    try:
+        async with _ai_session_scope(_get_ai_factory()) as session:
+            result = await session.execute(
+                sa.text("SELECT id FROM organization WHERE code = 'IRIP-DEMO'")
+            )
+            row = result.scalar()
+            if row is not None:
+                return UUID(str(row))
+    except Exception:
+        pass
+
+    return new_id()
+
+
 # ---- 请求模型 ----
 
 
@@ -71,6 +125,9 @@ class SendMessageRequest(BaseModel):
     provider_name: str = Field(
         "offline", max_length=64, description="Provider 名称"
     )
+    thinking_enabled: bool = Field(
+        False, description="是否启用思考模式"
+    )
 
 
 # ---- 响应模型 ----
@@ -82,6 +139,8 @@ class ConversationResponse(BaseModel):
     id: str
     title: str
     provider_mode: str
+    pinned: bool = False
+    archived: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -182,11 +241,7 @@ async def create_conversation(
     Returns:
         ConversationResponse: 新对话（201 Created）。
     """
-    org_id = getattr(current_user, "organization_id", None)
-    if org_id is None:
-        from packages.common.ids import new_id
-
-        org_id = new_id()
+    org_id = await _resolve_org_id(current_user)
 
     ref = await service.create_conversation(
         user_id=current_user.user_id,
@@ -198,6 +253,8 @@ async def create_conversation(
         id=str(ref.id),
         title=ref.title,
         provider_mode=ref.provider_mode,
+        pinned=ref.pinned,
+        archived=ref.archived,
         created_at=ref.created_at,
         updated_at=ref.updated_at,
     )
@@ -208,6 +265,8 @@ async def list_conversations(
     current_user: AssistantUserDep,
     service: AIServiceDep,
     limit: int = Query(50, ge=1, le=200, description="最大返回数"),
+    include_archived: bool = Query(False, description="是否包含已归档对话"),
+    archived_only: bool = Query(False, description="是否只返回已归档对话"),
 ) -> ConversationListResponse:
     """列出当前用户的对话。
 
@@ -215,20 +274,20 @@ async def list_conversations(
         current_user: 当前用户。
         service: AI 编排服务。
         limit: 最大返回数。
+        include_archived: 是否包含已归档对话。
+        archived_only: 是否只返回已归档对话。
 
     Returns:
         ConversationListResponse: 对话列表。
     """
-    org_id = getattr(current_user, "organization_id", None)
-    if org_id is None:
-        from packages.common.ids import new_id
-
-        org_id = new_id()
+    org_id = await _resolve_org_id(current_user)
 
     refs = await service.list_conversations(
         user_id=current_user.user_id,
         organization_id=org_id,
         limit=limit,
+        include_archived=include_archived,
+        archived_only=archived_only,
     )
     return ConversationListResponse(
         items=[
@@ -236,11 +295,112 @@ async def list_conversations(
                 id=str(r.id),
                 title=r.title,
                 provider_mode=r.provider_mode,
+                pinned=r.pinned,
+                archived=r.archived,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
             for r in refs
         ]
+    )
+
+
+@assistant_router.patch(
+    "/conversations/{conversation_id}/pin",
+    response_model=ConversationResponse,
+)
+async def toggle_pin(
+    conversation_id: UUID,
+    current_user: AssistantUserDep,
+    service: AIServiceDep,
+) -> ConversationResponse:
+    """切换对话置顶状态。"""
+    new_pinned = await service.toggle_pin(
+        conversation_id=conversation_id,
+        user_id=current_user.user_id,
+    )
+    # 重新查询返回完整信息
+    refs = await service.list_conversations(
+        user_id=current_user.user_id,
+        organization_id=await _resolve_org_id(current_user),
+        limit=200,
+        include_archived=True,
+    )
+    for r in refs:
+        if r.id == conversation_id:
+            return ConversationResponse(
+                id=str(r.id),
+                title=r.title,
+                provider_mode=r.provider_mode,
+                pinned=r.pinned,
+                archived=r.archived,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+    raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+
+
+@assistant_router.patch(
+    "/conversations/{conversation_id}/archive",
+    response_model=ConversationResponse,
+)
+async def toggle_archive(
+    conversation_id: UUID,
+    current_user: AssistantUserDep,
+    service: AIServiceDep,
+) -> ConversationResponse:
+    """切换对话归档状态。"""
+    new_archived = await service.toggle_archive(
+        conversation_id=conversation_id,
+        user_id=current_user.user_id,
+    )
+    refs = await service.list_conversations(
+        user_id=current_user.user_id,
+        organization_id=await _resolve_org_id(current_user),
+        limit=200,
+        include_archived=True,
+    )
+    for r in refs:
+        if r.id == conversation_id:
+            return ConversationResponse(
+                id=str(r.id),
+                title=r.title,
+                provider_mode=r.provider_mode,
+                pinned=r.pinned,
+                archived=r.archived,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+    raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+
+
+@assistant_router.post(
+    "/conversations/{conversation_id}/cancel",
+    status_code=200,
+)
+async def cancel_request(
+    conversation_id: UUID,
+    current_user: AssistantUserDep,
+    service: AIServiceDep,
+) -> dict[str, str]:
+    """取消正在进行的 AI 请求。"""
+    cancelled = service.cancel_request(conversation_id)
+    return {"cancelled": str(cancelled).lower()}
+
+
+@assistant_router.delete(
+    "/conversations/{conversation_id}",
+    status_code=204,
+)
+async def delete_conversation(
+    conversation_id: UUID,
+    current_user: AssistantUserDep,
+    service: AIServiceDep,
+) -> None:
+    """永久删除对话（仅允许删除已归档的对话）。"""
+    await service.delete_conversation(
+        conversation_id=conversation_id,
+        user_id=current_user.user_id,
     )
 
 
@@ -274,6 +434,7 @@ async def send_message(
         question=body.question,
         conversation_id=conversation_id,
         provider_name=body.provider_name,
+        thinking_enabled=body.thinking_enabled,
     )
     return AskResponse(
         conversation_id=str(conversation_id),

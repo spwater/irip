@@ -1,0 +1,77 @@
+classDiagram
+    class LLMExtractor {
+        +async execute(context: ComponentContext, params: dict) ComponentResult
+        -_read_file(path: str, encoding: str, max_length: int) str
+        -_get_ai_config() dict
+        -_build_messages(content: str, prompt: str, schema: list) list~dict~
+        -_call_llm(config: dict, messages: list, cancel_event: asyncio.Event) AIResponse
+        -_parse_json_response(answer: str) list~dict~
+        -_build_observation_table(data: list~dict~, schema: list, path: str) ObservationTable
+        -_coerce_value(value: Any, target_type: str) Any
+    }
+
+    class ObservationTable {
+        +columns: tuple~str~
+        +rows: tuple~dict~
+        +source_locations: tuple~dict~
+        +row_count() int
+        +column_count() int
+    }
+
+    class ComponentContext {
+        +organization_id: UUID
+        +user_id: UUID
+        +clock: Clock
+        +artifact_service: Any
+        +job_id: UUID
+        +cancel_event: asyncio.Event
+        +secrets: dict~str, str~
+        +workdir: Path
+    }
+
+    class ComponentResult {
+        +outputs: dict~str, Any~
+        +summary: str
+        +metadata: dict~str, Any~
+        +diagnostics: dict~str, Any~ | None
+    }
+
+    class OpenAICompatibleProvider {
+        -_api_key: str
+        -_base_url: str
+        -_model: str
+        -_thinking_enabled: bool
+        +async complete(request: AIRequest, cancel_event) AIResponse
+    }
+
+    class AIRequest {
+        +messages: tuple~dict~
+        +tools: tuple~str~
+        +user_context: dict
+        +provider_mode: str
+    }
+
+    class AIResponse {
+        +answer: str
+        +tool_calls: tuple~dict~
+        +citations: tuple
+        +uncertainty: str | None
+        +provider_mode: str
+    }
+
+    class ToolSpec {
+        +name: str
+        +display_name: str
+        +description: str
+        +required_permission: str
+        +candidate: bool
+        +parameters_schema: dict
+    }
+
+    LLMExtractor ..> ComponentContext : 接收
+    LLMExtractor ..> ComponentResult : 返回
+    LLMExtractor ..> ObservationTable : 构建输出
+    LLMExtractor ..> OpenAICompatibleProvider : 调用 LLM
+    LLMExtractor ..> AIRequest : 构建请求
+    OpenAICompatibleProvider ..> AIResponse : 返回
+    ComponentResult ..> ObservationTable : outputs["observations"]

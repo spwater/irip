@@ -1,7 +1,7 @@
 """AI 工具白名单注册表。
 
 定义 AI 助手可调用的工具集合，分为两类：
-1. **白名单工具（只读，7 个）**: 可直接执行，不修改平台数据；
+1. **白名单工具（只读，8 个）**: 可直接执行，不修改平台数据；
 2. **候选工具（需审批，4 个）**: 产生写操作建议，必须经人工审批后才执行。
 
 安全原则：
@@ -40,7 +40,7 @@ class ToolSpec:
     parameters_schema: dict[str, Any] = field(default_factory=dict)
 
 
-#: 7 个白名单工具（只读）。
+#: 8 个白名单工具（只读）。
 WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="search_standards",
@@ -146,6 +146,22 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
                     "description": "引用的事实 UUID 列表",
                 },
             },
+        },
+    ),
+    ToolSpec(
+        name="extract_data",
+        display_name="数据提取",
+        description="根据文件路径和提取指令，用大模型从文件中提取结构化数据",
+        required_permission="ingestion:write",
+        candidate=False,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "文件路径"},
+                "prompt": {"type": "string", "description": "提取指令"},
+                "schema": {"type": "array", "description": "目标字段定义"},
+            },
+            "required": ["path", "prompt", "schema"],
         },
     ),
 )

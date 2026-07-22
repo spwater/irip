@@ -14,6 +14,8 @@
 - 服务依赖注入 session_factory、organization_id、clock。
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -429,6 +431,23 @@ class ComponentRegistryService:
             )
             result = await session.execute(query)
             return [(row[0], row[1]) for row in result.all()]
+
+    async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:
+        """列出指定组件的所有版本（按版本创建时间降序）。
+
+        Args:
+            component_id: 组件主记录 UUID。
+
+        Returns:
+            list[ComponentVersion]: 版本记录列表。
+        """
+        async with session_scope(self._factory) as session:
+            result = await session.execute(
+                sa.select(ComponentVersion)
+                .where(ComponentVersion.component_id == component_id)
+                .order_by(ComponentVersion.created_at.desc())
+            )
+            return list(result.scalars().all())
 
     async def deprecate(self, name: str) -> Component:
         """废弃组件。

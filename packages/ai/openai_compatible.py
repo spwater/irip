@@ -19,6 +19,7 @@ REST API（如 OpenAI 官方、Azure OpenAI、本地 vLLM、Ollama 等）。
     }
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -50,6 +51,7 @@ class OpenAICompatibleProvider:
         base_url: str,
         model: str,
         timeout: float = 30.0,
+        thinking_enabled: bool = False,
     ) -> None:
         """初始化 OpenAI 兼容 Provider。
 
@@ -58,34 +60,69 @@ class OpenAICompatibleProvider:
             base_url: API 基础 URL（不含 /chat/completions 后缀）。
             model: 模型名称。
             timeout: HTTP 请求超时秒数。
+            thinking_enabled: 是否启用思考模式（如 Qwen3 的 enable_thinking）。
         """
         self._api_key = api_key
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout = timeout
+        self._thinking_enabled = thinking_enabled
 
-    async def complete(self, request: AIRequest) -> AIResponse:
+    async def complete(
+        self,
+        request: AIRequest,
+        cancel_event: asyncio.Event | None = None,
+    ) -> AIResponse:
         """调用 OpenAI 兼容 API 处理请求。
 
         Args:
             request: AI 请求。
+            cancel_event: 取消事件，set() 时中断请求。
 
         Returns:
             AIResponse: 解析后的回答。
 
         Raises:
+            AppError: code="ai_cancelled"，当请求被取消时。
             AppError: code="ai_provider_error"，当 API 调用失败时。
         """
         payload = self._build_payload(request)
         headers = self._build_headers()
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(
-                    f"{self._base_url}/chat/completions",
-                    json=payload,
-                    headers=headers,
-                )
+            async with httpx.AsyncClient(timeout=self._timeout, proxy=None) as client:
+                if cancel_event is not None:
+                    # 竞速：请求 vs 取消信号
+                    request_task = asyncio.create_task(
+                        client.post(
+                            f"{self._base_url}/chat/completions",
+                            json=payload,
+                            headers=headers,
+                        )
+                    )
+                    cancel_task = asyncio.create_task(cancel_event.wait())
+                    done, pending = await asyncio.wait(
+                        {request_task, cancel_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    # 取消未完成的任务
+                    for t in pending:
+                        t.cancel()
+                    if cancel_task in done:
+                        # 被取消
+                        raise AppError(
+                            code="ai_cancelled",
+                            message="请求已被用户取消",
+                            retryable=False,
+                            fields={},
+                        )
+                    resp = request_task.result()
+                else:
+                    resp = await client.post(
+                        f"{self._base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                    )
         except httpx.TimeoutException as exc:
             raise AppError(
                 code="ai_provider_error",
@@ -125,17 +162,17 @@ class OpenAICompatibleProvider:
 
         将 IRIP AIRequest 转换为 OpenAI API 格式：
         - messages 直接透传（已为 OpenAI 格式）；
-        - tools 转换为 OpenAI function 格式。
+        - tools 暂不传递（避免大模型对普通问题也尝试调用工具）。
         """
         messages: list[dict[str, Any]] = [
             {
                 "role": "system",
                 "content": (
                     "你是 IRIP 工业研发智能平台的 AI 助手。"
-                    "你可以调用工具搜索标准变量、事实、参数、解释溯源链路、"
-                    "对比实验、运行模型和生成报告草稿。"
-                    "回答必须基于工具返回的真实数据，不得编造。"
-                    "在回答末尾附上引用来源。"
+                    "你可以回答关于工业研究、材料科学、数据分析的问题。"
+                    "当用户询问平台内的数据（如标准变量、实验事实、参数）时，"
+                    "请说明这些数据需要在平台相应页面查看。"
+                    "回答使用中文。"
                 ),
             }
         ]
@@ -144,27 +181,13 @@ class OpenAICompatibleProvider:
             for m in request.messages
         )
 
-        tools_list: list[dict[str, Any]] = []
-        for tool_name in request.tools:
-            # 简化：工具 schema 由调用方（AIService）通过 ToolRegistry 提供
-            tools_list.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": f"IRIP tool: {tool_name}",
-                        "parameters": {"type": "object", "properties": {}},
-                    },
-                }
-            )
-
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
         }
-        if tools_list:
-            payload["tools"] = tools_list
-            payload["tool_choice"] = "auto"
+        # 思考模式：Qwen3 vLLM 通过 chat_template_kwargs 控制思考开关
+        # 顶层 enable_thinking 参数无效，只有 chat_template_kwargs 生效
+        payload["chat_template_kwargs"] = {"enable_thinking": self._thinking_enabled}
         return payload
 
     def _parse_response(

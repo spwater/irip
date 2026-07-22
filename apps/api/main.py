@@ -30,8 +30,9 @@ from apps.api.dependencies.departments import (
 from apps.api.routers.auth import auth_router, get_auth_service, get_me_session_factory, me_router
 from apps.api.routers.audit import audit_router, get_audit_session_factory
 from apps.api.routers.backups import backups_router, get_backups_session_factory
-from apps.api.routers.assistant import assistant_router, get_ai_service
+from apps.api.routers.assistant import assistant_router, get_ai_service, set_ai_session_factory as set_assistant_session_factory
 from apps.api.routers.ai_config import ai_config_router, set_session_factory as set_ai_config_session_factory, get_active_ai_config
+from apps.api.routers.files import files_router
 from apps.api.routers.components import (
     components_router,
     get_component_registry_service,
@@ -588,6 +589,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # AI 助手服务（优先从配置读取真实模型，未配置时用离线模式）
     set_ai_config_session_factory(session_factory)
+    set_assistant_session_factory(session_factory)
 
     async def _get_ai_service_dep() -> AIService:
         config = await get_active_ai_config()
@@ -596,6 +598,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 api_key=config["api_key"],
                 base_url=config["base_url"],
                 model=config["model_name"],
+                thinking_enabled=config.get("thinking_enabled", False),
             )
         else:
             provider = OfflineProvider()
@@ -706,6 +709,7 @@ def create_app() -> FastAPI:
     app.include_router(backups_router)
     app.include_router(assistant_router)
     app.include_router(ai_config_router)
+    app.include_router(files_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

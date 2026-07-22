@@ -241,6 +241,9 @@ def _definition_to_response(
             "published_at": version.published_at.isoformat()
             if version.published_at
             else None,
+            "nodes": version.nodes_json or [],
+            "edges": version.edges_json or [],
+            "random_seed": version.random_seed,
         }
     return FlowDefinitionResponse(
         id=str(definition.id),

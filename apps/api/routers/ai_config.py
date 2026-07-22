@@ -48,6 +48,7 @@ _ai_config_table = sa.Table(
     sa.Column("api_key", sa.Text, nullable=False),
     sa.Column("model_name", sa.Text, nullable=False),
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
+    sa.Column("thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
     sa.Column("updated_at", UTCDateTime, server_default=sa.func.now(), nullable=False),
     sa.Column("updated_by", GUID, nullable=True),
     extend_existing=True,
@@ -64,6 +65,7 @@ class AIConfigUpdateRequest(BaseModel):
     api_key: str = Field(..., max_length=500, description="API 密钥")
     model_name: str = Field(..., max_length=200, description="模型名称，如 gpt-4o")
     enabled: bool = Field(True, description="是否启用")
+    thinking_enabled: bool = Field(False, description="是否启用思考模式")
 
 
 class AIConfigResponse(BaseModel):
@@ -73,6 +75,7 @@ class AIConfigResponse(BaseModel):
     api_key_masked: str
     model_name: str
     enabled: bool
+    thinking_enabled: bool
     updated_at: str | None = None
 
 
@@ -127,12 +130,14 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
                 api_key_masked="",
                 model_name="",
                 enabled=False,
+                thinking_enabled=False,
             )
         return AIConfigResponse(
             base_url=row["base_url"],
             api_key_masked=_mask_key(row["api_key"]),
             model_name=row["model_name"],
             enabled=row["enabled"],
+            thinking_enabled=row.get("thinking_enabled", False),
             updated_at=str(row["updated_at"]) if row["updated_at"] else None,
         )
 
@@ -158,6 +163,7 @@ async def update_ai_config(
                     api_key=body.api_key,
                     model_name=body.model_name,
                     enabled=body.enabled,
+                    thinking_enabled=body.thinking_enabled,
                     updated_at=now,
                     updated_by=current_user.user_id,
                 )
@@ -171,6 +177,7 @@ async def update_ai_config(
                     api_key=body.api_key,
                     model_name=body.model_name,
                     enabled=body.enabled,
+                    thinking_enabled=body.thinking_enabled,
                     updated_at=now,
                     updated_by=current_user.user_id,
                 )
@@ -181,6 +188,7 @@ async def update_ai_config(
         api_key_masked=_mask_key(body.api_key),
         model_name=body.model_name,
         enabled=body.enabled,
+        thinking_enabled=body.thinking_enabled,
         updated_at=str(now),
     )
 
@@ -244,6 +252,7 @@ async def get_active_ai_config() -> dict[str, str] | None:
             "base_url": row["base_url"],
             "api_key": row["api_key"],
             "model_name": row["model_name"],
+            "thinking_enabled": row.get("thinking_enabled", False),
         }
 
 

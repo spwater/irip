@@ -21,6 +21,7 @@ type AIConfig = {
   api_key_masked: string;
   model_name: string;
   enabled: boolean;
+  thinking_enabled: boolean;
   updated_at: string | null;
 };
 
@@ -57,6 +58,7 @@ export function AIConfigPage(): JSX.Element {
         api_key: '',
         model_name: config.model_name,
         enabled: config.enabled,
+        thinking_enabled: config.thinking_enabled,
       });
     }
   }, [config, form]);
@@ -67,6 +69,7 @@ export function AIConfigPage(): JSX.Element {
       api_key: string;
       model_name: string;
       enabled: boolean;
+      thinking_enabled: boolean;
     }) => {
       const res = await http.put<AIConfig>('/ai-config', values);
       return res.data;
@@ -107,6 +110,7 @@ export function AIConfigPage(): JSX.Element {
         api_key: values.api_key,
         model_name: values.model_name,
         enabled: values.enabled ?? false,
+        thinking_enabled: values.thinking_enabled ?? false,
       });
     } catch {
       // 校验失败
@@ -161,6 +165,14 @@ export function AIConfigPage(): JSX.Element {
           <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
         </Form.Item>
         <Form.Item name="enabled" label="启用" valuePropName="checked">
+          <Switch />
+        </Form.Item>
+        <Form.Item
+          name="thinking_enabled"
+          label="思考模式"
+          valuePropName="checked"
+          tooltip="启用后，请求中会携带 enable_thinking=true 参数（适用于 Qwen3 等支持思考模式的模型）"
+        >
           <Switch />
         </Form.Item>
         <Form.Item>
