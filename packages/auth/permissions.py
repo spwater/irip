@@ -70,14 +70,30 @@ class Permission:
     MODEL_PUBLISH: str = "model:publish"
     MODEL_PREDICT: str = "model:predict"
 
-    # 参数审核
+    # 参数审核与发布
     PARAMETER_READ: str = "parameter:read"
+    PARAMETER_WRITE: str = "parameter:write"
     PARAMETER_REVIEW: str = "parameter:review"
     PARAMETER_APPROVE: str = "parameter:approve"
+    PARAMETER_PUBLISH: str = "parameter:publish"
 
     # 机构/实验室管理（新增）
     DEPARTMENT_MANAGE: str = "department:manage"
     DEPARTMENT_READ: str = "department:read"
+
+    # 设备仪器管理
+    EQUIPMENT_MANAGE: str = "equipment:manage"
+    EQUIPMENT_READ: str = "equipment:read"
+
+    # 数据导入与映射（IRIP Task 13）
+    INGESTION_READ: str = "ingestion:read"
+    INGESTION_WRITE: str = "ingestion:write"
+    INGESTION_PUBLISH: str = "ingestion:publish"
+
+    # 溯源与推导（IRIP Task 17）
+    PROVENANCE_READ: str = "provenance:read"
+    PROVENANCE_WRITE: str = "provenance:write"
+    PROVENANCE_PUBLISH: str = "provenance:publish"
 
     @classmethod
     def all(cls) -> list[str]:
@@ -101,10 +117,20 @@ class Permission:
             cls.MODEL_PUBLISH,
             cls.MODEL_PREDICT,
             cls.PARAMETER_READ,
+            cls.PARAMETER_WRITE,
             cls.PARAMETER_REVIEW,
             cls.PARAMETER_APPROVE,
+            cls.PARAMETER_PUBLISH,
             cls.DEPARTMENT_MANAGE,
             cls.DEPARTMENT_READ,
+            cls.EQUIPMENT_MANAGE,
+            cls.EQUIPMENT_READ,
+            cls.INGESTION_READ,
+            cls.INGESTION_WRITE,
+            cls.INGESTION_PUBLISH,
+            cls.PROVENANCE_READ,
+            cls.PROVENANCE_WRITE,
+            cls.PROVENANCE_PUBLISH,
         ]
 
 
@@ -125,6 +151,8 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.STANDARD_WRITE,
             Permission.STANDARD_PUBLISH,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_MANAGE,
+            Permission.EQUIPMENT_READ,
         ],
     },
     RoleCode.DATA_STEWARD.value: {
@@ -136,6 +164,15 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.ARTIFACT_UPLOAD,
             Permission.ARTIFACT_DOWNLOAD,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
+            Permission.INGESTION_READ,
+            Permission.INGESTION_WRITE,
+            Permission.INGESTION_PUBLISH,
+            Permission.PROVENANCE_READ,
+            Permission.PROVENANCE_WRITE,
+            Permission.PROVENANCE_PUBLISH,
+            Permission.PARAMETER_READ,
+            Permission.PARAMETER_WRITE,
         ],
     },
     RoleCode.RESEARCHER.value: {
@@ -147,6 +184,11 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.JOB_READ,
             Permission.JOB_SUBMIT,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
+            Permission.PROVENANCE_READ,
+            Permission.PROVENANCE_WRITE,
+            Permission.PARAMETER_READ,
+            Permission.PARAMETER_WRITE,
         ],
     },
     RoleCode.MODEL_ENGINEER.value: {
@@ -157,6 +199,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.MODEL_PUBLISH,
             Permission.MODEL_PREDICT,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
         ],
     },
     RoleCode.REVIEWER.value: {
@@ -165,7 +208,9 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PARAMETER_READ,
             Permission.PARAMETER_REVIEW,
             Permission.PARAMETER_APPROVE,
+            Permission.PARAMETER_PUBLISH,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
         ],
     },
     RoleCode.READ_ONLY_USER.value: {
@@ -175,6 +220,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.STANDARD_READ,
             Permission.PARAMETER_READ,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
         ],
     },
 }

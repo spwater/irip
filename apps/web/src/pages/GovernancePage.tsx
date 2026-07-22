@@ -1,13 +1,12 @@
 import { Card, Tabs, Typography } from 'antd';
-import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
 
 const { Title, Paragraph } = Typography;
 
 /**
  * 平台治理页面 — Ant Design Tabs 布局
  *
- * 首期"机构管理"Tab 渲染 DepartmentManagement 组件；
- * 预留"审计日志""授权管理"Tab（占位）。
+ * "机构管理"已移至标准管理页面；
+ * 保留"审计日志""授权管理"占位 Tab。
  */
 export function GovernancePage(): JSX.Element {
   return (
@@ -15,13 +14,8 @@ export function GovernancePage(): JSX.Element {
       <Title level={2}>平台治理</Title>
       <Paragraph type="secondary">数据治理与合规管理</Paragraph>
       <Tabs
-        defaultActiveKey="departments"
+        defaultActiveKey="audit"
         items={[
-          {
-            key: 'departments',
-            label: '机构管理',
-            children: <DepartmentManagement />,
-          },
           {
             key: 'audit',
             label: '审计日志',

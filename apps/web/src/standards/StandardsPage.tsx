@@ -30,6 +30,8 @@ import {
   type VariableVersion,
 } from '@/api/client';
 import { ObjectGraphPage } from '@/objects/ObjectGraphPage';
+import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
+import { EquipmentPage } from '@/equipment/EquipmentPage';
 
 const { Title, Text } = Typography;
 
@@ -269,8 +271,18 @@ export function StandardsPage(): JSX.Element {
       defaultActiveKey="variables"
       items={[
         {
+          key: 'departments',
+          label: '组织机构',
+          children: <DepartmentManagement />,
+        },
+        {
+          key: 'equipment',
+          label: '设备仪器',
+          children: <EquipmentPage />,
+        },
+        {
           key: 'variables',
-          label: '标准变量',
+          label: '物理量管理',
           children: (
             <div>
               <Space style={{ marginBottom: 16 }}>

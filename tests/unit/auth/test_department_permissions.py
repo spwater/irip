@@ -96,5 +96,37 @@ class TestDepartmentPermissions:
         assert Permission.DEPARTMENT_MANAGE not in perms
 
     def test_total_permission_count(self) -> None:
-        """权限总数 = 20（V0） + 2（department）= 22。"""
-        assert len(Permission.all()) == 22
+        """权限总数 = 20（V0） + 2（department）+ 2（equipment）+ 3（ingestion）+ 3（provenance）+ 2（parameter:write/publish）= 32。"""
+        assert len(Permission.all()) == 32
+
+    def test_permission_all_includes_equipment_permissions(self) -> None:
+        """Permission.all() 包含 EQUIPMENT_MANAGE 和 EQUIPMENT_READ。"""
+        all_perms = Permission.all()
+        assert Permission.EQUIPMENT_MANAGE in all_perms
+        assert Permission.EQUIPMENT_READ in all_perms
+
+    def test_equipment_permission_values(self) -> None:
+        """设备权限常量值正确。"""
+        assert Permission.EQUIPMENT_MANAGE == "equipment:manage"
+        assert Permission.EQUIPMENT_READ == "equipment:read"
+
+    def test_all_seven_roles_have_equipment_read(self) -> None:
+        """7 个内置角色均包含 equipment:read。"""
+        for role_code in RoleCode:
+            role_def = BUILTIN_ROLES.get(role_code.value)
+            assert role_def is not None, f"角色 {role_code.value} 不在 BUILTIN_ROLES 中"
+            permissions = role_def["permissions"]
+            assert isinstance(permissions, list)
+            assert Permission.EQUIPMENT_READ in permissions, (
+                f"角色 {role_code.value} 缺少 equipment:read 权限"
+            )
+
+    def test_standard_owner_has_equipment_manage(self) -> None:
+        """标准负责人含 equipment:manage。"""
+        perms = set(BUILTIN_ROLES["standard_owner"]["permissions"])  # type: ignore[arg-type]
+        assert Permission.EQUIPMENT_MANAGE in perms
+
+    def test_read_only_user_no_equipment_manage(self) -> None:
+        """只读用户不含 equipment:manage。"""
+        perms = set(BUILTIN_ROLES["read_only_user"]["permissions"])  # type: ignore[arg-type]
+        assert Permission.EQUIPMENT_MANAGE not in perms

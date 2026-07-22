@@ -29,13 +29,42 @@ from apps.api.dependencies.departments import (
 )
 from apps.api.routers.auth import auth_router, get_auth_service, get_me_session_factory, me_router
 from apps.api.routers.departments import departments_router
+from apps.api.routers.equipment import equipment_router, get_equipment_service
+from apps.api.routers.fact_templates import (
+    get_method_service,
+    get_package_service,
+    get_template_service,
+    methods_router,
+    packages_router,
+    templates_router,
+)
+from apps.api.routers.facts import facts_router, get_fact_service
 from apps.api.routers.health import (
     get_health_session_factory,
     get_redis_url,
     get_s3_repo,
     health_router,
 )
+from apps.api.routers.ingestions import (
+    get_ingestion_service,
+    get_mapping_profile_service,
+    get_mapping_service,
+    ingestions_router,
+)
 from apps.api.routers.jobs import get_job_service, jobs_router
+from apps.api.routers.objects import get_object_graph_service, objects_router
+from apps.api.routers.parameters import (
+    get_parameter_service,
+    parameters_router,
+)
+from apps.api.routers.provenance import (
+    get_derivation_service,
+    get_evidence_service,
+    get_provenance_graph_service,
+    get_recipe_service,
+    provenance_router,
+)
+from apps.api.routers.standards import get_standard_service, standards_router
 from apps.api.routers.uploads import (
     artifacts_router,
     get_artifact_service,
@@ -46,9 +75,26 @@ from packages.common.artifacts import ArtifactService
 from packages.common.database import build_session_factory
 from packages.common.errors import AppError
 from packages.common.s3_repository import S3Repository
+from packages.connectors.mapping import (
+    IngestionService,
+    MappingProfileService,
+    MappingService,
+)
 from packages.departments.service import DepartmentService
 from packages.departments.user_departments import UserDepartmentService
+from packages.equipment.service import EquipmentService
+from packages.facts.service import FactService
 from packages.jobs.service import JobService
+from packages.parameters.service import ParameterService
+from packages.provenance.derivations import DerivationService
+from packages.provenance.evidence import EvidenceService
+from packages.provenance.graph import ProvenanceGraphService
+from packages.provenance.recipes import RecipeService
+from packages.standards.methods import MethodService
+from packages.standards.object_graph import ObjectGraphService
+from packages.standards.packages import PackageService
+from packages.standards.service import StandardService
+from packages.standards.templates import TemplateService
 
 #: AppError code → HTTP 状态码映射（docs/arch-v0.md §7.2）。
 _STATUS_MAP: dict[str, int] = {
@@ -58,11 +104,36 @@ _STATUS_MAP: dict[str, int] = {
     "forbidden": 403,
     "not_found": 404,
     "conflict": 409,
+    "invalid_transition": 409,
+    "published_version_immutable": 409,
     "unsupported_media_type": 415,
     "hash_mismatch": 422,
     "size_mismatch": 422,
     "validation_failed": 422,
+    "incompatible_dimensions": 422,
+    "unknown_unit": 422,
+    "invalid_cursor": 422,
+    "self_relation": 422,
+    "object_cycle": 409,
+    "reference_not_published": 422,
+    "missing_observation": 422,
+    "duplicate_observation": 422,
+    "missing_unit": 422,
+    "invalid_observation": 422,
+    "secret_not_found": 404,
+    "connector_error": 502,
     "internal_error": 500,
+    "normalized_without_raw": 422,
+    "template_not_published": 422,
+    "method_not_published": 422,
+    "quality_blocked": 422,
+    "ingestion_error": 500,
+    "component_unavailable": 422,
+    "evidence_not_frozen": 422,
+    "recipe_not_published": 422,
+    "self_approval_forbidden": 403,
+    "derivation_not_succeeded": 422,
+    "candidate_not_pending": 409,
 }
 
 
@@ -185,6 +256,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.dependency_overrides[get_department_service] = _get_department_service
 
+    # 设备仪器服务（需当前用户上下文，按请求构造）
+    async def _get_equipment_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> EquipmentService:
+        """按请求构造设备仪器服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return EquipmentService(
+            session_factory=session_factory,
+            organization_id=org_id,
+        )
+
+    app.dependency_overrides[get_equipment_service] = _get_equipment_service_dep
+
     # 用户-实验室关联服务（需当前用户上下文，按请求构造）
     async def _get_user_department_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -198,6 +282,210 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.dependency_overrides[get_user_department_service] = (
         _get_user_department_service_dep
+    )
+
+    # 标准变量服务（需当前用户上下文，按请求构造）
+    async def _get_standard_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> StandardService:
+        """按请求构造标准变量服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return StandardService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_standard_service] = _get_standard_service_dep
+
+    # 工业对象图服务（需当前用户上下文，按请求构造）
+    async def _get_object_graph_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ObjectGraphService:
+        """按请求构造工业对象图服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return ObjectGraphService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_object_graph_service] = (
+        _get_object_graph_service_dep
+    )
+
+    # 事实模板服务（需当前用户上下文，按请求构造）
+    async def _get_template_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> TemplateService:
+        """按请求构造事实模板服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return TemplateService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_template_service] = _get_template_service_dep
+
+    # 方法服务（需当前用户上下文，按请求构造）
+    async def _get_method_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> MethodService:
+        """按请求构造方法服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return MethodService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_method_service] = _get_method_service_dep
+
+    # 标准包服务（需当前用户上下文，按请求构造）
+    async def _get_package_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> PackageService:
+        """按请求构造标准包服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return PackageService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_package_service] = _get_package_service_dep
+
+    # 映射评分服务（需当前用户上下文，按请求构造）
+    async def _get_mapping_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> "MappingService":
+        """按请求构造映射评分服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return MappingService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_mapping_service] = _get_mapping_service_dep
+
+    # 映射配置生命周期服务（需当前用户上下文，按请求构造）
+    async def _get_mapping_profile_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> "MappingProfileService":
+        """按请求构造映射配置服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return MappingProfileService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_mapping_profile_service] = (
+        _get_mapping_profile_service_dep
+    )
+
+    # 数据源预览服务（需当前用户上下文，按请求构造）
+    async def _get_ingestion_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> "IngestionService":
+        """按请求构造预览服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return IngestionService(
+            session_factory=session_factory,
+            organization_id=org_id,
+        )
+
+    app.dependency_overrides[get_ingestion_service] = _get_ingestion_service_dep
+
+    # 事实服务（需当前用户上下文，按请求构造）
+    async def _get_fact_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> FactService:
+        """按请求构造事实服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return FactService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_fact_service] = _get_fact_service_dep
+
+    # 证据集服务（需当前用户上下文，按请求构造）
+    async def _get_evidence_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> EvidenceService:
+        """按请求构造证据集服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return EvidenceService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_evidence_service] = _get_evidence_service_dep
+
+    # 推导配方服务（需当前用户上下文，按请求构造）
+    async def _get_recipe_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> RecipeService:
+        """按请求构造推导配方服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return RecipeService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_recipe_service] = _get_recipe_service_dep
+
+    # 推导运行服务（需当前用户上下文，按请求构造）
+    async def _get_derivation_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> DerivationService:
+        """按请求构造推导运行服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return DerivationService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_derivation_service] = (
+        _get_derivation_service_dep
+    )
+
+    # 溯源图服务（需当前用户上下文，按请求构造）
+    async def _get_provenance_graph_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ProvenanceGraphService:
+        """按请求构造溯源图服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return ProvenanceGraphService(
+            session_factory=session_factory,
+            organization_id=org_id,
+        )
+
+    app.dependency_overrides[get_provenance_graph_service] = (
+        _get_provenance_graph_service_dep
+    )
+
+    # 参数服务（需当前用户上下文，按请求构造）
+    async def _get_parameter_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ParameterService:
+        """按请求构造参数服务，从 DB 查询当前用户的 organization_id。"""
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return ParameterService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            actor_id=current_user.user_id,
+        )
+
+    app.dependency_overrides[get_parameter_service] = (
+        _get_parameter_service_dep
     )
 
     # /me 端点用的 DB 会话工厂
@@ -281,7 +569,17 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_router)
     app.include_router(jobs_router)
     app.include_router(departments_router)
+    app.include_router(equipment_router)
     app.include_router(user_departments_router)
+    app.include_router(standards_router)
+    app.include_router(objects_router)
+    app.include_router(templates_router)
+    app.include_router(methods_router)
+    app.include_router(packages_router)
+    app.include_router(ingestions_router)
+    app.include_router(facts_router)
+    app.include_router(provenance_router)
+    app.include_router(parameters_router)
     app.include_router(health_router)
 
     # ---- AppError 异常处理器 ----
