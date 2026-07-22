@@ -1,0 +1,25 @@
+name: postgres_query
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "仅允许 SELECT 查询（sqlparse 拦截非 SELECT），凭据通过 context.secrets。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - query
+  properties:
+    query:
+      type: string
+      description: "SQL 查询语句（仅 SELECT）"
+    limit:
+      type: integer
+      minimum: 1
+      default: 10000
+network_policy:
+  allowed_hosts: []

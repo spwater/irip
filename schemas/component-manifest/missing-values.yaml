@@ -1,0 +1,28 @@
+name: missing_values
+version: 1.0.0
+kind: transform
+runtime: python
+description: "缺失值处理（reject/null/forward_fill/constant 策略）。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - strategy
+  properties:
+    strategy:
+      type: string
+      enum: ["reject", "null", "forward_fill", "constant"]
+    columns:
+      type: array
+      items:
+        type: string
+    fill_value:
+      description: "constant 策略的填充值"

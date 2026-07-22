@@ -1,0 +1,13 @@
+# 本地开发覆盖：把依赖容器端口暴露到宿主机，方便本机 uvicorn 直连
+# 用法：docker compose -f compose.yaml -f compose.override.local.yaml up -d
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+  redis:
+    ports:
+      - "6379:6379"
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"

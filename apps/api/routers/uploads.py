@@ -18,7 +18,11 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
-from packages.common.artifacts import ALLOWED_MEDIA_TYPES, ArtifactService
+from packages.common.artifacts import (
+    ALLOWED_MEDIA_TYPES,
+    MAX_UPLOAD_SIZE_BYTES,
+    ArtifactService,
+)
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 
@@ -114,6 +118,20 @@ async def presign_upload(
             message=f"不支持的媒体类型: {body.media_type}",
             retryable=False,
             fields={"media_type": body.media_type},
+        )
+
+    if body.size_bytes > MAX_UPLOAD_SIZE_BYTES:
+        raise AppError(
+            code="file_too_large",
+            message=(
+                f"文件大小 {body.size_bytes} 超过上限 "
+                f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
+            ),
+            retryable=False,
+            fields={
+                "size_bytes": body.size_bytes,
+                "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+            },
         )
 
     artifact_id = new_id()

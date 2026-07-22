@@ -1,0 +1,22 @@
+name: json_reader
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "读取 JSON（对象或数组），展平为 ObservationTable。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - path
+  properties:
+    path:
+      type: string
+      description: "JSON 文件路径"
+    json_path:
+      type: string
+      description: "JSONPath 式点号路径，定位数组节点（可选）"

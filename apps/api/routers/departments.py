@@ -1,4 +1,4 @@
-"""实验室管理路由：创建、列表、详情、编辑、状态切换。
+"""实验室管理路由：创建、列表、详情、编辑、状态切换、删除。
 
 端点（docs/arch-department.md §5 T03）：
   POST   /api/v1/departments           — 创建实验室（department:manage）
@@ -6,13 +6,15 @@
   GET    /api/v1/departments/{id}      — 详情（department:read）
   PATCH  /api/v1/departments/{id}      — 编辑（department:manage，不含 code）
   PATCH  /api/v1/departments/{id}/status — 启用/禁用（department:manage）
+  DELETE /api/v1/departments/{id}      — 删除（department:manage，子部门数和仪器数均为0时）
 
 安全约定：
-- 创建/编辑/状态切换需 require_permission("department:manage")；
+- 创建/编辑/状态切换/删除需 require_permission("department:manage")；
 - 列表/详情需 require_permission("department:read")；
 - code 创建后锁定：UpdateDepartmentRequest 不含 code 字段；
 - 乐观锁：编辑/状态切换请求必须携带 lock_version；
-- 软禁用：status='disabled'，无 DELETE 端点。
+- 软禁用：status='disabled'；
+- 物理删除：DELETE 端点，前置条件子部门数为0且仪器数为0。
 """
 
 from datetime import datetime
@@ -310,3 +312,20 @@ async def update_department_status(
         lock_version=body.lock_version,
     )
     return _to_response(dept)
+
+
+@departments_router.delete("/{department_id}", status_code=204)
+async def delete_department(
+    department_id: UUID,
+    current_user: ManageUserDep,
+    service: DepartmentServiceDep,
+) -> None:
+    """删除实验室（物理删除）。
+
+    前置条件：子部门数为 0 且仪器数为 0。
+
+    Raises:
+        AppError: code="not_found"，当实验室不存在时。
+        AppError: code="conflict"，当存在子部门或仪器时不允许删除。
+    """
+    await service.delete(department_id)

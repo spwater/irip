@@ -1,0 +1,87 @@
+{
+  "name": "grate_cooler_rom",
+  "version": "1.0.0",
+  "description": "篦冷机降阶模型（Reduced Order Model）：5 输入 → 4 输出多输出回归。",
+  "input_schema": {
+    "type": "object",
+    "required": [
+      "clinker_feed_tph",
+      "cooling_air_nm3_kg",
+      "grate_speed_m_min",
+      "bed_depth_mm",
+      "clinker_inlet_temp_c"
+    ],
+    "properties": {
+      "clinker_feed_tph": {
+        "type": "number",
+        "minimum": 120,
+        "maximum": 300,
+        "description": "熟料给料量 (t/h)"
+      },
+      "cooling_air_nm3_kg": {
+        "type": "number",
+        "minimum": 1.6,
+        "maximum": 3.2,
+        "description": "冷却风量 (Nm³/kg)"
+      },
+      "grate_speed_m_min": {
+        "type": "number",
+        "minimum": 1.2,
+        "maximum": 4.0,
+        "description": "篦床速度 (m/min)"
+      },
+      "bed_depth_mm": {
+        "type": "number",
+        "minimum": 450,
+        "maximum": 850,
+        "description": "料层厚度 (mm)"
+      },
+      "clinker_inlet_temp_c": {
+        "type": "number",
+        "minimum": 1250,
+        "maximum": 1450,
+        "description": "熟料入口温度 (°C)"
+      }
+    },
+    "additionalProperties": false
+  },
+  "output_schema": {
+    "type": "object",
+    "required": [
+      "clinker_outlet_temp_c",
+      "cooling_efficiency_pct",
+      "secondary_air_temp_c",
+      "fan_power_kw"
+    ],
+    "properties": {
+      "clinker_outlet_temp_c": {
+        "type": "number",
+        "description": "熟料出口温度 (°C)"
+      },
+      "cooling_efficiency_pct": {
+        "type": "number",
+        "description": "冷却效率 (%)"
+      },
+      "secondary_air_temp_c": {
+        "type": "number",
+        "description": "二次风温度 (°C)"
+      },
+      "fan_power_kw": {
+        "type": "number",
+        "description": "风机功率 (kW)"
+      }
+    },
+    "additionalProperties": false
+  },
+  "applicability_domain": {
+    "clinker_feed_tph": {"min": 120.0, "max": 300.0, "unit": "t/h"},
+    "cooling_air_nm3_kg": {"min": 1.6, "max": 3.2, "unit": "Nm3/kg"},
+    "grate_speed_m_min": {"min": 1.2, "max": 4.0, "unit": "m/min"},
+    "bed_depth_mm": {"min": 450.0, "max": 850.0, "unit": "mm"},
+    "clinker_inlet_temp_c": {"min": 1250.0, "max": 1450.0, "unit": "degC"}
+  },
+  "executor": {
+    "type": "python",
+    "timeout_seconds": 300
+  }
+}

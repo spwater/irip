@@ -1,0 +1,279 @@
+%% IRIP V3 类图 — AI 助手 + 治理控制台 + 备份恢复
+%% 架构师: 高见远（Gao）  日期: 2026-07-25
+
+classDiagram
+  direction LR
+
+  %% ========== AI Provider 抽象层 ==========
+  class AIRequest {
+    +messages: tuple~dict~
+    +tools: tuple~dict~
+    +model: str
+    +temperature: float
+    +max_tokens: int
+    +organization_id: UUID
+    +user_id: UUID
+  }
+
+  class AIResponse {
+    +content: str
+    +tool_calls: tuple~dict~
+    +citations: tuple~Citation~
+    +usage: dict
+    +provider: str
+    +model: str
+  }
+
+  class AIProvider {
+    <<Protocol>>
+    +complete(request: AIRequest) AIResponse
+    +healthcheck() bool
+  }
+
+  class OpenAICompatibleProvider {
+    -base_url: str
+    -api_key: str
+    -model: str
+    -httpx_client: httpx.AsyncClient
+    +complete(request: AIRequest) AIResponse
+    +healthcheck() bool
+  }
+
+  class OfflineProvider {
+    +complete(request: AIRequest) AIResponse
+    +healthcheck() bool
+    -match_keyword(messages) dict
+  }
+
+  %% ========== AI 工具白名单 ==========
+  class ToolDefinition {
+    +name: str
+    +description: str
+    +parameters_schema: dict
+    +handler: ToolHandler
+    +enabled: bool
+  }
+
+  class ToolResult {
+    +name: str
+    +result: dict
+    +citations: tuple~Citation~
+    +error: str
+  }
+
+  class ToolHandler {
+    <<Protocol>>
+    +execute(arguments: dict, org_id: UUID, user_id: UUID) ToolResult
+  }
+
+  class ToolRegistry {
+    -tools: dict~str, ToolDefinition~
+    +register(tool: ToolDefinition) void
+    +get_enabled_tools() list~ToolDefinition~
+    +get_tool_schemas_for_llm() list~dict~
+    +is_allowed(tool_name: str) bool
+    +execute_tool(tool_name: str, arguments: dict, org_id: UUID, user_id: UUID) ToolResult
+  }
+
+  class SearchFactsHandler {
+    -fact_service: FactService
+    +execute(arguments: dict, org_id: UUID, user_id: UUID) ToolResult
+  }
+
+  class GetProvenanceHandler {
+    -provenance_service: ProvenanceGraphService
+    +execute(arguments: dict, org_id: UUID, user_id: UUID) ToolResult
+  }
+
+  %% ========== 引用层 ==========
+  class Citation {
+    +source_type: str
+    +source_id: str
+    +snippet: str
+    +metadata: dict
+  }
+
+  class CitationCollector {
+    -citations: list~Citation~
+    +add(citation: Citation) void
+    +add_from_tool_result(result: ToolResult) void
+    +collect() tuple~Citation~
+  }
+
+  %% ========== AI 服务 + ORM ==========
+  class AIService {
+    -session_factory: async_sessionmaker
+    -organization_id: UUID
+    -user_id: UUID
+    -provider: AIProvider
+    -tool_registry: ToolRegistry
+    +create_conversation(title: str) AIConversation
+    +list_conversations() list~AIConversation~
+    +get_conversation(conversation_id: UUID) AIConversation
+    +delete_conversation(conversation_id: UUID) void
+    +get_messages(conversation_id: UUID) list~AIMessage~
+    +send_message(conversation_id: UUID, content: str) AIMessage
+  }
+
+  class AIConversation {
+    +id: UUID
+    +organization_id: UUID
+    +user_id: UUID
+    +title: str
+    +provider: str
+    +created_at: datetime
+    +updated_at: datetime
+  }
+
+  class AIMessage {
+    +id: UUID
+    +conversation_id: UUID
+    +role: str
+    +content: str
+    +tool_calls_json: list
+    +citations_json: list
+    +created_at: datetime
+  }
+
+  %% ========== 治理 + 审计 ==========
+  class GovernanceService {
+    -session_factory: async_sessionmaker
+    -actor_id: UUID
+    +list_users(status: str) list~AppUser~
+    +get_user(user_id: UUID) AppUser
+    +update_user_roles(user_id: UUID, roles: list~str~) AppUser
+    +set_user_status(user_id: UUID, status: str) AppUser
+    +list_roles() list~Role~
+    +list_scope_grants(user_id: UUID) list~ScopeGrant~
+    +create_scope_grant(grant: dict) ScopeGrant
+    +revoke_scope_grant(grant_id: UUID) void
+  }
+
+  class AuditQueryService {
+    -session_factory: async_sessionmaker
+    -organization_id: UUID
+    +query_events(action: str, resource_type: str, actor_user_id: UUID, start_time: datetime, end_time: datetime, cursor: str, limit: int) tuple~list~AuditEvent~, str~
+  }
+
+  %% ========== 备份/恢复 ==========
+  class BackupManifest {
+    +backup_id: str
+    +created_at: str
+    +components: dict
+    +checksums: dict
+    +irip_version: str
+    +migration_head: str
+  }
+
+  class BackupManifestValidator {
+    +validate(manifest: BackupManifest, backup_dir: Path) bool
+    +verify_checksum(component: str, file_path: Path, expected: str) bool
+  }
+
+  class BackupService {
+    -db_url: str
+    -minio_endpoint: str
+    -minio_bucket: str
+    +backup(output_dir: Path) BackupManifest
+  }
+
+  class RestoreService {
+    -db_url: str
+    -minio_endpoint: str
+    -minio_bucket: str
+    +restore(backup_dir: Path) void
+  }
+
+  %% ========== V0-V2 复用服务（引用） ==========
+  class FactService {
+    <<V0-V2 复用>>
+    +search(query: str) CursorPage
+    +get(fact_id: UUID) FactDetail
+  }
+
+  class ParameterService {
+    <<V0-V2 复用>>
+    +list() CursorPage
+    +get(parameter_id: UUID) ParameterDetail
+  }
+
+  class ModelService {
+    <<V0-V2 复用>>
+    +list() CursorPage
+    +get(model_id: UUID) ModelDetail
+  }
+
+  class ProvenanceGraphService {
+    <<V0-V2 复用>>
+    +get(run_id: UUID) ProvenanceGraph
+  }
+
+  class AppUser {
+    <<V0 复用>>
+    +id: UUID
+    +email: str
+    +roles: list~str~
+    +status: str
+  }
+
+  class ScopeGrant {
+    <<V0 复用>>
+    +id: UUID
+    +user_id: UUID
+    +role_id: UUID
+    +resource_type: str
+    +action: str
+  }
+
+  class AuditEvent {
+    <<V0 复用>>
+    +id: UUID
+    +action: str
+    +actor_user_id: UUID
+    +occurred_at: datetime
+  }
+
+  class JobService {
+    <<V0 复用>>
+    +accept(kind: str, payload: dict) Job
+    +complete(job_id: UUID, result: dict) void
+  }
+
+  %% ========== 关系 ==========
+  AIProvider <|.. OpenAICompatibleProvider : implements
+  AIProvider <|.. OfflineProvider : implements
+  AIProvider <-- AIService : depends
+
+  ToolHandler <|.. SearchFactsHandler : implements
+  ToolHandler <|.. GetProvenanceHandler : implements
+  ToolDefinition --> ToolHandler : handler
+  ToolRegistry --> ToolDefinition : manages
+  ToolRegistry <-- AIService : depends
+  ToolRegistry ..> ToolResult : produces
+
+  ToolResult --> Citation : contains
+  CitationCollector --> Citation : collects
+  CitationCollector ..> ToolResult : reads
+  CitationCollector <-- AIService : uses
+
+  AIResponse --> Citation : contains
+  AIRequest <-- AIProvider : accepts
+  AIProvider ..> AIResponse : produces
+
+  AIService --> AIConversation : manages
+  AIService --> AIMessage : manages
+  AIMessage --> AIConversation : belongs_to
+
+  SearchFactsHandler --> FactService : calls
+  GetProvenanceHandler --> ProvenanceGraphService : calls
+
+  GovernanceService --> AppUser : manages
+  GovernanceService --> ScopeGrant : manages
+  AuditQueryService --> AuditEvent : queries
+
+  BackupService --> BackupManifest : produces
+  RestoreService --> BackupManifest : consumes
+  BackupManifestValidator --> BackupManifest : validates
+  RestoreService ..> BackupManifestValidator : uses
+  BackupService ..> JobService : async via
+  RestoreService ..> JobService : async via

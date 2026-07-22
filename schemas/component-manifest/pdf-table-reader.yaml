@@ -1,0 +1,29 @@
+name: pdf_table_reader
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "使用 pdfplumber 提取 PDF 表格。"
+timeout_seconds: 180
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - path
+  properties:
+    path:
+      type: string
+      description: "PDF 文件路径"
+    page_numbers:
+      type: array
+      items:
+        type: integer
+        minimum: 1
+      description: "页码列表（1-based，可选）"
+    table_index:
+      type: integer
+      minimum: 0
+      default: 0

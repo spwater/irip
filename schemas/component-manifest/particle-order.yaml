@@ -1,0 +1,33 @@
+name: particle_order
+version: 1.0.0
+kind: quality
+runtime: python
+description: "粒度序检查（D10<D50<D90）。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: true
+parameters:
+  type: object
+  required:
+    - d10_column
+    - d50_column
+    - d90_column
+  properties:
+    d10_column:
+      type: string
+    d50_column:
+      type: string
+    d90_column:
+      type: string
+    strict:
+      type: boolean
+      default: true

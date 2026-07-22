@@ -74,7 +74,7 @@ class TestRolePermissionMatrix:
         assert admin_perms == all_perms
 
     def test_standard_owner_permissions(self) -> None:
-        """标准负责人权限：standard:read/write/publish + department:read + equipment:manage/read。"""
+        """标准负责人权限：standard:read/write/publish + department:read + equipment:manage/read + component:manage/read + flow:manage/read + assistant:use。"""
         perms = set(BUILTIN_ROLES["standard_owner"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "standard:read",
@@ -83,10 +83,15 @@ class TestRolePermissionMatrix:
             "department:read",
             "equipment:manage",
             "equipment:read",
+            "component:manage",
+            "component:read",
+            "flow:manage",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_data_steward_permissions(self) -> None:
-        """数据管家权限：fact:read/write + artifact:read/upload/download + department:read + equipment:read + ingestion:read/write/publish + provenance:read/write/publish + parameter:read/write。"""
+        """数据管家权限：fact:read/write + artifact:read/upload/download + department:read + equipment:read + ingestion:read/write/publish + provenance:read/write/publish + parameter:read/write + component:read + flow:execute/read + assistant:use。"""
         perms = set(BUILTIN_ROLES["data_steward"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "fact:read",
@@ -104,10 +109,14 @@ class TestRolePermissionMatrix:
             "provenance:publish",
             "parameter:read",
             "parameter:write",
+            "component:read",
+            "flow:execute",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_researcher_permissions(self) -> None:
-        """研究员权限：fact:read + artifact:read/download + job:read/submit + department:read + equipment:read + provenance:read/write + parameter:read/write。"""
+        """研究员权限：fact:read + artifact:read/download + job:read/submit + department:read + equipment:read + provenance:read/write + parameter:read/write + component:read + flow:execute/read + assistant:use。"""
         perms = set(BUILTIN_ROLES["researcher"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "fact:read",
@@ -121,22 +130,33 @@ class TestRolePermissionMatrix:
             "provenance:write",
             "parameter:read",
             "parameter:write",
+            "component:read",
+            "flow:execute",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_model_engineer_permissions(self) -> None:
-        """模型工程师权限：model:read/write/publish/predict + department:read + equipment:read。"""
+        """模型工程师权限：model:read/manage/write/publish/predict + department:read + equipment:read + component:manage/read + flow:manage/execute/read + assistant:use。"""
         perms = set(BUILTIN_ROLES["model_engineer"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "model:read",
+            "model:manage",
             "model:write",
             "model:publish",
             "model:predict",
             "department:read",
             "equipment:read",
+            "component:manage",
+            "component:read",
+            "flow:manage",
+            "flow:execute",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_reviewer_permissions(self) -> None:
-        """审核员权限：parameter:read/review/approve/publish + department:read + equipment:read。"""
+        """审核员权限：parameter:read/review/approve/publish + department:read + equipment:read + assistant:use。"""
         perms = set(BUILTIN_ROLES["reviewer"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "parameter:read",
@@ -145,10 +165,11 @@ class TestRolePermissionMatrix:
             "parameter:publish",
             "department:read",
             "equipment:read",
+            "assistant:use",
         }
 
     def test_read_only_user_permissions(self) -> None:
-        """只读用户权限：fact:read + standard:read + parameter:read + department:read + equipment:read。"""
+        """只读用户权限：fact:read + standard:read + parameter:read + department:read + equipment:read + component:read + flow:read + assistant:use。"""
         perms = set(BUILTIN_ROLES["read_only_user"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "fact:read",
@@ -156,6 +177,9 @@ class TestRolePermissionMatrix:
             "parameter:read",
             "department:read",
             "equipment:read",
+            "component:read",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_read_only_user_cannot_write(self) -> None:

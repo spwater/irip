@@ -1,0 +1,39 @@
+name: steady_window
+version: 1.0.0
+kind: transform
+runtime: python
+description: "稳态窗口识别。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: windows
+    data_type: steady_windows
+    required: true
+  - name: observations
+    data_type: observation_table
+    required: false
+parameters:
+  type: object
+  required:
+    - value_column
+    - window_size
+    - tolerance
+  properties:
+    value_column:
+      type: string
+    window_size:
+      type: integer
+      minimum: 2
+    tolerance:
+      type: number
+      minimum: 0
+    min_duration:
+      type: integer
+      minimum: 1
+    metric:
+      type: string
+      enum: ["std", "range"]
+      default: std

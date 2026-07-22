@@ -1,0 +1,27 @@
+name: field_mapper
+version: 1.0.0
+kind: transform
+runtime: python
+description: "源字段→目标字段映射。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - mapping
+  properties:
+    mapping:
+      type: object
+      additionalProperties:
+        type: string
+      description: "源字段→目标字段映射"
+    include_unmapped:
+      type: boolean
+      default: false

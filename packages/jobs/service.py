@@ -248,3 +248,107 @@ class JobService:
                 progress=progress,
                 retryable=retryable,
             )
+
+    async def list(
+        self,
+        status: str | None = None,
+        kind: str | None = None,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> tuple[list[tuple[Job, str, int, bool]], str | None, bool]:
+        """分页查询作业列表。
+
+        按创建时间倒序排列，支持按状态和类型过滤。
+
+        Args:
+            status: 状态过滤（如 ``running``、``succeeded``）。
+            kind: 类型过滤（如 ``echo``、``audit_export``）。
+            cursor: 分页游标（上一页最后一条的 created_at ISO 字符串）。
+            limit: 每页数量。
+
+        Returns:
+            tuple: (items, next_cursor, has_more)
+              - items: [(job, stage, progress, retryable), ...] 元组列表
+              - next_cursor: 下一页游标（无更多数据时为 None）
+              - has_more: 是否还有更多数据
+        """
+        from datetime import datetime
+
+        conditions: list[Any] = [Job.organization_id == self._org_id]
+
+        if status is not None:
+            conditions.append(Job.status == status)
+
+        if kind is not None:
+            conditions.append(Job.kind == kind)
+
+        if cursor is not None:
+            try:
+                cursor_dt = datetime.fromisoformat(cursor)
+            except ValueError as exc:
+                raise AppError(
+                    code="invalid_cursor",
+                    message="无效的分页游标",
+                    retryable=False,
+                    fields={"cursor": cursor},
+                ) from exc
+            conditions.append(Job.created_at < cursor_dt)
+
+        async with self._factory() as session:
+            stmt = (
+                sa.select(Job)
+                .where(*conditions)
+                .order_by(Job.created_at.desc())
+                .limit(limit + 1)
+            )
+            result = await session.execute(stmt)
+            rows: list[Job] = list(result.scalars().all())
+
+        has_more: bool = len(rows) > limit
+        page_rows: list[Job] = rows[:limit]
+        next_cursor: str | None = None
+        if has_more and page_rows:
+            next_cursor = page_rows[-1].created_at.isoformat()
+
+        items: list[tuple[Job, str, int, bool]] = []
+        for job in page_rows:
+            job_status = JobStatus(job.status)
+            retryable = (
+                job.attempt < job.max_attempts
+                and job_status not in TERMINAL_STATUSES
+            )
+            stage = job.last_error.get("stage", "") if job.last_error else ""
+            progress = (
+                100
+                if job_status in TERMINAL_STATUSES
+                else (50 if job_status == JobStatus.RUNNING else 0)
+            )
+            items.append((job, stage, progress, retryable))
+
+        return items, next_cursor, has_more
+
+    async def get_raw(self, job_id: UUID) -> Job:
+        """获取作业原始 ORM 实体（含 payload、result、last_error 等全字段）。
+
+        与 ``get()`` 不同，此方法返回完整的 Job ORM 对象，
+        用于作业详情页展示输入载荷、执行结果和错误日志。
+
+        Args:
+            job_id: 作业 UUID。
+
+        Returns:
+            Job: 作业 ORM 实体。
+
+        Raises:
+            AppError: code="not_found"，当作业不存在时。
+        """
+        async with self._factory() as session:
+            job: Job | None = await JobRepository.get(session, job_id)
+            if job is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"作业不存在: {job_id}",
+                    retryable=False,
+                    fields={"job_id": str(job_id)},
+                )
+            return job

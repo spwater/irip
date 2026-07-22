@@ -33,6 +33,7 @@ import json
 from datetime import datetime
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
@@ -335,6 +336,66 @@ class DepartmentService:
                 fields={"lock_version": lock_version},
             )
 
+    async def delete(self, department_id: UUID) -> None:
+        """删除实验室（物理删除）。
+
+        前置条件：
+        - 子部门数为 0（无直接子部门）；
+        - 仪器数为 0（无关联设备）。
+
+        Raises:
+            AppError: code="not_found"，当实验室不存在时。
+            AppError: code="conflict"，当存在子部门或仪器时不允许删除。
+        """
+        from packages.equipment.entities import Equipment
+
+        async with session_scope(self._factory) as session:
+            # 检查是否存在
+            existing = await DepartmentRepository.select_by_id(session, department_id)
+            if existing is None:
+                raise AppError(
+                    code="not_found",
+                    message="实验室不存在",
+                    retryable=False,
+                    fields={"department_id": str(department_id)},
+                )
+
+            # 检查子部门数
+            children_count = await DepartmentRepository.select_children_count(
+                session, department_id
+            )
+            if children_count > 0:
+                raise AppError(
+                    code="conflict",
+                    message=f"存在 {children_count} 个子部门，请先删除子部门",
+                    retryable=False,
+                    fields={"children_count": children_count},
+                )
+
+            # 检查仪器数
+            equip_result = await session.execute(
+                sa.select(sa.func.count())
+                .select_from(Equipment)
+                .where(Equipment.department_id == department_id)
+            )
+            equipment_count = int(equip_result.scalar() or 0)
+            if equipment_count > 0:
+                raise AppError(
+                    code="conflict",
+                    message=f"存在 {equipment_count} 台仪器，请先迁移或删除仪器",
+                    retryable=False,
+                    fields={"equipment_count": equipment_count},
+                )
+
+            # 执行删除
+            deleted = await DepartmentRepository.delete_by_id(session, department_id)
+            if not deleted:
+                raise AppError(
+                    code="not_found",
+                    message="实验室不存在",
+                    retryable=False,
+                    fields={"department_id": str(department_id)},
+                )
 
 def _encode_cursor(
     sort_order: int, created_at: datetime, dept_id: UUID

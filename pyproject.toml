@@ -24,6 +24,10 @@ dependencies = [
   "pydantic-settings>=2.5,<3",
   "python-multipart>=0.0.9,<1",
   "structlog>=24,<26",
+  "jsonschema>=4.23,<5",
+  "openpyxl>=3.1,<4",
+  "scikit-learn>=1.5,<2",
+  "joblib>=1.4,<2",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +58,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
   "integration: 需要真实外部依赖（数据库/对象存储）的集成测试",
   "slow: 运行较慢的测试",
+  "acceptance: V1 验收不变量测试",
 ]
 
 # ---- ruff ----

@@ -78,7 +78,7 @@ export function EquipmentPage(): JSX.Element {
 
   const publishedVarOptions = (publishedVars?.items ?? []).map((v) => ({
     value: v.id,
-    label: `${v.name_zh} (${v.code})`,
+    label: `${v.display_name} (${v.code})`,
   }));
 
   // ---- 数据查询：当前设备已关联的物理量 ----

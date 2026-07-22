@@ -1,0 +1,39 @@
+name: experiment_comparison
+version: 1.0.0
+kind: output
+runtime: python
+description: "多实验对照表。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: comparison_table
+    data_type: observation_table
+    required: true
+  - name: text_table
+    data_type: text
+    required: false
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - experiments
+    - key_column
+    - value_columns
+  properties:
+    experiments:
+      type: array
+      items:
+        type: object
+        required:
+          - label
+        properties:
+          label:
+            type: string
+    key_column:
+      type: string
+    value_columns:
+      type: array
+      items:
+        type: string

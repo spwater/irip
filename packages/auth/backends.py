@@ -27,7 +27,7 @@ class AuthenticatedIdentity:
         email: 用户邮箱。
         display_name: 用户显示名。
         status: 账户状态（active / disabled）。
-        roles: 用户角色列表（T04 为空，T05 RBAC 后填充）。
+        roles: 用户角色列表（从 app_user.roles 读取）。
     """
 
     user_id: UUID
@@ -111,5 +111,5 @@ class LocalAuthBackend:
             email=user.email,
             display_name=user.display_name,
             status=user.status,
-            roles=[],
+            roles=list(user.roles),
         )

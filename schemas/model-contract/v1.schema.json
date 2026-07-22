@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://irip/schemas/model-contract/v1.schema.json",
+  "title": "IRIP Model Contract v1",
+  "description": "Validation schema for IRIP model contracts (V2-T04). A model contract declares the model name, semantic version, input/output JSON Schemas, and applicability domain (per-dimension min/max ranges).",
+  "type": "object",
+  "required": ["name", "version", "input_schema", "output_schema", "applicability_domain"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Model name, lowercase letters/digits/underscore, must start with a letter."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "description": "Semantic version string (semver 2.0.0)."
+    },
+    "input_schema": {
+      "type": "object",
+      "description": "JSON Schema describing the model input parameters.",
+      "additionalProperties": true
+    },
+    "output_schema": {
+      "type": "object",
+      "description": "JSON Schema describing the model output parameters.",
+      "additionalProperties": true
+    },
+    "applicability_domain": {
+      "type": "object",
+      "description": "Per-input-dimension min/max range defining the applicability domain.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["min", "max"],
+        "properties": {
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "unit": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "executor": {
+      "type": "object",
+      "description": "Optional executor specification describing how to run the model.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["python", "cli"],
+          "description": "Adapter type: 'python' for in-process sklearn/pickle models, 'cli' for command-line models."
+        },
+        "command": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Command tuple for CLI adapters (e.g. ['python', 'predict.py'])."
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 300
+        },
+        "module": {
+          "type": "string",
+          "description": "Python module path for python adapters (optional)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable model description."
+    }
+  },
+  "additionalProperties": false
+}

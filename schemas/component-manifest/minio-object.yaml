@@ -1,0 +1,28 @@
+name: minio_object
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "通过 context.artifact_service 读取 MinIO/S3 对象。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - object_key
+  properties:
+    object_key:
+      type: string
+      description: "S3 对象 key"
+    format:
+      type: string
+      enum: ["auto", "csv", "json", "excel"]
+      default: auto
+    delimiter:
+      type: string
+    encoding:
+      type: string
+      default: utf-8

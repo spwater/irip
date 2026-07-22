@@ -1,0 +1,157 @@
+%% IRIP V3 时序图 — 关键操作调用流程
+%% 架构师: 高见远（Gao）  日期: 2026-07-25
+
+%% ========== 4.1 AI 助手对话流程（含工具调用 + 引用聚合） ==========
+sequenceDiagram
+    autonumber
+    actor R as 研究员
+    participant API as Assistant API
+    participant SVC as AIService
+    participant DB as PostgreSQL
+    participant REG as ToolRegistry
+    participant PROV as AIProvider
+    participant TOOL as ToolHandler
+    participant CC as CitationCollector
+    participant FS as FactService (V0-V2)
+
+    R->>API: POST /assistant/conversations/{id}/messages {content}
+    API->>SVC: send_message(conversation_id, content)
+
+    Note over SVC,DB: 1. 持久化用户消息
+    SVC->>DB: INSERT ai_message (role=user, content)
+
+    Note over SVC,PROV: 2. 构建请求 + 调用 AI
+    SVC->>DB: SELECT ai_message WHERE conversation_id ORDER BY created_at
+    DB-->>SVC: conversation_history
+    SVC->>REG: get_tool_schemas_for_llm()
+    REG-->>SVC: 7 tool schemas (JSON)
+    SVC->>PROV: complete(AIRequest{messages, tools})
+
+    alt 无 tool_calls
+        PROV-->>SVC: AIResponse{content, tool_calls=()}
+
+    else 有 tool_calls
+        PROV-->>SVC: AIResponse{content="", tool_calls=[{name, args}]}
+
+        Note over SVC,CC: 3. 执行工具调用 + 收集引用
+        loop for each tool_call
+            SVC->>REG: is_allowed(tool_name)?
+            alt 非白名单工具
+                REG-->>SVC: false
+                SVC-->>API: AppError(code=tool_not_allowed)
+            else 白名单工具
+                REG-->>SVC: true
+                SVC->>REG: execute_tool(tool_name, args, org_id, user_id)
+                REG->>TOOL: handler.execute(args, org_id, user_id)
+                TOOL->>FS: search/get (scoped to org_id)
+                FS-->>TOOL: query results
+                TOOL-->>REG: ToolResult{name, result, citations}
+                REG-->>SVC: ToolResult
+                SVC->>CC: add_from_tool_result(result)
+            end
+        end
+
+        Note over SVC,PROV: 4. 二次调用 provider 生成最终回复
+        SVC->>DB: INSERT ai_message (role=tool, result)
+        SVC->>PROV: complete(AIRequest{history + tool_results})
+        PROV-->>SVC: AIResponse{content=final, tool_calls=()}
+        SVC->>CC: collect()
+        CC-->>SVC: citations tuple
+    end
+
+    Note over SVC,DB: 5. 持久化助手消息
+    SVC->>DB: INSERT ai_message (role=assistant, content, tool_calls_json, citations_json)
+    SVC-->>API: AIMessage{content, tool_calls, citations}
+    API-->>R: 200 OK {assistant_message + citations + tool_traces}
+
+%% ========== 4.2 治理 — 用户角色分配流程 ==========
+sequenceDiagram
+    autonumber
+    actor A as 平台管理员
+    participant API as Governance API
+    participant AUTH as require_permission
+    participant SVC as GovernanceService
+    participant DB as PostgreSQL
+    participant AUDIT as AuditRecorder
+
+    A->>API: PATCH /governance/users/{id}/roles {roles=["researcher"]}
+    API->>AUTH: require_permission("governance:manage")
+    AUTH-->>API: authorized
+    API->>SVC: update_user_roles(user_id, roles)
+
+    Note over SVC,DB: 校验角色合法性
+    SVC->>DB: SELECT role WHERE code IN roles
+    DB-->>SVC: roles_exist
+    alt 角色不存在
+        SVC-->>API: AppError(code=validation_failed)
+        API-->>A: 422 {error}
+    else 角色合法
+        SVC->>DB: UPDATE app_user SET roles=? WHERE id=? (lock_version)
+        DB-->>SVC: updated
+        SVC->>AUDIT: record(action="governance.role_update", resource_type="user", resource_id, payload)
+        AUDIT->>DB: INSERT audit_event (append-only)
+        SVC-->>API: AppUser{updated}
+        API-->>A: 200 OK {user}
+    end
+
+%% ========== 4.3 备份 → 恢复流程 ==========
+sequenceDiagram
+    autonumber
+    actor O as 运维人员
+    participant API as Backups API
+    participant JOB as JobService
+    participant W as Celery Worker
+    participant BK as BackupService
+    participant RS as RestoreService
+    participant VAL as BackupManifestValidator
+    participant PG as PostgreSQL
+    participant MINIO as MinIO
+
+    Note over O,API: 触发备份
+    O->>API: POST /backups
+    API->>JOB: accept(kind="backup", payload={output_dir})
+    JOB-->>API: job_id
+    API-->>O: 202 Accepted {job_id}
+
+    Note over W,BK: Worker 执行备份
+    W->>JOB: lease(job_id)
+    W->>BK: backup(output_dir)
+    BK->>PG: pg_dump --format=custom
+    PG-->>BK: db.dump
+    BK->>MINIO: aws s3 sync (bucket → local)
+    MINIO-->>BK: objects synced
+    BK->>BK: compute SHA-256 for each component
+    BK->>PG: SELECT version_num FROM alembic_version
+    PG-->>BK: migration_head
+    BK->>BK: write manifest.json (BackupManifest)
+    BK-->>W: BackupManifest
+    W->>JOB: complete(job_id, result={backup_id})
+
+    Note over O,API: 触发恢复
+    O->>API: POST /backups/{backup_id}/restore
+    API->>JOB: accept(kind="restore", payload={backup_dir})
+    JOB-->>API: job_id
+    API-->>O: 202 Accepted {job_id}
+
+    Note over W,RS: Worker 执行恢复
+    W->>JOB: lease(job_id)
+    W->>RS: restore(backup_dir)
+    RS->>RS: read manifest.json → BackupManifest
+    RS->>VAL: validate(manifest, backup_dir)
+    VAL->>VAL: verify all checksums (SHA-256)
+
+    alt 校验失败
+        VAL-->>RS: false (checksum mismatch)
+        RS-->>W: AppError(code=backup_corrupted)
+        W->>JOB: complete(job_id, error)
+    else 校验通过
+        VAL-->>RS: true
+        RS->>PG: pg_restore --clean db.dump
+        PG-->>RS: restored
+        RS->>MINIO: aws s3 sync (local → bucket)
+        MINIO-->>RS: objects restored
+        RS->>PG: verify alembic_version == manifest.migration_head
+        PG-->>RS: version matches
+        RS-->>W: restore complete
+        W->>JOB: complete(job_id)
+    end

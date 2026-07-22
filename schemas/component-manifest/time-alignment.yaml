@@ -1,0 +1,33 @@
+name: time_alignment
+version: 1.0.0
+kind: transform
+runtime: python
+description: "时间戳对齐。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - time_column
+    - frequency
+  properties:
+    time_column:
+      type: string
+    frequency:
+      type: string
+      description: "对齐频率（如 1s/1min/5min/1h）"
+    method:
+      type: string
+      enum: ["nearest", "ffill", "bfill"]
+      default: nearest
+    value_columns:
+      type: array
+      items:
+        type: string

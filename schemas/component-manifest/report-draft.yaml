@@ -1,0 +1,41 @@
+name: report_draft
+version: 1.0.0
+kind: output
+runtime: python
+description: "Markdown 报告草稿。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: report
+    data_type: text
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - title
+    - sections
+  properties:
+    title:
+      type: string
+    sections:
+      type: array
+      items:
+        type: object
+        required:
+          - heading
+        properties:
+          heading:
+            type: string
+          content:
+            description: "章节内容（字符串或结构化数据）"
+          level:
+            type: integer
+            minimum: 1
+            maximum: 6
+            default: 2
+    metadata:
+      type: object
+      additionalProperties: true

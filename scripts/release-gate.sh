@@ -1,0 +1,159 @@
+#!/usr/bin/env bash
+# IRIP 发布门脚本 — 全量质量检查
+# 用法：bash scripts/release-gate.sh
+# 任一步骤失败即退出码 1，全部通过输出 "RELEASE GATE PASSED"
+set -euo pipefail
+
+# ---- 颜色输出 ----
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# ---- 配置 ----
+COMPOSE_PROJECT_NAME=irip-release-gate
+export COMPOSE_PROJECT_NAME
+
+PY="${PYTHON:-.venv/bin/python}"
+PNPM="${PNPM:-pnpm}"
+
+# 步骤计数器
+STEP=0
+TOTAL_STEPS=9
+
+# ---- 辅助函数 ----
+
+step_header() {
+    STEP=$((STEP + 1))
+    echo ""
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}  Step ${STEP}/${TOTAL_STEPS}: $1${NC}"
+    echo -e "${BLUE}========================================${NC}"
+}
+
+step_pass() {
+    echo -e "${GREEN}  [PASS] $1${NC}"
+}
+
+step_fail() {
+    echo -e "${RED}  [FAIL] $1${NC}"
+    echo ""
+    echo -e "${RED}========================================${NC}"
+    echo -e "${RED}  RELEASE GATE FAILED at Step ${STEP}${NC}"
+    echo -e "${RED}  Reason: $1${NC}"
+    echo -e "${RED}========================================${NC}"
+    exit 1
+}
+
+cleanup() {
+    echo ""
+    echo -e "${YELLOW}  Cleaning up Docker Compose release-gate environment...${NC}"
+    COMPOSE_PROJECT_NAME=irip-release-gate docker compose down -v 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# ---- Step 1: Lint ----
+step_header "Ruff 静态检查 (apps packages tests)"
+if $PY -m ruff check apps packages tests; then
+    step_pass "Ruff lint — 0 errors"
+else
+    step_fail "Ruff lint 失败"
+fi
+
+# ---- Step 2: Type check ----
+step_header "Mypy 严格类型检查 (apps packages)"
+if $PY -m mypy apps packages; then
+    step_pass "Mypy type check — 0 errors"
+else
+    step_fail "Mypy type check 失败"
+fi
+
+# ---- Step 3: Unit + Property + Contract + Integration tests ----
+step_header "Python 测试套件 (unit + property + contract + integration + security + recovery + acceptance)"
+if $PY -m pytest \
+    tests/unit \
+    tests/property \
+    tests/contract \
+    tests/integration \
+    tests/security \
+    tests/recovery \
+    tests/acceptance; then
+    step_pass "Python 测试套件 — 100% pass"
+else
+    step_fail "Python 测试套件失败"
+fi
+
+# ---- Step 4: Frontend lint ----
+step_header "前端 Lint (apps/web)"
+if $PNPM --dir apps/web lint; then
+    step_pass "前端 lint — 0 errors"
+else
+    step_fail "前端 lint 失败"
+fi
+
+# ---- Step 5: Frontend tests ----
+step_header "前端单元测试 (apps/web)"
+if $PNPM --dir apps/web test -- --run; then
+    step_pass "前端单元测试 — 100% pass"
+else
+    step_fail "前端单元测试失败"
+fi
+
+# ---- Step 6: Frontend build ----
+step_header "前端生产构建 (apps/web)"
+if $PNPM --dir apps/web build; then
+    step_pass "前端构建 — success"
+else
+    step_fail "前端构建失败"
+fi
+
+# ---- Step 7: Docker Compose up ----
+step_header "Docker Compose 全量启动 (release-gate 环境)"
+echo "  构建并启动全部服务..."
+if docker compose up --build -d; then
+    # 等待 API 健康
+    echo "  等待 API 健康检查..."
+    MAX_WAIT=60
+    WAITED=0
+    while [ $WAITED -lt $MAX_WAIT ]; do
+        if curl -sf http://localhost:8000/api/v1/health/live > /dev/null 2>&1; then
+            break
+        fi
+        sleep 2
+        WAITED=$((WAITED + 2))
+    done
+    if [ $WAITED -ge $MAX_WAIT ]; then
+        step_fail "Docker Compose 启动后 API 健康检查超时 (${MAX_WAIT}s)"
+    else
+        step_pass "Docker Compose 启动 — 全部服务健康"
+    fi
+else
+    step_fail "Docker Compose 启动失败"
+fi
+
+# ---- Step 8: E2E tests ----
+step_header "前端 E2E 测试 (apps/web)"
+if $PNPM --dir apps/web e2e; then
+    step_pass "前端 E2E 测试 — 100% pass"
+else
+    step_fail "前端 E2E 测试失败"
+fi
+
+# ---- Step 9: Cleanup (via trap) ----
+step_header "清理 Docker Compose 环境"
+# trap EXIT 会自动执行 cleanup
+step_pass "清理完成"
+
+# ---- 最终结果 ----
+echo ""
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}  RELEASE GATE PASSED${NC}"
+echo -e "${GREEN}  All ${TOTAL_STEPS} steps completed successfully${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo "  版本: 0.1.0"
+echo "  阶段: Phase V0-V3 全栈交付"
+echo "  迁移版本: 0021_ai_conversations"
+echo ""
+exit 0

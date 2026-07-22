@@ -30,6 +30,7 @@ import {
   type VariableVersion,
 } from '@/api/client';
 import { ObjectGraphPage } from '@/objects/ObjectGraphPage';
+import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
 import { EquipmentPage } from '@/equipment/EquipmentPage';
 
@@ -137,12 +138,10 @@ export function StandardsPage(): JSX.Element {
       const values = await form.validateFields();
       createMutation.mutate({
         code: values.code,
-        name_zh: values.name_zh,
-        name_en: values.name_en,
-        quantity_kind: values.quantity_kind,
+        display_name: values.display_name,
         data_type: values.data_type,
-        unit: values.unit,
-        description: values.description,
+        canonical_unit: values.canonical_unit,
+        quantity_kind: values.quantity_kind,
       });
     } catch {
       // 表单校验失败
@@ -162,14 +161,9 @@ export function StandardsPage(): JSX.Element {
       width: 160,
     },
     {
-      title: '中文名',
-      dataIndex: 'name_zh',
-      key: 'name_zh',
-    },
-    {
-      title: '英文名',
-      dataIndex: 'name_en',
-      key: 'name_en',
+      title: '名称',
+      dataIndex: 'display_name',
+      key: 'display_name',
     },
     {
       title: '量纲',
@@ -281,6 +275,11 @@ export function StandardsPage(): JSX.Element {
           children: <EquipmentPage />,
         },
         {
+          key: 'exp-objects',
+          label: '实验对象',
+          children: <ExperimentalObjectPage />,
+        },
+        {
           key: 'variables',
           label: '物理量管理',
           children: (
@@ -343,18 +342,11 @@ export function StandardsPage(): JSX.Element {
                     <Input placeholder="如：temperature" maxLength={64} />
                   </Form.Item>
                   <Form.Item
-                    name="name_zh"
-                    label="中文名"
-                    rules={[{ required: true, message: '请输入中文名' }]}
+                    name="display_name"
+                    label="名称"
+                    rules={[{ required: true, message: '请输入名称' }]}
                   >
                     <Input placeholder="如：温度" maxLength={200} />
-                  </Form.Item>
-                  <Form.Item
-                    name="name_en"
-                    label="英文名"
-                    rules={[{ required: true, message: '请输入英文名' }]}
-                  >
-                    <Input placeholder="如：temperature" maxLength={200} />
                   </Form.Item>
                   <Form.Item
                     name="quantity_kind"
@@ -377,11 +369,8 @@ export function StandardsPage(): JSX.Element {
                       ]}
                     />
                   </Form.Item>
-                  <Form.Item name="unit" label="单位">
+                  <Form.Item name="canonical_unit" label="单位">
                     <Input placeholder="如：℃" />
-                  </Form.Item>
-                  <Form.Item name="description" label="描述">
-                    <Input.TextArea placeholder="变量描述（可选）" rows={3} />
                   </Form.Item>
                 </Form>
               </Modal>
@@ -396,7 +385,7 @@ export function StandardsPage(): JSX.Element {
                 {versionDrawerRecord && (
                   <>
                     <Title level={5}>
-                      {versionDrawerRecord.name_zh}（{versionDrawerRecord.code}）
+                      {versionDrawerRecord.display_name}（{versionDrawerRecord.code}）
                     </Title>
                     <Timeline
                       items={(versions ?? []).map((v: VariableVersion) => ({

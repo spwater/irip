@@ -1,0 +1,40 @@
+name: bootstrap_interval
+version: 1.0.0
+kind: statistics
+runtime: python
+description: "Bootstrap 置信区间（固定种子）。"
+timeout_seconds: 180
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: intervals
+    data_type: confidence_intervals
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - column
+  properties:
+    column:
+      type: string
+    statistic:
+      type: string
+      enum: ["mean", "median", "std", "var", "min", "max"]
+      default: mean
+    confidence:
+      type: number
+      exclusiveMinimum: 0
+      exclusiveMaximum: 1
+      default: 0.95
+    iterations:
+      type: integer
+      minimum: 100
+      default: 10000
+    seed:
+      type: integer
+      default: 42

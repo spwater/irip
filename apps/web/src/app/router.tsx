@@ -13,9 +13,15 @@ import { StandardsPage as StandardsPageV1 } from '@/standards/StandardsPage';
 import { FactsPage as FactsPageV1 } from '@/facts/FactsPage';
 import { FactDetail } from '@/facts/FactDetail';
 import { ParameterPage as ParameterPageV1 } from '@/parameters/ParameterPage';
-import { ModelsPage } from '@/pages/ModelsPage';
-import { GovernancePage } from '@/pages/GovernancePage';
-import { JobsPage } from '@/pages/JobsPage';
+import { ComponentsPage } from '@/components/ComponentsPage';
+import { FlowDetail } from '@/components/FlowDetail';
+import { ModelsPage } from '@/models/ModelsPage';
+import { ModelDetail } from '@/models/ModelDetail';
+import { PredictionWorkbench } from '@/models/PredictionWorkbench';
+import { AssistantPage } from '@/assistant/AssistantPage';
+import { GovernanceConsole } from '@/governance/GovernanceConsole';
+import { JobsPage } from '@/jobs/JobsPage';
+import { JobDetail } from '@/jobs/JobDetail';
 
 /**
  * 根路由布局 — 包裹 AuthProvider
@@ -117,23 +123,66 @@ export function createAppRouter() {
     component: ParameterPageV1,
   });
 
-  // V0 placeholder routes (unchanged)
+  // V2 模型管理路由（替换 V0 占位页面）
   const modelsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/models',
     component: ModelsPage,
   });
 
+  const modelDetailRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/models/$modelId',
+    component: ModelDetail,
+  });
+
+  const predictionRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/models/predict',
+    component: PredictionWorkbench,
+    validateSearch: (search: Record<string, unknown>): { modelId?: string } => ({
+      modelId: typeof search.modelId === 'string' ? search.modelId : undefined,
+    }),
+  });
+
+  // V2 组件管理路由
+  const componentsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/components',
+    component: ComponentsPage,
+  });
+
+  // V2 流程编排路由
+  const flowsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/flows',
+    component: FlowDetail,
+  });
+
+  // V3 AI 助手路由
+  const assistantRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/assistant',
+    component: AssistantPage,
+  });
+
+  // V3 平台治理路由（Tabs 内部切换子页面）
   const governanceRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/governance',
-    component: GovernancePage,
+    component: GovernanceConsole,
   });
 
   const jobsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/jobs',
     component: JobsPage,
+  });
+
+  const jobDetailRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/jobs/$jobId',
+    component: JobDetail,
   });
 
   const routeTree = rootRoute.addChildren([
@@ -148,9 +197,15 @@ export function createAppRouter() {
       factDetailRoute,
       provenanceRoute,
       parametersRoute,
+      componentsRoute,
+      flowsRoute,
       modelsRoute,
+      modelDetailRoute,
+      predictionRoute,
+      assistantRoute,
       governanceRoute,
       jobsRoute,
+      jobDetailRoute,
     ]),
   ]);
 

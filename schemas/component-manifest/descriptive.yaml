@@ -1,0 +1,26 @@
+name: descriptive
+version: 1.0.0
+kind: statistics
+runtime: python
+description: "描述性统计。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: statistics
+    data_type: statistics_result
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - columns
+  properties:
+    columns:
+      type: array
+      items:
+        type: string

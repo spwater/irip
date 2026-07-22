@@ -21,28 +21,16 @@ import { IngestionWizard } from '@/ingestions/IngestionWizard';
 
 /** 状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  in_review: 'orange',
-  published: 'green',
-  deprecated: 'default',
-  rejected: 'red',
+  active: 'green',
+  superseded: 'orange',
+  withdrawn: 'red',
 };
 
 /** 状态 → 中文标签 */
 const STATUS_LABEL: Record<string, string> = {
-  draft: '草稿',
-  in_review: '审核中',
-  published: '已发布',
-  deprecated: '已弃用',
-  rejected: '已驳回',
-};
-
-/** 质量等级 → 颜色 */
-const QUALITY_COLOR: Record<string, string> = {
-  Q0: 'default',
-  Q1: 'blue',
-  Q2: 'gold',
-  Q3: 'green',
+  active: '活跃',
+  superseded: '已替代',
+  withdrawn: '已撤回',
 };
 
 const { Title } = Typography;
@@ -73,8 +61,8 @@ export function FactsPage(): JSX.Element {
     queryKey: ['facts', statusFilter, searchQuery],
     queryFn: ({ pageParam }) =>
       searchQuery
-        ? apiSearchFacts({ q: searchQuery, cursor: pageParam, limit: 20 })
-        : apiListFacts({ cursor: pageParam, limit: 20, status: statusFilter }),
+        ? apiSearchFacts({ q: searchQuery, cursor: pageParam, page_size: 20 })
+        : apiListFacts({ cursor: pageParam, page_size: 20, status: statusFilter }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
@@ -89,22 +77,33 @@ export function FactsPage(): JSX.Element {
   // ---- 表格列定义 ----
   const columns: ColumnsType<FactSummary> = [
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 120,
+      title: 'Fact ID',
+      dataIndex: 'fact_id',
+      key: 'fact_id',
+      width: 280,
+      ellipsis: true,
+      render: (id: string) => <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{id}</span>,
     },
     {
       title: '事实类型',
       dataIndex: 'fact_type',
       key: 'fact_type',
-      width: 120,
+      width: 130,
+      render: (t: string) => <Tag color="blue">{t}</Tag>,
     },
     {
       title: '主体ID',
       dataIndex: 'subject_id',
       key: 'subject_id',
-      width: 120,
+      width: 180,
+      render: (s: string) => <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{s}</span>,
+    },
+    {
+      title: '修订号',
+      dataIndex: 'revision',
+      key: 'revision',
+      width: 80,
+      align: 'center' as const,
     },
     {
       title: '状态',
@@ -118,28 +117,6 @@ export function FactsPage(): JSX.Element {
       ),
     },
     {
-      title: '质量',
-      dataIndex: 'quality_level',
-      key: 'quality_level',
-      width: 80,
-      render: (q: string) => (
-        <Tag color={QUALITY_COLOR[q] ?? 'default'}>{q}</Tag>
-      ),
-    },
-    {
-      title: '版本数',
-      dataIndex: 'revision_count',
-      key: 'revision_count',
-      width: 80,
-      align: 'center' as const,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-    },
-    {
       title: '操作',
       key: 'action',
       width: 100,
@@ -147,7 +124,7 @@ export function FactsPage(): JSX.Element {
         <Button
           type="link"
           size="small"
-          onClick={() => void navigate({ to: `/facts/${record.id}` })}
+          onClick={() => void navigate({ to: `/facts/${record.fact_id}` })}
         >
           查看详情
         </Button>
@@ -180,11 +157,9 @@ export function FactsPage(): JSX.Element {
                     value={statusFilter}
                     onChange={(val: string | undefined) => setStatusFilter(val)}
                     options={[
-                      { value: 'draft', label: '草稿' },
-                      { value: 'in_review', label: '审核中' },
-                      { value: 'published', label: '已发布' },
-                      { value: 'deprecated', label: '已弃用' },
-                      { value: 'rejected', label: '已驳回' },
+                      { value: 'active', label: '活跃' },
+                      { value: 'superseded', label: '已替代' },
+                      { value: 'withdrawn', label: '已撤回' },
                     ]}
                   />
                 </Space>
@@ -192,7 +167,7 @@ export function FactsPage(): JSX.Element {
                 <Table<FactSummary>
                   columns={columns}
                   dataSource={items}
-                  rowKey="id"
+                  rowKey="fact_id"
                   loading={isLoading}
                   pagination={false}
                   size="middle"

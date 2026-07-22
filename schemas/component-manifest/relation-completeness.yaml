@@ -1,0 +1,30 @@
+name: relation_completeness
+version: 1.0.0
+kind: quality
+runtime: python
+description: "引用完整性检查。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+  - name: parent_table
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: true
+parameters:
+  type: object
+  required:
+    - foreign_key
+    - parent_key
+  properties:
+    foreign_key:
+      type: string
+    parent_key:
+      type: string

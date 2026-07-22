@@ -1,0 +1,36 @@
+name: model_evaluate
+version: 1.0.0
+kind: model
+runtime: python
+description: "模型评估组件：验证模型版本，记录指标与适用域。"
+timeout_seconds: 300
+inputs: []
+outputs:
+  - name: version_id
+    data_type: model_version_ref
+    required: true
+  - name: status
+    data_type: status_string
+    required: true
+  - name: metrics
+    data_type: metrics_result
+    required: false
+parameters:
+  type: object
+  required:
+    - model_id
+    - version_id
+  properties:
+    model_id:
+      type: string
+      format: uuid
+    version_id:
+      type: string
+      format: uuid
+    dataset_artifact_id:
+      type: string
+      format: uuid
+    metrics:
+      type: object
+    applicability_domain:
+      type: object

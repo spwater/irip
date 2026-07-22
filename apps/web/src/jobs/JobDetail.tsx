@@ -1,0 +1,288 @@
+import {
+  Button,
+  Card,
+  Descriptions,
+  Popconfirm,
+  Progress,
+  Space,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate, useParams } from '@tanstack/react-router';
+import {
+  apiCancelJob,
+  apiGetJobDetail,
+  apiRetryJob,
+  extractApiError,
+} from '@/api/client';
+
+const { Title, Text, Paragraph } = Typography;
+
+/** 状态 → 颜色映射 */
+const STATUS_COLOR: Record<string, string> = {
+  accepted: 'default',
+  queued: 'blue',
+  running: 'processing',
+  retry_wait: 'orange',
+  succeeded: 'success',
+  failed: 'error',
+  cancel_requested: 'warning',
+  cancelled: 'default',
+};
+
+/** 状态 → 中文标签映射 */
+const STATUS_LABEL: Record<string, string> = {
+  accepted: '已接受',
+  queued: '排队中',
+  running: '运行中',
+  retry_wait: '等待重试',
+  succeeded: '已完成',
+  failed: '已失败',
+  cancel_requested: '取消请求中',
+  cancelled: '已取消',
+};
+
+/** 终态集合 */
+const TERMINAL_STATUSES: string[] = ['succeeded', 'failed', 'cancelled'];
+
+/** 可取消状态集合 */
+const CANCELLABLE_STATUSES: string[] = [
+  'accepted',
+  'queued',
+  'running',
+  'retry_wait',
+];
+
+/**
+ * 作业详情页面
+ *
+ * 功能：
+ * - 作业基本信息（ID / 类型 / 状态 / 阶段 / 进度 / 创建时间）
+ * - 执行历史/尝试（attempt / max_attempts）
+ * - 日志展示（last_error）
+ * - 工件链接（result）
+ * - 重试/取消操作
+ */
+export function JobDetail(): JSX.Element {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { jobId } = useParams({ strict: false });
+
+  // ---- 数据查询：作业详情 ----
+  const { data, isLoading } = useQuery({
+    queryKey: ['jobs', 'detail', jobId],
+    queryFn: () => apiGetJobDetail(jobId as string),
+    enabled: !!jobId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      // 非终态时每 3 秒刷新
+      return status && !TERMINAL_STATUSES.includes(status) ? 3000 : false;
+    },
+  });
+
+  // ---- 取消 Mutation ----
+  const cancelMutation = useMutation({
+    mutationFn: () => apiCancelJob(jobId as string),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs', 'detail', jobId] });
+      void queryClient.invalidateQueries({ queryKey: ['jobs', 'list'] });
+      message.success('取消请求已发送');
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
+  // ---- 重试 Mutation ----
+  const retryMutation = useMutation({
+    mutationFn: () => apiRetryJob(jobId as string),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({ queryKey: ['jobs', 'list'] });
+      message.success(`重试作业已创建（ID: ${result.id}）`);
+      void navigate({ to: '/jobs/$jobId', params: { jobId: result.id } });
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
+  if (isLoading || !data) {
+    return (
+      <div>
+        <Title level={3}>作业详情</Title>
+        <Text type="secondary">加载中…</Text>
+      </div>
+    );
+  }
+
+  const job = data;
+  const canCancel = CANCELLABLE_STATUSES.includes(job.status);
+  const canRetry = TERMINAL_STATUSES.includes(job.status);
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 16 }}>
+        <Button onClick={() => void navigate({ to: '/jobs' })}>返回列表</Button>
+        {canRetry && (
+          <Popconfirm
+            title="确定重试此作业？"
+            onConfirm={() => retryMutation.mutate()}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="primary" loading={retryMutation.isPending}>
+              重试
+            </Button>
+          </Popconfirm>
+        )}
+        {canCancel && (
+          <Popconfirm
+            title="确定取消此作业？"
+            onConfirm={() => cancelMutation.mutate()}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button danger loading={cancelMutation.isPending}>
+              取消作业
+            </Button>
+          </Popconfirm>
+        )}
+      </Space>
+
+      <Title level={3}>作业详情</Title>
+
+      {/* 基本信息 */}
+      <Card title="基本信息" style={{ marginBottom: 16 }}>
+        <Descriptions bordered column={2} size="small">
+          <Descriptions.Item label="作业 ID">{job.id}</Descriptions.Item>
+          <Descriptions.Item label="类型">{job.kind}</Descriptions.Item>
+          <Descriptions.Item label="状态">
+            <Tag color={STATUS_COLOR[job.status] ?? 'default'}>
+              {STATUS_LABEL[job.status] ?? job.status}
+            </Tag>
+          </Descriptions.Item>
+          <Descriptions.Item label="阶段">
+            {job.stage || <Text type="secondary">-</Text>}
+          </Descriptions.Item>
+          <Descriptions.Item label="进度">
+            <Progress percent={job.progress} size="small" style={{ width: 200 }} />
+          </Descriptions.Item>
+          <Descriptions.Item label="可重试">
+            {job.retryable ? <Tag color="orange">是</Tag> : <Tag>否</Tag>}
+          </Descriptions.Item>
+          <Descriptions.Item label="尝试次数">
+            {job.attempt} / {job.max_attempts}
+          </Descriptions.Item>
+          <Descriptions.Item label="创建者">
+            {job.created_by ?? <Text type="secondary">-</Text>}
+          </Descriptions.Item>
+          <Descriptions.Item label="创建时间">
+            {new Date(job.created_at).toLocaleString()}
+          </Descriptions.Item>
+          <Descriptions.Item label="更新时间">
+            {new Date(job.updated_at).toLocaleString()}
+          </Descriptions.Item>
+        </Descriptions>
+      </Card>
+
+      {/* 输入载荷 */}
+      {job.payload && Object.keys(job.payload).length > 0 && (
+        <Card title="输入载荷" style={{ marginBottom: 16 }}>
+          <Paragraph>
+            <pre
+              style={{
+                background: '#f5f5f5',
+                padding: 12,
+                borderRadius: 4,
+                fontSize: 12,
+                overflow: 'auto',
+                maxHeight: 300,
+              }}
+            >
+              {JSON.stringify(job.payload, null, 2)}
+            </pre>
+          </Paragraph>
+        </Card>
+      )}
+
+      {/* 错误日志 */}
+      {job.last_error && (
+        <Card title="错误日志" style={{ marginBottom: 16 }}>
+          <Paragraph>
+            <pre
+              style={{
+                background: '#fff2f0',
+                padding: 12,
+                borderRadius: 4,
+                fontSize: 12,
+                overflow: 'auto',
+                maxHeight: 300,
+                border: '1px solid #ffccc7',
+              }}
+            >
+              {JSON.stringify(job.last_error, null, 2)}
+            </pre>
+          </Paragraph>
+        </Card>
+      )}
+
+      {/* 执行结果 / 工件 */}
+      {job.result && Object.keys(job.result).length > 0 && (
+        <Card title="执行结果 / 工件" style={{ marginBottom: 16 }}>
+          <Paragraph>
+            <pre
+              style={{
+                background: '#f6ffed',
+                padding: 12,
+                borderRadius: 4,
+                fontSize: 12,
+                overflow: 'auto',
+                maxHeight: 400,
+                border: '1px solid #b7eb8f',
+              }}
+            >
+              {JSON.stringify(job.result, null, 2)}
+            </pre>
+          </Paragraph>
+          {/* 工件链接：如果 result 中包含 artifact_id 或 download_url，显示链接 */}
+          {Boolean(job.result.artifact_id) && (
+            <Space>
+              <Text>工件 ID: </Text>
+              <Text copyable style={{ fontFamily: 'monospace' }}>
+                {String(job.result.artifact_id)}
+              </Text>
+            </Space>
+          )}
+          {Boolean(job.result.download_url) && (
+            <div style={{ marginTop: 8 }}>
+              <a href={String(job.result.download_url)} target="_blank" rel="noreferrer">
+                下载工件
+              </a>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 终态提示 */}
+      {TERMINAL_STATUSES.includes(job.status) && !job.last_error && !job.result && (
+        <Card title="执行历史">
+          <Descriptions column={1} size="small">
+            <Descriptions.Item label="当前状态">
+              <Tag color={STATUS_COLOR[job.status] ?? 'default'}>
+                {STATUS_LABEL[job.status] ?? job.status}
+              </Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label="尝试次数">
+              {job.attempt} / {job.max_attempts}
+            </Descriptions.Item>
+            <Descriptions.Item label="完成时间">
+              {new Date(job.updated_at).toLocaleString()}
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+      )}
+    </div>
+  );
+}

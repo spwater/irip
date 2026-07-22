@@ -28,6 +28,13 @@ from apps.api.dependencies.departments import (
     get_user_department_service,
 )
 from apps.api.routers.auth import auth_router, get_auth_service, get_me_session_factory, me_router
+from apps.api.routers.audit import audit_router, get_audit_session_factory
+from apps.api.routers.backups import backups_router, get_backups_session_factory
+from apps.api.routers.assistant import assistant_router, get_ai_service
+from apps.api.routers.components import (
+    components_router,
+    get_component_registry_service,
+)
 from apps.api.routers.departments import departments_router
 from apps.api.routers.equipment import equipment_router, get_equipment_service
 from apps.api.routers.fact_templates import (
@@ -39,6 +46,8 @@ from apps.api.routers.fact_templates import (
     templates_router,
 )
 from apps.api.routers.facts import facts_router, get_fact_service
+from apps.api.routers.flows import flows_router, get_flow_service
+from apps.api.routers.governance import governance_router, get_governance_session_factory
 from apps.api.routers.health import (
     get_health_session_factory,
     get_redis_url,
@@ -52,6 +61,7 @@ from apps.api.routers.ingestions import (
     ingestions_router,
 )
 from apps.api.routers.jobs import get_job_service, jobs_router
+from apps.api.routers.models import get_model_service, models_router
 from apps.api.routers.objects import get_object_graph_service, objects_router
 from apps.api.routers.parameters import (
     get_parameter_service,
@@ -95,6 +105,15 @@ from packages.standards.object_graph import ObjectGraphService
 from packages.standards.packages import PackageService
 from packages.standards.service import StandardService
 from packages.standards.templates import TemplateService
+
+# V2+V3 新增服务导入
+from packages.components.registry import ComponentRegistryService
+from packages.components.flow_runtime import FlowRuntimeService
+from packages.components.runner import PythonComponentRunner
+from packages.models.service import ModelService
+from packages.ai.service import AIService
+from packages.ai.offline_provider import OfflineProvider
+from packages.ai.tools import ToolRegistry
 
 #: AppError code → HTTP 状态码映射（docs/arch-v0.md §7.2）。
 _STATUS_MAP: dict[str, int] = {
@@ -491,6 +510,74 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # /me 端点用的 DB 会话工厂
     app.dependency_overrides[get_me_session_factory] = lambda: session_factory
 
+    # 治理路由用的 DB 会话工厂
+    app.dependency_overrides[get_governance_session_factory] = lambda: session_factory
+
+    # 审计路由用的 DB 会话工厂
+    app.dependency_overrides[get_audit_session_factory] = lambda: session_factory
+
+    # 备份/恢复路由用的 DB 会话工厂
+    app.dependency_overrides[get_backups_session_factory] = lambda: session_factory
+
+    # 组件注册表服务（需当前用户上下文）
+    async def _get_component_registry_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ComponentRegistryService:
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return ComponentRegistryService(
+            session_factory=session_factory,
+            organization_id=org_id,
+        )
+
+    app.dependency_overrides[get_component_registry_service] = (
+        _get_component_registry_service_dep
+    )
+
+    # 流程运行时服务（需当前用户上下文 + 组件注册表 + 执行器）
+    async def _get_flow_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> FlowRuntimeService:
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        registry = ComponentRegistryService(
+            session_factory=session_factory,
+            organization_id=org_id,
+        )
+        runner = PythonComponentRunner()
+        return FlowRuntimeService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            registry=registry,
+            runner=runner,
+            job_service=None,
+        )
+
+    app.dependency_overrides[get_flow_service] = _get_flow_service_dep
+
+    # 模型服务（需当前用户上下文 + 工件服务）
+    async def _get_model_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ModelService:
+        org_id = await _lookup_org_id(session_factory, current_user.user_id)
+        return ModelService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            artifact_service=artifact_service,
+        )
+
+    app.dependency_overrides[get_model_service] = _get_model_service_dep
+
+    # AI 助手服务（离线模式，不需要外部 API）
+    def _get_ai_service_dep() -> AIService:
+        provider = OfflineProvider()
+        tool_registry = ToolRegistry()
+        return AIService(
+            provider=provider,
+            tool_registry=tool_registry,
+            session_factory=session_factory,
+        )
+
+    app.dependency_overrides[get_ai_service] = _get_ai_service_dep
+
     yield
 
     # 清理
@@ -580,7 +667,14 @@ def create_app() -> FastAPI:
     app.include_router(facts_router)
     app.include_router(provenance_router)
     app.include_router(parameters_router)
+    app.include_router(components_router)
+    app.include_router(flows_router)
+    app.include_router(models_router)
     app.include_router(health_router)
+    app.include_router(governance_router)
+    app.include_router(audit_router)
+    app.include_router(backups_router)
+    app.include_router(assistant_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

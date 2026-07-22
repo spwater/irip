@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://irip/schemas/component-manifest/v1.schema.json",
+  "title": "IRIP Component Manifest v1",
+  "description": "Validation schema for IRIP component manifests (V2-T01).",
+  "type": "object",
+  "required": ["name", "version", "kind", "runtime"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "description": "Component name, lowercase letters/digits/underscore, must start with a letter."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$",
+      "description": "Semantic version string (semver 2.0.0)."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["ingestion", "transform", "quality", "statistics", "output", "model"],
+      "description": "Component category."
+    },
+    "runtime": {
+      "type": "string",
+      "enum": ["python", "cli"],
+      "description": "Execution runtime type."
+    },
+    "inputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PortSpec" },
+      "default": []
+    },
+    "outputs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/PortSpec" },
+      "default": []
+    },
+    "parameters": {
+      "type": "object",
+      "description": "JSON Schema describing component parameters.",
+      "additionalProperties": true
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*@(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+      },
+      "default": []
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable component description."
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 300,
+      "description": "Maximum execution time in seconds."
+    },
+    "network_policy": {
+      "type": "object",
+      "properties": {
+        "allowed_hosts": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "rejected_hosts": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "PortSpec": {
+      "type": "object",
+      "required": ["name", "data_type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "data_type": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean",
+          "default": true
+        },
+        "schema": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

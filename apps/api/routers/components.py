@@ -1,0 +1,259 @@
+"""组件管理路由：发布 / 列表 / 详情。
+
+端点（IRIP V2-T01）：
+  POST   /api/v1/components              — 发布组件版本（component:manage）
+  GET    /api/v1/components              — 列表（component:read）
+  GET    /api/v1/components/{component_id} — 详情（component:read）
+
+安全约定：
+- 发布需 require_permission("component:manage")；
+- 列表/详情需 require_permission("component:read")。
+
+DI 约定（与 V1 standards 路由一致）：
+- get_component_registry_service() 抛 NotImplementedError，
+  生产环境通过 dependency_overrides 注入按请求构造的实例。
+"""
+
+from datetime import datetime
+from pathlib import Path
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field
+
+from apps.api.dependencies.auth import CurrentUser
+from apps.api.dependencies.authorization import require_permission
+from packages.components.manifest import ManifestValidator
+from packages.components.registry import ComponentRegistryService
+
+#: JSON Schema 路径（相对项目根目录）。
+_SCHEMA_PATH: Path = (
+    Path(__file__).resolve().parents[3]
+    / "schemas"
+    / "component-manifest"
+    / "v1.schema.json"
+)
+
+#: 路由实例。
+components_router = APIRouter(
+    prefix="/api/v1/components", tags=["components"]
+)
+
+#: 需 component:manage 权限的当前用户依赖。
+ManageUserDep = Annotated[
+    CurrentUser, Depends(require_permission("component:manage"))
+]
+
+#: 需 component:read 权限的当前用户依赖。
+ReadUserDep = Annotated[
+    CurrentUser, Depends(require_permission("component:read"))
+]
+
+
+def get_component_registry_service() -> ComponentRegistryService:
+    """获取 ComponentRegistryService 实例（由 DI 容器或测试覆盖提供）。
+
+    生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
+    （需当前用户上下文查询 organization_id）。
+    """
+    raise NotImplementedError(
+        "get_component_registry_service must be overridden "
+        "via dependency_overrides"
+    )
+
+
+#: ComponentRegistryService 依赖类型别名。
+ComponentRegistryServiceDep = Annotated[
+    ComponentRegistryService, Depends(get_component_registry_service)
+]
+
+
+# ---- 请求模型 ----
+
+
+class PublishComponentRequest(BaseModel):
+    """发布组件请求。"""
+
+    manifest_yaml: str = Field(
+        ...,
+        min_length=1,
+        max_length=200000,
+        description="组件清单 YAML 文本",
+    )
+
+
+# ---- 响应模型 ----
+
+
+class ComponentVersionResponse(BaseModel):
+    """组件版本响应（发布端点返回）。"""
+
+    id: str
+    name: str
+    version: str
+    kind: str
+    runtime: str
+    status: str
+    manifest_sha256: str
+    published_at: datetime | None
+    created_at: datetime
+
+
+class ComponentListItemResponse(BaseModel):
+    """组件列表项响应。"""
+
+    id: str
+    name: str
+    version: str
+    kind: str
+    runtime: str
+    status: str
+    manifest_sha256: str
+    published_at: datetime | None
+    created_at: datetime
+
+
+class ComponentListResponse(BaseModel):
+    """组件列表响应。"""
+
+    items: list[ComponentListItemResponse]
+
+
+class ComponentDetailResponse(BaseModel):
+    """组件详情响应（含 manifest_yaml 全文）。"""
+
+    id: str
+    name: str
+    version: str
+    kind: str
+    runtime: str
+    status: str
+    manifest_sha256: str
+    manifest_yaml: str
+    published_at: datetime | None
+    created_at: datetime
+
+
+# ---- 端点 ----
+
+
+@components_router.post(
+    "/",
+    response_model=ComponentVersionResponse,
+    status_code=201,
+)
+async def publish_component(
+    body: PublishComponentRequest,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> ComponentVersionResponse:
+    """发布组件版本。
+
+    校验清单 YAML → 发布到注册表 → 返回版本信息。
+
+    Args:
+        body: 发布请求（含 manifest_yaml）。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        ComponentVersionResponse: 新发布的版本信息（201 Created）。
+
+    Raises:
+        AppError: code="invalid_manifest"，当清单校验失败。
+        AppError: code="conflict"，当版本已存在或 kind 不一致。
+    """
+    validator = ManifestValidator(_SCHEMA_PATH)
+    manifest = validator.validate(body.manifest_yaml)
+
+    version = await service.publish(manifest)
+
+    return ComponentVersionResponse(
+        id=str(version.id),
+        name=manifest.name,
+        version=version.version,
+        kind=manifest.kind,
+        runtime=version.runtime,
+        status=version.status,
+        manifest_sha256=version.manifest_sha256,
+        published_at=version.published_at,
+        created_at=version.created_at,
+    )
+
+
+@components_router.get(
+    "/", response_model=ComponentListResponse
+)
+async def list_components(
+    current_user: ReadUserDep,
+    service: ComponentRegistryServiceDep,
+    kind: str | None = Query(None, description="按类别过滤"),
+    status: str | None = Query(None, description="按状态过滤"),
+) -> ComponentListResponse:
+    """列表查询组件。
+
+    Args:
+        current_user: 当前认证用户（需 component:read 权限）。
+        service: 组件注册表服务。
+        kind: 可选，按类别过滤
+            （ingestion/transform/quality/statistics/output/model）。
+        status: 可选，按组件状态过滤
+            （draft/published/deprecated）。
+
+    Returns:
+        ComponentListResponse: 组件列表。
+    """
+    items = await service.list(kind=kind, status=status)
+    return ComponentListResponse(
+        items=[
+            ComponentListItemResponse(
+                id=str(ver.id),
+                name=comp.name,
+                version=ver.version,
+                kind=comp.kind,
+                runtime=ver.runtime,
+                status=comp.status,
+                manifest_sha256=ver.manifest_sha256,
+                published_at=ver.published_at,
+                created_at=ver.created_at,
+            )
+            for comp, ver in items
+        ]
+    )
+
+
+@components_router.get(
+    "/{component_id}", response_model=ComponentDetailResponse
+)
+async def get_component(
+    component_id: UUID,
+    current_user: ReadUserDep,
+    service: ComponentRegistryServiceDep,
+) -> ComponentDetailResponse:
+    """获取组件版本详情。
+
+    Args:
+        component_id: 组件版本 UUID。
+        current_user: 当前认证用户（需 component:read 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        ComponentDetailResponse: 组件详情（含 manifest_yaml 全文）。
+
+    Raises:
+        AppError: code="not_found"，当版本不存在。
+    """
+    comp, ver = await service.get_version_by_id(component_id)
+    return ComponentDetailResponse(
+        id=str(ver.id),
+        name=comp.name,
+        version=ver.version,
+        kind=comp.kind,
+        runtime=ver.runtime,
+        status=comp.status,
+        manifest_sha256=ver.manifest_sha256,
+        manifest_yaml=ver.manifest_yaml,
+        published_at=ver.published_at,
+        created_at=ver.created_at,
+    )

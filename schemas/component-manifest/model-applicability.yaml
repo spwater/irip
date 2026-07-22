@@ -1,0 +1,24 @@
+name: model_applicability
+version: 1.0.0
+kind: model
+runtime: python
+description: "模型适用域检查组件：校验输入是否在适用域范围内。"
+timeout_seconds: 60
+inputs: []
+outputs:
+  - name: valid
+    data_type: boolean_result
+    required: true
+  - name: errors
+    data_type: error_list
+    required: false
+parameters:
+  type: object
+  required:
+    - inputs
+    - applicability_domain
+  properties:
+    inputs:
+      type: object
+    applicability_domain:
+      type: object

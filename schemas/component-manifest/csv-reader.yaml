@@ -1,0 +1,28 @@
+name: csv_reader
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "使用 csv 模块读取 CSV/TSV 文件，支持分隔符/编码参数。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - path
+  properties:
+    path:
+      type: string
+      description: "CSV 文件路径"
+    delimiter:
+      type: string
+      description: "分隔符（可选，默认自动检测）"
+    encoding:
+      type: string
+      default: utf-8
+    has_header:
+      type: boolean
+      default: true

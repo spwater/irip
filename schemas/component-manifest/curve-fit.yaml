@@ -1,0 +1,36 @@
+name: curve_fit
+version: 1.0.0
+kind: statistics
+runtime: python
+description: "曲线拟合。"
+timeout_seconds: 180
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: model_params
+    data_type: model_params
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - x_column
+    - y_column
+    - model
+  properties:
+    x_column:
+      type: string
+    y_column:
+      type: string
+    model:
+      type: string
+      enum: ["linear", "polynomial", "exponential", "power"]
+    degree:
+      type: integer
+      minimum: 1
+      maximum: 10
+      default: 2

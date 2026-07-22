@@ -227,7 +227,7 @@ class AuthService:
                 access_token = create_access_token(
                     user_id=user.id,
                     email=user.email,
-                    roles=[],
+                    roles=list(user.roles),
                     secret=self._token_secret,
                     clock=self._clock,
                 )

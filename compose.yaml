@@ -155,6 +155,55 @@ services:
         condition: service_healthy
     restart: "no"
 
+  backup:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    command: ["python", "-m", "deployments.compose.backup"]
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_APPLICATION_VERSION: ${IRIP_APPLICATION_VERSION:-0.1.0}
+      IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
+      IRIP_BACKUP_AGE_RECIPIENT: ${IRIP_BACKUP_AGE_RECIPIENT:-}
+    volumes:
+      - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: "no"
+
+  restore:
+    build:
+      context: .
+      dockerfile: deployments/compose/api.Dockerfile
+    command: ["python", "-m", "deployments.compose.restore", "--backup-dir", "${IRIP_RESTORE_BACKUP_DIR:-/backups}"]
+    environment:
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_MINIO_ENDPOINT: http://minio:9000
+      IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
+      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
+      IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
+      IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
+      IRIP_BACKUP_AGE_IDENTITY: ${IRIP_BACKUP_AGE_IDENTITY:-}
+      IRIP_RESTORE_SKIP_MIGRATIONS: ${IRIP_RESTORE_SKIP_MIGRATIONS:-false}
+    volumes:
+      - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   pgdata:
   miniodata:

@@ -152,19 +152,35 @@ class UserRepository:
     ) -> UUID:
         """幂等获取或创建管理员用户。
 
-        若 admin@irip.local 不存在则创建，已存在则返回其 ID。
-        密码仅在创建时设置，已存在用户密码不更新。
+        若 admin@irip.local 不存在则创建（含 platform_administrator 角色），
+        已存在则返回其 ID。密码仅在创建时设置，已存在用户密码不更新。
+
+        幂等角色修复：若管理员已存在但 roles 为空（历史遗留），
+        补写 platform_administrator 角色，保证修复可重复执行。
 
         Returns:
             UUID: 管理员用户 ID。
         """
         result = await session.execute(
-            sa.text("SELECT id FROM app_user WHERE email = :email"),
+            sa.text("SELECT id, roles FROM app_user WHERE email = :email"),
             {"email": email},
         )
-        existing = result.scalar()
+        existing = result.first()
         if existing is not None:
-            return UUID(str(existing))
+            user_id = UUID(str(existing[0]))
+            existing_roles = existing[1]
+            if not existing_roles:
+                await session.execute(
+                    sa.text(
+                        "UPDATE app_user SET roles = CAST(:roles AS jsonb) "
+                        "WHERE id = :uid"
+                    ),
+                    {
+                        "roles": json.dumps([ADMIN_ROLE_CODE]),
+                        "uid": user_id,
+                    },
+                )
+            return user_id
 
         user_id = new_id()
         password_hash = hash_password(password)
@@ -172,8 +188,9 @@ class UserRepository:
             sa.text(
                 "INSERT INTO app_user "
                 "(id, organization_id, email, display_name, "
-                "password_hash, status, lock_version) "
-                "VALUES (:id, :org, :email, :name, :hash, 'active', 0)"
+                "password_hash, status, lock_version, roles) "
+                "VALUES (:id, :org, :email, :name, :hash, 'active', 0, "
+                "CAST(:roles AS jsonb))"
             ),
             {
                 "id": user_id,
@@ -181,6 +198,7 @@ class UserRepository:
                 "email": email,
                 "name": display_name,
                 "hash": password_hash,
+                "roles": json.dumps([ADMIN_ROLE_CODE]),
             },
         )
         return user_id

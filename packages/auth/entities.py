@@ -16,7 +16,7 @@ from datetime import datetime
 from uuid import UUID
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import CITEXT
+from sqlalchemy.dialects.postgresql import CITEXT, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from packages.common.database import Base
@@ -37,6 +37,7 @@ class AppUser(Base):
         created_at: 创建时间。
         updated_at: 更新时间。
         lock_version: 乐观锁版本号。
+        roles: 用户角色代码列表（JSONB，如 ["platform_administrator"]）。
     """
 
     __tablename__ = "app_user"
@@ -57,6 +58,12 @@ class AppUser(Base):
     )
     lock_version: Mapped[int] = mapped_column(
         sa.Integer, server_default=sa.text("0"), nullable=False
+    )
+    roles: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        default=list,
     )
 
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(

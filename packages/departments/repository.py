@@ -270,3 +270,31 @@ class DepartmentRepository:
             .returning(Department)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def select_children_count(
+        session: AsyncSession,
+        department_id: UUID,
+    ) -> int:
+        """COUNT 直接子部门数。"""
+        result = await session.execute(
+            sa.select(sa.func.count())
+            .select_from(Department)
+            .where(Department.parent_id == department_id)
+        )
+        return int(result.scalar() or 0)
+
+    @staticmethod
+    async def delete_by_id(
+        session: AsyncSession,
+        department_id: UUID,
+    ) -> bool:
+        """DELETE 实验室记录（物理删除）。
+
+        Returns:
+            bool: 是否删除成功（影响行数 > 0）。
+        """
+        result = await session.execute(
+            sa.delete(Department).where(Department.id == department_id)
+        )
+        return result.rowcount > 0

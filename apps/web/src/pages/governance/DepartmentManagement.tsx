@@ -10,17 +10,20 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   message,
 } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateDepartment,
+  apiDeleteDepartment,
   apiListDepartments,
   apiUpdateDepartment,
   apiUpdateDepartmentStatus,
   type DepartmentListItem,
 } from '@/api/client';
+import { useAuthStore } from '@/auth/AuthProvider';
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
 
 /**
@@ -61,6 +64,12 @@ function buildTree(items: DepartmentListItem[]): DepartmentTreeNode[] {
       roots.push(item);
     }
   });
+  // 子部门为 0 的节点去掉 children 属性，Ant Design Table 不再显示展开箭头
+  map.forEach((item) => {
+    if (item.children && item.children.length === 0) {
+      delete item.children;
+    }
+  });
   return roots;
 }
 
@@ -93,6 +102,8 @@ function getDescendantIds(
 
 export function DepartmentManagement(): JSX.Element {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<DepartmentListItem | null>(null);
@@ -159,6 +170,22 @@ export function DepartmentManagement(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
       message.success('状态更新成功');
+    },
+    onError: (err: unknown) => {
+      const msg = _extractErrorMessage(err);
+      message.error(msg);
+    },
+  });
+
+  // ---- 删除 Mutation ----
+  const deleteMutation = useMutation({
+    mutationFn: apiDeleteDepartment,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      setModalOpen(false);
+      setEditingDept(null);
+      form.resetFields();
+      message.success('部门已删除');
     },
     onError: (err: unknown) => {
       const msg = _extractErrorMessage(err);
@@ -248,6 +275,11 @@ export function DepartmentManagement(): JSX.Element {
     })();
   };
 
+  const handleDelete = (): void => {
+    if (!editingDept) return;
+    deleteMutation.mutate(editingDept.id);
+  };
+
   // ---- 表格列定义 ----
   const columns: ColumnsType<DepartmentTreeNode> = [
     {
@@ -311,6 +343,7 @@ export function DepartmentManagement(): JSX.Element {
             type="link"
             size="small"
             onClick={() => handleEdit(record)}
+            disabled={!isAdmin}
           >
             编辑
           </Button>
@@ -343,7 +376,7 @@ export function DepartmentManagement(): JSX.Element {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate}>
+        <Button type="primary" onClick={handleCreate} disabled={!isAdmin}>
           新建实验室
         </Button>
         <Select
@@ -366,22 +399,77 @@ export function DepartmentManagement(): JSX.Element {
         loading={isLoading}
         pagination={false}
         size="middle"
-        expandable={{ childrenColumnName: 'children' }}
+        expandable={{
+          childrenColumnName: 'children',
+          defaultExpandAllRows: true,
+        }}
         scroll={{ y: 600 }}
       />
 
       <Modal
         title={editingDept ? '编辑实验室' : '新建实验室'}
         open={modalOpen}
-        onOk={handleSubmit}
         onCancel={() => {
           setModalOpen(false);
           setEditingDept(null);
           form.resetFields();
         }}
-        confirmLoading={createMutation.isPending || updateMutation.isPending}
-        okText="保存"
-        cancelText="取消"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            {editingDept ? (
+              <Tooltip
+                title={
+                  editingDept.children_count > 0
+                    ? '存在子部门，请先删除子部门后才能删除该实验室'
+                    : editingDept.equipment_count > 0
+                      ? '存在仪器，请先迁移或删除仪器后才能删除该实验室'
+                      : '删除后不可恢复'
+                }
+              >
+                <Popconfirm
+                  title="确定删除该实验室？"
+                  description="此操作不可恢复"
+                  onConfirm={handleDelete}
+                  okText="确定删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true }}
+                >
+                  <Button
+                    danger
+                    type="primary"
+                    loading={deleteMutation.isPending}
+                    disabled={
+                      editingDept.children_count > 0 ||
+                      editingDept.equipment_count > 0
+                    }
+                  >
+                    删除实验室
+                  </Button>
+                </Popconfirm>
+              </Tooltip>
+            ) : (
+              <span />
+            )}
+            <Space>
+              <Button
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingDept(null);
+                  form.resetFields();
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleSubmit}
+                loading={createMutation.isPending || updateMutation.isPending}
+              >
+                保存
+              </Button>
+            </Space>
+          </div>
+        }
       >
         <Form form={form} layout="vertical">
           <Form.Item

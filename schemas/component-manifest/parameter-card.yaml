@@ -1,0 +1,48 @@
+name: parameter_card
+version: 1.0.0
+kind: output
+runtime: python
+description: "生成 L3 参数候选。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: candidates
+    data_type: parameter_candidates
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - variable_code
+    - value_column
+  properties:
+    variable_code:
+      type: string
+    value_column:
+      type: string
+    unit_column:
+      type: string
+    confidence:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0.8
+    exclusion_rules:
+      type: array
+      items:
+        type: object
+        required:
+          - column
+        properties:
+          column:
+            type: string
+          operator:
+            type: string
+            enum: ["lt", "le", "gt", "ge", "eq", "ne"]
+          value:
+            description: "比较值"

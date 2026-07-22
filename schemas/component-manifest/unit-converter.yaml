@@ -1,0 +1,34 @@
+name: unit_converter
+version: 1.0.0
+kind: transform
+runtime: python
+description: "批量单位转换（mm→um 等）。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - conversions
+  properties:
+    conversions:
+      type: array
+      items:
+        type: object
+        required:
+          - column
+        properties:
+          column:
+            type: string
+          from_unit:
+            type: string
+          to_unit:
+            type: string
+          factor:
+            type: number

@@ -30,6 +30,7 @@ from packages.common.s3_repository import S3Repository
 #: 允许的媒体类型白名单。
 ALLOWED_MEDIA_TYPES: frozenset[str] = frozenset({
     "text/plain",
+    "text/csv",
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -37,6 +38,9 @@ ALLOWED_MEDIA_TYPES: frozenset[str] = frozenset({
     "image/jpeg",
     "application/json",
 })
+
+#: 最大上传大小（字节），100 MiB。
+MAX_UPLOAD_SIZE_BYTES: int = 100 * 1024 * 1024
 
 
 def _build_object_key(sha256: str) -> str:
@@ -334,6 +338,44 @@ class ArtifactService:
                 media_type=artifact.media_type,
                 size_bytes=artifact.size_bytes,
             )
+
+    async def get_bytes(self, artifact_id: UUID) -> bytes:
+        """下载工件内容字节。
+
+        通过 artifact_id 查找关联的 blob，从 S3 下载内容。
+        供模型服务下载模型工件等场景使用。
+
+        Args:
+            artifact_id: 工件 UUID。
+
+        Returns:
+            bytes: 工件内容字节。
+
+        Raises:
+            AppError: code="not_found"，当工件不存在时。
+        """
+        async with self._factory() as session:
+            row = (
+                await session.execute(
+                    sa.select(Artifact, ArtifactBlob).where(
+                        Artifact.id == artifact_id,
+                        ArtifactBlob.sha256 == Artifact.sha256,
+                    )
+                )
+            ).first()
+            if row is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"工件不存在: {artifact_id}",
+                    retryable=False,
+                    fields={"artifact_id": str(artifact_id)},
+                )
+            artifact: Artifact = row[0]
+            blob: ArtifactBlob = row[1]
+        data: bytes = await asyncio.to_thread(
+            self._s3.get_object, blob.object_key
+        )
+        return data
 
     def presign_upload(self, sha256: str, expires: int = 3600) -> str:
         """生成预签名上传 URL（基于内容寻址 key）。

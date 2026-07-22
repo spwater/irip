@@ -96,8 +96,8 @@ class TestDepartmentPermissions:
         assert Permission.DEPARTMENT_MANAGE not in perms
 
     def test_total_permission_count(self) -> None:
-        """权限总数 = 20（V0） + 2（department）+ 2（equipment）+ 3（ingestion）+ 3（provenance）+ 2（parameter:write/publish）= 32。"""
-        assert len(Permission.all()) == 32
+        """权限总数 = 32（V1）+ 2（component）+ 3（flow）+ 4（model）+ 1（assistant:use）+ 1（audit:read）+ 2（system:health/manage）+ 1（role:assign）+ 1（user:manage）= 42。"""
+        assert len(Permission.all()) == 42
 
     def test_permission_all_includes_equipment_permissions(self) -> None:
         """Permission.all() 包含 EQUIPMENT_MANAGE 和 EQUIPMENT_READ。"""

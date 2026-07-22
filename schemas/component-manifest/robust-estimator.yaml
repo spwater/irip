@@ -1,0 +1,31 @@
+name: robust_estimator
+version: 1.0.0
+kind: statistics
+runtime: python
+description: "稳健估计器（中位数/MAD）。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: statistics
+    data_type: statistics_result
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: false
+parameters:
+  type: object
+  required:
+    - columns
+  properties:
+    columns:
+      type: array
+      items:
+        type: string
+    trim_percent:
+      type: number
+      minimum: 0
+      maximum: 0.5
+      default: 0.1

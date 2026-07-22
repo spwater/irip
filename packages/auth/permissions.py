@@ -66,6 +66,7 @@ class Permission:
 
     # 模型
     MODEL_READ: str = "model:read"
+    MODEL_MANAGE: str = "model:manage"
     MODEL_WRITE: str = "model:write"
     MODEL_PUBLISH: str = "model:publish"
     MODEL_PREDICT: str = "model:predict"
@@ -95,6 +96,27 @@ class Permission:
     PROVENANCE_WRITE: str = "provenance:write"
     PROVENANCE_PUBLISH: str = "provenance:publish"
 
+    # 组件管理（IRIP V2-T01）
+    COMPONENT_MANAGE: str = "component:manage"
+    COMPONENT_READ: str = "component:read"
+
+    # 流程引擎（IRIP V2-T03）
+    FLOW_MANAGE: str = "flow:manage"
+    FLOW_EXECUTE: str = "flow:execute"
+    FLOW_READ: str = "flow:read"
+
+    # AI 助手（IRIP V3-T01）
+    ASSISTANT_USE: str = "assistant:use"
+
+    # 审计（IRIP V3-T02）
+    AUDIT_READ: str = "audit:read"
+
+    # 系统健康监控（IRIP V3-T02）
+    SYSTEM_HEALTH: str = "system:health"
+
+    # 系统管理：备份/恢复等系统级运维操作（IRIP V3-T03）
+    SYSTEM_MANAGE: str = "system:manage"
+
     @classmethod
     def all(cls) -> list[str]:
         """返回所有权限常量列表。"""
@@ -113,6 +135,7 @@ class Permission:
             cls.JOB_SUBMIT,
             cls.JOB_CANCEL,
             cls.MODEL_READ,
+            cls.MODEL_MANAGE,
             cls.MODEL_WRITE,
             cls.MODEL_PUBLISH,
             cls.MODEL_PREDICT,
@@ -131,6 +154,15 @@ class Permission:
             cls.PROVENANCE_READ,
             cls.PROVENANCE_WRITE,
             cls.PROVENANCE_PUBLISH,
+            cls.COMPONENT_MANAGE,
+            cls.COMPONENT_READ,
+            cls.FLOW_MANAGE,
+            cls.FLOW_EXECUTE,
+            cls.FLOW_READ,
+            cls.ASSISTANT_USE,
+            cls.AUDIT_READ,
+            cls.SYSTEM_HEALTH,
+            cls.SYSTEM_MANAGE,
         ]
 
 
@@ -153,6 +185,11 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_MANAGE,
             Permission.EQUIPMENT_READ,
+            Permission.COMPONENT_MANAGE,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_MANAGE,
+            Permission.FLOW_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
     RoleCode.DATA_STEWARD.value: {
@@ -173,6 +210,10 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_PUBLISH,
             Permission.PARAMETER_READ,
             Permission.PARAMETER_WRITE,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_EXECUTE,
+            Permission.FLOW_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
     RoleCode.RESEARCHER.value: {
@@ -189,17 +230,28 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_WRITE,
             Permission.PARAMETER_READ,
             Permission.PARAMETER_WRITE,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_EXECUTE,
+            Permission.FLOW_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
     RoleCode.MODEL_ENGINEER.value: {
         "display_name": "模型工程师",
         "permissions": [
             Permission.MODEL_READ,
+            Permission.MODEL_MANAGE,
             Permission.MODEL_WRITE,
             Permission.MODEL_PUBLISH,
             Permission.MODEL_PREDICT,
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_READ,
+            Permission.COMPONENT_MANAGE,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_MANAGE,
+            Permission.FLOW_EXECUTE,
+            Permission.FLOW_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
     RoleCode.REVIEWER.value: {
@@ -211,6 +263,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PARAMETER_PUBLISH,
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
     RoleCode.READ_ONLY_USER.value: {
@@ -221,6 +274,9 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PARAMETER_READ,
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_READ,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_READ,
+            Permission.ASSISTANT_USE,
         ],
     },
 }

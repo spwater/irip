@@ -1,0 +1,38 @@
+name: range_check
+version: 1.0.0
+kind: quality
+runtime: python
+description: "值域边界检查。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: true
+parameters:
+  type: object
+  required:
+    - rules
+  properties:
+    rules:
+      type: array
+      items:
+        type: object
+        required:
+          - column
+        properties:
+          column:
+            type: string
+          min:
+            type: number
+          max:
+            type: number
+    inclusive:
+      type: boolean
+      default: true

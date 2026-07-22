@@ -1,0 +1,156 @@
+"""Celery 推导任务（IRIP Task 17）。
+
+包装 DerivationService 为 Celery 任务，异步处理推导作业。
+任务通过 asyncio.run() 在同步 Celery 上下文中执行异步推导。
+"""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from uuid import UUID
+
+from apps.worker.celery_app import celery_app
+
+
+async def _process_derivation_async(
+    job_id: str,
+    payload: dict,
+) -> dict:
+    """异步处理推导作业。
+
+    从 payload 中提取参数，构建 DerivationService 并执行推导。
+
+    Args:
+        job_id: 作业 UUID 字符串。
+        payload: 作业载荷，包含：
+            - evidence_set_version_id: 证据集版本 ID
+            - recipe_version_id: 配方版本 ID
+            - organization_id: 组织 ID
+            - actor_id: 操作人 ID（可选）
+
+    Returns:
+        dict: 推导结果摘要。
+    """
+    import sqlalchemy as sa
+
+    from packages.common.database import build_session_factory, session_scope
+    from packages.jobs.entities import Job, JobStatus
+    from packages.provenance.derivations import DerivationService
+
+    db_url = os.getenv(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    )
+    if db_url.startswith("postgresql+psycopg://"):
+        async_url = db_url.replace(
+            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
+        )
+    else:
+        async_url = db_url
+
+    factory = build_session_factory(async_url)
+
+    # 从 payload 提取参数
+    organization_id = UUID(str(payload["organization_id"]))
+    actor_id_str = payload.get("actor_id")
+    actor_id = UUID(str(actor_id_str)) if actor_id_str else None
+    evidence_set_version_id = UUID(
+        str(payload["evidence_set_version_id"])
+    )
+    recipe_version_id = UUID(str(payload["recipe_version_id"]))
+
+    # 构建服务
+    derivation_service = DerivationService(
+        session_factory=factory,
+        organization_id=organization_id,
+        actor_id=actor_id,
+    )
+
+    # 更新作业状态为 RUNNING
+    async with session_scope(factory) as session:
+        await session.execute(
+            sa.update(Job)
+            .values(
+                status=JobStatus.RUNNING.value,
+                updated_at=sa.func.now(),
+                lock_version=Job.lock_version + 1,
+            )
+            .where(Job.id == UUID(job_id))
+        )
+
+    # 执行推导
+    try:
+        ref = await derivation_service.create_run(
+            evidence_set_version_id=evidence_set_version_id,
+            recipe_version_id=recipe_version_id,
+        )
+
+        summary = {
+            "run_id": str(ref.id),
+            "status": ref.status,
+            "output_digest": ref.output_digest,
+            "outputs": [
+                {
+                    "variable_code": o.variable_code,
+                    "value": str(o.value),
+                    "unit": o.unit,
+                    "confidence": o.confidence,
+                    "exclusion_reasons": list(o.exclusion_reasons),
+                }
+                for o in ref.outputs
+            ],
+        }
+
+        # 更新作业状态为 COMPLETED
+        async with session_scope(factory) as session:
+            await session.execute(
+                sa.update(Job)
+                .values(
+                    status=JobStatus.COMPLETED.value,
+                    result=summary,
+                    updated_at=sa.func.now(),
+                    lock_version=Job.lock_version + 1,
+                )
+                .where(Job.id == UUID(job_id))
+            )
+
+        return summary
+
+    except Exception as exc:
+        # 更新作业状态为 FAILED
+        async with session_scope(factory) as session:
+            await session.execute(
+                sa.update(Job)
+                .values(
+                    status=JobStatus.FAILED.value,
+                    last_error={"error": str(exc)},
+                    updated_at=sa.func.now(),
+                    lock_version=Job.lock_version + 1,
+                )
+                .where(Job.id == UUID(job_id))
+            )
+        raise
+
+
+@celery_app.task(name="irip.derivation.process")
+def process_derivation_job(job_id: str, payload: dict) -> dict:
+    """Celery 任务：处理推导作业。
+
+    1. 从 payload 提取参数；
+    2. 构建 DerivationService；
+    3. 执行 create_run；
+    4. 更新作业状态（RUNNING → COMPLETED/FAILED）；
+    5. 返回结果摘要。
+
+    Args:
+        job_id: 作业 UUID 字符串。
+        payload: 作业载荷字典。
+
+    Returns:
+        dict: 推导结果摘要。
+    """
+    try:
+        return asyncio.run(_process_derivation_async(job_id, payload))
+    except Exception as exc:
+        return {"error": str(exc), "job_id": job_id}

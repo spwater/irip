@@ -1,0 +1,39 @@
+name: schema_check
+version: 1.0.0
+kind: quality
+runtime: python
+description: "字段类型/约束检查。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+  - name: diagnostics
+    data_type: diagnostic_report
+    required: true
+parameters:
+  type: object
+  required:
+    - schema
+  properties:
+    schema:
+      type: object
+      additionalProperties:
+        type: object
+        properties:
+          type:
+            type: string
+            enum: ["number", "integer", "string", "boolean", "datetime"]
+          required:
+            type: boolean
+            default: true
+          min:
+            type: number
+          max:
+            type: number
+          enum:
+            type: array

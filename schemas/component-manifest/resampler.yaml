@@ -1,0 +1,32 @@
+name: resampler
+version: 1.0.0
+kind: transform
+runtime: python
+description: "时间序列重采样。"
+timeout_seconds: 120
+inputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - time_column
+    - frequency
+    - aggregation
+  properties:
+    time_column:
+      type: string
+    frequency:
+      type: string
+    aggregation:
+      type: string
+      enum: ["mean", "sum", "max", "min", "median", "count", "std", "var"]
+    value_columns:
+      type: array
+      items:
+        type: string

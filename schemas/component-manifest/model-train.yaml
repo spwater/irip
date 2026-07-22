@@ -1,0 +1,29 @@
+name: model_train
+version: 1.0.0
+kind: model
+runtime: python
+description: "模型训练组件：创建模型并提交验证。"
+timeout_seconds: 300
+inputs: []
+outputs:
+  - name: model_id
+    data_type: model_ref
+    required: true
+  - name: version_id
+    data_type: model_version_ref
+    required: true
+parameters:
+  type: object
+  required:
+    - code
+    - display_name
+    - version_id
+  properties:
+    code:
+      type: string
+      pattern: "^[a-z][a-z0-9_]*$"
+    display_name:
+      type: string
+    version_id:
+      type: string
+      format: uuid

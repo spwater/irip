@@ -1,0 +1,41 @@
+name: rest_fetch
+version: 1.0.0
+kind: ingestion
+runtime: python
+description: "REST API 拉取（SSRF 防护、HTTPS 限制、响应 50MB 上限、最多 3 次重定向）。"
+timeout_seconds: 120
+inputs: []
+outputs:
+  - name: observations
+    data_type: observation_table
+    required: true
+parameters:
+  type: object
+  required:
+    - url
+  properties:
+    url:
+      type: string
+      format: uri
+      description: "请求 URL"
+    method:
+      type: string
+      enum: ["GET", "POST"]
+      default: GET
+    headers:
+      type: object
+      additionalProperties:
+        type: string
+    params:
+      type: object
+      additionalProperties: true
+    allow_http:
+      type: boolean
+      default: false
+    json_path:
+      type: string
+    auth_header_secret:
+      type: string
+      description: "context.secrets 中认证 token 的键名"
+network_policy:
+  allowed_hosts: []

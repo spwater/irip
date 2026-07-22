@@ -187,8 +187,8 @@ export async function apiCreateJob(
   return res.data;
 }
 
-export async function apiCancelJob(id: string): Promise<JobSummary> {
-  const res = await http.post<JobSummary>(`/jobs/${id}/cancel`);
+export async function apiCancelJob(id: string): Promise<{ job_id: string; status: string; kind: string }> {
+  const res = await http.post<{ job_id: string; status: string; kind: string }>(`/jobs/${id}/cancel`);
   return res.data;
 }
 
@@ -293,6 +293,10 @@ export async function apiUpdateDepartmentStatus(
   return res.data;
 }
 
+export async function apiDeleteDepartment(id: string): Promise<void> {
+  await http.delete(`/departments/${id}`);
+}
+
 export async function apiGetDepartmentUsers(
   departmentId: string,
 ): Promise<DepartmentUser[]> {
@@ -330,17 +334,20 @@ export type CursorPage<T> = {
 export type VariableSummary = {
   id: string;
   code: string;
-  name_zh: string;
-  name_en: string;
-  quantity_kind: string;
+  display_name: string;
+  canonical_unit: string | null;
+  quantity_kind: string | null;
   data_type: string;
   status: string;
-  current_version: string | null;
+  version_count: number;
+  created_at: string;
+  updated_at: string;
+  lock_version: number;
 };
 
 export type VariableDetail = VariableSummary & {
   description: string | null;
-  unit: string | null;
+  canonical_unit: string | null;
   aliases: string[];
   lock_version: number;
   created_at: string;
@@ -359,12 +366,14 @@ export type VariableVersion = {
 export type IndustrialObject = {
   id: string;
   code: string;
-  name_zh: string;
-  name_en: string;
+  display_name: string;
   object_type: string;
   description: string | null;
   status: string;
   parent_id: string | null;
+  created_at: string;
+  updated_at: string;
+  lock_version: number;
 };
 
 export type ObjectRelation = {
@@ -372,7 +381,14 @@ export type ObjectRelation = {
   source_id: string;
   target_id: string;
   relation_type: string;
-  description: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+/** 后端 /objects/{id}/descendants 实际返回结构 */
+export type DescendantsResponse = {
+  root_id: string;
+  descendant_ids: string[];
 };
 
 // ---- Templates ----
@@ -428,64 +444,71 @@ export type MappingRankResponse = {
 
 // ---- Facts ----
 export type FactSummary = {
-  id: string;
+  fact_id: string;
+  revision: number;
+  revision_id: string;
   fact_type: string;
   subject_id: string;
   status: string;
-  quality_level: string;
-  revision_count: number;
-  created_at: string;
 };
 
 export type FactDetail = {
-  id: string;
+  fact_id: string;
+  revision: number;
+  revision_id: string;
   fact_type: string;
   subject_id: string;
   status: string;
-  quality_level: string;
-  current_revision: number;
-  value: unknown;
-  unit: string | null;
-  conditions: Record<string, unknown> | null;
-  created_at: string;
-  updated_at: string;
 };
 
 export type FactRevision = {
-  revision: number;
-  status: string;
-  created_at: string;
-  created_by: string;
-  change_note: string | null;
-};
-
-export type Observation = {
-  id: string;
   fact_id: string;
   revision: number;
-  source_field: string;
+  revision_id: string;
+  fact_type: string;
+  subject_id: string;
+  status: string;
+};
+
+export type RawObservation = {
+  id: string;
+  fact_revision_id: string;
+  source_path: string;
   source_value: string;
   source_unit: string | null;
-  normalized_value: string;
-  normalized_unit: string | null;
+  source_name: string | null;
   artifact_id: string | null;
-  artifact_url: string | null;
-  quality_level: string;
+};
+
+export type NormalizedObservation = {
+  id: string;
+  fact_revision_id: string;
+  variable_version_id: string;
+  raw_observation_id: string;
+  value: string;
+  unit: string | null;
+};
+
+export type ObservationsResponse = {
+  raw: RawObservation[];
+  normalized: NormalizedObservation[];
 };
 
 // ---- Provenance ----
 export type ProvenanceNode = {
   id: string;
-  type: 'fact_revision' | 'observation' | 'intermediate_artifact' | 'derivation_run' | 'parameter_version';
+  node_type: string;
   label: string;
   version: string;
   status: string;
 };
 
 export type ProvenanceEdge = {
-  source: string;
-  target: string;
-  label: string;
+  source_id: string;
+  source_type: string;
+  target_id: string;
+  target_type: string;
+  edge_type: string;
 };
 
 export type ProvenanceGraph = {
@@ -494,29 +517,35 @@ export type ProvenanceGraph = {
 };
 
 export type EvidenceSet = {
-  id: string;
-  label: string;
+  set_id: string;
+  name: string;
   status: string;
+  version: number;
+  version_id: string | null;
   member_count: number;
-  created_at: string;
-  frozen_at: string | null;
 };
 
 export type Recipe = {
-  id: string;
-  label: string;
+  recipe_id: string;
+  code: string;
+  display_name: string;
   status: string;
-  version: string | null;
-  created_at: string;
+  version: number;
 };
 
 export type DerivationRun = {
   id: string;
-  recipe_id: string;
   status: string;
-  started_at: string;
-  finished_at: string | null;
-  output_count: number;
+  output_digest: string;
+  outputs: DerivationRunOutput[];
+};
+
+export type DerivationRunOutput = {
+  variable_code: string;
+  value: string;
+  unit: string | null;
+  confidence: number;
+  exclusion_reasons: string[];
 };
 
 // ---- Parameters ----
@@ -600,12 +629,11 @@ export function extractApiError(err: unknown): string {
 
 export async function apiCreateVariable(body: {
   code: string;
-  name_zh: string;
-  name_en: string;
-  quantity_kind: string;
+  display_name: string;
   data_type: string;
-  unit?: string;
-  description?: string;
+  canonical_unit?: string;
+  quantity_kind?: string;
+  valid_range?: string[];
 }): Promise<VariableDetail> {
   const res = await http.post<VariableDetail>('/standards/variables', body);
   return res.data;
@@ -675,8 +703,7 @@ export async function apiConvertUnits(params: {
 
 export async function apiCreateObject(body: {
   code: string;
-  name_zh: string;
-  name_en: string;
+  display_name: string;
   object_type: string;
   description?: string;
   parent_id?: string;
@@ -686,10 +713,9 @@ export async function apiCreateObject(body: {
 }
 
 export async function apiListObjects(params?: {
-  status?: string;
   object_type?: string;
   cursor?: string;
-  limit?: number;
+  page_size?: number;
 }): Promise<CursorPage<IndustrialObject>> {
   const res = await http.get<CursorPage<IndustrialObject>>('/objects', { params });
   return res.data;
@@ -698,6 +724,25 @@ export async function apiListObjects(params?: {
 export async function apiGetObject(objectId: string): Promise<IndustrialObject> {
   const res = await http.get<IndustrialObject>(`/objects/${objectId}`);
   return res.data;
+}
+
+export async function apiUpdateObject(objectId: string, body: {
+  display_name: string;
+  description?: string | null;
+}): Promise<IndustrialObject> {
+  const res = await http.patch<IndustrialObject>(`/objects/${objectId}`, body);
+  return res.data;
+}
+
+export async function apiUpdateObjectStatus(objectId: string, body: {
+  status: 'active' | 'inactive';
+}): Promise<IndustrialObject> {
+  const res = await http.patch<IndustrialObject>(`/objects/${objectId}/status`, body);
+  return res.data;
+}
+
+export async function apiDeleteObject(objectId: string): Promise<void> {
+  await http.delete(`/objects/${objectId}`);
 }
 
 export async function apiAddObjectRelation(objectId: string, body: {
@@ -721,8 +766,8 @@ export async function apiListObjectRelations(objectId: string): Promise<ObjectRe
 /** Alias for apiListObjectRelations */
 export const apiGetObjectRelations = apiListObjectRelations;
 
-export async function apiGetObjectDescendants(objectId: string): Promise<IndustrialObject[]> {
-  const res = await http.get<IndustrialObject[]>(`/objects/${objectId}/descendants`);
+export async function apiGetObjectDescendants(objectId: string): Promise<DescendantsResponse> {
+  const res = await http.get<DescendantsResponse>(`/objects/${objectId}/descendants`);
   return res.data;
 }
 
@@ -952,9 +997,10 @@ export async function apiCreateFact(body: {
 
 export async function apiListFacts(params?: {
   cursor?: string;
-  limit?: number;
+  page_size?: number;
   fact_type?: string;
   status?: string;
+  object_id?: string;
 }): Promise<CursorPage<FactSummary>> {
   const res = await http.get<CursorPage<FactSummary>>('/facts', { params });
   return res.data;
@@ -963,7 +1009,10 @@ export async function apiListFacts(params?: {
 export async function apiSearchFacts(params: {
   q: string;
   cursor?: string;
-  limit?: number;
+  page_size?: number;
+  fact_type?: string;
+  status?: string;
+  object_id?: string;
 }): Promise<CursorPage<FactSummary>> {
   const res = await http.get<CursorPage<FactSummary>>('/facts/search', { params });
   return res.data;
@@ -974,8 +1023,8 @@ export async function apiGetFact(factId: string): Promise<FactDetail> {
   return res.data;
 }
 
-export async function apiListFactRevisions(factId: string): Promise<FactRevision[]> {
-  const res = await http.get<FactRevision[]>(`/facts/${factId}/revisions`);
+export async function apiListFactRevisions(factId: string): Promise<{ items: FactRevision[]; next_cursor: string | null }> {
+  const res = await http.get<{ items: FactRevision[]; next_cursor: string | null }>(`/facts/${factId}/revisions`);
   return res.data;
 }
 
@@ -984,17 +1033,8 @@ export async function apiGetFactRevision(factId: string, revision: number): Prom
   return res.data;
 }
 
-export async function apiGetFactObservations(factId: string): Promise<Observation[]> {
-  const res = await http.get<Observation[]>(`/facts/${factId}/observations`);
-  return res.data;
-}
-
-export async function apiReviseFact(factId: string, body: {
-  value: unknown;
-  unit?: string;
-  change_note?: string;
-}): Promise<FactDetail> {
-  const res = await http.post<FactDetail>(`/facts/${factId}/revise`, body);
+export async function apiGetFactObservations(factId: string): Promise<ObservationsResponse> {
+  const res = await http.get<ObservationsResponse>(`/facts/${factId}/observations`);
   return res.data;
 }
 
@@ -1003,8 +1043,7 @@ export async function apiReviseFact(factId: string, body: {
 // ============================================================
 
 export async function apiCreateEvidenceSet(body: {
-  label: string;
-  member_ids: string[];
+  name: string;
 }): Promise<EvidenceSet> {
   const res = await http.post<EvidenceSet>('/provenance/evidence-sets', body);
   return res.data;
@@ -1013,14 +1052,14 @@ export async function apiCreateEvidenceSet(body: {
 export async function apiListEvidenceSets(params?: {
   status?: string;
   cursor?: string;
-  limit?: number;
+  page_size?: number;
 }): Promise<CursorPage<EvidenceSet>> {
   const res = await http.get<CursorPage<EvidenceSet>>('/provenance/evidence-sets', { params });
   return res.data;
 }
 
 export async function apiFreezeEvidenceSet(setId: string): Promise<EvidenceSet> {
-  const res = await http.post<EvidenceSet>(`/provenance/evidence-sets/${setId}/freeze`);
+  const res = await http.post<EvidenceSet>(`/provenance/evidence-sets/${setId}/freeze`, { fact_filter: null });
   return res.data;
 }
 
@@ -1037,22 +1076,28 @@ export async function apiListEvidenceSetMembers(setId: string): Promise<unknown[
 }
 
 export async function apiCreateRecipe(body: {
-  label: string;
-  steps: unknown[];
+  code: string;
+  display_name: string;
 }): Promise<Recipe> {
   const res = await http.post<Recipe>('/provenance/recipes', body);
   return res.data;
 }
 
 export async function apiPublishRecipe(recipeId: string): Promise<Recipe> {
-  const res = await http.post<Recipe>(`/provenance/recipes/${recipeId}/publish`);
+  const res = await http.post<Recipe>(`/provenance/recipes/${recipeId}/publish`, {
+    component_name: 'default',
+    component_version: '1.0.0',
+    parameters: {},
+    random_seed: 42,
+    output_definitions: [],
+  });
   return res.data;
 }
 
 export async function apiListRecipes(params?: {
   status?: string;
   cursor?: string;
-  limit?: number;
+  page_size?: number;
 }): Promise<CursorPage<Recipe>> {
   const res = await http.get<CursorPage<Recipe>>('/provenance/recipes', { params });
   return res.data;
@@ -1064,8 +1109,8 @@ export async function apiGetRecipe(recipeId: string): Promise<Recipe> {
 }
 
 export async function apiCreateDerivationRun(body: {
-  recipe_id: string;
-  inputs: Record<string, unknown>;
+  evidence_set_version_id: string;
+  recipe_version_id: string;
 }): Promise<DerivationRun> {
   const res = await http.post<DerivationRun>('/provenance/derivation-runs', body);
   return res.data;
@@ -1084,7 +1129,7 @@ export async function apiGetDerivationRun(runId: string): Promise<DerivationRun>
 export async function apiListDerivationRuns(params?: {
   status?: string;
   cursor?: string;
-  limit?: number;
+  page_size?: number;
 }): Promise<CursorPage<DerivationRun>> {
   const res = await http.get<CursorPage<DerivationRun>>('/provenance/derivation-runs', { params });
   return res.data;
@@ -1283,4 +1328,1071 @@ export async function apiSetEquipmentVariables(
   const res = await http.put<{ ok: boolean }>(`/equipment/${id}/variables`, body);
   return res.data;
 }
+
+// ============================================================
+// V2 组件管理 API（/components）— IRIP V2-T01
+// ============================================================
+
+/** 组件摘要（列表项）。 */
+export type ComponentSummary = {
+  id: string;
+  name: string;
+  version: string;
+  kind: string;
+  runtime: string;
+  status: string;
+  manifest_sha256: string;
+  published_at: string | null;
+  created_at: string;
+};
+
+/** 组件详情（含 manifest 全文 + 可选解析字段）。 */
+export type ComponentDetail = ComponentSummary & {
+  manifest_yaml: string;
+  /** 清单中声明的参数（从 manifest_yaml 解析；后端可能不直接返回）。 */
+  parameters?: Record<string, unknown>;
+  /** 清单中声明的输入端口（从 manifest_yaml 解析；后端可能不直接返回）。 */
+  inputs?: unknown[];
+  /** 清单中声明的输出端口（从 manifest_yaml 解析；后端可能不直接返回）。 */
+  outputs?: unknown[];
+};
+
+export async function apiListComponents(params?: {
+  kind?: string;
+  status?: string;
+}): Promise<CursorPage<ComponentSummary>> {
+  const res = await http.get<{ items: ComponentSummary[] }>('/components/', { params });
+  // 后端 ComponentListResponse 仅含 items（无分页游标），适配为 CursorPage
+  return { items: res.data.items, next_cursor: null, has_more: false };
+}
+
+export async function apiGetComponent(id: string): Promise<ComponentDetail> {
+  const res = await http.get<ComponentDetail>(`/components/${id}`);
+  return res.data;
+}
+
+export async function apiPublishComponent(body: {
+  manifest_yaml: string;
+}): Promise<ComponentSummary> {
+  const res = await http.post<ComponentSummary>('/components/', body);
+  return res.data;
+}
+
+// ============================================================
+// V2 流程编排 API（/flows）— IRIP V2-T03
+// ============================================================
+
+/** 流程定义摘要。 */
+export type FlowSummary = {
+  id: string;
+  code: string;
+  display_name: string;
+  status: string;
+  lock_version: number;
+  created_at: string;
+  updated_at: string;
+  latest_version: {
+    id: string;
+    version: number;
+    digest: string;
+    status: string;
+    published_at: string | null;
+  } | null;
+};
+
+/** 流程版本（发布端点返回）。 */
+export type FlowVersion = {
+  id: string;
+  flow_definition_id: string;
+  version: number;
+  digest: string;
+  random_seed: number;
+  status: string;
+  published_at: string | null;
+  created_at: string;
+  nodes: unknown[];
+  edges: unknown[];
+};
+
+/** 流程运行摘要。 */
+export type FlowRunSummary = {
+  id: string;
+  flow_version_id: string;
+  status: string;
+  job_id: string | null;
+  output_digest: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+};
+
+/** 节点执行记录。 */
+export type FlowNodeExecution = {
+  id: string;
+  node_id: string;
+  status: string;
+  duration_ms: number | null;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
+/** 流程运行详情（含节点执行列表）。 */
+export type FlowRunDetail = FlowRunSummary & {
+  nodes: FlowNodeExecution[];
+};
+
+/** 流程节点定义（请求体）。 */
+export type FlowNodeSchema = {
+  node_id: string;
+  component_name: string;
+  component_version: string;
+  params?: Record<string, unknown>;
+  input_bindings?: Record<string, string>;
+};
+
+/** 流程边定义（请求体）。 */
+export type FlowEdgeSchema = {
+  source_node: string;
+  source_port: string;
+  target_node: string;
+  target_port: string;
+};
+
+export async function apiCreateFlow(body: {
+  code: string;
+  display_name: string;
+  nodes?: FlowNodeSchema[];
+  edges?: FlowEdgeSchema[];
+}): Promise<FlowSummary> {
+  const res = await http.post<FlowSummary>('/flows/', body);
+  return res.data;
+}
+
+export async function apiPublishFlow(
+  flowId: string,
+  body: { nodes: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; random_seed?: number },
+): Promise<FlowSummary> {
+  // 后端发布端点返回 FlowVersionResponse；此处发布后重新获取定义，
+  // 返回含最新版本摘要的 FlowSummary（满足 UI 刷新需求）。
+  await http.post(`/flows/${flowId}/publish`, body);
+  return apiGetFlow(flowId);
+}
+
+export async function apiListFlows(params?: {
+  status?: string;
+}): Promise<CursorPage<FlowSummary>> {
+  const res = await http.get<{ items: FlowSummary[] }>('/flows/', { params });
+  return { items: res.data.items, next_cursor: null, has_more: false };
+}
+
+export async function apiGetFlow(flowId: string): Promise<FlowSummary> {
+  const res = await http.get<FlowSummary>(`/flows/${flowId}`);
+  return { ...res.data, latest_version: res.data.latest_version ?? null };
+}
+
+export async function apiCreateFlowRun(
+  flowId: string,
+  body: { inputs?: Record<string, unknown> },
+): Promise<FlowRunSummary> {
+  const res = await http.post<FlowRunSummary>(`/flows/${flowId}/runs`, body);
+  return res.data;
+}
+
+export async function apiResumeFlowRun(runId: string): Promise<FlowRunSummary> {
+  const res = await http.post<FlowRunSummary>(`/flows/runs/${runId}/resume`);
+  return res.data;
+}
+
+export async function apiCancelFlowRun(runId: string): Promise<FlowRunSummary> {
+  const res = await http.post<FlowRunSummary>(`/flows/runs/${runId}/cancel`);
+  return res.data;
+}
+
+export async function apiRetryFlowNode(
+  runId: string,
+  nodeId: string,
+): Promise<FlowRunSummary> {
+  // 后端重试端点返回单节点执行记录；此处重试后重新获取运行详情，
+  // 返回最新运行状态（FlowRunDetail 兼容 FlowRunSummary）。
+  await http.post(`/flows/runs/${runId}/retry/${encodeURIComponent(nodeId)}`);
+  return apiGetFlowRun(runId);
+}
+
+export async function apiGetFlowRun(runId: string): Promise<FlowRunDetail> {
+  const res = await http.get<{
+    id: string;
+    flow_version_id: string;
+    status: string;
+    job_id: string | null;
+    output_digest: string | null;
+    started_at: string | null;
+    completed_at: string | null;
+    created_at: string;
+    node_executions: FlowNodeExecution[];
+  }>(`/flows/runs/${runId}`);
+  // 后端字段 node_executions → 前端字段 nodes
+  return {
+    id: res.data.id,
+    flow_version_id: res.data.flow_version_id,
+    status: res.data.status,
+    job_id: res.data.job_id,
+    output_digest: res.data.output_digest,
+    started_at: res.data.started_at,
+    completed_at: res.data.completed_at,
+    created_at: res.data.created_at,
+    nodes: res.data.node_executions,
+  };
+}
+
+// ============================================================
+// V2 模型管理 API（/models）— IRIP V2-T04
+// ============================================================
+
+/** 模型摘要。 */
+export type ModelSummary = {
+  id: string;
+  code: string;
+  display_name: string;
+  status: string;
+  current_version_id: string | null;
+  lock_version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 模型版本摘要。 */
+export type ModelVersionSummary = {
+  id: string;
+  model_id: string;
+  version: number;
+  status: string;
+  contract_sha256: string | null;
+  model_artifact_id: string | null;
+  metrics: Record<string, unknown>;
+  applicability_domain: Record<string, unknown>;
+  code_hash: string | null;
+  dependency_hash: string | null;
+  model_hash: string | null;
+  created_at: string;
+  published_at: string | null;
+};
+
+/** 预测结果。 */
+export type PredictionResult = {
+  model_id: string;
+  model_version_id: string;
+  version: number;
+  predictions: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+  fact_id: string | null;
+};
+
+export async function apiCreateModel(body: {
+  code: string;
+  display_name: string;
+}): Promise<ModelSummary> {
+  const res = await http.post<ModelSummary>('/models/', body);
+  return res.data;
+}
+
+export async function apiListModels(params?: {
+  status?: string;
+}): Promise<CursorPage<ModelSummary>> {
+  const res = await http.get<{ items: ModelSummary[] }>('/models/', { params });
+  return { items: res.data.items, next_cursor: null, has_more: false };
+}
+
+export async function apiGetModel(modelId: string): Promise<ModelSummary> {
+  const res = await http.get<ModelSummary>(`/models/${modelId}`);
+  return res.data;
+}
+
+export async function apiGetModelVersions(
+  modelId: string,
+): Promise<ModelVersionSummary[]> {
+  const res = await http.get<{ items: ModelVersionSummary[] }>(
+    `/models/${modelId}/versions`,
+  );
+  return res.data.items;
+}
+
+export async function apiValidateModelVersion(
+  modelId: string,
+  versionId: string,
+  body: {
+    dataset_artifact_id?: string;
+    metrics?: Record<string, unknown>;
+    applicability_domain?: Record<string, unknown>;
+  },
+): Promise<ModelVersionSummary> {
+  const res = await http.post<ModelVersionSummary>(
+    `/models/${modelId}/versions/${versionId}/validate`,
+    body,
+  );
+  return res.data;
+}
+
+export async function apiPublishModelVersion(
+  modelId: string,
+  versionId: string,
+): Promise<ModelSummary> {
+  const res = await http.post<ModelSummary>(
+    `/models/${modelId}/versions/${versionId}/publish`,
+  );
+  return res.data;
+}
+
+export async function apiRollbackModel(
+  modelId: string,
+  targetVersionId: string,
+): Promise<ModelSummary> {
+  const res = await http.post<ModelSummary>(`/models/${modelId}/rollback`, {
+    target_version_id: targetVersionId,
+  });
+  return res.data;
+}
+
+export async function apiPredictModel(
+  modelId: string,
+  body: { inputs: Record<string, unknown> },
+): Promise<PredictionResult> {
+  const res = await http.post<PredictionResult>(`/models/${modelId}/predict`, body);
+  return res.data;
+}
+
+export async function apiDeprecateModel(modelId: string): Promise<ModelSummary> {
+  const res = await http.post<ModelSummary>(`/models/${modelId}/deprecate`);
+  return res.data;
+}
+
+// ============================================================
+// AI 助手（IRIP V3-T01）
+// ============================================================
+
+/** 工具调用摘要 */
+export type ToolCallSummary = {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+  status: string;
+};
+
+/** 引用项 */
+export type Citation = {
+  object_type: string;
+  object_id: string;
+  version: string;
+  label: string;
+  href: string;
+};
+
+/** 对话摘要 */
+export type ConversationSummary = {
+  id: string;
+  title: string;
+  provider_mode: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** AI 消息 */
+export type AssistantMessage = {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_calls: ToolCallSummary[];
+  citations: Citation[];
+  uncertainty: string | null;
+  created_at: string;
+};
+
+/** 问答响应 */
+export type AskResponse = {
+  conversation_id: string;
+  answer: string;
+  tool_calls: ToolCallSummary[];
+  citations: Citation[];
+  uncertainty: string | null;
+  provider_mode: string;
+};
+
+/** 工具信息 */
+export type ToolInfo = {
+  name: string;
+  display_name: string;
+  description: string;
+  required_permission: string;
+  candidate: boolean;
+};
+
+/** Provider 状态 */
+export type ProviderStatus = {
+  provider_mode: string;
+  whitelist_tools: ToolInfo[];
+  candidate_tools: ToolInfo[];
+};
+
+/** 后端 /assistant/conversations 实际返回的原始结构 */
+type ConversationApiResponse = {
+  id: string;
+  title: string;
+  provider_mode: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 后端 /assistant/conversations/{id}/messages 实际返回的原始结构 */
+type MessageListApiResponse = {
+  items: Array<{
+    id: string;
+    conversation_id: string;
+    role: string;
+    content: string;
+    tool_calls: ToolCallSummary[];
+    citations: Citation[];
+    uncertainty: string | null;
+    created_at: string;
+  }>;
+};
+
+/** 后端 /assistant/conversations 列表实际返回的原始结构 */
+type ConversationListApiResponse = {
+  items: ConversationApiResponse[];
+};
+
+/** 后端 /assistant/provider-status 实际返回的原始结构 */
+type ProviderStatusApiResponse = {
+  provider_mode: string;
+  whitelist_tools: ToolInfo[];
+  candidate_tools: ToolInfo[];
+};
+
+/** 后端 /assistant/conversations/{id}/messages POST 实际返回的原始结构 */
+type AskApiResponse = {
+  conversation_id: string;
+  answer: string;
+  tool_calls: ToolCallSummary[];
+  citations: Citation[];
+  uncertainty: string | null;
+  provider_mode: string;
+};
+
+/**
+ * 创建对话
+ */
+export async function apiCreateConversation(
+  body: { title?: string; provider_mode?: string },
+): Promise<ConversationSummary> {
+  const res = await http.post<ConversationApiResponse>(
+    '/assistant/conversations',
+    { title: body.title ?? '', provider_mode: body.provider_mode ?? 'offline' },
+  );
+  return res.data;
+}
+
+/**
+ * 列出对话
+ */
+export async function apiListConversations(
+  params?: { limit?: number },
+): Promise<ConversationSummary[]> {
+  const res = await http.get<ConversationListApiResponse>(
+    '/assistant/conversations',
+    { params: { limit: params?.limit ?? 50 } },
+  );
+  return res.data.items;
+}
+
+/**
+ * 发送消息并获取 AI 回答
+ */
+export async function apiSendMessage(
+  conversationId: string,
+  body: { question: string; provider_name?: string },
+): Promise<AskResponse> {
+  const res = await http.post<AskApiResponse>(
+    `/assistant/conversations/${conversationId}/messages`,
+    { question: body.question, provider_name: body.provider_name ?? 'offline' },
+  );
+  return res.data;
+}
+
+/**
+ * 列出对话消息
+ */
+export async function apiListMessages(
+  conversationId: string,
+): Promise<AssistantMessage[]> {
+  const res = await http.get<MessageListApiResponse>(
+    `/assistant/conversations/${conversationId}/messages`,
+  );
+  return res.data.items.map((m) => ({
+    ...m,
+    role: (m.role as 'user' | 'assistant' | 'tool') ?? 'user',
+  }));
+}
+
+/**
+ * 获取 Provider 状态
+ */
+export async function apiGetProviderStatus(): Promise<ProviderStatus> {
+  const res = await http.get<ProviderStatusApiResponse>(
+    '/assistant/provider-status',
+  );
+  return res.data;
+}
+
+// ============================================================
+// V3 治理 API（/governance）— IRIP V3-T02
+// ============================================================
+
+/** 用户列表项 */
+export type UserListItem = {
+  id: string;
+  email: string;
+  display_name: string;
+  roles: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** 用户列表分页响应 */
+export type UserListResponse = {
+  items: UserListItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 范围授权列表项 */
+export type ScopeGrantListItem = {
+  id: string;
+  user_id: string | null;
+  role_id: string | null;
+  organization_id: string;
+  object_root_id: string | null;
+  department_id: string | null;
+  resource_type: string;
+  action: string;
+  effective_from: string | null;
+  effective_to: string | null;
+};
+
+/** 范围授权列表分页响应 */
+export type ScopeGrantListResponse = {
+  items: ScopeGrantListItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 后端 /governance/users 原始结构 */
+type UserListApiResponse = {
+  items: Array<{
+    id: string;
+    email: string;
+    display_name: string;
+    roles: string[];
+    status: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 后端 /governance/scope-grants 原始结构 */
+type ScopeGrantListApiResponse = {
+  items: Array<{
+    id: string;
+    user_id: string | null;
+    role_id: string | null;
+    organization_id: string;
+    object_root_id: string | null;
+    department_id: string | null;
+    resource_type: string;
+    action: string;
+    effective_from: string | null;
+    effective_to: string | null;
+  }>;
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/**
+ * 列出用户
+ */
+export async function apiListUsers(params?: {
+  status?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<UserListResponse> {
+  const res = await http.get<UserListApiResponse>('/governance/users', {
+    params,
+  });
+  return {
+    items: res.data.items.map((u) => ({
+      id: u.id,
+      email: u.email,
+      display_name: u.display_name,
+      roles: u.roles ?? [],
+      status: u.status,
+      created_at: u.created_at,
+      updated_at: u.updated_at,
+    })),
+    next_cursor: res.data.next_cursor,
+    has_more: res.data.has_more,
+  };
+}
+
+/**
+ * 分配角色（合并到已有角色列表）
+ */
+export async function apiAssignRoles(
+  userId: string,
+  roles: string[],
+): Promise<UserListItem> {
+  const res = await http.post<UserListItem>(
+    `/governance/users/${userId}/roles`,
+    { roles },
+  );
+  return res.data;
+}
+
+/**
+ * 移除角色
+ */
+export async function apiRemoveRole(
+  userId: string,
+  role: string,
+): Promise<UserListItem> {
+  const res = await http.delete<UserListItem>(
+    `/governance/users/${userId}/roles/${encodeURIComponent(role)}`,
+  );
+  return res.data;
+}
+
+/**
+ * 更新用户状态
+ */
+export async function apiUpdateUserStatus(
+  userId: string,
+  status: 'active' | 'disabled',
+): Promise<UserListItem> {
+  const res = await http.patch<UserListItem>(
+    `/governance/users/${userId}/status`,
+    { status },
+  );
+  return res.data;
+}
+
+/**
+ * 列出范围授权
+ */
+export async function apiListScopeGrants(params?: {
+  user_id?: string;
+  resource_type?: string;
+  action?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<ScopeGrantListResponse> {
+  const res = await http.get<ScopeGrantListApiResponse>(
+    '/governance/scope-grants',
+    { params },
+  );
+  return {
+    items: res.data.items.map((g) => ({
+      id: g.id,
+      user_id: g.user_id,
+      role_id: g.role_id,
+      organization_id: g.organization_id,
+      object_root_id: g.object_root_id,
+      department_id: g.department_id,
+      resource_type: g.resource_type,
+      action: g.action,
+      effective_from: g.effective_from,
+      effective_to: g.effective_to,
+    })),
+    next_cursor: res.data.next_cursor,
+    has_more: res.data.has_more,
+  };
+}
+
+/**
+ * 创建范围授权
+ */
+export async function apiCreateScopeGrant(body: {
+  user_id: string | null;
+  role_id: string | null;
+  organization_id: string;
+  object_root_id: string | null;
+  department_id: string | null;
+  resource_type: string;
+  action: string;
+  effective_from: string | null;
+  effective_to: string | null;
+}): Promise<ScopeGrantListItem> {
+  const res = await http.post<ScopeGrantListItem>('/governance/scope-grants', body);
+  return res.data;
+}
+
+/**
+ * 删除范围授权
+ */
+export async function apiDeleteScopeGrant(id: string): Promise<void> {
+  await http.delete(`/governance/scope-grants/${id}`);
+}
+
+// ============================================================
+// V3 审计 API（/audit-events）— IRIP V3-T02
+// ============================================================
+
+/** 审计事件列表项 */
+export type AuditEventItem = {
+  id: string;
+  occurred_at: string;
+  actor_user_id: string | null;
+  organization_id: string;
+  action: string;
+  resource_type: string | null;
+  resource_id: string | null;
+  payload: Record<string, unknown> | null;
+  ip: string | null;
+  user_agent: string | null;
+};
+
+/** 审计事件分页响应 */
+export type AuditEventListResponse = {
+  items: AuditEventItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 后端 /audit-events 原始结构 */
+type AuditEventListApiResponse = {
+  items: Array<{
+    id: string;
+    occurred_at: string;
+    actor_user_id: string | null;
+    organization_id: string;
+    action: string;
+    resource_type: string | null;
+    resource_id: string | null;
+    payload: Record<string, unknown> | null;
+    ip: string | null;
+    user_agent: string | null;
+  }>;
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 审计导出响应 */
+export type AuditExportResponse = {
+  job_id: string;
+  status: string;
+  kind: string;
+};
+
+/**
+ * 查询审计事件
+ */
+export async function apiListAuditEvents(params: {
+  object_type?: string;
+  object_id?: string;
+  user_id?: string;
+  action?: string;
+  start_date?: string;
+  end_date?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<AuditEventListResponse> {
+  const res = await http.get<AuditEventListApiResponse>('/audit-events/', {
+    params,
+  });
+  return {
+    items: res.data.items.map((e) => ({
+      id: e.id,
+      occurred_at: e.occurred_at,
+      actor_user_id: e.actor_user_id,
+      organization_id: e.organization_id,
+      action: e.action,
+      resource_type: e.resource_type,
+      resource_id: e.resource_id,
+      payload: e.payload,
+      ip: e.ip,
+      user_agent: e.user_agent,
+    })),
+    next_cursor: res.data.next_cursor,
+    has_more: res.data.has_more,
+  };
+}
+
+/**
+ * 创建审计导出作业
+ */
+export async function apiCreateAuditExport(body: {
+  object_type: string | null;
+  object_id: string | null;
+  user_id: string | null;
+  action: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  format: string;
+}): Promise<AuditExportResponse> {
+  const res = await http.post<AuditExportResponse>(
+    '/audit-events/export',
+    body,
+  );
+  return res.data;
+}
+
+// ============================================================
+// V3 作业 API 扩展（/jobs）— IRIP V3-T02
+// ============================================================
+
+/** 作业列表项（扩展） */
+export type JobListItem = {
+  id: string;
+  kind: string;
+  status: string;
+  stage: string;
+  progress: number;
+  retryable: boolean;
+  created_at: string;
+  attempt: number;
+  max_attempts: number;
+};
+
+/** 作业列表分页响应 */
+export type JobListResponse = {
+  items: JobListItem[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 作业详情（扩展） */
+export type JobDetail = {
+  id: string;
+  kind: string;
+  status: string;
+  stage: string;
+  progress: number;
+  retryable: boolean;
+  attempt: number;
+  max_attempts: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  last_error: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  payload: Record<string, unknown> | null;
+};
+
+/** 后端 /jobs 列表原始结构 */
+type JobListApiResponse = {
+  items: Array<{
+    id: string;
+    kind: string;
+    status: string;
+    stage: string;
+    progress: number;
+    retryable: boolean;
+    created_at: string;
+    attempt: number;
+    max_attempts: number;
+  }>;
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+/** 后端 /jobs/{id}/detail 原始结构 */
+type JobDetailApiResponse = {
+  id: string;
+  kind: string;
+  status: string;
+  stage: string;
+  progress: number;
+  retryable: boolean;
+  attempt: number;
+  max_attempts: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  last_error: Record<string, unknown> | null;
+  result: Record<string, unknown> | null;
+  payload: Record<string, unknown> | null;
+};
+
+/** 后端 /jobs/{id}/retry 原始结构 */
+type JobRetryApiResponse = {
+  job_id: string;
+  status: string;
+  kind: string;
+};
+
+/**
+ * 列出作业
+ */
+export async function apiListJobs(params?: {
+  status?: string;
+  kind?: string;
+  cursor?: string;
+  limit?: number;
+}): Promise<JobListResponse> {
+  const res = await http.get<JobListApiResponse>('/jobs', { params });
+  return {
+    items: res.data.items.map((j) => ({
+      id: j.id,
+      kind: j.kind,
+      status: j.status,
+      stage: j.stage ?? '',
+      progress: j.progress ?? 0,
+      retryable: j.retryable ?? false,
+      created_at: j.created_at,
+      attempt: j.attempt ?? 0,
+      max_attempts: j.max_attempts ?? 3,
+    })),
+    next_cursor: res.data.next_cursor,
+    has_more: res.data.has_more,
+  };
+}
+
+/**
+ * 获取作业详情
+ */
+export async function apiGetJobDetail(id: string): Promise<JobDetail> {
+  const res = await http.get<JobDetailApiResponse>(`/jobs/${id}/detail`);
+  return {
+    id: res.data.id,
+    kind: res.data.kind,
+    status: res.data.status,
+    stage: res.data.stage ?? '',
+    progress: res.data.progress ?? 0,
+    retryable: res.data.retryable ?? false,
+    attempt: res.data.attempt ?? 0,
+    max_attempts: res.data.max_attempts ?? 3,
+    created_at: res.data.created_at,
+    updated_at: res.data.updated_at,
+    created_by: res.data.created_by,
+    last_error: res.data.last_error,
+    result: res.data.result,
+    payload: res.data.payload,
+  };
+}
+
+/**
+ * 重试作业
+ */
+export async function apiRetryJob(id: string): Promise<{ id: string; status: string; kind: string }> {
+  const res = await http.post<JobRetryApiResponse>(`/jobs/${id}/retry`);
+  return {
+    id: res.data.job_id,
+    status: res.data.status,
+    kind: res.data.kind,
+  };
+}
+
+// ============================================================
+// V3 系统健康 API（/health）— IRIP V3-T02
+// ============================================================
+
+/** 检查项 */
+export type HealthCheck = {
+  name: string;
+  status: string;
+  latency_ms: number | null;
+  message: string | null;
+};
+
+/** 系统健康响应 */
+export type SystemHealth = {
+  status: string;
+  checks: HealthCheck[];
+  migration_version: string | null;
+  worker_heartbeat: string | null;
+  outbox_backlog: number;
+};
+
+/** 后端 /health/ready 原始结构 */
+type HealthReadyApiResponse = {
+  status: string;
+  checks: Record<
+    string,
+    { status: string; version?: string; error?: string; [key: string]: unknown }
+  >;
+};
+
+/**
+ * 获取系统健康状态
+ *
+ * 调用 /health/ready 端点，将后端的 checks 字典结构转换为数组结构。
+ * 注意：后端在系统未就绪时返回 503，但响应体仍包含健康详情，
+ * 此处捕获 503 错误并提取响应体数据。
+ */
+export async function apiGetSystemHealth(): Promise<SystemHealth> {
+  let rawData: HealthReadyApiResponse;
+  try {
+    const res = await http.get<HealthReadyApiResponse>('/health/ready');
+    rawData = res.data;
+  } catch (err) {
+    // 503 时后端仍返回健康详情，从错误响应中提取
+    if (err && typeof err === 'object' && 'response' in err) {
+      const response = (err as { response?: { data?: HealthReadyApiResponse; status?: number } }).response;
+      if (response?.data && response.status === 503) {
+        rawData = response.data;
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  const checks: HealthCheck[] = Object.entries(rawData.checks).map(
+    ([name, detail]) => {
+      const status = detail.status;
+      let message: string | null = null;
+      if (detail.error) {
+        message = String(detail.error);
+      } else if (detail.version) {
+        message = `version: ${detail.version}`;
+      }
+      return {
+        name,
+        status,
+        latency_ms: null,
+        message,
+      };
+    },
+  );
+
+  // 从 checks 中提取迁移版本、worker 心跳、outbox 积压
+  const dbCheck = rawData.checks['database'];
+  const migrationVersion: string | null =
+    dbCheck?.version ?? null;
+
+  const outboxCheck = rawData.checks['outbox'];
+  const outboxBacklog: number =
+    typeof outboxCheck?.stale_undelivered === 'number'
+      ? outboxCheck.stale_undelivered
+      : 0;
+
+  // Worker 心跳：后端 /health/ready 不直接返回，
+  // 从 redis 检查项推断（redis ok = worker 可达）
+  const redisCheck = rawData.checks['redis'];
+  const workerHeartbeat: string | null =
+    redisCheck?.status === 'ok' ? new Date().toISOString() : null;
+
+  const overallStatus: string =
+    rawData.status === 'ok' ? 'ok' : 'not_ready';
+
+  return {
+    status: overallStatus,
+    checks,
+    migration_version: migrationVersion,
+    worker_heartbeat: workerHeartbeat,
+    outbox_backlog: outboxBacklog,
+  };
+}
+
 

@@ -1,0 +1,28 @@
+name: model_predict
+version: 1.0.0
+kind: model
+runtime: python
+description: "模型预测组件：使用当前发布版本预测，写 model_execution 事实。"
+timeout_seconds: 300
+inputs: []
+outputs:
+  - name: predictions
+    data_type: prediction_result
+    required: true
+  - name: model_version_id
+    data_type: model_version_ref
+    required: true
+  - name: fact_id
+    data_type: fact_ref
+    required: false
+parameters:
+  type: object
+  required:
+    - model_id
+    - inputs
+  properties:
+    model_id:
+      type: string
+      format: uuid
+    inputs:
+      type: object

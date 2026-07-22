@@ -14,16 +14,18 @@
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from packages.common.errors import AppError
-from packages.jobs.entities import JobRef
+from packages.common.ids import new_id
+from packages.jobs.entities import JobRef, JobStatus, TERMINAL_STATUSES
 from packages.jobs.service import JobService
 
 #: 路由实例。
@@ -72,6 +74,47 @@ class CancelResponse(BaseModel):
     kind: str
 
 
+class JobListItem(BaseModel):
+    """作业列表项。"""
+
+    id: str
+    kind: str
+    status: str
+    stage: str = ""
+    progress: int = 0
+    retryable: bool = False
+    created_at: datetime
+    attempt: int = 0
+    max_attempts: int = 3
+
+
+class JobListResponse(BaseModel):
+    """作业分页列表响应。"""
+
+    items: list[JobListItem]
+    next_cursor: str | None
+    has_more: bool
+
+
+class JobDetailResponse(BaseModel):
+    """作业详情响应体。"""
+
+    id: str
+    kind: str
+    status: str
+    stage: str = ""
+    progress: int = 0
+    retryable: bool = False
+    attempt: int = 0
+    max_attempts: int = 3
+    created_at: datetime
+    updated_at: datetime
+    created_by: str | None = None
+    last_error: dict[str, object] | None = None
+    result: dict[str, object] | None = None
+    payload: dict[str, object] | None = None
+
+
 # ---- 端点 ----
 
 
@@ -106,6 +149,53 @@ async def create_job(
         job_id=str(ref.job_id),
         status=ref.status.value,
         kind=ref.kind,
+    )
+
+
+@jobs_router.get("", response_model=JobListResponse)
+async def list_jobs(
+    current_user: CurrentUserDep,
+    service: JobServiceDep,
+    status: str | None = Query(None, description="状态筛选"),
+    kind: str | None = Query(None, description="类型筛选"),
+    cursor: str | None = Query(None, description="分页游标"),
+    limit: int = Query(50, ge=1, le=100, description="每页数量"),
+) -> JobListResponse:
+    """分页查询作业列表。
+
+    按创建时间倒序排列，支持按状态和类型过滤。
+
+    Args:
+        current_user: 当前认证用户。
+        service: 作业服务。
+        status: 状态筛选。
+        kind: 类型筛选。
+        cursor: 分页游标。
+        limit: 每页数量（最大 100）。
+
+    Returns:
+        JobListResponse: 分页作业列表。
+    """
+    items, next_cursor, has_more = await service.list(
+        status=status, kind=kind, cursor=cursor, limit=limit
+    )
+    return JobListResponse(
+        items=[
+            JobListItem(
+                id=str(job.id),
+                kind=job.kind,
+                status=job.status,
+                stage=stage,
+                progress=progress,
+                retryable=retryable,
+                created_at=job.created_at,
+                attempt=job.attempt,
+                max_attempts=job.max_attempts,
+            )
+            for job, stage, progress, retryable in items
+        ],
+        next_cursor=next_cursor,
+        has_more=has_more,
     )
 
 
@@ -161,6 +251,98 @@ async def cancel_job(
     """
     ref: JobRef = await service.request_cancel(job_id, current_user.user_id)
     return CancelResponse(
+        job_id=str(ref.job_id),
+        status=ref.status.value,
+        kind=ref.kind,
+    )
+
+
+@jobs_router.get("/{job_id}/detail", response_model=JobDetailResponse)
+async def get_job_detail(
+    job_id: UUID,
+    current_user: CurrentUserDep,
+    service: JobServiceDep,
+) -> JobDetailResponse:
+    """查询作业详情（含 payload、result、last_error）。
+
+    Args:
+        job_id: 作业 UUID。
+        current_user: 当前认证用户。
+        service: 作业服务。
+
+    Returns:
+        JobDetailResponse: 作业详情。
+
+    Raises:
+        AppError: code="not_found"，当作业不存在时。
+    """
+    from packages.jobs.entities import Job
+
+    ref: JobRef = await service.get(job_id)
+    job: Job = await service.get_raw(job_id)
+    return JobDetailResponse(
+        id=str(job.id),
+        kind=job.kind,
+        status=job.status,
+        stage=ref.stage,
+        progress=ref.progress,
+        retryable=ref.retryable,
+        attempt=job.attempt,
+        max_attempts=job.max_attempts,
+        created_at=job.created_at,
+        updated_at=job.updated_at,
+        created_by=str(job.created_by) if job.created_by is not None else None,
+        last_error=job.last_error,
+        result=job.result,
+        payload=job.payload,
+    )
+
+
+@jobs_router.post("/{job_id}/retry", response_model=JobResponse, status_code=202)
+async def retry_job(
+    job_id: UUID,
+    current_user: CurrentUserDep,
+    service: JobServiceDep,
+) -> JobResponse:
+    """重试已失败的作业。
+
+    仅对处于 failed 或 cancelled 终态的作业允许重试。
+    创建一个新作业，使用原作业的 kind 和 payload。
+
+    Args:
+        job_id: 原作业 UUID。
+        current_user: 当前认证用户。
+        service: 作业服务。
+
+    Returns:
+        JobResponse: 新作业 ID + 状态（202 Accepted）。
+
+    Raises:
+        AppError: code="not_found"，当原作业不存在时。
+        AppError: code="conflict"，当原作业非终态时。
+    """
+    from packages.jobs.entities import Job
+
+    original: Job = await service.get_raw(job_id)
+
+    original_status = JobStatus(original.status)
+    if original_status not in TERMINAL_STATUSES:
+        raise AppError(
+            code="conflict",
+            message=f"作业未处于终态，无法重试: {original_status.value}",
+            retryable=False,
+            fields={"status": original_status.value},
+        )
+
+    # 创建新作业（同 kind + payload，新幂等键）
+    new_idempotency_key = f"retry:{job_id}:{new_id()}"
+    payload = dict(original.payload) if original.payload else {}
+    ref: JobRef = await service.accept(
+        kind=original.kind,
+        payload=payload,
+        idempotency_key=new_idempotency_key,
+    )
+    return JobResponse(
         job_id=str(ref.job_id),
         status=ref.status.value,
         kind=ref.kind,
