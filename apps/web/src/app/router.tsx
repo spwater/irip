@@ -9,9 +9,10 @@ import { AuthProvider } from '@/auth/AuthProvider';
 import { LoginPage } from '@/auth/LoginPage';
 import { AppShell } from '@/app/AppShell';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
-import { FactsPage } from '@/pages/FactsPage';
-import { StandardsPage } from '@/pages/StandardsPage';
-import { ParametersPage } from '@/pages/ParametersPage';
+import { StandardsPage as StandardsPageV1 } from '@/standards/StandardsPage';
+import { FactsPage as FactsPageV1 } from '@/facts/FactsPage';
+import { FactDetail } from '@/facts/FactDetail';
+import { ParameterPage as ParameterPageV1 } from '@/parameters/ParameterPage';
 import { ModelsPage } from '@/pages/ModelsPage';
 import { GovernancePage } from '@/pages/GovernancePage';
 import { JobsPage } from '@/pages/JobsPage';
@@ -67,24 +68,56 @@ export function createAppRouter() {
     component: WorkbenchPage,
   });
 
-  const factsRoute = createRoute({
-    getParentRoute: () => protectedLayoutRoute,
-    path: '/facts',
-    component: FactsPage,
-  });
-
+  // V1 routes — using new components
   const standardsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/standards',
-    component: StandardsPage,
+    component: StandardsPageV1,
+  });
+
+  const objectsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/objects',
+    beforeLoad: () => {
+      throw redirect({ to: '/standards' });
+    },
+  });
+
+  const ingestionsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/ingestions',
+    beforeLoad: () => {
+      throw redirect({ to: '/facts' });
+    },
+  });
+
+  const factsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/facts',
+    component: FactsPageV1,
+  });
+
+  const factDetailRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/facts/$factId',
+    component: FactDetail,
+  });
+
+  const provenanceRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/provenance',
+    beforeLoad: () => {
+      throw redirect({ to: '/parameters' });
+    },
   });
 
   const parametersRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/parameters',
-    component: ParametersPage,
+    component: ParameterPageV1,
   });
 
+  // V0 placeholder routes (unchanged)
   const modelsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/models',
@@ -108,8 +141,12 @@ export function createAppRouter() {
     indexRoute,
     protectedLayoutRoute.addChildren([
       workbenchRoute,
-      factsRoute,
       standardsRoute,
+      objectsRoute,
+      ingestionsRoute,
+      factsRoute,
+      factDetailRoute,
+      provenanceRoute,
       parametersRoute,
       modelsRoute,
       governanceRoute,

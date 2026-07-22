@@ -10,8 +10,8 @@ const { Text } = Typography;
 /** 导航菜单项（中文标签） */
 const NAV_ITEMS = [
   { key: '/workbench', label: '研发看板' },
-  { key: '/facts', label: '实验事实' },
   { key: '/standards', label: '标准管理' },
+  { key: '/facts', label: '实验事实' },
   { key: '/parameters', label: '参数管理' },
   { key: '/models', label: '模型管理' },
   { key: '/governance', label: '平台治理' },
