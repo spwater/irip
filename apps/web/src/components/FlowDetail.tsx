@@ -321,16 +321,28 @@ function parseManifest(manifestYaml: string): ParsedManifest {
 
       if (indent === baseIndent) {
         if (trimmed.startsWith('required:')) {
-          // 解析 required 列表
-          for (let j = i + 1; j < sectionLines.length; j++) {
-            const reqLine = sectionLines[j];
-            const reqTrimmed = reqLine.trim();
-            if (!reqTrimmed || reqTrimmed.startsWith('#')) continue;
-            const reqIndent = reqLine.length - reqLine.trimStart().length;
-            if (reqIndent <= baseIndent) break;
-            const reqMatch = reqTrimmed.match(/^-\s*(.*)$/);
-            if (reqMatch) {
-              requiredParams.add(reqMatch[1].trim().replace(/^["']|["']$/g, ''));
+          // 先尝试解析同行内联列表格式：required: [a, b, c]
+          const inlineMatch = trimmed.match(/required:\s*\[(.*)\]/);
+          if (inlineMatch) {
+            inlineMatch[1].split(',').forEach((item) => {
+              const cleanItem = item.trim().replace(/^["']|["']$/g, '');
+              if (cleanItem) requiredParams.add(cleanItem);
+            });
+          } else {
+            // 块列表格式：
+            // required:
+            //   - a
+            //   - b
+            for (let j = i + 1; j < sectionLines.length; j++) {
+              const reqLine = sectionLines[j];
+              const reqTrimmed = reqLine.trim();
+              if (!reqTrimmed || reqTrimmed.startsWith('#')) continue;
+              const reqIndent = reqLine.length - reqLine.trimStart().length;
+              if (reqIndent <= baseIndent) break;
+              const reqMatch = reqTrimmed.match(/^-\s*(.*)$/);
+              if (reqMatch) {
+                requiredParams.add(reqMatch[1].trim().replace(/^["']|["']$/g, ''));
+              }
             }
           }
         } else if (trimmed.startsWith('properties:')) {
