@@ -1498,6 +1498,11 @@ export async function apiCreateFlowRun(
   return res.data;
 }
 
+export async function apiListFlowRuns(flowId: string): Promise<FlowRunSummary[]> {
+  const res = await http.get<FlowRunSummary[]>(`/flows/${flowId}/runs`);
+  return res.data;
+}
+
 export async function apiResumeFlowRun(runId: string): Promise<FlowRunSummary> {
   const res = await http.post<FlowRunSummary>(`/flows/runs/${runId}/resume`);
   return res.data;

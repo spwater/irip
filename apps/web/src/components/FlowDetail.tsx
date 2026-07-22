@@ -24,12 +24,14 @@ import {
   apiGetFlow,
   apiGetFlowRun,
   apiListFlows,
+  apiListFlowRuns,
   apiPublishFlow,
   apiResumeFlowRun,
   apiRetryFlowNode,
   extractApiError,
   type FlowNodeExecution,
   type FlowRunDetail,
+  type FlowRunSummary,
   type FlowSummary,
 } from '@/api/client';
 
@@ -103,7 +105,6 @@ export function FlowDetail(): JSX.Element {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [runModalOpen, setRunModalOpen] = useState(false);
-  const [runIdInput, setRunIdInput] = useState<string>('');
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [createForm] = Form.useForm();
   const [publishForm] = Form.useForm();
@@ -123,6 +124,15 @@ export function FlowDetail(): JSX.Element {
     queryFn: () => apiGetFlow(selectedFlowId!),
     enabled: !!selectedFlowId,
   });
+
+  // ---- 选中流程的运行列表查询 ----
+  const { data: runsList, isLoading: runsLoading } = useQuery({
+    queryKey: ['flow-runs', selectedFlowId],
+    queryFn: () => apiListFlowRuns(selectedFlowId!),
+    enabled: !!selectedFlowId,
+  });
+
+  const runs: FlowRunSummary[] = runsList ?? [];
 
   // ---- 运行详情查询 ----
   const { data: runDetail, isLoading: runLoading } = useQuery({
@@ -163,10 +173,12 @@ export function FlowDetail(): JSX.Element {
     mutationFn: (vars: { flowId: string; body: { inputs: Record<string, unknown> } }) =>
       apiCreateFlowRun(vars.flowId, vars.body),
     onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
       void queryClient.invalidateQueries({ queryKey: ['flow-run', data.id] });
       setRunModalOpen(false);
       runForm.resetFields();
       message.success('流程执行已创建');
+      setActiveRunId(data.id);
       setActiveRunId(data.id);
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
@@ -246,12 +258,6 @@ export function FlowDetail(): JSX.Element {
       createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
     } catch (err) {
       message.error(`JSON 解析失败: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
-
-  const handleLoadRun = (): void => {
-    if (runIdInput.trim()) {
-      setActiveRunId(runIdInput.trim());
     }
   };
 
@@ -432,38 +438,48 @@ export function FlowDetail(): JSX.Element {
       {/* 运行管理 */}
       {selectedFlowId && (
         <Card title="运行管理" style={{ marginBottom: 16 }}>
-          <Space style={{ marginBottom: 16 }}>
-            <Input
-              placeholder="输入运行 ID"
-              style={{ width: 360 }}
-              value={runIdInput}
-              onChange={(e) => setRunIdInput(e.target.value)}
-            />
-            <Button type="primary" onClick={handleLoadRun}>
-              加载运行
-            </Button>
-            {activeRunId && (
-              <>
-                <Popconfirm
-                  title="确认恢复执行？"
-                  onConfirm={() => resumeMutation.mutate(activeRunId)}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Button>恢复</Button>
-                </Popconfirm>
-                <Popconfirm
-                  title="确认取消执行？"
-                  onConfirm={() => cancelMutation.mutate(activeRunId)}
-                  okText="确定"
-                  cancelText="取消"
-                >
-                  <Button danger>取消</Button>
-                </Popconfirm>
-              </>
-            )}
-          </Space>
+          {/* 运行列表 */}
+          <Table<FlowRunSummary>
+            columns={[
+              { title: '运行 ID', dataIndex: 'id', key: 'id', width: 200, ellipsis: true,
+                render: (v: string) => <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.slice(0, 12)}...</Text> },
+              { title: '状态', dataIndex: 'status', key: 'status', width: 100,
+                render: (s: string) => <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
+              { title: '输出摘要', dataIndex: 'output_digest', key: 'output_digest', width: 180, ellipsis: true,
+                render: (v: string | null) => v ? <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.slice(0, 16)}...</Text> : '-' },
+              { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+              { title: '完成时间', dataIndex: 'completed_at', key: 'completed_at', width: 180,
+                render: (v: string | null) => v ?? '-' },
+              { title: '操作', key: 'action', width: 160,
+                render: (_: unknown, record: FlowRunSummary) => (
+                  <Space size="small">
+                    <Button type="link" size="small"
+                      onClick={() => setActiveRunId(record.id)}>
+                      查看详情
+                    </Button>
+                    {activeRunId === record.id && (
+                      <>
+                        <Popconfirm title="确认恢复？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                          <Button type="link" size="small">恢复</Button>
+                        </Popconfirm>
+                        <Popconfirm title="确认取消？" onConfirm={() => cancelMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                          <Button type="link" size="small" danger>取消</Button>
+                        </Popconfirm>
+                      </>
+                    )}
+                  </Space>
+                ),
+              },
+            ]}
+            dataSource={runs}
+            rowKey="id"
+            loading={runsLoading}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            size="small"
+            style={{ marginBottom: 16 }}
+          />
 
+          {/* 选中运行的详情 */}
           {activeRunId ? (
             runLoading ? (
               <div style={{ textAlign: 'center', padding: 24 }}>
@@ -475,7 +491,7 @@ export function FlowDetail(): JSX.Element {
               <Empty description="未找到运行记录" />
             )
           ) : (
-            <Empty description="请输入运行 ID 加载执行详情" />
+            <Empty description="点击上方查看详情按钮加载执行详情" />
           )}
         </Card>
       )}

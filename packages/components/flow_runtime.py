@@ -898,6 +898,29 @@ class FlowRuntimeService:
 
     # ---- 执行管理 ----
 
+    async def list_runs(self, flow_id: UUID) -> list[FlowRun]:
+        """列出流程的所有运行记录（按创建时间降序）。
+
+        Args:
+            flow_id: 流程定义 ID。
+
+        Returns:
+            list[FlowRun]: 运行记录列表。
+        """
+        async with session_scope(self._factory) as session:
+            result = await session.execute(
+                sa.select(FlowRun)
+                .where(
+                    FlowRun.flow_version_id.in_(
+                        sa.select(FlowDefinitionVersionORM.id).where(
+                            FlowDefinitionVersionORM.flow_definition_id == flow_id
+                        )
+                    )
+                )
+                .order_by(FlowRun.created_at.desc())
+            )
+            return list(result.scalars().all())
+
     async def create_run(
         self,
         flow_version_id: UUID,

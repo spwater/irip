@@ -451,6 +451,32 @@ async def get_flow(
 # ---- 端点：执行管理 ----
 
 
+@flows_router.get(
+    "/{flow_id}/runs",
+    response_model=list[FlowRunResponse],
+)
+async def list_runs(
+    flow_id: UUID,
+    current_user: ReadUserDep,
+    service: FlowServiceDep,
+) -> list[FlowRunResponse]:
+    """列出流程的所有运行记录。
+
+    Args:
+        flow_id: 流程定义 ID。
+        current_user: 当前认证用户（需 flow:read 权限）。
+        service: 流程运行时服务。
+
+    Returns:
+        list[FlowRunResponse]: 运行记录列表（按创建时间降序）。
+    """
+    import sqlalchemy as sa
+    from packages.components.flow_runtime import FlowRun
+
+    runs = await service.list_runs(flow_id)
+    return [_run_to_response(r) for r in runs]
+
+
 @flows_router.post(
     "/{flow_id}/runs",
     response_model=FlowRunResponse,
