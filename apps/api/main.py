@@ -533,7 +533,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         _get_component_registry_service_dep
     )
 
-    # 流程运行时服务（需当前用户上下文 + 组件注册表 + 执行器）
+    # 流程运行时服务（需当前用户上下文 + 组件注册表 + 执行器 + 作业服务）
     async def _get_flow_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> FlowRuntimeService:
@@ -543,12 +543,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             organization_id=org_id,
         )
         runner = PythonComponentRunner()
+        job_svc = JobService(
+            session_factory=session_factory,
+            organization_id=org_id,
+            created_by=current_user.user_id,
+        )
         return FlowRuntimeService(
             session_factory=session_factory,
             organization_id=org_id,
             registry=registry,
             runner=runner,
-            job_service=None,
+            job_service=job_svc,
         )
 
     app.dependency_overrides[get_flow_service] = _get_flow_service_dep
