@@ -4,12 +4,16 @@
   "title": "IRIP Component Manifest v1",
   "description": "Validation schema for IRIP component manifests (V2-T01).",
   "type": "object",
-  "required": ["name", "version", "kind", "runtime"],
+  "required": ["name", "version", "kind"],
   "properties": {
     "name": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$",
       "description": "Component name, lowercase letters/digits/underscore, must start with a letter."
+    },
+    "display_name": {
+      "type": "string",
+      "description": "Human-readable display name (Chinese)."
     },
     "version": {
       "type": "string",

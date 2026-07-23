@@ -28,7 +28,7 @@ import {
   type ModelVersionSummary,
 } from '@/api/client';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /** 模型状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
@@ -268,8 +268,6 @@ export function ModelsPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={2}>模型管理</Title>
-
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
           新建模型

@@ -25,12 +25,15 @@ import {
   apiGetComponent,
   apiListComponentVersions,
   apiListComponents,
+  apiListEquipment,
+  apiListObjects,
   apiPublishComponent,
   apiRestoreComponent,
   extractApiError,
   type ComponentDetail,
   type ComponentSummary,
   type ComponentVersionItem,
+  type IndustrialObject,
 } from '@/api/client';
 
 /** 把 UTC 时间字符串转成本地时间显示 */
@@ -67,8 +70,7 @@ const STATUS_LABEL: Record<string, string> = {
   deprecated: '已弃用',
 };
 
-/** LLM 驱动的组件名称集合 */
-const LLM_COMPONENTS = new Set(['ez_scan_extractor']);
+/** 比较函数 —— 摩登/古法由后端 engine 字段决定（llm=摩登, code=古法） */
 
 /** 比较 semver 版本号，返回 >0/0/<0 */
 function compareVersions(a: string, b: string): number {
@@ -83,7 +85,7 @@ function compareVersions(a: string, b: string): number {
 }
 
 /**
- * 组件管理页面
+ * 工具箱页面
  *
  * 分两栏展示：
  * - 摩登：基于 LLM 的组件（如 llm_extractor）
@@ -105,6 +107,26 @@ export function ComponentsPage(): JSX.Element {
     queryFn: () => apiListComponents({ kind: kindFilter }),
   });
 
+  // ---- 实验对象列表查询（用于显示"实验对象"列）----
+  const { data: objectData } = useQuery({
+    queryKey: ['objects-for-component'],
+    queryFn: () => apiListObjects({ page_size: 100 }),
+  });
+  // code → 实验对象（含 equipment_id，用于间接查设备名称）
+  const objectMap = new Map<string, IndustrialObject>(
+    (objectData?.items ?? []).map((o) => [o.code, o]),
+  );
+
+  // ---- 设备列表查询（用于通过实验对象的 equipment_id 显示关联设备名）----
+  const { data: equipmentData } = useQuery({
+    queryKey: ['equipment-for-component'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  // id → display_name
+  const equipmentMap = new Map(
+    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
+  );
+
   const allItems: ComponentSummary[] = (() => {
     const items = data?.items ?? [];
     // 按 name 去重，只保留最新版本
@@ -118,9 +140,9 @@ export function ComponentsPage(): JSX.Element {
     return Array.from(latestByName.values());
   })();
 
-  // 按摩登/古法/归档分组
-  const modernItems = allItems.filter((i) => LLM_COMPONENTS.has(i.name) && i.status !== 'deprecated');
-  const classicItems = allItems.filter((i) => !LLM_COMPONENTS.has(i.name) && i.status !== 'deprecated');
+  // 按摩登/古法/归档分组（engine=llm → 摩登，engine=code → 古法）
+  const modernItems = allItems.filter((i) => i.engine === 'llm' && i.status !== 'deprecated');
+  const classicItems = allItems.filter((i) => i.engine !== 'llm' && i.status !== 'deprecated');
   const archivedItems = allItems.filter((i) => i.status === 'deprecated');
   const currentItems = activeTab === 'modern' ? modernItems : activeTab === 'classic' ? classicItems : archivedItems;
 
@@ -134,8 +156,15 @@ export function ComponentsPage(): JSX.Element {
   // ---- 发布组件 Mutation（注册 + 编辑共用）----
   const publishMutation = useMutation({
     mutationFn: apiPublishComponent,
-    onSuccess: () => {
+    onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      // 刷新旧版本详情和版本历史
+      if (detailId) {
+        void queryClient.invalidateQueries({ queryKey: ['component', detailId] });
+        void queryClient.invalidateQueries({ queryKey: ['component-versions', detailId] });
+      }
+      // 指向新版本，让详情自动刷新
+      setDetailId(data.id);
       setModalOpen(false);
       setEditModalOpen(false);
       form.resetFields();
@@ -216,10 +245,18 @@ export function ComponentsPage(): JSX.Element {
   const columns: ColumnsType<ComponentSummary> = [
     {
       title: '名称',
-      dataIndex: 'name',
       key: 'name',
       width: 200,
-      render: (v: string) => <Text strong>{v}</Text>,
+      render: (_: unknown, record: ComponentSummary) => (
+        <div>
+          <Text strong>{record.display_name || record.name}</Text>
+          {record.display_name && (
+            <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+              {record.name}
+            </Text>
+          )}
+        </div>
+      ),
     },
     {
       title: '版本',
@@ -239,11 +276,30 @@ export function ComponentsPage(): JSX.Element {
       ),
     },
     {
-      title: '执行引擎',
-      dataIndex: 'runtime',
-      key: 'runtime',
-      width: 120,
-      render: (v: string) => <Text code>{v}</Text>,
+      title: '实验对象',
+      dataIndex: 'experimental_object_code',
+      key: 'experimental_object_code',
+      width: 200,
+      render: (code: string) => {
+        if (!code) return <Text type="secondary">-</Text>;
+        const obj = objectMap.get(code);
+        if (!obj) return <Text code>{code}</Text>;
+        const eqName = obj.equipment_id
+          ? equipmentMap.get(obj.equipment_id)
+          : null;
+        return (
+          <div>
+            <Text>{obj.display_name}</Text>
+            {eqName && (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  设备: {eqName}
+                </Text>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '状态',
@@ -254,18 +310,6 @@ export function ComponentsPage(): JSX.Element {
         <Tag color={STATUS_COLOR[v] ?? 'default'}>
           {STATUS_LABEL[v] ?? v}
         </Tag>
-      ),
-    },
-    {
-      title: 'SHA-256',
-      dataIndex: 'manifest_sha256',
-      key: 'manifest_sha256',
-      width: 140,
-      ellipsis: true,
-      render: (v: string) => (
-        <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
-          {v ? `${v.slice(0, 12)}…` : '-'}
-        </Text>
       ),
     },
     {
@@ -354,11 +398,9 @@ export function ComponentsPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={2}>组件管理</Title>
-
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={handleOpenModal}>
-          注册组件
+          新建工具
         </Button>
         <Select
           placeholder="类别筛选"
@@ -464,9 +506,9 @@ export function ComponentsPage(): JSX.Element {
         />
       </Card>
 
-      {/* 注册组件 Modal */}
+      {/* 新建工具 Modal */}
       <Modal
-        title="注册组件"
+        title="新建工具"
         open={modalOpen}
         onOk={handlePublish}
         onCancel={() => {
@@ -488,7 +530,7 @@ export function ComponentsPage(): JSX.Element {
             ]}
           >
             <Input.TextArea
-              placeholder={`name: my_component\nversion: "1.0.0"\nkind: transform\nruntime: python\n...`}
+              placeholder={`name: my_component\nversion: "1.0.0"\nkind: transform\n...`}
               rows={16}
               style={{ fontFamily: 'monospace', fontSize: 13 }}
             />
@@ -598,27 +640,21 @@ function ComponentDetailPanel({
     <div>
       <Descriptions bordered column={1} size="small">
         <Descriptions.Item label="名称">
-          <Text strong>{detail.name}</Text>
+          <Text strong>{detail.display_name || detail.name}</Text>
+          {detail.display_name && (
+            <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+              {detail.name}
+            </Text>
+          )}
         </Descriptions.Item>
         <Descriptions.Item label="版本">{detail.version}</Descriptions.Item>
         <Descriptions.Item label="类别">
           <Tag color="blue">{KIND_LABEL[detail.kind] ?? detail.kind}</Tag>
         </Descriptions.Item>
-        <Descriptions.Item label="执行引擎">
-          <Text code>{detail.runtime}</Text>
-        </Descriptions.Item>
         <Descriptions.Item label="状态">
           <Tag color={STATUS_COLOR[detail.status] ?? 'default'}>
             {STATUS_LABEL[detail.status] ?? detail.status}
           </Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="SHA-256">
-          <Text
-            copyable
-            style={{ fontFamily: 'monospace', fontSize: 12 }}
-          >
-            {detail.manifest_sha256}
-          </Text>
         </Descriptions.Item>
         <Descriptions.Item label="发布时间">
           {fmtTime(detail.published_at)}

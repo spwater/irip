@@ -27,6 +27,31 @@ from packages.departments.entities import Department
 from packages.equipment.entities import Equipment, EquipmentVariable
 
 
+async def _get_descendant_dept_ids(
+    session: AsyncSession, dept_id: UUID
+) -> list[UUID]:
+    """递归查询某部门及其所有后代部门的 ID 列表。
+
+    使用 PostgreSQL WITH RECURSIVE 递归 CTE 遍历 parent_id 层级。
+    """
+    stmt = sa.text(
+        """
+        WITH RECURSIVE dept_tree AS (
+            SELECT id FROM department WHERE id = CAST(:root_id AS uuid)
+            UNION ALL
+            SELECT d.id FROM department d
+            INNER JOIN dept_tree dt ON d.parent_id = dt.id
+        )
+        SELECT id FROM dept_tree
+        """
+    )
+    result = await session.execute(
+        stmt.bindparams(root_id=str(dept_id))
+    )
+    rows = result.fetchall()
+    return [UUID(str(row[0])) for row in rows]
+
+
 class EquipmentRepository:
     """设备仪器持久化仓库。
 
@@ -113,7 +138,7 @@ class EquipmentRepository:
         Args:
             session: 异步会话。
             organization_id: 组织 ID（过滤条件）。
-            department_id: 部门 ID 筛选（None = 不过滤）。
+            department_id: 部门 ID 筛选（None = 不过滤；非 None 时含所有后代部门）。
             status: 状态筛选（None = 不过滤，"active" / "disabled"）。
             cursor_sort_order: 游标 sort_order（None = 第一页）。
             cursor_created_at: 游标 created_at（None = 第一页）。
@@ -149,7 +174,12 @@ class EquipmentRepository:
         )
 
         if department_id is not None:
-            query = query.where(Equipment.department_id == department_id)
+            # 递归查后代部门 ID，用 IN 过滤（含自身）
+            dept_ids = await _get_descendant_dept_ids(session, department_id)
+            if dept_ids:
+                query = query.where(Equipment.department_id.in_(dept_ids))
+            else:
+                query = query.where(Equipment.department_id == department_id)
 
         if status is not None:
             query = query.where(Equipment.status == status)

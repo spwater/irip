@@ -226,7 +226,6 @@ export function ParameterPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={2}>参数管理</Title>
       <Tabs
         defaultActiveKey="list"
         items={[

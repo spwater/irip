@@ -66,9 +66,8 @@ class ObjectType(StrEnum):
         EQUIPMENT_GROUP: 设备组。
         INSTRUMENT: 仪器。
         MEASUREMENT_POINT: 测量点。
-        SAMPLE: 样品。
         MATERIAL: 物料。
-        PRODUCT: 产品。
+        SIGNAL: 信号。
     """
 
     LAB = "lab"
@@ -76,9 +75,8 @@ class ObjectType(StrEnum):
     EQUIPMENT_GROUP = "equipment_group"
     INSTRUMENT = "instrument"
     MEASUREMENT_POINT = "measurement_point"
-    SAMPLE = "sample"
     MATERIAL = "material"
-    PRODUCT = "product"
+    SIGNAL = "signal"
 
 
 class IndustrialObject(Base):
@@ -110,6 +108,7 @@ class IndustrialObject(Base):
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'active'")
     )

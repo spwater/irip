@@ -91,9 +91,11 @@ class ComponentVersionResponse(BaseModel):
 
     id: str
     name: str
+    display_name: str
     version: str
     kind: str
     runtime: str
+    engine: str
     status: str
     manifest_sha256: str
     published_at: datetime | None
@@ -105,9 +107,12 @@ class ComponentListItemResponse(BaseModel):
 
     id: str
     name: str
+    display_name: str
     version: str
     kind: str
     runtime: str
+    engine: str
+    experimental_object_code: str
     status: str
     manifest_sha256: str
     published_at: datetime | None
@@ -125,6 +130,7 @@ class ComponentDetailResponse(BaseModel):
 
     id: str
     name: str
+    display_name: str
     version: str
     kind: str
     runtime: str
@@ -133,6 +139,40 @@ class ComponentDetailResponse(BaseModel):
     manifest_yaml: str
     published_at: datetime | None
     created_at: datetime
+
+
+def _detect_engine(manifest_yaml: str) -> str:
+    """从 manifest YAML 判断组件引擎类型。
+
+    LLM 驱动的组件 parameters 里必然包含 prompt 参数。
+    返回 "llm" 或 "code"。
+    """
+    import re
+
+    if re.search(r"^\s+prompt:\s*$", manifest_yaml, re.MULTILINE):
+        return "llm"
+    return "code"
+
+
+def _parse_display_name(manifest_yaml: str) -> str:
+    """从 manifest YAML 提取 display_name 字段。"""
+    import re
+
+    match = re.search(r'^display_name:\s*["\']?(.*?)["\']?\s*$', manifest_yaml, re.MULTILINE)
+    return match.group(1) if match else ""
+
+
+def _parse_experimental_object_code(manifest_yaml: str) -> str:
+    """从 manifest YAML 提取 experimental_object_code 参数的默认值。"""
+    import re
+
+    # 匹配 experimental_object_code: 下面的 default: "xxx"
+    match = re.search(
+        r'^\s+experimental_object_code:\s*\n\s*type:\s*string.*?\n\s*default:\s*["\']?(.*?)["\']?\s*$',
+        manifest_yaml,
+        re.MULTILINE | re.DOTALL,
+    )
+    return match.group(1) if match else ""
 
 
 # ---- 端点 ----
@@ -172,9 +212,11 @@ async def publish_component(
     return ComponentVersionResponse(
         id=str(version.id),
         name=manifest.name,
+        display_name=manifest.display_name,
         version=version.version,
         kind=manifest.kind,
         runtime=version.runtime,
+        engine=_detect_engine(version.manifest_yaml),
         status=version.status,
         manifest_sha256=version.manifest_sha256,
         published_at=version.published_at,
@@ -210,9 +252,12 @@ async def list_components(
             ComponentListItemResponse(
                 id=str(ver.id),
                 name=comp.name,
+                display_name=_parse_display_name(ver.manifest_yaml),
                 version=ver.version,
                 kind=comp.kind,
                 runtime=ver.runtime,
+                engine=_detect_engine(ver.manifest_yaml),
+                experimental_object_code=_parse_experimental_object_code(ver.manifest_yaml),
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
@@ -248,6 +293,7 @@ async def get_component(
     return ComponentDetailResponse(
         id=str(ver.id),
         name=comp.name,
+        display_name=_parse_display_name(ver.manifest_yaml),
         version=ver.version,
         kind=comp.kind,
         runtime=ver.runtime,

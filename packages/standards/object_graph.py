@@ -42,6 +42,7 @@ from packages.standards.objects import (
     ObjectRelation,
     RelationType,
 )
+from packages.facts.entities import Fact, FactRevision
 
 
 class ObjectGraphService:
@@ -80,6 +81,7 @@ class ObjectGraphService:
         display_name: str,
         description: str | None = None,
         parent_id: UUID | None = None,
+        equipment_id: UUID | None = None,
     ) -> IndustrialObject:
         """创建工业对象（status=active）。
 
@@ -139,6 +141,7 @@ class ObjectGraphService:
                 display_name=display_name,
                 description=description,
                 parent_id=parent_id,
+                equipment_id=equipment_id,
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -169,6 +172,7 @@ class ObjectGraphService:
         object_id: UUID,
         display_name: str,
         description: str | None = None,
+        equipment_id: UUID | None = None,
     ) -> IndustrialObject:
         """编辑工业对象（code 不可修改）。
 
@@ -187,6 +191,7 @@ class ObjectGraphService:
             obj = await self._get_and_check_org(session, object_id)
             obj.display_name = display_name
             obj.description = description
+            obj.equipment_id = equipment_id
             obj.updated_at = datetime.now(UTC)
             obj.lock_version += 1
             await session.flush()
@@ -265,6 +270,35 @@ class ObjectGraphService:
                     retryable=False,
                     fields={"object_id": str(object_id)},
                 )
+
+            # 级联删除关联的 fact（含 fact_revision → raw_observation / fact_artifact）
+            facts = await session.execute(
+                sa.select(Fact).where(Fact.object_id == object_id)
+            )
+            for fact in facts.scalars():
+                # 删除 fact_revision 下的 raw_observation 和 fact_artifact
+                revisions = await session.execute(
+                    sa.select(FactRevision).where(FactRevision.fact_id == fact.id)
+                )
+                for rev in revisions.scalars():
+                    await session.execute(
+                        sa.text("DELETE FROM normalized_observation WHERE fact_revision_id = :rid"),
+                        {"rid": rev.id},
+                    )
+                    await session.execute(
+                        sa.text("DELETE FROM raw_observation WHERE fact_revision_id = :rid"),
+                        {"rid": rev.id},
+                    )
+                    await session.execute(
+                        sa.text("DELETE FROM fact_artifact WHERE fact_revision_id = :rid"),
+                        {"rid": rev.id},
+                    )
+                    await session.execute(
+                        sa.text("DELETE FROM fact_revision_link WHERE from_revision_id = :rid OR to_revision_id = :rid"),
+                        {"rid": rev.id},
+                    )
+                    await session.delete(rev)
+                await session.delete(fact)
 
             await session.delete(obj)
             await session.flush()

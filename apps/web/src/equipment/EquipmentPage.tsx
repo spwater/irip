@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   Button,
-  Drawer,
   Form,
   Input,
   InputNumber,
@@ -18,17 +17,13 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateEquipment,
   apiGetEquipment,
-  apiGetEquipmentVariables,
   apiDeleteEquipment,
   apiListDepartments,
   apiListEquipment,
-  apiListVariables,
-  apiSetEquipmentVariables,
   apiUpdateEquipment,
   apiUpdateEquipmentStatus,
   extractApiError,
   type EquipmentListItem,
-  type EquipmentVariable,
 } from '@/api/client';
 
 /**
@@ -36,25 +31,43 @@ import {
  *
  * 功能：
  * - Ant Design Table 列表（编码 / 名称 / 所属机构 / 状态 / 物理量数 / 排序 / 操作）
- * - 顶部"新建设备"按钮 + 状态筛选 Select + 机构筛选 Select
+ * - 顶部"新建仪器或方法"按钮 + 状态筛选 Select + 机构筛选 Select
  * - Modal + Form 创建/编辑弹窗（code 编辑时 disabled）
  * - 物理量管理 Drawer（多选已发布物理量，全量替换）
  * - Popconfirm 启用/禁用确认
  */
-export function EquipmentPage(): JSX.Element {
+export function EquipmentPage({
+  presetDeptId,
+  onPresetDeptIdConsumed,
+  onAddObject,
+}: {
+  presetDeptId?: string;
+  onPresetDeptIdConsumed?: () => void;
+  onAddObject?: (equipmentId: string) => void;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<EquipmentListItem | null>(null);
-  const [varDrawerItem, setVarDrawerItem] = useState<EquipmentListItem | null>(null);
   const [form] = Form.useForm();
+
+  // 当 presetDeptId 变化时，自动打开新建弹窗并预填
+  useEffect(() => {
+    if (presetDeptId) {
+      setEditingItem(null);
+      form.resetFields();
+      form.setFieldsValue({ department_id: presetDeptId });
+      setModalOpen(true);
+      onPresetDeptIdConsumed?.();
+    }
+  }, [presetDeptId]);
 
   // ---- 数据查询：设备列表 ----
   const { data, isLoading } = useQuery({
     queryKey: ['equipment', statusFilter, deptFilter],
     queryFn: () =>
-      apiListEquipment({ status: statusFilter, department_id: deptFilter }),
+      apiListEquipment({ status: statusFilter, department_id: deptFilter, limit: 100 }),
   });
 
   const items: EquipmentListItem[] = data?.items ?? [];
@@ -70,31 +83,14 @@ export function EquipmentPage(): JSX.Element {
     label: d.display_name,
   }));
 
-  // ---- 数据查询：已发布物理量（用于物理量管理 Drawer） ----
-  const { data: publishedVars } = useQuery({
-    queryKey: ['variables', 'published', 100],
-    queryFn: () => apiListVariables({ status: 'published', limit: 100 }),
-    enabled: !!varDrawerItem,
-  });
-
-  const publishedVarOptions = (publishedVars?.items ?? []).map((v) => ({
-    value: v.id,
-    label: `${v.display_name} (${v.code})`,
-  }));
-
-  // ---- 数据查询：当前设备已关联的物理量 ----
-  const { data: currentVars, isLoading: varsLoading } = useQuery({
-    queryKey: ['equipment-variables', varDrawerItem?.id],
-    queryFn: () => apiGetEquipmentVariables(varDrawerItem!.id),
-    enabled: !!varDrawerItem,
-  });
-
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
     mutationFn: apiCreateEquipment,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
       setModalOpen(false);
       form.resetFields();
       message.success('设备创建成功');
@@ -119,6 +115,7 @@ export function EquipmentPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
       setModalOpen(false);
       setEditingItem(null);
       form.resetFields();
@@ -138,6 +135,7 @@ export function EquipmentPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
       message.success('状态更新成功');
     },
     onError: (err: unknown) => {
@@ -151,23 +149,8 @@ export function EquipmentPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
       message.success('设备已删除');
-    },
-    onError: (err: unknown) => {
-      message.error(extractApiError(err));
-    },
-  });
-
-  // ---- 设置物理量 Mutation ----
-  const setVarsMutation = useMutation({
-    mutationFn: (params: { id: string; body: { variable_ids: string[] } }) =>
-      apiSetEquipmentVariables(params.id, params.body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
-      void queryClient.invalidateQueries({
-        queryKey: ['equipment-variables'],
-      });
-      message.success('物理量设置成功');
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -238,14 +221,6 @@ export function EquipmentPage(): JSX.Element {
     })();
   };
 
-  const handleSaveVariables = (selectedIds: string[]): void => {
-    if (!varDrawerItem) return;
-    setVarsMutation.mutate({
-      id: varDrawerItem.id,
-      body: { variable_ids: selectedIds },
-    });
-  };
-
   // ---- 表格列定义 ----
   const columns: ColumnsType<EquipmentListItem> = [
     {
@@ -281,13 +256,6 @@ export function EquipmentPage(): JSX.Element {
         ),
     },
     {
-      title: '物理量数',
-      dataIndex: 'variable_count',
-      key: 'variable_count',
-      width: 90,
-      align: 'center',
-    },
-    {
       title: '排序',
       dataIndex: 'sort_order',
       key: 'sort_order',
@@ -297,7 +265,7 @@ export function EquipmentPage(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: 220,
       render: (_: unknown, record: EquipmentListItem) => (
         <Space size="small">
           <Button
@@ -306,6 +274,13 @@ export function EquipmentPage(): JSX.Element {
             onClick={() => handleEdit(record)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => onAddObject?.(record.id)}
+          >
+            +对象
           </Button>
           <Popconfirm
             title={
@@ -325,13 +300,6 @@ export function EquipmentPage(): JSX.Element {
               {record.status === 'active' ? '禁用' : '启用'}
             </Button>
           </Popconfirm>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => setVarDrawerItem(record)}
-          >
-            物理量
-          </Button>
         </Space>
       ),
     },
@@ -341,7 +309,7 @@ export function EquipmentPage(): JSX.Element {
     <div>
       <Space style={{ marginBottom: 16 }} wrap>
         <Button type="primary" onClick={handleCreate}>
-          新建设备
+          新建仪器或方法
         </Button>
         <Select
           placeholder="状态筛选"
@@ -375,7 +343,7 @@ export function EquipmentPage(): JSX.Element {
 
       {/* 创建/编辑 Modal */}
       <Modal
-        title={editingItem ? '编辑设备' : '新建设备'}
+        title={editingItem ? '编辑仪器或方法' : '新建仪器或方法'}
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => {
@@ -442,16 +410,15 @@ export function EquipmentPage(): JSX.Element {
           <Form.Item
             name="sort_order"
             label="排序权重"
-            rules={[{ required: true, message: '请输入排序权重' }]}
           >
-            <InputNumber min={0} style={{ width: '100%' }} />
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="默认 0" />
           </Form.Item>
         </Form>
         {editingItem && (
           <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
             <Popconfirm
               title="确定删除该仪器？"
-              description="将同时删除仪器及其物理量关联，此操作不可撤销。"
+              description="将同时删除仪器及其关联，此操作不可撤销。"
               onConfirm={() => {
                 deleteMutation.mutate(editingItem.id);
                 setModalOpen(false);
@@ -474,96 +441,6 @@ export function EquipmentPage(): JSX.Element {
       </Modal>
 
       {/* 物理量管理 Drawer */}
-      <EquipmentVariableDrawer
-        item={varDrawerItem}
-        open={!!varDrawerItem}
-        onClose={() => setVarDrawerItem(null)}
-        currentVars={currentVars ?? []}
-        varsLoading={varsLoading}
-        varOptions={publishedVarOptions}
-        onSave={handleSaveVariables}
-        saving={setVarsMutation.isPending}
-      />
     </div>
-  );
-}
-
-/**
- * 设备物理量管理 Drawer 组件。
- */
-function EquipmentVariableDrawer(props: {
-  item: EquipmentListItem | null;
-  open: boolean;
-  onClose: () => void;
-  currentVars: EquipmentVariable[];
-  varsLoading: boolean;
-  varOptions: { value: string; label: string }[];
-  onSave: (selectedIds: string[]) => void;
-  saving: boolean;
-}): JSX.Element {
-  const { item, open, onClose, currentVars, varsLoading, varOptions, onSave, saving } = props;
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-
-  // 当 currentVars 变化时，同步 selectedIds
-  useEffect(() => {
-    setSelectedIds(currentVars.map((v) => v.id));
-  }, [currentVars]);
-
-  const handleSave = (): void => {
-    onSave(selectedIds);
-    onClose();
-  };
-
-  return (
-    <Drawer
-      title={item ? `物理量管理 — ${item.display_name}` : '物理量管理'}
-      open={open}
-      onClose={onClose}
-      width={600}
-      footer={
-        <Space style={{ float: 'right' }}>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleSave} loading={saving}>
-            保存
-          </Button>
-        </Space>
-      }
-    >
-      {varsLoading ? (
-        <p style={{ color: '#999' }}>加载中...</p>
-      ) : (
-        <>
-          <p style={{ marginBottom: 16, color: '#666' }}>
-            选择该设备能产出的已发布物理量。保存后将全量替换当前关联。
-          </p>
-          <Select
-            mode="multiple"
-            placeholder="选择物理量"
-            style={{ width: '100%' }}
-            value={selectedIds}
-            onChange={(vals: string[]) => setSelectedIds(vals)}
-            options={varOptions}
-            optionFilterProp="label"
-            showSearch
-          />
-          <div style={{ marginTop: 24 }}>
-            <p style={{ fontWeight: 600, marginBottom: 8 }}>
-              当前已关联（{currentVars.length}）：
-            </p>
-            {currentVars.length === 0 ? (
-              <p style={{ color: '#999' }}>暂无关联物理量</p>
-            ) : (
-              <Space size="small" wrap>
-                {currentVars.map((v) => (
-                  <Tag key={v.id} color="blue">
-                    {v.name_zh} ({v.code})
-                  </Tag>
-                ))}
-              </Space>
-            )}
-          </div>
-        </>
-      )}
-    </Drawer>
   );
 }

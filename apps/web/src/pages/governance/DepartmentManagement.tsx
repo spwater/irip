@@ -37,7 +37,7 @@ type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]
  * 功能：
  * - Ant Design Table 树形列表（编码 / 名称 / 状态 / 成员数 / 子部门数 / 仪器数 / 排序 / 操作）
  * - 按 sort_order + created_at 排序
- * - 顶部"新建实验室"按钮 + 状态筛选 Select
+ * - 顶部"新建组织机构"按钮 + 状态筛选 Select
  * - Modal + Form 创建/编辑弹窗（code 编辑时 disabled）
  * - 新建/编辑可选上级部门（Select 树形选项）
  * - 编辑时排除自己及子孙防循环引用
@@ -100,7 +100,11 @@ function getDescendantIds(
   return result;
 }
 
-export function DepartmentManagement(): JSX.Element {
+export function DepartmentManagement({
+  onAddEquipment,
+}: {
+  onAddEquipment?: (deptId: string) => void;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
@@ -336,7 +340,7 @@ export function DepartmentManagement(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 300,
       render: (_: unknown, record: DepartmentTreeNode) => (
         <Space size="small">
           <Button
@@ -346,6 +350,14 @@ export function DepartmentManagement(): JSX.Element {
             disabled={!isAdmin}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => onAddEquipment?.(record.id)}
+            disabled={!isAdmin}
+          >
+            +仪器
           </Button>
           <Popconfirm
             title={record.status === 'active' ? '确定禁用该实验室？' : '确定启用该实验室？'}
@@ -377,7 +389,7 @@ export function DepartmentManagement(): JSX.Element {
     <div>
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={handleCreate} disabled={!isAdmin}>
-          新建实验室
+          新建组织机构
         </Button>
         <Select
           placeholder="状态筛选"
@@ -407,7 +419,7 @@ export function DepartmentManagement(): JSX.Element {
       />
 
       <Modal
-        title={editingDept ? '编辑实验室' : '新建实验室'}
+        title={editingDept ? '编辑组织机构' : '新建组织机构'}
         open={modalOpen}
         onCancel={() => {
           setModalOpen(false);
@@ -525,9 +537,8 @@ export function DepartmentManagement(): JSX.Element {
           <Form.Item
             name="sort_order"
             label="排序权重"
-            rules={[{ required: true, message: '请输入排序权重' }]}
           >
-            <InputNumber min={0} style={{ width: '100%' }} />
+            <InputNumber min={0} style={{ width: '100%' }} placeholder="默认 0" />
           </Form.Item>
         </Form>
       </Modal>

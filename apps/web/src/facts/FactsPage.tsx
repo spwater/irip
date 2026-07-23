@@ -2,17 +2,19 @@ import { useState } from 'react';
 import {
   Button,
   Input,
+  message,
+  Popconfirm,
   Select,
   Space,
   Table,
   Tabs,
   Tag,
-  Typography,
 } from 'antd';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { ColumnsType } from 'antd/es/table';
 import {
+  apiDeleteFact,
   apiListFacts,
   apiSearchFacts,
   type FactSummary,
@@ -33,7 +35,7 @@ const STATUS_LABEL: Record<string, string> = {
   withdrawn: '已撤回',
 };
 
-const { Title } = Typography;
+
 
 /**
  * 实验事实列表页面
@@ -47,8 +49,20 @@ const { Title } = Typography;
  */
 export function FactsPage(): JSX.Element {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+
+  // ---- 删除 Mutation ----
+  const deleteMutation = useMutation({
+    mutationFn: apiDeleteFact,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
+      void queryClient.refetchQueries({ queryKey: ['facts'], exact: false });
+      message.success('事实已删除');
+    },
+    onError: (err: unknown) => message.error(String(err)),
+  });
 
   // ---- 数据查询（游标分页） ----
   const {
@@ -119,22 +133,40 @@ export function FactsPage(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 160,
       render: (_: unknown, record: FactSummary) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => void navigate({ to: `/facts/${record.fact_id}` })}
-        >
-          查看详情
-        </Button>
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            onClick={() => void navigate({ to: `/facts/${record.fact_id}` })}
+          >
+            查看详情
+          </Button>
+          <Popconfirm
+            title="确定删除该事实？此操作不可撤销。"
+            description="将同时删除所有修订、观察值和关联数据"
+            onConfirm={() => deleteMutation.mutate(record.fact_id)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              loading={deleteMutation.isPending}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
 
   return (
     <div>
-      <Title level={2}>实验事实</Title>
       <Tabs
         defaultActiveKey="list"
         items={[

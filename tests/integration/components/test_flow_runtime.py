@@ -137,6 +137,7 @@ def runner() -> PythonComponentRunner:
 
     echo_manifest = ComponentManifest(
         name="echo_flow",
+        display_name="echo_flow",
         version="1.0.0",
         kind="transform",
         runtime="python",
@@ -151,6 +152,7 @@ def runner() -> PythonComponentRunner:
 
     source_manifest = ComponentManifest(
         name="flow_source",
+        display_name="flow_source",
         version="1.0.0",
         kind="ingestion",
         runtime="python",
@@ -173,6 +175,7 @@ def failing_runner() -> PythonComponentRunner:
 
     failing_manifest = ComponentManifest(
         name="failing_comp",
+        display_name="failing_comp",
         version="1.0.0",
         kind="transform",
         runtime="python",

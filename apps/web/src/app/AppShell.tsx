@@ -8,18 +8,13 @@ import { JobDrawer, JobDrawerButton } from '@/jobs/JobDrawer';
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
-/** 导航菜单项（中文标签） */
+/** 导航菜单项（分组布局） */
 const NAV_ITEMS: MenuProps['items'] = [
   { key: '/workbench', label: '研发看板' },
-  { key: '/standards', label: '要素管理' },
-  { key: '/facts', label: '实验事实' },
-  { key: '/parameters', label: '参数管理' },
-  { key: '/components', label: '组件管理' },
-  { key: '/flows', label: '流程编排' },
-  { key: '/models', label: '模型管理' },
+  { key: '/standards', label: '实验室建设' },
+  { key: '/lab-ops', label: '实验室运营' },
   { key: '/assistant', label: 'AI 助手' },
   { key: '/governance', label: '平台治理' },
-  { key: '/jobs', label: '作业中心' },
 ];
 
 /**

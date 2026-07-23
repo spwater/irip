@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Checkbox,
@@ -118,8 +119,17 @@ const NODE_STATUS_LABEL: Record<string, string> = {
 // 组件分类 & 可视化节点构建器
 // ============================================================
 
-/** LLM 驱动的组件名称集合 — 摩登组件 */
-const LLM_COMPONENTS = new Set(['ez_scan_extractor']);
+/** 比较语义化版本号，返回 >0/0/<0 */
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const va = pa[i] ?? 0;
+    const vb = pb[i] ?? 0;
+    if (va !== vb) return va - vb;
+  }
+  return 0;
+}
 
 /** 组件类别 → 中文标签 */
 const KIND_LABEL: Record<string, string> = {
@@ -447,6 +457,40 @@ export function FlowDetail(): JSX.Element {
   const [createForm] = Form.useForm();
   const [runForm] = Form.useForm();
 
+  /** 比较版本号 */
+  const cmpVer = (a: string, b: string): number => {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const va = pa[i] ?? 0;
+      const vb = pb[i] ?? 0;
+      if (va !== vb) return va - vb;
+    }
+    return 0;
+  };
+
+  // ---- 组件列表查询（用于新建流程选择工具）----
+  const { data: componentsDataForCreate } = useQuery({
+    queryKey: ['components-for-flow-create'],
+    queryFn: () => apiListComponents(),
+  });
+  const componentOptions = (() => {
+    const items = componentsDataForCreate?.items ?? [];
+    const latestByName = new Map<string, ComponentSummary>();
+    for (const item of items) {
+      const existing = latestByName.get(item.name);
+      if (!existing || cmpVer(item.version, existing.version) > 0) {
+        latestByName.set(item.name, item);
+      }
+    }
+    return Array.from(latestByName.values())
+      .filter((c) => c.status !== 'deprecated')
+      .map((c) => ({
+        value: c.name,
+        label: c.display_name ? `${c.display_name} (${c.name})` : c.name,
+      }));
+  })();
+
   // ---- 流程列表查询 ----
   const [showArchived, setShowArchived] = useState(false);
   const { data: listData, isLoading: listLoading } = useQuery({
@@ -674,18 +718,60 @@ export function FlowDetail(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 160,
       render: (_: unknown, record: FlowSummary) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedFlowId(record.id);
-          }}
-        >
-          查看
-        </Button>
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedFlowId(record.id);
+            }}
+          >
+            查看
+          </Button>
+          {record.status === 'deprecated' ? (
+            <Popconfirm
+              title="确定恢复该流程？"
+              onConfirm={(e) => {
+                e?.stopPropagation();
+                restoreMutation.mutate(record.id);
+              }}
+              okText="恢复"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                size="small"
+                onClick={(e) => e.stopPropagation()}
+                loading={restoreMutation.isPending}
+              >
+                恢复
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Popconfirm
+              title="确定归档该流程？"
+              onConfirm={(e) => {
+                e?.stopPropagation();
+                archiveMutation.mutate(record.id);
+              }}
+              okText="归档"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={(e) => e.stopPropagation()}
+                loading={archiveMutation.isPending}
+              >
+                归档
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];
@@ -716,6 +802,15 @@ export function FlowDetail(): JSX.Element {
       width: 200,
       ellipsis: true,
       render: (_: unknown, record: FlowNodeExecution) => {
+        // 失败节点优先显示错误信息（红色）
+        if (record.status === 'failed') {
+          const diag = record.diagnostics;
+          const errMsg = diag?.error_message;
+          if (errMsg) {
+            return <Text type="danger" strong>{String(errMsg)}</Text>;
+          }
+          return <Text type="danger">执行失败</Text>;
+        }
         const out = record.output_summary;
         if (!out) return '-';
         return out._summary_text || '-';
@@ -727,10 +822,17 @@ export function FlowDetail(): JSX.Element {
       render: (_: unknown, record: FlowNodeExecution) => {
         const out = record.output_summary;
         if (!out) {
-          // 看看是否有错误
+          // 失败节点显示更显眼的错误信息
           const diag = record.diagnostics;
           if (diag && diag.error_message) {
-            return <Text type="danger" style={{ fontSize: 12 }}>{String(diag.error_message)}</Text>;
+            return (
+              <Alert
+                type="error"
+                message="执行失败"
+                description={String(diag.error_message)}
+                style={{ padding: '8px 12px' }}
+              />
+            );
           }
           return '-';
         }
@@ -791,8 +893,6 @@ export function FlowDetail(): JSX.Element {
 
   return (
     <div>
-      <Title level={2}>流程编排</Title>
-
       <Space style={{ marginBottom: 16, alignItems: 'center' }}>
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
           新建流程
@@ -990,6 +1090,27 @@ export function FlowDetail(): JSX.Element {
       >
         <Form form={createForm} layout="vertical">
           <Form.Item
+            name="component_name"
+            label="选择工具"
+            rules={[{ required: true, message: '请选择工具' }]}
+          >
+            <Select
+              placeholder="选择工具组件"
+              showSearch
+              optionFilterProp="label"
+              options={componentOptions}
+              onChange={(value: string) => {
+                const now = new Date();
+                const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+                const tsDisplay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                createForm.setFieldsValue({
+                  code: `${value}_${ts}`,
+                  display_name: `${value} 流程 ${tsDisplay}`,
+                });
+              }}
+            />
+          </Form.Item>
+          <Form.Item
             name="code"
             label="流程编码"
             rules={[
@@ -1152,8 +1273,25 @@ function RunDetailPanel({
 
   const canPersistFact = run.status === 'succeeded';
 
+  // 从第一个失败节点提取错误信息，用于 run 级别错误提示
+  const failedNode = run.nodes.find((n) => n.status === 'failed');
+  const runErrorMessage: string | null = failedNode?.diagnostics?.error_message
+    ? String(failedNode.diagnostics.error_message)
+    : null;
+
   return (
     <div>
+      {/* 流程执行失败时在顶部显著展示错误信息 */}
+      {run.status === 'failed' && runErrorMessage && (
+        <Alert
+          type="error"
+          message="流程执行失败"
+          description={runErrorMessage}
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {canPersistFact && (
         <div style={{ marginBottom: 16 }}>
           <Button type="primary" onClick={() => setFactModalOpen(true)}>
@@ -1333,8 +1471,17 @@ function PublishVersionModal({
   });
 
   const allComponents: ComponentSummary[] = componentsData?.items ?? [];
-  const modernComponents = allComponents.filter((c) => LLM_COMPONENTS.has(c.name));
-  const classicComponents = allComponents.filter((c) => !LLM_COMPONENTS.has(c.name));
+  // 按去重只保留最新版本
+  const latestByName = new Map<string, ComponentSummary>();
+  for (const c of allComponents) {
+    const existing = latestByName.get(c.name);
+    if (!existing || compareSemver(c.version, existing.version) > 0) {
+      latestByName.set(c.name, c);
+    }
+  }
+  const uniqueComponents = Array.from(latestByName.values()).filter((c) => c.status !== 'deprecated');
+  const modernComponents = uniqueComponents.filter((c) => c.engine === 'llm');
+  const classicComponents = uniqueComponents.filter((c) => c.engine !== 'llm');
 
   // ---- 组件详情查询（按选中的组件动态获取 manifest）----
   const selectedComponentIds = Array.from(

@@ -5,10 +5,9 @@
 
 参数（全部在 manifest 定义，网页可编辑）：
 - path: 文件路径（必填）
-- prompt: 提取指令
-- system_message: LLM system message
-- schema: 输出列定义 [{name, type}, ...]
-- pdf_engine: PDF 读取引擎（pymupdf / raw）
+- prompt: LLM 提示词（包含角色设定 + 提取指令 + 输出格式要求）
+- file_engine: 文件读取方式（pymupdf / image / raw）
+- image_dpi: image 模式渲染分辨率
 - max_content_chars: 最大内容字符数
 - timeout: LLM 调用超时秒数
 """
@@ -40,22 +39,15 @@ class EZScanExtractor:
         """读取文件 → 提取文本 → 调用 LLM → 返回 ObservationTable。"""
         path_str: str = params["path"]
         prompt: str = params.get("prompt", "")
-        system_message: str = params.get("system_message", "")
-        pdf_engine: str = params.get("pdf_engine", "pymupdf")
-        image_dpi: int = params.get("image_dpi", 200)
-        max_chars: int = params.get("max_content_chars", 50000)
-        timeout: int = params.get("timeout", 120)
+        pdf_engine: str = params.get("file_engine", "pymupdf")
+        image_dpi: int = 200
+        max_chars: int = 999999999
+        timeout: int = 300
 
         if not prompt:
             raise AppError(
                 code="validation_failed",
                 message="缺少 prompt 参数",
-                retryable=False,
-            )
-        if not system_message:
-            raise AppError(
-                code="validation_failed",
-                message="缺少 system_message 参数",
                 retryable=False,
             )
 
@@ -91,11 +83,11 @@ class EZScanExtractor:
                 retryable=False,
             )
 
-        # 6. 构建 LLM 请求
+        # 6. 构建 LLM 请求（单条 user 消息，不分角色）
         if is_image_mode:
             # 多模态：图片 + 文本指令
             user_content: list[dict[str, Any]] = [
-                {"type": "text", "text": f"提取指令：{prompt}\n\n请根据以下图片内容提取数据。"},
+                {"type": "text", "text": f"{prompt}\n\n请根据以下图片内容提取数据。"},
             ]
             for img_data_url in content:
                 user_content.append({
@@ -103,17 +95,15 @@ class EZScanExtractor:
                     "image_url": {"url": img_data_url},
                 })
             messages = [
-                {"role": "system", "content": system_message},
                 {"role": "user", "content": user_content},
             ]
         else:
             # 纯文本模式
             user_message: str = (
-                f"提取指令：{prompt}\n\n"
+                f"{prompt}\n\n"
                 f"文件内容：\n{content}"
             )
             messages = [
-                {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},
             ]
 
@@ -121,7 +111,7 @@ class EZScanExtractor:
             "model": config["model_name"],
             "messages": messages,
             "chat_template_kwargs": {
-                "enable_thinking": config.get("thinking_enabled", False),
+                "enable_thinking": False,
             },
         }
 

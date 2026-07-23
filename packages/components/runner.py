@@ -93,19 +93,42 @@ class PythonComponentRunner:
         """
         key = (manifest.name, manifest.version)
         impl = self._registry.get(key)
+        # 版本不匹配时按 name 回退查找（网页发布的版本号可能比注册表里的新）
         if impl is None:
-            raise AppError(
-                code="component_not_found",
-                message=(
-                    f"Python 组件未注册: "
-                    f"{manifest.name}@{manifest.version}"
-                ),
-                retryable=False,
-                fields={
-                    "name": manifest.name,
-                    "version": manifest.version,
-                },
-            )
+            for (reg_name, _reg_ver), reg_impl in self._registry.items():
+                if reg_name == manifest.name:
+                    impl = reg_impl
+                    break
+        if impl is None:
+            # 检查 manifest 是否为 LLM 类型组件
+            # （parameters.properties 中包含 prompt 键）
+            _props = (manifest.parameters or {}).get("properties", {}) or {}
+            # 防御：properties 理论上可能为非 dict（schema 仅约束 parameters 为 object），
+            # 此处确保 _props 为 dict，避免对字符串做 `in` 触发子串误判
+            if not isinstance(_props, dict):
+                _props = {}
+            if "prompt" in _props:
+                # LLM 类型组件统一使用 EZScanExtractor 实现
+                # 延迟导入避免循环依赖
+                from packages.components.builtin.ingestion.ez_scan_extractor import (
+                    EZScanExtractor,
+                )
+                impl = EZScanExtractor()
+                # 自动注册，下次不用重复创建
+                self._registry[(manifest.name, manifest.version)] = impl
+            else:
+                raise AppError(
+                    code="component_not_found",
+                    message=(
+                        f"Python 组件未注册: "
+                        f"{manifest.name}@{manifest.version}"
+                    ),
+                    retryable=False,
+                    fields={
+                        "name": manifest.name,
+                        "manifest_version": manifest.version,
+                    },
+                )
 
         execute_task = asyncio.create_task(
             impl.execute(context, params)

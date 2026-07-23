@@ -10,11 +10,9 @@ import { LoginPage } from '@/auth/LoginPage';
 import { AppShell } from '@/app/AppShell';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { StandardsPage as StandardsPageV1 } from '@/standards/StandardsPage';
-import { FactsPage as FactsPageV1 } from '@/facts/FactsPage';
+import { LabOpsPage } from '@/pages/LabOpsPage';
 import { FactDetail } from '@/facts/FactDetail';
-import { ParameterPage as ParameterPageV1 } from '@/parameters/ParameterPage';
 import { ComponentsPage } from '@/components/ComponentsPage';
-import { FlowDetail } from '@/components/FlowDetail';
 import { ModelsPage } from '@/models/ModelsPage';
 import { ModelDetail } from '@/models/ModelDetail';
 import { PredictionWorkbench } from '@/models/PredictionWorkbench';
@@ -100,7 +98,9 @@ export function createAppRouter() {
   const factsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/facts',
-    component: FactsPageV1,
+    beforeLoad: () => {
+      throw redirect({ to: '/lab-ops' });
+    },
   });
 
   const factDetailRoute = createRoute({
@@ -113,14 +113,16 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/provenance',
     beforeLoad: () => {
-      throw redirect({ to: '/parameters' });
+      throw redirect({ to: '/lab-ops' });
     },
   });
 
   const parametersRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/parameters',
-    component: ParameterPageV1,
+    beforeLoad: () => {
+      throw redirect({ to: '/lab-ops' });
+    },
   });
 
   // V2 模型管理路由（替换 V0 占位页面）
@@ -156,7 +158,20 @@ export function createAppRouter() {
   const flowsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/flows',
-    component: FlowDetail,
+    beforeLoad: () => {
+      throw redirect({ to: '/lab-ops' });
+    },
+  });
+
+  // 实验室运营页面（Tab：实验执行 / 实验记录 / 数据抽取）
+  // 支持 ?tab= 搜索参数，便于从详情页（如事实详情）深链回指定 Tab
+  const labOpsRoute = createRoute({
+    getParentRoute: () => protectedLayoutRoute,
+    path: '/lab-ops',
+    component: LabOpsPage,
+    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+      tab: typeof search.tab === 'string' ? search.tab : undefined,
+    }),
   });
 
   // V3 AI 助手路由
@@ -199,6 +214,7 @@ export function createAppRouter() {
       parametersRoute,
       componentsRoute,
       flowsRoute,
+      labOpsRoute,
       modelsRoute,
       modelDetailRoute,
       predictionRoute,

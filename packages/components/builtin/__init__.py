@@ -86,6 +86,8 @@ _BUILTIN_COMPONENTS: dict[str, tuple[str, type]] = {
     "rest_fetch": ("1.0.0", RESTFetch),
     "minio_object": ("1.0.0", MinioObject),
     "ez_scan_extractor": ("1.3.1", EZScanExtractor),
+    "aez_scan_extractor": ("1.4.0", EZScanExtractor),
+    "xrf_ez_extractor": ("1.4.4", EZScanExtractor),
     # transform
     "field_mapper": ("1.0.0", FieldMapper),
     "unit_converter": ("1.0.0", UnitConverter),
@@ -125,6 +127,8 @@ _YAML_FILES: dict[str, str] = {
     "rest_fetch": "rest-fetch.yaml",
     "minio_object": "minio-object.yaml",
     "ez_scan_extractor": "ez-scan-extractor.yaml",
+    "aez_scan_extractor": "ez-scan-extractor.yaml",
+    "xrf_ez_extractor": "ez-scan-extractor.yaml",
     "field_mapper": "field-mapper.yaml",
     "unit_converter": "unit-converter.yaml",
     "missing_values": "missing-values.yaml",
@@ -184,7 +188,12 @@ def register_builtin_components(runner: Any) -> dict[str, ComponentManifest]:
     for name, (version, impl_cls) in _BUILTIN_COMPONENTS.items():
         manifest = _load_manifest(name)
         impl = impl_cls()
-        runner.register(manifest, impl)
+        # 如果 YAML 里的 name 和期望的 name 不同（别名组件），
+        # 用期望的 name 和 version 直接注册到 runner
+        if manifest.name != name or manifest.version != version:
+            runner._registry[(name, version)] = impl
+        else:
+            runner.register(manifest, impl)
         manifests[name] = manifest
     return manifests
 

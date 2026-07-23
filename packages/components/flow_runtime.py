@@ -344,9 +344,10 @@ def _build_manifest_from_version(
 
     return ComponentManifest(
         name=raw["name"],
+        display_name=raw.get("display_name", ""),
         version=raw["version"],
         kind=raw["kind"],
-        runtime=raw["runtime"],
+        runtime=raw.get("runtime", "python"),
         inputs=_parse_port_specs(raw.get("inputs")),
         outputs=_parse_port_specs(raw.get("outputs")),
         parameters=raw.get("parameters", {}) or {},

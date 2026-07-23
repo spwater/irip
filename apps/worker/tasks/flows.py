@@ -35,6 +35,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     """
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
+    from packages.components.builtin import register_builtin_components
     from packages.components.flow_runtime import FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
@@ -55,6 +56,10 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     factory = build_session_factory(async_url)
 
+    # 设置 AI 配置的 session factory，使 LLM 组件能查询数据库获取 AI 配置
+    from apps.api.routers.ai_config import set_session_factory as set_ai_config_session_factory
+    set_ai_config_session_factory(factory)
+
     organization_id = UUID(str(payload["organization_id"]))
 
     registry = ComponentRegistryService(
@@ -62,6 +67,8 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         organization_id=organization_id,
     )
     runner = PythonComponentRunner()
+    # 注册内置组件，使 worker 能找到已发布的组件实现
+    register_builtin_components(runner)
     job_service = JobService(
         session_factory=factory,
         organization_id=organization_id,
@@ -219,6 +226,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     """
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
+    from packages.components.builtin import register_builtin_components
     from packages.components.flow_runtime import FlowRuntimeService, FlowRun
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
@@ -238,6 +246,10 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
 
     factory = build_session_factory(async_url)
 
+    # 设置 AI 配置的 session factory，使 LLM 组件能查询数据库获取 AI 配置
+    from apps.api.routers.ai_config import set_session_factory as set_ai_config_session_factory
+    set_ai_config_session_factory(factory)
+
     organization_id = UUID(str(payload["organization_id"]))
 
     registry = ComponentRegistryService(
@@ -245,6 +257,8 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
         organization_id=organization_id,
     )
     runner = PythonComponentRunner()
+    # 注册内置组件，使 worker 能找到已发布的组件实现
+    register_builtin_components(runner)
     job_service = JobService(
         session_factory=factory,
         organization_id=organization_id,

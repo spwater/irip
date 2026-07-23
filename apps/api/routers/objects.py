@@ -69,9 +69,8 @@ class CreateObjectRequest(BaseModel):
         "equipment_group",
         "instrument",
         "measurement_point",
-        "sample",
         "material",
-        "product",
+        "signal",
     ] = Field(..., description="对象类型")
     code: str = Field(
         ...,
@@ -83,6 +82,7 @@ class CreateObjectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     parent_id: UUID | None = Field(None, description="父对象 ID")
+    equipment_id: UUID | None = Field(None, description="关联设备 ID")
 
 
 class AddRelationRequest(BaseModel):
@@ -116,6 +116,7 @@ class ObjectResponse(BaseModel):
     display_name: str
     description: str | None
     parent_id: str | None
+    equipment_id: str | None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -131,6 +132,7 @@ class ObjectListItem(BaseModel):
     display_name: str
     description: str | None
     parent_id: str | None
+    equipment_id: str | None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -193,6 +195,7 @@ async def create_object(
         display_name=body.display_name,
         description=body.description,
         parent_id=body.parent_id,
+        equipment_id=body.equipment_id,
     )
     return _object_to_response(obj)
 
@@ -271,6 +274,7 @@ class UpdateObjectRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    equipment_id: UUID | None = Field(None, description="关联设备 ID")
 
 
 class UpdateObjectStatusRequest(BaseModel):
@@ -304,6 +308,7 @@ async def update_object(
         object_id=object_id,
         display_name=body.display_name,
         description=body.description,
+        equipment_id=body.equipment_id,
     )
     return _object_to_response(obj)
 
@@ -488,6 +493,7 @@ def _object_to_response(obj: object) -> ObjectResponse:
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
+        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]
@@ -504,6 +510,7 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
+        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]

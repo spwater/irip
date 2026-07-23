@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Form,
@@ -17,6 +17,7 @@ import {
   apiCreateObject,
   apiDeleteObject,
   apiGetObject,
+  apiListEquipment,
   apiListObjects,
   apiUpdateObject,
   apiUpdateObjectStatus,
@@ -27,29 +28,31 @@ import {
 /**
  * 实验对象管理页面（要素管理第 3 个 Tab）
  *
- * 实验对象 = industrial_object 表中 object_type 为 material / sample / product 的记录。
- * 与设备仪器、物理量平级管理，不走审批流，状态为 active / inactive。
+ * 实验对象 = industrial_object 表中 object_type 为 material / signal 的记录。
+ * - material：物料
+ * - signal：信号
  *
  * 功能：
- * - Ant Design Table 列表（编码 / 名称 / 类型 / 状态 / 描述 / 操作）
- * - 顶部"新建对象"按钮 + 类型筛选
- * - Modal + Form 创建/编辑弹窗（类型创建后锁定）
+ * - Ant Design Table 列表（编码 / 名称 / 类型 / 关联设备 / 状态 / 描述 / 操作）
+ * - 顶部"新建实验对象"按钮 + 类型筛选
+ * - Modal + Form 创建/编辑弹窗（编码与类型创建后锁定）
  * - Popconfirm 启用/禁用确认
  */
 
 /** 实验对象类型选项 */
 const EXP_OBJECT_TYPES = [
   { value: 'material', label: '物料' },
-  { value: 'sample', label: '样品' },
-  { value: 'product', label: '产品' },
+  { value: 'signal', label: '信号' },
 ];
 
 /** 类型 → 中文标签 */
 const TYPE_LABEL: Record<string, string> = {
   material: '物料',
-  sample: '样品',
-  product: '产品',
+  signal: '信号',
 };
+
+/** 列表查询用的类型过滤 */
+const LIST_TYPE_FILTER = 'material,signal';
 
 /** 状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
@@ -63,26 +66,54 @@ const STATUS_LABEL: Record<string, string> = {
   inactive: '禁用',
 };
 
-export function ExperimentalObjectPage(): JSX.Element {
+export function ExperimentalObjectPage({
+  presetEquipmentId,
+  onPresetConsumed,
+}: {
+  presetEquipmentId?: string;
+  onPresetConsumed?: () => void;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IndustrialObject | null>(null);
   const [form] = Form.useForm();
 
+  // 当 presetEquipmentId 变化时，自动打开新建弹窗并预填
+  useEffect(() => {
+    if (presetEquipmentId) {
+      setEditingItem(null);
+      form.resetFields();
+      form.setFieldsValue({ equipment_id: presetEquipmentId });
+      setModalOpen(true);
+      onPresetConsumed?.();
+    }
+  }, [presetEquipmentId]);
+
   // ---- 数据查询 ----
   const { data, isLoading } = useQuery({
     queryKey: ['exp-objects', typeFilter],
     queryFn: () =>
       apiListObjects({
-        object_type: typeFilter
-          ? typeFilter
-          : 'material,sample,product',
+        object_type: typeFilter ? typeFilter : LIST_TYPE_FILTER,
         page_size: 100,
       }),
   });
 
   const items: IndustrialObject[] = data?.items ?? [];
+
+  // ---- 设备列表查询（用于关联设备下拉框）----
+  const { data: equipmentData } = useQuery({
+    queryKey: ['equipment-for-object-link'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
+    value: e.id,
+    label: `${e.display_name} (${e.code})`,
+  }));
+  const equipmentMap = new Map(
+    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
+  );
 
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
@@ -102,7 +133,7 @@ export function ExperimentalObjectPage(): JSX.Element {
   const updateMutation = useMutation({
     mutationFn: (params: {
       id: string;
-      body: { display_name: string; description?: string | null };
+      body: { display_name: string; description?: string | null; equipment_id?: string | null };
     }) => apiUpdateObject(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
@@ -161,6 +192,7 @@ export function ExperimentalObjectPage(): JSX.Element {
       display_name: detail.display_name,
       object_type: record.object_type,
       description: detail.description ?? '',
+      equipment_id: detail.equipment_id ?? undefined,
     });
     setModalOpen(true);
   };
@@ -174,6 +206,7 @@ export function ExperimentalObjectPage(): JSX.Element {
           body: {
             display_name: values.display_name,
             description: values.description ?? null,
+            equipment_id: values.equipment_id || null,
           },
         });
       } else {
@@ -182,6 +215,7 @@ export function ExperimentalObjectPage(): JSX.Element {
           display_name: values.display_name,
           object_type: values.object_type,
           description: values.description,
+          equipment_id: values.equipment_id || undefined,
         });
       }
     } catch {
@@ -222,6 +256,13 @@ export function ExperimentalObjectPage(): JSX.Element {
       key: 'object_type',
       width: 100,
       render: (t: string) => TYPE_LABEL[t] ?? t,
+    },
+    {
+      title: '关联设备',
+      dataIndex: 'equipment_id',
+      key: 'equipment_id',
+      width: 160,
+      render: (eid: string | null) => (eid && equipmentMap.has(eid) ? equipmentMap.get(eid)! : '-'),
     },
     {
       title: '状态',
@@ -284,7 +325,7 @@ export function ExperimentalObjectPage(): JSX.Element {
           新建实验对象
         </Button>
         <Select
-          placeholder="对象类型"
+          placeholder="类型筛选"
           allowClear
           style={{ width: 140 }}
           value={typeFilter}
@@ -398,6 +439,15 @@ export function ExperimentalObjectPage(): JSX.Element {
               placeholder="对象描述（可选）"
               rows={3}
               maxLength={2000}
+            />
+          </Form.Item>
+          <Form.Item name="equipment_id" label="关联设备">
+            <Select
+              placeholder="选择关联设备（可选）"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={equipmentOptions}
             />
           </Form.Item>
         </Form>

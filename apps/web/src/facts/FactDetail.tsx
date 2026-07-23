@@ -97,7 +97,7 @@ export function FactDetail(): JSX.Element {
   return (
     <div>
       <Button
-        onClick={() => void navigate({ to: '/facts' })}
+        onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
         style={{ marginBottom: 16 }}
       >
         返回列表

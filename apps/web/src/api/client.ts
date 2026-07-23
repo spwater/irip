@@ -371,6 +371,7 @@ export type IndustrialObject = {
   description: string | null;
   status: string;
   parent_id: string | null;
+  equipment_id: string | null;
   created_at: string;
   updated_at: string;
   lock_version: number;
@@ -707,6 +708,7 @@ export async function apiCreateObject(body: {
   object_type: string;
   description?: string;
   parent_id?: string;
+  equipment_id?: string;
 }): Promise<IndustrialObject> {
   const res = await http.post<IndustrialObject>('/objects', body);
   return res.data;
@@ -729,6 +731,7 @@ export async function apiGetObject(objectId: string): Promise<IndustrialObject> 
 export async function apiUpdateObject(objectId: string, body: {
   display_name: string;
   description?: string | null;
+  equipment_id?: string | null;
 }): Promise<IndustrialObject> {
   const res = await http.patch<IndustrialObject>(`/objects/${objectId}`, body);
   return res.data;
@@ -1048,6 +1051,10 @@ export async function apiGetFactData(factId: string): Promise<FactData> {
   return res.data;
 }
 
+export async function apiDeleteFact(factId: string): Promise<void> {
+  await http.delete(`/facts/${factId}`);
+}
+
 // ============================================================
 // Provenance API（/provenance）
 // ============================================================
@@ -1351,9 +1358,12 @@ export async function apiDeleteEquipment(id: string): Promise<void> {
 export type ComponentSummary = {
   id: string;
   name: string;
+  display_name: string;
   version: string;
   kind: string;
   runtime: string;
+  engine: string;
+  experimental_object_code: string;
   status: string;
   manifest_sha256: string;
   published_at: string | null;

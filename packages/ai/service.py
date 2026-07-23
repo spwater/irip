@@ -576,11 +576,10 @@ class AIService:
             provider_mode=provider_name,
         )
 
-        # 思考模式：全局配置 AND 对话框开关，两者都开启才思考
-        global_thinking = getattr(self._provider, "_thinking_enabled", False)
-        actual_thinking = global_thinking and thinking_enabled
+        # 思考模式：由对话框开关控制（AI 配置页已移除全局 thinking 开关，
+        # 改为以对话级 thinking_enabled 作为唯一控制源）
         if hasattr(self._provider, "_thinking_enabled"):
-            self._provider._thinking_enabled = actual_thinking
+            self._provider._thinking_enabled = thinking_enabled
 
         # 创建取消事件并注册到模块级字典
         cancel_event = asyncio.Event()

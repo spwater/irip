@@ -397,6 +397,7 @@ def _make_manifest(
     """构建测试用 ComponentManifest。"""
     return ComponentManifest(
         name="test_component",
+        display_name="测试组件",
         version="1.0.0",
         kind="transform",
         runtime="python",

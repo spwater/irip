@@ -45,6 +45,7 @@ class ComponentManifest:
     """
 
     name: str
+    display_name: str
     version: str
     kind: str
     runtime: str
@@ -172,9 +173,10 @@ class ManifestValidator:
 
         return ComponentManifest(
             name=raw["name"],
+            display_name=raw.get("display_name", ""),
             version=raw["version"],
             kind=raw["kind"],
-            runtime=raw["runtime"],
+            runtime=raw.get("runtime", "python"),
             inputs=inputs,
             outputs=outputs,
             parameters=parameters,

@@ -123,18 +123,17 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_missing_runtime_fails(
+    def test_missing_runtime_defaults_to_python(
         self, validator: ManifestValidator
     ) -> None:
-        """缺少 runtime 时验证失败。"""
+        """缺少 runtime 时默认为 python。"""
         yaml_text = """\
 name: test_component
 version: 1.0.0
 kind: ingestion
 """
-        with pytest.raises(AppError) as exc_info:
-            validator.validate(yaml_text)
-        assert exc_info.value.code == "invalid_manifest"
+        manifest = validator.validate(yaml_text)
+        assert manifest.runtime == "python"
 
     def test_invalid_kind_fails(
         self, validator: ManifestValidator

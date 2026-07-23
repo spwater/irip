@@ -433,6 +433,50 @@ async def get_fact_data(
         return json_mod.loads(data_bytes.decode("utf-8"))
 
 
+@facts_router.delete("/{fact_id}", status_code=204)
+async def delete_fact(
+    fact_id: UUID,
+    current_user: WriteUserDep,
+    service: FactServiceDep,
+) -> None:
+    """删除实验事实（级联删除所有关联数据）。
+
+    级联删除：fact_revision_link → normalized_observation → raw_observation
+    → fact_artifact → fact_revision → fact
+    """
+    import sqlalchemy as sa
+    from packages.facts.entities import Fact, FactRevision
+
+    async with service._factory() as session:
+        # 查所有 revision
+        revisions = await session.execute(
+            sa.select(FactRevision).where(FactRevision.fact_id == fact_id)
+        )
+        for rev in revisions.scalars():
+            await session.execute(
+                sa.text("DELETE FROM fact_revision_link WHERE from_revision_id = :rid OR to_revision_id = :rid"),
+                {"rid": rev.id},
+            )
+            await session.execute(
+                sa.text("DELETE FROM normalized_observation WHERE fact_revision_id = :rid"),
+                {"rid": rev.id},
+            )
+            await session.execute(
+                sa.text("DELETE FROM raw_observation WHERE fact_revision_id = :rid"),
+                {"rid": rev.id},
+            )
+            await session.execute(
+                sa.text("DELETE FROM fact_artifact WHERE fact_revision_id = :rid"),
+                {"rid": rev.id},
+            )
+            await session.delete(rev)
+
+        fact = await session.get(Fact, fact_id)
+        if fact:
+            await session.delete(fact)
+        await session.commit()
+
+
 @facts_router.post(
     "/{fact_id}/revise", response_model=FactRevisionResponse
 )
