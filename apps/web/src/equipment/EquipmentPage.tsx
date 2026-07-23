@@ -19,6 +19,7 @@ import {
   apiCreateEquipment,
   apiGetEquipment,
   apiGetEquipmentVariables,
+  apiDeleteEquipment,
   apiListDepartments,
   apiListEquipment,
   apiListVariables,
@@ -93,6 +94,7 @@ export function EquipmentPage(): JSX.Element {
     mutationFn: apiCreateEquipment,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
       setModalOpen(false);
       form.resetFields();
       message.success('设备创建成功');
@@ -116,6 +118,7 @@ export function EquipmentPage(): JSX.Element {
     }) => apiUpdateEquipment(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
       setModalOpen(false);
       setEditingItem(null);
       form.resetFields();
@@ -134,7 +137,21 @@ export function EquipmentPage(): JSX.Element {
     }) => apiUpdateEquipmentStatus(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
       message.success('状态更新成功');
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
+  // ---- 删除 Mutation ----
+  const deleteMutation = useMutation({
+    mutationFn: apiDeleteEquipment,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+      void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      message.success('设备已删除');
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -280,7 +297,7 @@ export function EquipmentPage(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 240,
+      width: 180,
       render: (_: unknown, record: EquipmentListItem) => (
         <Space size="small">
           <Button
@@ -430,6 +447,30 @@ export function EquipmentPage(): JSX.Element {
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
+        {editingItem && (
+          <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+            <Popconfirm
+              title="确定删除该仪器？"
+              description="将同时删除仪器及其物理量关联，此操作不可撤销。"
+              onConfirm={() => {
+                deleteMutation.mutate(editingItem.id);
+                setModalOpen(false);
+                setEditingItem(null);
+                form.resetFields();
+              }}
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                danger
+                loading={deleteMutation.isPending}
+              >
+                删除仪器
+              </Button>
+            </Popconfirm>
+          </div>
+        )}
       </Modal>
 
       {/* 物理量管理 Drawer */}

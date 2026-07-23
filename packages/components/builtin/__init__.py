@@ -10,9 +10,9 @@
 - 组件清单 YAML 位于 ``schemas/component-manifest/`` 目录。
 
 组件清单（30 个）：
-- ingestion (8): excel_reader, csv_reader, json_reader,
+- ingestion (7): excel_reader, csv_reader, json_reader,
   pdf_table_reader, postgres_query, rest_fetch, minio_object,
-  llm_extractor
+  ez_scan_extractor
 - transform (7): field_mapper, unit_converter, missing_values,
   time_alignment, resampler, mad_outliers, steady_window
 - quality (4): schema_check, range_check, particle_order,
@@ -30,7 +30,7 @@ from typing import Any
 from packages.components.builtin.ingestion.csv_reader import CSVReader
 from packages.components.builtin.ingestion.excel_reader import ExcelReader
 from packages.components.builtin.ingestion.json_reader import JSONReader
-from packages.components.builtin.ingestion.llm_extractor import LLMExtractor
+from packages.components.builtin.ingestion.ez_scan_extractor import EZScanExtractor
 from packages.components.builtin.ingestion.minio_object import MinioObject
 from packages.components.builtin.ingestion.pdf_table_reader import (
     PDFTableReader,
@@ -85,7 +85,7 @@ _BUILTIN_COMPONENTS: dict[str, tuple[str, type]] = {
     "postgres_query": ("1.0.0", PostgresQuery),
     "rest_fetch": ("1.0.0", RESTFetch),
     "minio_object": ("1.0.0", MinioObject),
-    "llm_extractor": ("1.0.0", LLMExtractor),
+    "ez_scan_extractor": ("1.3.1", EZScanExtractor),
     # transform
     "field_mapper": ("1.0.0", FieldMapper),
     "unit_converter": ("1.0.0", UnitConverter),
@@ -124,7 +124,7 @@ _YAML_FILES: dict[str, str] = {
     "postgres_query": "postgres-query.yaml",
     "rest_fetch": "rest-fetch.yaml",
     "minio_object": "minio-object.yaml",
-    "llm_extractor": "llm-extractor.yaml",
+    "ez_scan_extractor": "ez-scan-extractor.yaml",
     "field_mapper": "field-mapper.yaml",
     "unit_converter": "unit-converter.yaml",
     "missing_values": "missing-values.yaml",

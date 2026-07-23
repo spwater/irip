@@ -857,6 +857,72 @@ class FlowRuntimeService:
             )
             return definition, latest
 
+    async def deprecate_definition(self, flow_id: UUID) -> FlowDefinition:
+        """将流程定义标记为已归档（deprecated）。
+
+        Args:
+            flow_id: 流程定义 ID。
+
+        Returns:
+            FlowDefinition: 更新后的定义。
+
+        Raises:
+            AppError: code="not_found"，当定义不存在。
+        """
+        now: datetime = self._clock.now()
+        async with session_scope(self._factory) as session:
+            definition: FlowDefinition | None = await session.scalar(
+                sa.select(FlowDefinition).where(
+                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.id == flow_id,
+                )
+            )
+            if definition is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"流程定义不存在: {flow_id}",
+                    retryable=False,
+                    fields={"flow_id": str(flow_id)},
+                )
+            definition.status = "deprecated"
+            definition.updated_at = now
+            definition.lock_version += 1
+            await session.flush()
+            return definition
+
+    async def restore_definition(self, flow_id: UUID) -> FlowDefinition:
+        """从归档恢复流程定义（deprecated → published）。
+
+        Args:
+            flow_id: 流程定义 ID。
+
+        Returns:
+            FlowDefinition: 更新后的定义。
+
+        Raises:
+            AppError: code="not_found"，当定义不存在。
+        """
+        now: datetime = self._clock.now()
+        async with session_scope(self._factory) as session:
+            definition: FlowDefinition | None = await session.scalar(
+                sa.select(FlowDefinition).where(
+                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.id == flow_id,
+                )
+            )
+            if definition is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"流程定义不存在: {flow_id}",
+                    retryable=False,
+                    fields={"flow_id": str(flow_id)},
+                )
+            definition.status = "published"
+            definition.updated_at = now
+            definition.lock_version += 1
+            await session.flush()
+            return definition
+
     async def get_definition_by_id(
         self, version_id: UUID
     ) -> tuple[FlowDefinition, FlowDefinitionVersionORM]:
@@ -1068,6 +1134,10 @@ class FlowRuntimeService:
                 inputs[port_name] = _resolve_input(
                     binding, node_outputs, input_snapshot
                 )
+            # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
+            for key, val in input_snapshot.items():
+                if val and key not in inputs:
+                    inputs[key] = val
 
             # 执行节点
             exec_result: dict[str, Any] = await self._execute_single_node(
@@ -1355,6 +1425,10 @@ class FlowRuntimeService:
                 inputs[port_name] = _resolve_input(
                     binding, node_outputs, input_snapshot
                 )
+            # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
+            for key, val in input_snapshot.items():
+                if val and key not in inputs:
+                    inputs[key] = val
 
             # 执行节点
             exec_result: dict[str, Any] = await self._execute_single_node(
@@ -1683,6 +1757,28 @@ class FlowRuntimeService:
                 ).scalars().all()
             )
             return run, executions
+
+    async def delete_run(self, run_id: UUID) -> None:
+        """删除执行记录及其所有节点执行记录。
+
+        Args:
+            run_id: 执行记录 ID。
+        """
+        async with session_scope(self._factory) as session:
+            # 删除节点执行记录
+            await session.execute(
+                sa.delete(FlowNodeExecution).where(
+                    FlowNodeExecution.flow_run_id == run_id
+                )
+            )
+            # 删除执行记录
+            await session.execute(
+                sa.delete(FlowRun).where(
+                    FlowRun.organization_id == self._org_id,
+                    FlowRun.id == run_id,
+                )
+            )
+            await session.flush()
 
     # ---- 内部辅助方法 ----
 

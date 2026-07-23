@@ -384,6 +384,55 @@ async def get_observations(
     )
 
 
+@facts_router.get("/{fact_id}/data")
+async def get_fact_data(
+    fact_id: UUID,
+    current_user: ReadUserDep,
+    service: FactServiceDep,
+) -> dict:
+    """获取事实关联的提取数据（从 artifact 下载 JSON）。
+
+    返回 {"metadata": {...}, "data": [...]} 格式的干净数据。
+    """
+    import json as json_mod
+    import sqlalchemy as sa
+    from packages.facts.entities import FactArtifact, FactRevision
+    from packages.common.artifacts import ArtifactService
+    from apps.api.main import _build_s3_repo
+
+    # 获取最新修订
+    fact = await service.get(fact_id)
+    revision_id = fact.revision_id
+
+    async with service._factory() as session:
+        # 查 fact_artifact + artifact，找 JSON 类型的（提取数据）
+        from packages.common.artifacts import Artifact
+        result = await session.execute(
+            sa.select(FactArtifact, Artifact)
+            .where(
+                FactArtifact.fact_revision_id == revision_id,
+                FactArtifact.artifact_id == Artifact.id,
+                Artifact.media_type == "application/json",
+            )
+            .limit(1)
+        )
+        row = result.first()
+        if row is None:
+            return {"metadata": {}, "data": []}
+
+        fa = row[0]
+        # 下载 artifact 内容
+        s3_repo = _build_s3_repo()
+        artifact_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=service._factory,
+            organization_id=service._org_id,
+            uploaded_by=current_user.user_id,
+        )
+        data_bytes = await artifact_svc.get_bytes(fa.artifact_id)
+        return json_mod.loads(data_bytes.decode("utf-8"))
+
+
 @facts_router.post(
     "/{fact_id}/revise", response_model=FactRevisionResponse
 )

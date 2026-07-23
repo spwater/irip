@@ -1038,6 +1038,16 @@ export async function apiGetFactObservations(factId: string): Promise<Observatio
   return res.data;
 }
 
+export type FactData = {
+  metadata: Record<string, unknown>;
+  data: Record<string, unknown>[];
+};
+
+export async function apiGetFactData(factId: string): Promise<FactData> {
+  const res = await http.get<FactData>(`/facts/${factId}/data`);
+  return res.data;
+}
+
 // ============================================================
 // Provenance API（/provenance）
 // ============================================================
@@ -1329,6 +1339,10 @@ export async function apiSetEquipmentVariables(
   return res.data;
 }
 
+export async function apiDeleteEquipment(id: string): Promise<void> {
+  await http.delete(`/equipment/${id}`);
+}
+
 // ============================================================
 // V2 组件管理 API（/components）— IRIP V2-T01
 // ============================================================
@@ -1392,6 +1406,37 @@ export async function apiListComponentVersions(
 ): Promise<ComponentVersionItem[]> {
   const res = await http.get<ComponentVersionItem[]>(
     `/components/${componentId}/versions`,
+  );
+  return res.data;
+}
+
+export async function apiArchiveComponent(componentId: string): Promise<void> {
+  await http.patch(`/components/${componentId}/archive`);
+}
+
+export async function apiRestoreComponent(componentId: string): Promise<void> {
+  await http.patch(`/components/${componentId}/restore`);
+}
+
+export async function apiDeleteComponent(componentId: string): Promise<void> {
+  await http.delete(`/components/${componentId}`);
+}
+
+export type PersistFactResult = {
+  fact_id: string;
+  revision: number;
+  subject_id: string;
+  raw_count: number;
+  artifact_id: string | null;
+};
+
+export async function apiPersistRunAsFact(
+  runId: string,
+  body: { object_id: string; template_version_id?: string | null },
+): Promise<PersistFactResult> {
+  const res = await http.post<PersistFactResult>(
+    `/flows/runs/${runId}/persist-fact`,
+    body,
   );
   return res.data;
 }
@@ -1515,6 +1560,40 @@ export async function apiGetFlow(flowId: string): Promise<FlowSummary> {
   return { ...res.data, latest_version: res.data.latest_version ?? null };
 }
 
+export async function apiArchiveFlow(flowId: string): Promise<FlowSummary> {
+  const res = await http.post<FlowSummary>(`/flows/${flowId}/archive`);
+  return { ...res.data, latest_version: res.data.latest_version ?? null };
+}
+
+export async function apiRestoreFlow(flowId: string): Promise<FlowSummary> {
+  const res = await http.post<FlowSummary>(`/flows/${flowId}/restore`);
+  return { ...res.data, latest_version: res.data.latest_version ?? null };
+}
+
+/** 事实模板版本列表项 — 对应后端 TemplateSummary */
+export type FactTemplateVersionItem = {
+  id: string;
+  code: string;
+  display_name: string;
+  fact_type: string;
+  status: string;
+  version_count: number;
+  latest_version: {
+    id: string;
+    template_id: string;
+    version: number;
+    display_name: string;
+    fact_type: string;
+  } | null;
+};
+
+export async function apiListFactTemplateVersions(): Promise<FactTemplateVersionItem[]> {
+  const res = await http.get<{ items: FactTemplateVersionItem[] }>('/templates', {
+    params: { page_size: 100 },
+  });
+  return res.data.items;
+}
+
 export async function apiCreateFlowRun(
   flowId: string,
   body: { inputs?: Record<string, unknown> },
@@ -1546,6 +1625,10 @@ export async function apiRetryFlowNode(
   // 返回最新运行状态（FlowRunDetail 兼容 FlowRunSummary）。
   await http.post(`/flows/runs/${runId}/retry/${encodeURIComponent(nodeId)}`);
   return apiGetFlowRun(runId);
+}
+
+export async function apiDeleteFlowRun(runId: string): Promise<void> {
+  await http.delete(`/flows/runs/${runId}`);
 }
 
 export async function apiGetFlowRun(runId: string): Promise<FlowRunDetail> {

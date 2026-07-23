@@ -4,21 +4,17 @@ import {
   Descriptions,
   Empty,
   Spin,
-  Table,
   Tag,
   Timeline,
   Typography,
 } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import type { ColumnsType } from 'antd/es/table';
 import {
   apiGetFact,
-  apiGetFactObservations,
+  apiGetFactData,
   apiListFactRevisions,
   type FactRevision,
-  type RawObservation,
-  type NormalizedObservation,
 } from '@/api/client';
 
 const { Text } = Typography;
@@ -35,18 +31,6 @@ const STATUS_LABEL: Record<string, string> = {
   active: '活跃',
   superseded: '已替代',
   withdrawn: '已撤回',
-};
-
-/** 合并 raw + normalized 的行类型 */
-type MergedObservation = {
-  key: string;
-  source_path: string;
-  source_value: string;
-  source_unit: string | null;
-  source_name: string | null;
-  normalized_value: string | null;
-  normalized_unit: string | null;
-  variable_version_id: string | null;
 };
 
 /**
@@ -75,84 +59,27 @@ export function FactDetail(): JSX.Element {
     enabled: !!factId,
   });
 
-  const { data: observations } = useQuery({
-    queryKey: ['fact-observations', factId],
-    queryFn: () => apiGetFactObservations(factId),
+  const { data: factData } = useQuery({
+    queryKey: ['fact-data', factId],
+    queryFn: () => apiGetFactData(factId),
     enabled: !!factId,
   });
 
-  // ---- 合并 raw + normalized 观察值 ----
-  const mergedRows: MergedObservation[] = (() => {
-    if (!observations) return [];
-    const raws: RawObservation[] = observations.raw;
-    const norms: NormalizedObservation[] = observations.normalized;
-    // 建立 raw_id → normalized 映射
-    const normMap = new Map<string, NormalizedObservation>();
-    for (const n of norms) {
-      normMap.set(n.raw_observation_id, n);
-    }
-    return raws.map((r) => {
-      const n = normMap.get(r.id);
-      return {
-        key: r.id,
-        source_path: r.source_path,
-        source_value: r.source_value,
-        source_unit: r.source_unit,
-        source_name: r.source_name,
-        normalized_value: n ? n.value : null,
-        normalized_unit: n ? n.unit : null,
-        variable_version_id: n ? n.variable_version_id : null,
-      };
-    });
-  })();
+  // ---- 提取干净的行数据 ----
+  const allData: Record<string, unknown>[] = factData?.data ?? [];
+  const artifactMetadata: Record<string, unknown> = factData?.metadata ?? {};
 
-  // ---- 观察值表格列 ----
-  const observationColumns: ColumnsType<MergedObservation> = [
-    {
-      title: '来源路径',
-      dataIndex: 'source_path',
-      key: 'source_path',
-      width: 140,
-      render: (v: string) => <Text code>{v}</Text>,
-    },
-    {
-      title: '来源值',
-      dataIndex: 'source_value',
-      key: 'source_value',
-      width: 120,
-      render: (v: string) => <Text strong>{v}</Text>,
-    },
-    {
-      title: '来源单位',
-      dataIndex: 'source_unit',
-      key: 'source_unit',
-      width: 80,
-      render: (u: string | null) => u ?? '-',
-    },
-    {
-      title: '标准化值',
-      dataIndex: 'normalized_value',
-      key: 'normalized_value',
-      width: 120,
-      render: (v: string | null) => v ?? <Text type="secondary">-</Text>,
-    },
-    {
-      title: '标准化单位',
-      dataIndex: 'normalized_unit',
-      key: 'normalized_unit',
-      width: 80,
-      render: (u: string | null) => u ?? '-',
-    },
-    {
-      title: '变量版本ID',
-      dataIndex: 'variable_version_id',
-      key: 'variable_version_id',
-      width: 200,
-      ellipsis: true,
-      render: (v: string | null) =>
-        v ? <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.slice(0, 8)}...</Text> : <Text type="secondary">-</Text>,
-    },
-  ];
+  // ---- 构建展示数据 ----
+  const metadata = fact
+    ? {
+        fact_id: fact.fact_id,
+        fact_type: fact.fact_type,
+        subject_id: fact.subject_id,
+        status: fact.status,
+        revision: fact.revision,
+        ...artifactMetadata,
+      }
+    : {};
 
   // ---- 加载与空状态 ----
   if (factLoading) {
@@ -229,17 +156,83 @@ export function FactDetail(): JSX.Element {
         )}
       </Card>
 
-      {/* 观测数据（raw + normalized 合并展示） */}
-      <Card title={`观测数据（${mergedRows.length} 条）`}>
-        <Table<MergedObservation>
-          columns={observationColumns}
-          dataSource={mergedRows}
-          pagination={false}
-          size="small"
-          scroll={{ x: true }}
-        />
-        {mergedRows.length === 0 && (
-          <Text type="secondary">暂无观测数据</Text>
+      {/* Metadata */}
+      <Card
+        title="Metadata"
+        style={{ marginBottom: 16 }}
+        extra={
+          <Button
+            size="small"
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `fact-${fact.fact_id.slice(0, 8)}-metadata.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            导出 JSON
+          </Button>
+        }
+      >
+        <pre
+          style={{
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'monospace',
+            maxHeight: 300,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+          }}
+        >
+          {JSON.stringify(metadata, null, 2)}
+        </pre>
+      </Card>
+
+      {/* 全部数据 */}
+      <Card
+        title={`数据（${allData.length} 条）`}
+        extra={
+          <Button
+            size="small"
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `fact-${fact.fact_id.slice(0, 8)}-data.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            导出 JSON
+          </Button>
+        }
+      >
+        <pre
+          style={{
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'monospace',
+            maxHeight: 500,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            margin: 0,
+          }}
+        >
+          {JSON.stringify(allData, null, 2)}
+        </pre>
+        {allData.length === 0 && (
+          <Text type="secondary">暂无数据</Text>
         )}
       </Card>
     </div>

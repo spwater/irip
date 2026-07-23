@@ -55,7 +55,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
- * 标准管理页面
+ * 要素管理页面
  *
  * 功能：
  * - Ant Design Table 列表（编码 / 中文名 / 英文名 / 量纲 / 数据类型 / 状态 / 当前版本 / 操作）

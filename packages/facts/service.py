@@ -68,7 +68,7 @@ class CreateFactCommand:
     fact_type: Literal[
         "experiment_run", "simulation_run", "document_record", "model_execution"
     ]
-    template_version_id: UUID
+    template_version_id: UUID | None
     organization_id: UUID
     object_id: UUID
     subject_id: str
@@ -207,21 +207,22 @@ class FactService:
                 )
 
         async with session_scope(self._factory) as session:
-            # 3. 校验模板已发布
-            template_version = await session.scalar(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == command.template_version_id
+            # 3. 校验模板已发布（可选，template_version_id 为 None 时跳过）
+            if command.template_version_id is not None:
+                template_version = await session.scalar(
+                    sa.select(FactTemplateVersion).where(
+                        FactTemplateVersion.id == command.template_version_id
+                    )
                 )
-            )
-            if template_version is None or template_version.status != "published":
-                raise AppError(
-                    code="template_not_published",
-                    message="事实模板版本未发布",
-                    retryable=False,
-                    fields={
-                        "template_version_id": str(command.template_version_id)
-                    },
-                )
+                if template_version is None or template_version.status != "published":
+                    raise AppError(
+                        code="template_not_published",
+                        message="事实模板版本未发布",
+                        retryable=False,
+                        fields={
+                            "template_version_id": str(command.template_version_id)
+                        },
+                    )
 
             # 4. 校验工业对象属于组织
             obj = await session.scalar(

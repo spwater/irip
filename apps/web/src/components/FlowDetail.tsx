@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Button,
   Card,
+  Checkbox,
   Descriptions,
   Divider,
   Empty,
@@ -24,11 +25,16 @@ import {
   apiCancelFlowRun,
   apiCreateFlow,
   apiCreateFlowRun,
+  apiDeleteFlowRun,
   apiBrowseFiles,
+  apiArchiveFlow,
+  apiRestoreFlow,
+  apiPersistRunAsFact,
   apiGetComponent,
   apiGetFlow,
   apiGetFlowRun,
   apiListComponents,
+  apiListObjects,
   apiListFlows,
   apiListFlowRuns,
   apiPublishFlow,
@@ -61,6 +67,14 @@ const STATUS_LABEL: Record<string, string> = {
   published: '已发布',
   deprecated: '已弃用',
 };
+
+/** 把 UTC 时间字符串转成本地时间显示 */
+function fmtTime(v: string | null | undefined): string {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return v;
+  return d.toLocaleString('zh-CN', { hour12: false });
+}
 
 /** 运行状态 → 颜色 */
 const RUN_STATUS_COLOR: Record<string, string> = {
@@ -105,7 +119,7 @@ const NODE_STATUS_LABEL: Record<string, string> = {
 // ============================================================
 
 /** LLM 驱动的组件名称集合 — 摩登组件 */
-const LLM_COMPONENTS = new Set(['llm_extractor']);
+const LLM_COMPONENTS = new Set(['ez_scan_extractor']);
 
 /** 组件类别 → 中文标签 */
 const KIND_LABEL: Record<string, string> = {
@@ -418,7 +432,7 @@ function parseManifest(manifestYaml: string): ParsedManifest {
  * 功能：
  * - 流程列表 Table（编码 / 名称 / 状态 / 最新版本）
  * - 顶部「新建流程」按钮 → Modal（编码 + 名称）
- * - 选中流程 → 展示基本信息 + 运行操作（执行 / 恢复 / 取消）
+ * - 选中流程 → 展示基本信息 + 运行操作（执行 / 继续 / 取消）
  * - 节点执行列表 Table（节点 ID / 状态 / 耗时）
  * - 发布版本 Modal（可视化节点构建器 + 高级 JSON 模式）
  */
@@ -428,17 +442,22 @@ export function FlowDetail(): JSX.Element {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [runModalOpen, setRunModalOpen] = useState(false);
+  const [runFileBrowserOpen, setRunFileBrowserOpen] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [createForm] = Form.useForm();
   const [runForm] = Form.useForm();
 
   // ---- 流程列表查询 ----
+  const [showArchived, setShowArchived] = useState(false);
   const { data: listData, isLoading: listLoading } = useQuery({
     queryKey: ['flows'],
     queryFn: () => apiListFlows(),
   });
 
-  const flows: FlowSummary[] = listData?.items ?? [];
+  const allFlows: FlowSummary[] = listData?.items ?? [];
+  const flows: FlowSummary[] = showArchived
+    ? allFlows
+    : allFlows.filter((f) => f.status !== 'deprecated');
 
   // ---- 选中流程详情查询 ----
   const { data: flow, isLoading: flowLoading } = useQuery({
@@ -452,6 +471,14 @@ export function FlowDetail(): JSX.Element {
     queryKey: ['flow-runs', selectedFlowId],
     queryFn: () => apiListFlowRuns(selectedFlowId!),
     enabled: !!selectedFlowId,
+    refetchInterval: (query) => {
+      // 有 pending/running 状态的 run 时，每 2 秒轮询
+      const items = query.state.data;
+      if (items && items.some((r: FlowRunSummary) => r.status === 'pending' || r.status === 'running')) {
+        return 2000;
+      }
+      return false;
+    },
   });
 
   const runs: FlowRunSummary[] = runsList ?? [];
@@ -489,6 +516,28 @@ export function FlowDetail(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
+  // ---- 归档 Mutation ----
+  const archiveMutation = useMutation({
+    mutationFn: apiArchiveFlow,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flows'] });
+      void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
+      message.success('流程已归档');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  // ---- 恢复 Mutation ----
+  const restoreMutation = useMutation({
+    mutationFn: apiRestoreFlow,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flows'] });
+      void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
+      message.success('流程已恢复');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
   // ---- 创建运行 Mutation ----
   const createRunMutation = useMutation({
     mutationFn: (vars: { flowId: string; body: { inputs: Record<string, unknown> } }) =>
@@ -504,12 +553,13 @@ export function FlowDetail(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  // ---- 恢复 / 取消 Mutation ----
+  // ---- 继续 / 取消 Mutation ----
   const resumeMutation = useMutation({
     mutationFn: apiResumeFlowRun,
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
       void queryClient.invalidateQueries({ queryKey: ['flow-run', activeRunId] });
-      message.success('流程执行已恢复');
+      message.success('流程执行已完成');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
@@ -519,6 +569,19 @@ export function FlowDetail(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['flow-run', activeRunId] });
       message.success('流程执行已取消');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  // ---- 删除运行 Mutation ----
+  const deleteRunMutation = useMutation({
+    mutationFn: apiDeleteFlowRun,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
+      if (activeRunId) {
+        setActiveRunId(null);
+      }
+      message.success('运行记录已删除');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
@@ -560,12 +623,31 @@ export function FlowDetail(): JSX.Element {
     if (!selectedFlowId) return;
     try {
       const values = await runForm.validateFields();
-      const inputs = values.inputs_json
-        ? JSON.parse(values.inputs_json as string)
-        : {};
+      // 从表单收集参数值，构建 inputs
+      const inputs: Record<string, unknown> = {};
+      const nodeParams = flow?.latest_version?.nodes as FlowNodeSchema[] | undefined;
+      if (nodeParams) {
+        for (const node of nodeParams) {
+          const prefix = `${node.node_id}__`;
+          for (const key of Object.keys(node.params ?? {})) {
+            const formKey = `${prefix}${key}`;
+            const formValue = values[formKey];
+            if (formValue !== undefined && formValue !== '') {
+              // 检查这个参数是否需要跨节点共享
+              // 当前简单处理：所有节点共用同名参数
+              inputs[key] = formValue;
+            }
+          }
+        }
+      }
+      // 也保留原始 JSON 输入
+      if (values.inputs_json) {
+        const jsonInputs = JSON.parse(values.inputs_json as string);
+        Object.assign(inputs, jsonInputs);
+      }
       createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
     } catch (err) {
-      message.error(`JSON 解析失败: ${err instanceof Error ? err.message : String(err)}`);
+      message.error(`参数解析失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -711,10 +793,16 @@ export function FlowDetail(): JSX.Element {
     <div>
       <Title level={2}>流程编排</Title>
 
-      <Space style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16, alignItems: 'center' }}>
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
           新建流程
         </Button>
+        <Checkbox
+          checked={showArchived}
+          onChange={(e) => setShowArchived(e.target.checked)}
+        >
+          显示已归档
+        </Checkbox>
       </Space>
 
       {/* 流程列表 */}
@@ -743,18 +831,12 @@ export function FlowDetail(): JSX.Element {
                   <Text strong>{flow.code}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="名称">{flow.display_name}</Descriptions.Item>
-                <Descriptions.Item label="状态">
-                  <Tag color={STATUS_COLOR[flow.status] ?? 'default'}>
-                    {STATUS_LABEL[flow.status] ?? flow.status}
-                  </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="锁版本">{flow.lock_version}</Descriptions.Item>
                 <Descriptions.Item label="最新版本">
                   {flow.latest_version
                     ? `v${flow.latest_version.version} (${flow.latest_version.digest.slice(0, 12)}…)`
                     : '未发布'}
                 </Descriptions.Item>
-                <Descriptions.Item label="创建时间">{flow.created_at}</Descriptions.Item>
+                <Descriptions.Item label="创建时间">{fmtTime(flow.created_at)}</Descriptions.Item>
               </Descriptions>
 
               <Space style={{ marginTop: 16 }} wrap>
@@ -778,6 +860,36 @@ export function FlowDetail(): JSX.Element {
                     需先发布版本才能执行
                   </Text>
                 )}
+                {flow.status === 'deprecated' ? (
+                  <Popconfirm
+                    title="确定恢复该流程？"
+                    description="恢复后流程将重新显示在活跃列表中"
+                    onConfirm={() => selectedFlowId && restoreMutation.mutate(selectedFlowId)}
+                    okText="恢复"
+                    cancelText="取消"
+                  >
+                    <Button
+                      loading={restoreMutation.isPending}
+                    >
+                      恢复
+                    </Button>
+                  </Popconfirm>
+                ) : (
+                  <Popconfirm
+                    title="确定归档该流程？"
+                    description="归档后流程将标记为已弃用，不再显示在活跃列表中"
+                    onConfirm={() => selectedFlowId && archiveMutation.mutate(selectedFlowId)}
+                    okText="归档"
+                    cancelText="取消"
+                  >
+                    <Button
+                      danger
+                      loading={archiveMutation.isPending}
+                    >
+                      归档
+                    </Button>
+                  </Popconfirm>
+                )}
               </Space>
             </>
           )}
@@ -790,32 +902,50 @@ export function FlowDetail(): JSX.Element {
           {/* 运行列表 */}
           <Table<FlowRunSummary>
             columns={[
-              { title: '运行 ID', dataIndex: 'id', key: 'id', width: 200, ellipsis: true,
-                render: (v: string) => <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.slice(0, 12)}...</Text> },
+              { title: '作业 ID', dataIndex: 'job_id', key: 'job_id', width: 280, ellipsis: true,
+                render: (v: string | null) => v ? <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text> : '-' },
               { title: '状态', dataIndex: 'status', key: 'status', width: 100,
                 render: (s: string) => <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
-              { title: '输出摘要', dataIndex: 'output_digest', key: 'output_digest', width: 180, ellipsis: true,
-                render: (v: string | null) => v ? <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v.slice(0, 16)}...</Text> : '-' },
-              { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180 },
+              { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
+                render: (v: string) => fmtTime(v) },
               { title: '完成时间', dataIndex: 'completed_at', key: 'completed_at', width: 180,
-                render: (v: string | null) => v ?? '-' },
-              { title: '操作', key: 'action', width: 160,
+                render: (v: string | null) => fmtTime(v) },
+              { title: '操作', key: 'action', width: 200,
                 render: (_: unknown, record: FlowRunSummary) => (
                   <Space size="small">
                     <Button type="link" size="small"
                       onClick={() => setActiveRunId(record.id)}>
                       查看详情
                     </Button>
-                    {activeRunId === record.id && (
+                    {record.status === 'pending' && (
+                      <Button type="link" size="small"
+                        loading={resumeMutation.isPending}
+                        onClick={() => resumeMutation.mutate(record.id)}>
+                        执行
+                      </Button>
+                    )}
+                    {activeRunId === record.id && record.status !== 'pending' && record.status !== 'succeeded' && record.status !== 'cancelled' && (
                       <>
-                        <Popconfirm title="确认恢复？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
-                          <Button type="link" size="small">恢复</Button>
+                        <Popconfirm title="确认继续？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                          <Button type="link" size="small">继续</Button>
                         </Popconfirm>
                         <Popconfirm title="确认取消？" onConfirm={() => cancelMutation.mutate(record.id)} okText="确定" cancelText="取消">
                           <Button type="link" size="small" danger>取消</Button>
                         </Popconfirm>
                       </>
                     )}
+                    <Popconfirm
+                      title="确定删除该运行记录？"
+                      description="将同时删除其所有节点执行记录，不可撤销"
+                      onConfirm={() => deleteRunMutation.mutate(record.id)}
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button type="link" size="small" danger loading={deleteRunMutation.isPending}>
+                        删除
+                      </Button>
+                    </Popconfirm>
                   </Space>
                 ),
               },
@@ -906,9 +1036,63 @@ export function FlowDetail(): JSX.Element {
         width={600}
       >
         <Form form={runForm} layout="vertical">
-          <Form.Item name="inputs_json" label="输入参数 (JSON，可选)">
+          {(flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.map((node) => {
+            const params = node.params as Record<string, unknown> ?? {};
+            const paramEntries = Object.entries(params);
+            if (paramEntries.length === 0) return null;
+            return (
+              <div key={node.node_id}>
+                <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                  节点：{node.node_id}（{node.component_name}）
+                </Text>
+                {paramEntries.map(([key, defaultVal]) => {
+                  const formKey = `${node.node_id}__${key}`;
+                  const isPath = /path|file/i.test(key);
+                  return (
+                    <Form.Item
+                      key={formKey}
+                      name={formKey}
+                      label={key}
+                      initialValue={defaultVal || ''}
+                    >
+                      {isPath ? (
+                        <Input.Group compact style={{ display: 'flex' }}>
+                          <Form.Item name={formKey} noStyle>
+                            <Input
+                              style={{ flex: 1 }}
+                              placeholder={defaultVal ? String(defaultVal) : `输入 ${key}`}
+                            />
+                          </Form.Item>
+                          <Button
+                            size="small"
+                            onClick={() => setRunFileBrowserOpen(true)}
+                          >
+                            浏览
+                          </Button>
+                          <FileBrowserModal
+                            open={runFileBrowserOpen}
+                            onClose={() => setRunFileBrowserOpen(false)}
+                            onSelect={(selectedPath) => {
+                              runForm.setFieldValue(formKey, selectedPath);
+                              setRunFileBrowserOpen(false);
+                            }}
+                          />
+                        </Input.Group>
+                      ) : (
+                        <Input
+                          placeholder={defaultVal ? String(defaultVal) : `输入 ${key}`}
+                        />
+                      )}
+                    </Form.Item>
+                  );
+                })}
+                <Divider style={{ margin: '12px 0' }} />
+              </div>
+            );
+          })}
+          <Form.Item name="inputs_json" label="额外参数 (JSON，可选)">
             <Input.TextArea
-              rows={6}
+              rows={3}
               style={{ fontFamily: 'monospace', fontSize: 13 }}
               placeholder={`{\n  "key": "value"\n}`}
             />
@@ -927,40 +1111,56 @@ function RunDetailPanel({
   run: FlowRunDetail;
   nodeColumns: ColumnsType<FlowNodeExecution>;
 }): JSX.Element {
+  const queryClient = useQueryClient();
+  const [factModalOpen, setFactModalOpen] = useState(false);
+  const [factObjectId, setFactObjectId] = useState<string | undefined>();
+
+  // 从成功的节点中提取 metadata 和全部数据
+  const succeededNode = run.nodes.find(
+    (n) => n.status === 'succeeded' && n.output_summary,
+  );
+  const meta = (succeededNode?.output_summary?._metadata ?? {}) as Record<string, unknown>;
+  const allRows = (meta.all_rows ?? meta.preview_rows ?? []) as Record<string, unknown>[];
+  const header = (meta.header ?? {}) as Record<string, unknown>;
+  const exportData = { metadata: header, data: allRows };
+
+  // 查询工业对象
+  const { data: objectsData } = useQuery({
+    queryKey: ['objects-for-fact'],
+    queryFn: () => apiListObjects({ page_size: 100 }),
+    enabled: factModalOpen,
+  });
+  const objectOptions = (objectsData?.items ?? []).map((o) => ({
+    value: o.id,
+    label: `${o.display_name} (${o.code})`,
+  }));
+
+  // 写入事实 Mutation
+  const persistFactMutation = useMutation({
+    mutationFn: () =>
+      apiPersistRunAsFact(run.id, {
+        object_id: factObjectId!,
+        template_version_id: null,
+      }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['facts'] });
+      setFactModalOpen(false);
+      message.success(`已写入事实：${data.raw_count} 条观察值（fact_id=${data.fact_id.slice(0, 8)}...）`);
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  const canPersistFact = run.status === 'succeeded';
+
   return (
     <div>
-      <Descriptions bordered column={2} size="small" style={{ marginBottom: 16 }}>
-        <Descriptions.Item label="运行 ID">
-          <Text copyable style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {run.id}
-          </Text>
-        </Descriptions.Item>
-        <Descriptions.Item label="状态">
-          <Tag color={RUN_STATUS_COLOR[run.status] ?? 'default'}>
-            {RUN_STATUS_LABEL[run.status] ?? run.status}
-          </Tag>
-        </Descriptions.Item>
-        <Descriptions.Item label="流程版本 ID">
-          <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
-            {run.flow_version_id.slice(0, 12)}…
-          </Text>
-        </Descriptions.Item>
-        <Descriptions.Item label="作业 ID">
-          {run.job_id ?? '-'}
-        </Descriptions.Item>
-        <Descriptions.Item label="输出摘要">
-          {run.output_digest ? (
-            <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
-              {run.output_digest.slice(0, 16)}…
-            </Text>
-          ) : (
-            '-'
-          )}
-        </Descriptions.Item>
-        <Descriptions.Item label="创建时间">{run.created_at}</Descriptions.Item>
-        <Descriptions.Item label="开始时间">{run.started_at ?? '-'}</Descriptions.Item>
-        <Descriptions.Item label="完成时间">{run.completed_at ?? '-'}</Descriptions.Item>
-      </Descriptions>
+      {canPersistFact && (
+        <div style={{ marginBottom: 16 }}>
+          <Button type="primary" onClick={() => setFactModalOpen(true)}>
+            查看数据 & 写入事实
+          </Button>
+        </div>
+      )}
 
       <Title level={5}>节点执行（{run.nodes.length} 个）</Title>
       <Table<FlowNodeExecution>
@@ -973,6 +1173,97 @@ function RunDetailPanel({
       {run.nodes.length === 0 && (
         <Paragraph type="secondary">暂无节点执行记录</Paragraph>
       )}
+
+      {/* 查看数据 & 写入事实 Modal */}
+      <Modal
+        title="执行结果数据"
+        open={factModalOpen}
+        onCancel={() => setFactModalOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setFactModalOpen(false)}>关闭</Button>
+            <Button
+              type="primary"
+              disabled={!factObjectId}
+              loading={persistFactMutation.isPending}
+              onClick={() => persistFactMutation.mutate()}
+            >
+              写入事实
+            </Button>
+          </Space>
+        }
+        width={720}
+      >
+        {/* metadata 区域 */}
+        <Text strong>Metadata</Text>
+        <pre
+          style={{
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'monospace',
+            maxHeight: 200,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            marginTop: 4,
+            marginBottom: 16,
+          }}
+        >
+          {JSON.stringify(header, null, 2)}
+        </pre>
+
+        {/* 全部数据区域 */}
+        <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
+          <Text strong>数据（{allRows.length} 行）</Text>
+          <Button
+            size="small"
+            onClick={() => {
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `run-${run.id.slice(0, 8)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            导出 JSON
+          </Button>
+        </Space>
+        <pre
+          style={{
+            background: '#f5f5f5',
+            padding: 12,
+            borderRadius: 6,
+            fontSize: 13,
+            fontFamily: 'monospace',
+            maxHeight: 400,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            marginTop: 4,
+          }}
+        >
+          {JSON.stringify(allRows, null, 2)}
+        </pre>
+
+        {/* 写入事实区域 */}
+        <Divider />
+        <Form layout="vertical">
+          <Form.Item label="工业对象" required>
+            <Select
+              placeholder="选择工业对象"
+              showSearch
+              optionFilterProp="label"
+              options={objectOptions}
+              value={factObjectId}
+              onChange={setFactObjectId}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }
@@ -1218,7 +1509,7 @@ function PublishVersionModal({
       onPublish({
         nodes: parsedNodes,
         edges: parsedEdges,
-        random_seed: Number(randomSeed) || 0,
+        random_seed: 0,
       });
       return;
     }
@@ -1253,8 +1544,9 @@ function PublishVersionModal({
         const manifest = n.component_id ? parsedManifests[n.component_id] : undefined;
         if (manifest) {
           for (const param of manifest.params) {
-            if (!(param.name in params) && param.default !== undefined) {
-              params[param.name] = param.default;
+            if (!(param.name in params)) {
+              // 留空的参数也存入 params（用空值），这样创建执行时弹窗能显示输入框
+              params[param.name] = param.default !== undefined ? param.default : '';
             }
             // 复杂类型的字符串值尝试 JSON 解析
             if (
@@ -1347,13 +1639,6 @@ function PublishVersionModal({
               onChange={(e) => setEdgesJson(e.target.value)}
             />
           </Form.Item>
-          <Form.Item label="随机种子">
-            <Input
-              placeholder="0"
-              value={randomSeed}
-              onChange={(e) => setRandomSeed(e.target.value)}
-            />
-          </Form.Item>
         </Form>
       ) : (
         /* ---- 可视化模式 ---- */
@@ -1441,18 +1726,6 @@ function PublishVersionModal({
               暂无连线，单节点流程可不添加
             </Text>
           )}
-
-          {/* 随机种子 */}
-          <Divider />
-          <Form layout="vertical">
-            <Form.Item label="随机种子">
-              <Input
-                placeholder="0"
-                value={randomSeed}
-                onChange={(e) => setRandomSeed(e.target.value)}
-              />
-            </Form.Item>
-          </Form>
 
           <Text type="secondary" style={{ fontSize: 11 }}>
             提示：如需设置 input_bindings，请切换到高级模式
@@ -1766,7 +2039,8 @@ function ParamInputRow({
           }
         />
       ) : needsFileBrowser ? (
-        /* 文件路径参数：Input + 浏览按钮 */
+        /* 文件路径参数：输入框 + 浏览按钮 */
+        <>
         <div style={{ display: 'flex', gap: 4 }}>
           <Input
             size="small"
@@ -1788,15 +2062,16 @@ function ParamInputRow({
           >
             浏览
           </Button>
-          <FileBrowserModal
-            open={fileBrowserOpen}
-            onClose={() => setFileBrowserOpen(false)}
-            onSelect={(selectedPath) => {
-              onChange(selectedPath);
-              setFileBrowserOpen(false);
-            }}
-          />
         </div>
+        <FileBrowserModal
+          open={fileBrowserOpen}
+          onClose={() => setFileBrowserOpen(false)}
+          onSelect={(selectedPath) => {
+            onChange(convertParamValue(selectedPath, param.type));
+            setFileBrowserOpen(false);
+          }}
+        />
+        </>
       ) : (
         <Input
           size="small"

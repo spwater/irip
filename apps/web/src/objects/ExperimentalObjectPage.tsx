@@ -25,7 +25,7 @@ import {
 } from '@/api/client';
 
 /**
- * 实验对象管理页面（标准管理第 3 个 Tab）
+ * 实验对象管理页面（要素管理第 3 个 Tab）
  *
  * 实验对象 = industrial_object 表中 object_type 为 material / sample / product 的记录。
  * 与设备仪器、物理量平级管理，不走审批流，状态为 active / inactive。

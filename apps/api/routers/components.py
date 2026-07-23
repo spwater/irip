@@ -301,3 +301,69 @@ async def list_component_versions(
         )
         for v in versions
     ]
+
+
+# ---- 端点：归档 / 恢复 / 删除 ----
+
+
+@components_router.patch("/{component_id}/archive")
+async def archive_component(
+    component_id: UUID,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> dict[str, str]:
+    """归档组件（status → deprecated）。
+
+    Args:
+        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录）。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        dict: {"status": "deprecated"}
+    """
+    comp, _ = await service.get_version_by_id(component_id)
+    await service.deprecate(comp.name)
+    return {"status": "deprecated"}
+
+
+@components_router.patch("/{component_id}/restore")
+async def restore_component(
+    component_id: UUID,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> dict[str, str]:
+    """恢复组件（deprecated → published）。
+
+    Args:
+        component_id: 组件版本 UUID。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        dict: {"status": "published"}
+    """
+    comp, _ = await service.get_version_by_id(component_id)
+    await service.restore(comp.name)
+    return {"status": "published"}
+
+
+@components_router.delete("/{component_id}")
+async def delete_component(
+    component_id: UUID,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> dict[str, str]:
+    """彻底删除组件及其所有版本。
+
+    Args:
+        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录 ID）。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        dict: {"status": "deleted"}
+    """
+    comp, _ = await service.get_version_by_id(component_id)
+    await service.delete_component(comp.id)
+    return {"status": "deleted"}

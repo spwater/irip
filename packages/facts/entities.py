@@ -65,10 +65,9 @@ class Fact(Base):
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
-    template_version_id: Mapped[UUID] = mapped_column(
+    template_version_id: Mapped[UUID | None] = mapped_column(
         GUID,
-        sa.ForeignKey("fact_template_version.id"),
-        nullable=False,
+        nullable=True,
     )
     fact_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     object_id: Mapped[UUID] = mapped_column(
@@ -149,10 +148,9 @@ class FactRevision(Base):
         nullable=False,
     )
     revision: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    template_version_id: Mapped[UUID] = mapped_column(
+    template_version_id: Mapped[UUID | None] = mapped_column(
         GUID,
-        sa.ForeignKey("fact_template_version.id"),
-        nullable=False,
+        nullable=True,
     )
     fact_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     object_id: Mapped[UUID] = mapped_column(

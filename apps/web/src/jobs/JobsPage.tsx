@@ -159,17 +159,6 @@ export function JobsPage(): JSX.Element {
       render: (progress: number) => <Progress percent={progress} size="small" />,
     },
     {
-      title: '尝试',
-      key: 'attempt',
-      width: 100,
-      align: 'center' as const,
-      render: (_: unknown, record: JobListItem) => (
-        <Text style={{ fontSize: 12 }}>
-          {record.attempt} / {record.max_attempts}
-        </Text>
-      ),
-    },
-    {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',

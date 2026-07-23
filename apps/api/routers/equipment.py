@@ -1,4 +1,4 @@
-"""设备仪器管理路由：创建、列表、详情、编辑、状态切换、物理量关联。
+"""设备仪器管理路由：创建、列表、详情、编辑、状态切换、物理量关联、删除。
 
 端点：
   POST   /api/v1/equipment                  — 创建设备（equipment:manage）
@@ -6,15 +6,16 @@
   GET    /api/v1/equipment/{id}             — 详情（equipment:read）
   PATCH  /api/v1/equipment/{id}             — 编辑（equipment:manage，不含 code）
   PATCH  /api/v1/equipment/{id}/status      — 启用/禁用（equipment:manage）
+  DELETE /api/v1/equipment/{id}            — 删除（equipment:manage）
   GET    /api/v1/equipment/{id}/variables   — 物理量列表（equipment:read）
   PUT    /api/v1/equipment/{id}/variables   — 设置物理量（equipment:manage）
 
 安全约定：
-- 创建/编辑/状态切换/设置物理量需 require_permission("equipment:manage")；
+- 创建/编辑/状态切换/删除/设置物理量需 require_permission("equipment:manage")；
 - 列表/详情/物理量列表需 require_permission("equipment:read")；
 - code 创建后锁定：UpdateEquipmentBody 不含 code 字段；
 - 乐观锁：编辑/状态切换请求必须携带 lock_version；
-- 软禁用：status='disabled'，无 DELETE 端点。
+- 删除为硬删除，会级联删除物理量关联。
 """
 
 from datetime import datetime
@@ -415,3 +416,22 @@ async def set_equipment_variables(
     variable_ids = [UUID(vid) for vid in body.variable_ids]
     await service.set_variables(equipment_id, variable_ids)
     return {"ok": True}
+
+
+@equipment_router.delete("/{equipment_id}", status_code=204)
+async def delete_equipment(
+    equipment_id: UUID,
+    current_user: ManageUserDep,
+    service: EquipmentServiceDep,
+) -> None:
+    """删除设备（硬删除，含物理量关联）。
+
+    Args:
+        equipment_id: 设备 UUID。
+        current_user: 当前认证用户（需 equipment:manage 权限）。
+        service: 设备服务。
+
+    Raises:
+        AppError: code="not_found"，当设备不存在时。
+    """
+    await service.delete(equipment_id)

@@ -11,7 +11,7 @@ const { Text } = Typography;
 /** 导航菜单项（中文标签） */
 const NAV_ITEMS: MenuProps['items'] = [
   { key: '/workbench', label: '研发看板' },
-  { key: '/standards', label: '标准管理' },
+  { key: '/standards', label: '要素管理' },
   { key: '/facts', label: '实验事实' },
   { key: '/parameters', label: '参数管理' },
   { key: '/components', label: '组件管理' },

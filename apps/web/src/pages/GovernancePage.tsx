@@ -5,7 +5,7 @@ const { Title, Paragraph } = Typography;
 /**
  * 平台治理页面 — Ant Design Tabs 布局
  *
- * "机构管理"已移至标准管理页面；
+ * "机构管理"已移至要素管理页面；
  * 保留"审计日志""授权管理"占位 Tab。
  */
 export function GovernancePage(): JSX.Element {

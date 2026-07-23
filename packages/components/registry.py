@@ -485,3 +485,52 @@ class ComponentRegistryService:
             await session.flush()
 
             return component
+
+    async def restore(self, name: str) -> Component:
+        """恢复组件（deprecated → published）。
+
+        Args:
+            name: 组件名称。
+
+        Returns:
+            Component: 更新后的组件记录。
+        """
+        now: datetime = self._clock.now()
+        async with session_scope(self._factory) as session:
+            component: Component | None = await session.scalar(
+                sa.select(Component).where(
+                    Component.organization_id == self._org_id,
+                    Component.name == name,
+                )
+            )
+            if component is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"组件不存在: {name}",
+                    retryable=False,
+                    fields={"name": name},
+                )
+            component.status = "published"
+            component.updated_at = now
+            component.lock_version += 1
+            await session.flush()
+            return component
+
+    async def delete_component(self, component_id: UUID) -> None:
+        """彻底删除组件及其所有版本。
+
+        Args:
+            component_id: 组件主记录 UUID。
+        """
+        async with session_scope(self._factory) as session:
+            # 删除所有版本
+            await session.execute(
+                sa.delete(ComponentVersion).where(
+                    ComponentVersion.component_id == component_id
+                )
+            )
+            # 删除主记录
+            await session.execute(
+                sa.delete(Component).where(Component.id == component_id)
+            )
+            await session.flush()

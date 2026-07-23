@@ -448,6 +448,37 @@ class EquipmentService:
             for v in variables
         ]
 
+    async def delete(self, equipment_id: UUID) -> None:
+        """删除设备（硬删除，含关联的物理量关系）。
+
+        Args:
+            equipment_id: 设备 UUID。
+
+        Raises:
+            AppError: code="not_found"，当设备不存在时。
+        """
+        async with session_scope(self._factory) as session:
+            equipment = await EquipmentRepository.select_by_id(session, equipment_id)
+            if equipment is None or equipment.organization_id != self._org_id:
+                raise AppError(
+                    code="not_found",
+                    message="设备不存在",
+                    retryable=False,
+                    fields={"equipment_id": str(equipment_id)},
+                )
+
+            # 先删除物理量关联
+            from packages.equipment.entities import EquipmentVariable
+            await session.execute(
+                sa.delete(EquipmentVariable).where(
+                    EquipmentVariable.equipment_id == equipment_id
+                )
+            )
+            # 再删除设备
+            await session.execute(
+                sa.delete(Equipment).where(Equipment.id == equipment_id)
+            )
+
 
 def _encode_cursor(
     sort_order: int, created_at: datetime, equip_id: UUID

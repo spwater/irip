@@ -20,15 +20,26 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
+  apiArchiveComponent,
+  apiDeleteComponent,
   apiGetComponent,
   apiListComponentVersions,
   apiListComponents,
   apiPublishComponent,
+  apiRestoreComponent,
   extractApiError,
   type ComponentDetail,
   type ComponentSummary,
   type ComponentVersionItem,
 } from '@/api/client';
+
+/** 把 UTC 时间字符串转成本地时间显示 */
+function fmtTime(v: string | null | undefined): string {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return v;
+  return d.toLocaleString('zh-CN', { hour12: false });
+}
 
 const { Title, Text } = Typography;
 
@@ -57,7 +68,19 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /** LLM 驱动的组件名称集合 */
-const LLM_COMPONENTS = new Set(['llm_extractor']);
+const LLM_COMPONENTS = new Set(['ez_scan_extractor']);
+
+/** 比较 semver 版本号，返回 >0/0/<0 */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map(Number);
+  const pb = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const va = pa[i] ?? 0;
+    const vb = pb[i] ?? 0;
+    if (va !== vb) return va - vb;
+  }
+  return 0;
+}
 
 /**
  * 组件管理页面
@@ -68,7 +91,7 @@ const LLM_COMPONENTS = new Set(['llm_extractor']);
  */
 export function ComponentsPage(): JSX.Element {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'modern' | 'classic'>('modern');
+  const [activeTab, setActiveTab] = useState<'modern' | 'classic' | 'archived'>('modern');
   const [kindFilter, setKindFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -82,12 +105,24 @@ export function ComponentsPage(): JSX.Element {
     queryFn: () => apiListComponents({ kind: kindFilter }),
   });
 
-  const allItems: ComponentSummary[] = data?.items ?? [];
+  const allItems: ComponentSummary[] = (() => {
+    const items = data?.items ?? [];
+    // 按 name 去重，只保留最新版本
+    const latestByName = new Map<string, ComponentSummary>();
+    for (const item of items) {
+      const existing = latestByName.get(item.name);
+      if (!existing || compareVersions(item.version, existing.version) > 0) {
+        latestByName.set(item.name, item);
+      }
+    }
+    return Array.from(latestByName.values());
+  })();
 
-  // 按摩登/古法分组
-  const modernItems = allItems.filter((i) => LLM_COMPONENTS.has(i.name));
-  const classicItems = allItems.filter((i) => !LLM_COMPONENTS.has(i.name));
-  const currentItems = activeTab === 'modern' ? modernItems : classicItems;
+  // 按摩登/古法/归档分组
+  const modernItems = allItems.filter((i) => LLM_COMPONENTS.has(i.name) && i.status !== 'deprecated');
+  const classicItems = allItems.filter((i) => !LLM_COMPONENTS.has(i.name) && i.status !== 'deprecated');
+  const archivedItems = allItems.filter((i) => i.status === 'deprecated');
+  const currentItems = activeTab === 'modern' ? modernItems : activeTab === 'classic' ? classicItems : archivedItems;
 
   // ---- 详情查询 ----
   const { data: detail, isLoading: detailLoading } = useQuery({
@@ -110,6 +145,34 @@ export function ComponentsPage(): JSX.Element {
     onError: (err: unknown) => {
       message.error(extractApiError(err));
     },
+  });
+
+  // ---- 归档 / 恢复 / 删除 Mutation ----
+  const archiveMutation = useMutation({
+    mutationFn: apiArchiveComponent,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['components'] });
+      message.success('组件已归档');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: apiRestoreComponent,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['components'] });
+      message.success('组件已恢复');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: apiDeleteComponent,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['components'] });
+      message.success('组件已删除');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
   // ---- 事件处理 ----
@@ -208,15 +271,83 @@ export function ComponentsPage(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 80,
+      width: activeTab === 'archived' ? 160 : 120,
       render: (_: unknown, record: ComponentSummary) => (
-        <Button
-          type="link"
-          size="small"
-          onClick={() => setDetailId(record.id)}
-        >
-          详情
-        </Button>
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDetailId(record.id);
+            }}
+          >
+            详情
+          </Button>
+          {activeTab === 'archived' ? (
+            <>
+              <Popconfirm
+                title="确定恢复该组件？"
+                onConfirm={(e) => {
+                  e?.stopPropagation();
+                  restoreMutation.mutate(record.id);
+                }}
+                okText="恢复"
+                cancelText="取消"
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={(e) => e.stopPropagation()}
+                  loading={restoreMutation.isPending}
+                >
+                  恢复
+                </Button>
+              </Popconfirm>
+              <Popconfirm
+                title="确定彻底删除该组件？"
+                description="此操作不可撤销，将删除组件及其所有版本"
+                onConfirm={(e) => {
+                  e?.stopPropagation();
+                  deleteMutation.mutate(record.id);
+                }}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={(e) => e.stopPropagation()}
+                  loading={deleteMutation.isPending}
+                >
+                  删除
+                </Button>
+              </Popconfirm>
+            </>
+          ) : (
+            <Popconfirm
+              title="确定归档该组件？"
+              onConfirm={(e) => {
+                e?.stopPropagation();
+                archiveMutation.mutate(record.id);
+              }}
+              okText="归档"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={(e) => e.stopPropagation()}
+                loading={archiveMutation.isPending}
+              >
+                归档
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       ),
     },
   ];
@@ -249,7 +380,7 @@ export function ComponentsPage(): JSX.Element {
       <Card>
         <Tabs
           activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'modern' | 'classic')}
+          onChange={(key) => setActiveTab(key as 'modern' | 'classic' | 'archived')}
           items={[
             {
               key: 'modern',
@@ -285,6 +416,32 @@ export function ComponentsPage(): JSX.Element {
                   古法
                   <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
                     ({classicItems.length})
+                  </Text>
+                </span>
+              ),
+              children: (
+                <Table<ComponentSummary>
+                  columns={columns}
+                  dataSource={currentItems}
+                  rowKey="id"
+                  loading={isLoading}
+                  pagination={{ pageSize: 20, showSizeChanger: false }}
+                  size="middle"
+                  onRow={(record) => ({
+                    onClick: () => setDetailId(record.id),
+                    style: { cursor: 'pointer' },
+                  })}
+                />
+              ),
+            },
+            {
+              key: 'archived',
+              label: (
+                <span>
+                  <Tag color="default" style={{ marginRight: 4 }}>Archived</Tag>
+                  归档
+                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
+                    ({archivedItems.length})
                   </Text>
                 </span>
               ),
@@ -464,10 +621,10 @@ function ComponentDetailPanel({
           </Text>
         </Descriptions.Item>
         <Descriptions.Item label="发布时间">
-          {detail.published_at ?? '-'}
+          {fmtTime(detail.published_at)}
         </Descriptions.Item>
         <Descriptions.Item label="创建时间">
-          {detail.created_at}
+          {fmtTime(detail.created_at)}
         </Descriptions.Item>
       </Descriptions>
 
@@ -524,7 +681,7 @@ function ComponentDetailPanel({
                     </Text>
                   )}
                   <Text type="secondary" style={{ fontSize: 11 }}>
-                    {v.created_at.slice(0, 19)}
+                    {fmtTime(v.created_at)}
                   </Text>
                 </Space>
                 {!isCurrent && (

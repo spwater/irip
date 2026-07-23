@@ -22,6 +22,7 @@ DI 约定（与 V1 standards 路由一致）：
 """
 
 from datetime import datetime
+import json
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -451,6 +452,52 @@ async def get_flow(
     return _definition_to_response(definition, version)
 
 
+@flows_router.post(
+    "/{flow_id}/archive",
+    response_model=FlowDefinitionResponse,
+)
+async def archive_flow(
+    flow_id: UUID,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> FlowDefinitionResponse:
+    """归档流程定义（标记为 deprecated）。
+
+    Args:
+        flow_id: 流程定义 ID。
+        current_user: 当前认证用户（需 flow:manage 权限）。
+        service: 流程运行时服务。
+
+    Returns:
+        FlowDefinitionResponse: 归档后的流程详情。
+    """
+    definition = await service.deprecate_definition(flow_id)
+    return _definition_to_response(definition, None)
+
+
+@flows_router.post(
+    "/{flow_id}/restore",
+    response_model=FlowDefinitionResponse,
+)
+async def restore_flow(
+    flow_id: UUID,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> FlowDefinitionResponse:
+    """从归档恢复流程定义（deprecated → published）。
+
+    Args:
+        flow_id: 流程定义 ID。
+        current_user: 当前认证用户（需 flow:manage 权限）。
+        service: 流程运行时服务。
+
+    Returns:
+        FlowDefinitionResponse: 恢复后的流程详情。
+    """
+    definition = await service.restore_definition(flow_id)
+    return _definition_to_response(definition, None)
+
+
 # ---- 端点：执行管理 ----
 
 
@@ -643,4 +690,193 @@ async def get_run(
         node_executions=[
             _execution_to_response(e) for e in executions
         ],
+    )
+
+
+@flows_router.delete("/runs/{run_id}", status_code=204)
+async def delete_run(
+    run_id: UUID,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> None:
+    """删除执行记录及其所有节点执行记录。
+
+    Args:
+        run_id: 执行记录 ID。
+        current_user: 当前认证用户（需 flow:manage 权限）。
+        service: 流程运行时服务。
+    """
+    await service.delete_run(run_id)
+
+
+# ---- 端点：写入事实 ----
+
+
+class PersistFactRequest(BaseModel):
+    """写入事实请求。"""
+
+    object_id: UUID
+    template_version_id: UUID | None = None
+
+
+class PersistFactResponse(BaseModel):
+    """写入事实响应。"""
+
+    fact_id: UUID
+    revision: int
+    subject_id: str
+    raw_count: int
+    artifact_id: UUID | None = None
+
+
+@flows_router.post(
+    "/runs/{run_id}/persist-fact",
+    response_model=PersistFactResponse,
+    status_code=201,
+)
+async def persist_run_as_fact(
+    run_id: UUID,
+    body: PersistFactRequest,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> PersistFactResponse:
+    """将流程执行结果写入实验事实。
+
+    从成功的节点执行中提取数据（all_rows + header），
+    创建 Fact 记录，每行作为一条 raw observation。
+    如果执行时传了 path 且是 PDF 文件，同时上传 PDF 到 artifact 存储。
+    """
+    from packages.facts.service import FactService, CreateFactCommand
+    from packages.facts.observations import RawObservationInput
+    from packages.common.ids import new_id
+    from packages.common.artifacts import ArtifactService
+    from pathlib import Path
+
+    # 1. 获取执行记录和节点输出
+    run, executions = await service.get_run(run_id)
+
+    succeeded_nodes = [e for e in executions if e.status == "succeeded" and e.output_summary]
+    if not succeeded_nodes:
+        raise AppError(
+            code="validation_failed",
+            message="无成功的节点执行记录",
+            retryable=False,
+        )
+
+    # 2. 从节点输出提取数据
+    all_rows: list[dict[str, Any]] = []
+    header: dict[str, Any] = {}
+    source_path: str = ""
+    for exec_record in succeeded_nodes:
+        meta = exec_record.output_summary.get("_metadata", {})
+        if meta.get("all_rows"):
+            all_rows = meta["all_rows"]
+            header = meta.get("header", {})
+            break
+        if meta.get("preview_rows"):
+            all_rows = meta["preview_rows"]
+            header = meta.get("header", {})
+            break
+
+    if not all_rows:
+        raise AppError(
+            code="validation_failed",
+            message="执行结果中无可用的数据行",
+            retryable=False,
+        )
+
+    # 3. 从 input_snapshot 获取源文件路径
+    input_snapshot = run.input_snapshot or {}
+    source_path = str(input_snapshot.get("path", ""))
+
+    # 4. 上传原始 PDF + 提取数据 JSON 到 artifact 存储
+    pdf_artifact_id: UUID | None = None
+    data_artifact_id: UUID | None = None
+
+    try:
+        from apps.api.main import _build_s3_repo
+        s3_repo = _build_s3_repo()
+        artifact_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=service._factory,
+            organization_id=service._org_id,
+            uploaded_by=current_user.user_id,
+        )
+
+        # 4a. 上传原始 PDF
+        if source_path and source_path.lower().endswith(".pdf"):
+            file_path = Path(source_path)
+            if file_path.exists():
+                pdf_data = file_path.read_bytes()
+                pdf_ref = await artifact_svc.put_bytes(
+                    data=pdf_data,
+                    media_type="application/pdf",
+                    filename=file_path.name,
+                )
+                pdf_artifact_id = pdf_ref.artifact_id
+
+        # 4b. 上传提取的数据（整个 all_rows + header 作为 JSON）
+        export_payload = json.dumps(
+            {"metadata": header, "data": all_rows},
+            ensure_ascii=False,
+            indent=2,
+        ).encode("utf-8")
+        data_ref = await artifact_svc.put_bytes(
+            data=export_payload,
+            media_type="application/json",
+            filename=f"extract_{run_id}.json",
+        )
+        data_artifact_id = data_ref.artifact_id
+    except Exception:
+        pass
+
+    # 5. 只创建一条 raw observation 指向数据 artifact
+    raw_inputs: list[RawObservationInput] = []
+    if data_artifact_id:
+        raw_inputs.append(
+            RawObservationInput(
+                source_path=f"flow_run:{run_id}",
+                source_value=f"artifact:{data_artifact_id}",
+                source_unit=None,
+                source_name=source_path or f"flow_run:{run_id}",
+                artifact_id=data_artifact_id,
+                id=new_id(),
+            )
+        )
+
+    # 6. 创建事实
+    fact_service = FactService(
+        session_factory=service._factory,
+        organization_id=service._org_id,
+        actor_id=current_user.user_id,
+    )
+
+    all_artifacts: tuple[UUID, ...] = tuple(
+        aid for aid in [pdf_artifact_id, data_artifact_id] if aid is not None
+    )
+
+    command = CreateFactCommand(
+        fact_type="experiment_run",
+        template_version_id=body.template_version_id,
+        organization_id=service._org_id,
+        object_id=body.object_id,
+        subject_id=str(header.get("sample_name", run_id)),
+        started_at=run.started_at or run.created_at,
+        ended_at=run.completed_at,
+        method_version_id=None,
+        raw=tuple(raw_inputs),
+        normalized=(),
+        artifacts=all_artifacts,
+        idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
+        created_by=current_user.user_id,
+    )
+
+    ref = await fact_service.create(command)
+
+    return PersistFactResponse(
+        fact_id=str(ref.fact_id),
+        revision=ref.revision,
+        subject_id=ref.subject_id,
+        raw_count=len(all_rows),
+        artifact_id=data_artifact_id,
     )
