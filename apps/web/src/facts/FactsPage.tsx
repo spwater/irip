@@ -184,11 +184,11 @@ export function FactsPage(): JSX.Element {
                   />
                   <Select
                     placeholder="状态筛选"
-                    allowClear
                     style={{ width: 140 }}
-                    value={statusFilter}
-                    onChange={(val: string | undefined) => setStatusFilter(val)}
+                    value={statusFilter ?? '__all__'}
+                    onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
                     options={[
+                      { value: '__all__', label: '全部' },
                       { value: 'active', label: '活跃' },
                       { value: 'superseded', label: '已替代' },
                       { value: 'withdrawn', label: '已撤回' },

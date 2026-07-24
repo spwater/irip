@@ -1,5 +1,7 @@
 # 本地开发覆盖：把依赖容器端口暴露到宿主机，方便本机 uvicorn 直连
 # 用法：docker compose -f compose.yaml -f compose.override.local.yaml up -d
+#
+# 注意：文件参数已改为上传方式（上传到 MinIO），不再需要挂载宿主机目录。
 services:
   postgres:
     ports:
@@ -11,3 +13,13 @@ services:
     ports:
       - "9000:9000"
       - "9001:9001"
+  web:
+    ports:
+      - "8080:80"
+  # 开发模式禁用一次性运维容器，避免每次 up 重复执行
+  bootstrap:
+    profiles: ["ops"]
+  backup:
+    profiles: ["ops"]
+  restore:
+    profiles: ["ops"]

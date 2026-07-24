@@ -10,8 +10,12 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
+  Typography,
   message,
 } from 'antd';
+
+const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -224,15 +228,21 @@ export function EquipmentPage({
   // ---- 表格列定义 ----
   const columns: ColumnsType<EquipmentListItem> = [
     {
-      title: '编码',
-      dataIndex: 'code',
-      key: 'code',
-      width: 160,
-    },
-    {
       title: '名称',
-      dataIndex: 'display_name',
-      key: 'display_name',
+      key: 'name',
+      width: 180,
+      render: (_: unknown, record: EquipmentListItem) => (
+        <Tooltip title={record.description || undefined} placement="topLeft">
+          <div>
+            <Text strong>{record.display_name}</Text>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.code}
+              </Text>
+            </div>
+          </div>
+        </Tooltip>
+      ),
     },
     {
       title: '所属机构',
@@ -313,22 +323,21 @@ export function EquipmentPage({
         </Button>
         <Select
           placeholder="状态筛选"
-          allowClear
           style={{ width: 140 }}
-          value={statusFilter}
-          onChange={(val: string | undefined) => setStatusFilter(val)}
+          value={statusFilter ?? '__all__'}
+          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
           options={[
+            { value: '__all__', label: '全部' },
             { value: 'active', label: '启用' },
             { value: 'disabled', label: '禁用' },
           ]}
         />
         <Select
           placeholder="机构筛选"
-          allowClear
           style={{ width: 200 }}
-          value={deptFilter}
-          onChange={(val: string | undefined) => setDeptFilter(val)}
-          options={deptOptions}
+          value={deptFilter ?? '__all__'}
+          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
         />
       </Space>
 

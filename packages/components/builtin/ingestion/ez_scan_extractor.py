@@ -4,7 +4,9 @@
 所有可配置项通过 manifest 参数传入，代码中无硬编码。
 
 参数（全部在 manifest 定义，网页可编辑）：
-- path: 文件路径（必填）
+- path: 文件路径（必填），支持两种格式：
+  - artifact:{artifact_id} — 从 MinIO 下载工件到临时文件再处理（推荐）
+  - 文件系统路径 — 直接读取本地文件（兼容旧格式）
 - prompt: LLM 提示词（包含角色设定 + 提取指令 + 输出格式要求）
 - file_engine: 文件读取方式（pymupdf / image / raw）
 - image_dpi: image 模式渲染分辨率
@@ -13,9 +15,12 @@
 """
 
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -51,7 +56,14 @@ class EZScanExtractor:
                 retryable=False,
             )
 
-        file_path: Path = Path(path_str)
+        # 支持 artifact:{artifact_id} 格式：从 MinIO 下载到临时文件
+        # 兼容旧格式：直接使用文件系统路径
+        if path_str.startswith("artifact:"):
+            file_path = await self._download_artifact_to_temp(
+                context, path_str[len("artifact:"):]
+            )
+        else:
+            file_path = Path(path_str)
 
         # 1. 提取文件文本
         content = _extract_text(file_path, pdf_engine, image_dpi)
@@ -194,6 +206,48 @@ class EZScanExtractor:
             },
         )
 
+    @staticmethod
+    async def _download_artifact_to_temp(
+        context: ComponentContext,
+        artifact_id_str: str,
+    ) -> Path:
+        """从 MinIO 下载工件到临时文件，返回临时文件路径。
+
+        通过 context.artifact_service.get_bytes() 下载工件内容，
+        写入临时文件，返回 Path 对象。临时文件由调用方负责清理。
+
+        Args:
+            context: 组件执行上下文（提供 artifact_service）。
+            artifact_id_str: 工件 ID 字符串。
+
+        Returns:
+            Path: 临时文件路径。
+
+        Raises:
+            AppError: code="missing_dependency"，当 artifact_service 未注入。
+            AppError: code="not_found"，当工件不存在。
+        """
+        artifact_service = context.artifact_service
+        if artifact_service is None:
+            raise AppError(
+                code="missing_dependency",
+                message="artifact_service 未注入，无法下载 artifact",
+                retryable=False,
+                fields={},
+            )
+
+        artifact_id = UUID(artifact_id_str)
+        data: bytes = await artifact_service.get_bytes(artifact_id)
+
+        # 写入临时文件
+        fd, temp_path = tempfile.mkstemp(suffix=_guess_suffix(data))
+        try:
+            os.write(fd, data)
+        finally:
+            os.close(fd)
+
+        return Path(temp_path)
+
 
 def _extract_text(file_path: Path, engine: str = "pymupdf", image_dpi: int = 200) -> str | list[str]:
     """从文件中提取文本内容。
@@ -279,3 +333,28 @@ def _parse_llm_json(content: str) -> dict[str, Any]:
         message=f"无法从 LLM 响应中解析 JSON：{content[:200]}",
         retryable=True,
     )
+
+
+def _guess_suffix(data: bytes) -> str:
+    """根据文件内容魔数推断文件后缀。
+
+    通过检查文件头部的魔数字节判断文件类型，返回合适的后缀名。
+    支持识别 PDF、PNG、JPEG、Office Open XML（xlsx/docx）格式。
+    无法识别时返回空字符串（由系统分配默认后缀）。
+
+    Args:
+        data: 文件内容字节。
+
+    Returns:
+        str: 文件后缀（如 ``".pdf"``），无法识别返回 ``""``。
+    """
+    if data[:4] == b"%PDF":
+        return ".pdf"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if data[:2] == b"\xff\xd8":
+        return ".jpg"
+    # Office Open XML (xlsx/docx) — ZIP 格式，魔数 PK\x03\x04
+    if data[:4] == b"PK\x03\x04":
+        return ".xlsx"
+    return ""

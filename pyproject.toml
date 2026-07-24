@@ -28,6 +28,12 @@ dependencies = [
   "openpyxl>=3.1,<4",
   "scikit-learn>=1.5,<2",
   "joblib>=1.4,<2",
+  "pymupdf>=1.24,<2",
+  "pdfplumber>=0.11,<1",
+  "sqlparse>=0.5,<1",
+  "tabulate>=0.9,<1",
+  "numpy>=2.0,<3",
+  "pandas>=2.2,<3",
 ]
 
 [project.optional-dependencies]

@@ -126,6 +126,7 @@ class EquipmentListItem(BaseModel):
     id: str
     code: str
     display_name: str
+    description: str | None
     department_id: str
     department_name: str
     status: str
@@ -242,6 +243,7 @@ async def list_equipment(
             id=str(equip.id),
             code=equip.code,
             display_name=equip.display_name,
+            description=equip.description,
             department_id=str(equip.department_id),
             department_name=dept_name,
             status=equip.status,

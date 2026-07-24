@@ -220,11 +220,11 @@ export function AuditPage(): JSX.Element {
         <Space wrap>
           <Select
             placeholder="对象类型"
-            allowClear
             style={{ width: 160 }}
-            value={objectType}
-            onChange={(val: string | undefined) => setObjectType(val)}
+            value={objectType ?? '__all__'}
+            onChange={(val: string) => setObjectType(val === '__all__' ? undefined : val)}
             options={[
+              { value: '__all__', label: '全部' },
               { value: 'app_user', label: '用户' },
               { value: 'scope_grant', label: '授权' },
               { value: 'fact', label: '事实' },

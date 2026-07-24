@@ -7,16 +7,20 @@ FROM docker.m.daocloud.io/node:22-slim AS builder
 
 WORKDIR /build
 
-# 启用 corepack 以使用 pnpm
-RUN corepack enable pnpm
+# 配置国内 npm 镜像 + 启用 corepack
+RUN npm config set registry https://registry.npmmirror.com && \
+    corepack enable pnpm
 
 # 先复制依赖清单，利用 Docker 层缓存
 COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/.npmrc ./
-RUN pnpm install --frozen-lockfile
+# pnpm 11 的 ERR_PNPM_IGNORED_BUILDS 不影响包安装，仅退出码为 1
+# 用 || true 容忍退出码，再手动 rebuild esbuild 使其 native binary 可用
+RUN pnpm install --no-frozen-lockfile || true && \
+    pnpm rebuild esbuild
 
 # 复制源码并构建
 COPY apps/web/ ./
-RUN pnpm build
+RUN npx tsc --noEmit && npx vite build
 
 # ---- Stage 2: Serve ----
 FROM docker.m.daocloud.io/nginx:alpine

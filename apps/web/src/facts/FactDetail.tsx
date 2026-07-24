@@ -19,6 +19,14 @@ import {
 
 const { Text } = Typography;
 
+/** 把 UTC 时间字符串转成本地时间显示 */
+function fmtTime(v: string | null | undefined): string {
+  if (!v) return '-';
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return v;
+  return d.toLocaleString('zh-CN', { hour12: false });
+}
+
 /** 状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
   active: 'green',
@@ -68,6 +76,9 @@ export function FactDetail(): JSX.Element {
   // ---- 提取干净的行数据 ----
   const allData: Record<string, unknown>[] = factData?.data ?? [];
   const artifactMetadata: Record<string, unknown> = factData?.metadata ?? {};
+
+  // ---- 提取任务信息（实时反查）----
+  const taskInfo = factData?.task_info;
 
   // ---- 构建展示数据 ----
   const metadata = fact
@@ -130,6 +141,29 @@ export function FactDetail(): JSX.Element {
           </Descriptions.Item>
         </Descriptions>
       </Card>
+
+      {/* 任务信息 */}
+      {taskInfo && (
+        <Card title="任务信息" style={{ marginBottom: 16 }}>
+          <Descriptions bordered column={2}>
+            <Descriptions.Item label="任务名称">
+              {taskInfo.task_name ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="任务来源">
+              {taskInfo.task_source ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="项目名称">
+              {taskInfo.project_name ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="数据接口">
+              {taskInfo.data_interface ?? '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="创建时间">
+              {fmtTime(taskInfo.created_at)}
+            </Descriptions.Item>
+          </Descriptions>
+        </Card>
+      )}
 
       {/* 修订历史 */}
       <Card title="修订历史" style={{ marginBottom: 16 }}>

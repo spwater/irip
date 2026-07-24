@@ -18,7 +18,6 @@ export function GovernanceConsole(): JSX.Element {
   return (
     <div>
       <Title level={2}>平台治理</Title>
-      <Paragraph type="secondary">用户管理、范围授权、审计事件、系统健康、AI 配置与作业中心</Paragraph>
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key)}

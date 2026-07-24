@@ -81,6 +81,8 @@ class FlowDefinition(Base):
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    project_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -1038,6 +1040,19 @@ class FlowRuntimeService:
             )
             session.add(run)
             await session.flush()
+
+            # 发送 Celery task 触发异步执行
+            from apps.worker.celery_app import celery_app
+            celery_app.send_task(
+                "irip.flow.execute",
+                args=[str(job_ref.job_id), {
+                    "run_id": str(run_id),
+                    "flow_version_id": str(flow_version_id),
+                    "organization_id": str(self._org_id),
+                }],
+                queue="irip-jobs",
+            )
+
             return run
 
     async def execute(self, run_id: UUID) -> None:
@@ -1777,6 +1792,72 @@ class FlowRuntimeService:
                 sa.delete(FlowRun).where(
                     FlowRun.organization_id == self._org_id,
                     FlowRun.id == run_id,
+                )
+            )
+            await session.flush()
+
+    async def delete_flow(self, flow_id: UUID) -> None:
+        """删除流程定义及其所有版本和运行记录。
+
+        删除顺序（手动级联，避免依赖数据库 FK CASCADE）：
+        1. 查询该流程定义的所有版本 ID；
+        2. 删除这些版本关联的所有运行记录的节点执行记录；
+        3. 删除运行记录；
+        4. 删除流程版本；
+        5. 删除流程定义本身。
+
+        Args:
+            flow_id: 流程定义 ID。
+        """
+        async with session_scope(self._factory) as session:
+            # 1. 查询该流程定义的所有版本 ID
+            version_ids_result = await session.execute(
+                sa.select(FlowDefinitionVersionORM.id).where(
+                    FlowDefinitionVersionORM.flow_definition_id == flow_id
+                )
+            )
+            version_ids: list[UUID] = [
+                row[0] for row in version_ids_result.all()
+            ]
+
+            if version_ids:
+                # 2. 删除这些版本关联的所有运行记录的节点执行记录
+                run_ids_result = await session.execute(
+                    sa.select(FlowRun.id).where(
+                        FlowRun.flow_version_id.in_(version_ids)
+                    )
+                )
+                run_ids: list[UUID] = [
+                    row[0] for row in run_ids_result.all()
+                ]
+
+                if run_ids:
+                    await session.execute(
+                        sa.delete(FlowNodeExecution).where(
+                            FlowNodeExecution.flow_run_id.in_(run_ids)
+                        )
+                    )
+
+                    # 3. 删除运行记录
+                    await session.execute(
+                        sa.delete(FlowRun).where(
+                            FlowRun.flow_version_id.in_(version_ids)
+                        )
+                    )
+
+                # 4. 删除流程版本
+                await session.execute(
+                    sa.delete(FlowDefinitionVersionORM).where(
+                        FlowDefinitionVersionORM.flow_definition_id
+                        == flow_id
+                    )
+                )
+
+            # 5. 删除流程定义本身
+            await session.execute(
+                sa.delete(FlowDefinition).where(
+                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.id == flow_id,
                 )
             )
             await session.flush()

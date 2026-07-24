@@ -1,22 +1,31 @@
-"""文件浏览路由：为前端组件参数（如 llm_extractor 的 path）提供服务器端文件选择。
+"""文件浏览与上传路由：为前端组件参数（如 llm_extractor 的 path）提供文件选择与上传。
 
 端点：
-  GET /api/v1/files/browse?path=xxx  — 列出指定目录内容（flow:read）
+  GET  /api/v1/files/browse?path=xxx  — 列出指定目录内容（flow:read）
+  POST /api/v1/files/upload           — 上传文件到 MinIO，返回 artifact_id（flow:read）
 
 安全约定：
 - 浏览根目录限制为环境变量 IRIP_FILE_BROWSE_ROOT（默认项目根目录）；
 - 解析路径并验证不超出根目录（防止目录穿越）；
-- 隐藏文件（.开头）不返回。
+- 隐藏文件（.开头）不返回；
+- 上传文件大小上限 100 MiB，媒体类型必须在白名单中。
 """
 
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, UploadFile
 from pydantic import BaseModel
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.routers.uploads import get_artifact_service
+from packages.common.artifacts import (
+    ALLOWED_MEDIA_TYPES,
+    MAX_UPLOAD_SIZE_BYTES,
+    ArtifactService,
+)
+from packages.common.errors import AppError
 
 #: 路由实例。
 files_router = APIRouter(prefix="/api/v1/files", tags=["files"])
@@ -29,6 +38,46 @@ _BROWSE_ROOT = os.environ.get(
 
 #: 需 flow:read 权限的当前用户依赖。
 ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
+
+#: 需 flow:read 权限 + 工件服务的上传依赖。
+UploadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
+ArtifactServiceDep = Annotated[ArtifactService, Depends(get_artifact_service)]
+
+#: 文件扩展名 → 媒体类型映射（用于从文件名推断 MIME 类型）。
+_EXTENSION_MEDIA_TYPE_MAP: dict[str, str] = {
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".pdf": "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".json": "application/json",
+}
+
+
+def _guess_media_type(filename: str, content_type: str | None) -> str:
+    """根据文件名和上传 Content-Type 推断媒体类型。
+
+    优先使用上传时的 Content-Type（若在白名单中），
+    否则根据文件扩展名推断，最后回退到 application/octet-stream。
+
+    Args:
+        filename: 原始文件名。
+        content_type: 上传请求中的 Content-Type。
+
+    Returns:
+        str: 推断出的媒体类型。
+    """
+    if content_type and content_type in ALLOWED_MEDIA_TYPES:
+        return content_type
+
+    ext: str = os.path.splitext(filename)[1].lower()
+    if ext in _EXTENSION_MEDIA_TYPE_MAP:
+        return _EXTENSION_MEDIA_TYPE_MAP[ext]
+
+    return "application/octet-stream"
 
 
 class FileItem(BaseModel):
@@ -108,4 +157,84 @@ async def browse_files(
         current_path=rel_path,
         parent_path=parent,
         items=items,
+    )
+
+
+class UploadResponse(BaseModel):
+    """文件上传响应。"""
+
+    artifact_id: str  # MinIO 中的 artifact ID
+    filename: str  # 原始文件名
+    size: int  # 文件大小（字节）
+
+
+@files_router.post("/upload", response_model=UploadResponse)
+async def upload_file(
+    current_user: UploadUserDep,
+    service: ArtifactServiceDep,
+    file: UploadFile,
+) -> UploadResponse:
+    """上传文件到 MinIO，返回 artifact_id 供后续使用。
+
+    流程：
+    1. 读取上传文件内容到内存；
+    2. 校验文件大小（上限 100 MiB）；
+    3. 推断媒体类型（优先 Content-Type，其次文件扩展名）；
+    4. 通过 ArtifactService.put_bytes 上传到 MinIO（含去重）；
+    5. 返回 artifact_id + 原始文件名 + 大小。
+
+    Args:
+        current_user: 当前认证用户（需 flow:read 权限）。
+        service: 工件服务（DI 注入）。
+        file: 上传的文件对象。
+
+    Returns:
+        UploadResponse: 上传响应（artifact_id + filename + size）。
+
+    Raises:
+        AppError: code="file_too_large"，当文件超过 100 MiB。
+        AppError: code="unsupported_media_type"，当媒体类型不在白名单。
+    """
+    data: bytes = await file.read()
+
+    size: int = len(data)
+    if size > MAX_UPLOAD_SIZE_BYTES:
+        raise AppError(
+            code="file_too_large",
+            message=(
+                f"文件大小 {size} 超过上限 "
+                f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
+            ),
+            retryable=False,
+            fields={
+                "size_bytes": size,
+                "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+            },
+        )
+
+    filename: str = file.filename or "unnamed"
+    content_type: str | None = file.content_type
+    media_type: str = _guess_media_type(filename, content_type)
+
+    if media_type not in ALLOWED_MEDIA_TYPES:
+        raise AppError(
+            code="unsupported_media_type",
+            message=(
+                f"不支持的文件类型: {media_type}（文件名: {filename}）。"
+                f"允许的类型: pdf, txt, csv, json, xlsx, docx, png, jpg"
+            ),
+            retryable=False,
+            fields={"media_type": media_type, "filename": filename},
+        )
+
+    ref = await service.put_bytes(
+        data=data,
+        media_type=media_type,
+        filename=filename,
+    )
+
+    return UploadResponse(
+        artifact_id=str(ref.artifact_id),
+        filename=filename,
+        size=size,
     )

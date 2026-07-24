@@ -4,7 +4,7 @@ import { FlowDetail } from '@/components/FlowDetail';
 import { FactsPage } from '@/facts/FactsPage';
 import { ParameterPage } from '@/parameters/ParameterPage';
 
-const { Title, Paragraph } = Typography;
+const { Title } = Typography;
 
 /** 合法的 Tab key 集合。 */
 const VALID_TABS = ['flows', 'facts', 'parameters'] as const;
@@ -38,7 +38,6 @@ export function LabOpsPage(): JSX.Element {
   return (
     <div>
       <Title level={2}>实验室运营</Title>
-      <Paragraph type="secondary">实验执行、实验记录与数据抽取</Paragraph>
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}

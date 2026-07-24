@@ -2,18 +2,23 @@ import { useState } from 'react';
 import {
   Button,
   Card,
+  Col,
   Descriptions,
   Drawer,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Radio,
+  Row,
   Select,
   Space,
   Spin,
+  Switch,
   Table,
   Tabs,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -84,6 +89,249 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/** 表单字段名称集合（表单模式共用） */
+const FORM_FIELD_NAMES = [
+  'name',
+  'display_name',
+  'description',
+  'prompt',
+  'file_engine',
+  'experimental_object_code',
+] as const;
+
+/** 表单模式的初始（清空）状态：file_engine 默认 pymupdf，其余为空 */
+const FRESH_FORM_VALUES: Record<string, string | undefined> = {
+  name: undefined,
+  display_name: undefined,
+  description: undefined,
+  prompt: undefined,
+  file_engine: 'pymupdf',
+  experimental_object_code: undefined,
+};
+
+/** 表单模式提交时的字段值 */
+interface ComponentFormValues {
+  name: string;
+  display_name: string;
+  description: string;
+  prompt: string;
+  file_engine: string;
+  experimental_object_code: string;
+}
+
+/**
+ * 转义 YAML 双引号字符串中的特殊字符。
+ *
+ * YAML 双引号字符串支持反斜杠转义序列，可安全承载换行、引号、反斜杠等
+ * 任意字符，适合 prompt 这类多行文本。转义顺序：先反斜杠，再其余字符。
+ */
+function yamlEscapeDouble(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+}
+
+/**
+ * 把表单字段值组装成 ingestion 组件的 manifest YAML。
+ *
+ * 固定结构：version 固定 "1.0.0"（后端自动递增），kind 固定 ingestion，
+ * inputs 固定 []，outputs 固定 observation_table。
+ */
+function buildManifestYaml(v: ComponentFormValues): string {
+  const name = v.name ?? '';
+  const displayName = v.display_name ?? '';
+  const description = v.description ?? '';
+  const prompt = v.prompt ?? '';
+  const fileEngine = v.file_engine ?? 'pymupdf';
+  const expCode = v.experimental_object_code ?? '';
+  const lines: string[] = [
+    `name: ${name}`,
+    'version: "1.0.0"',
+    'kind: ingestion',
+    `display_name: "${yamlEscapeDouble(displayName)}"`,
+    `description: "${yamlEscapeDouble(description)}"`,
+    'inputs: []',
+    'outputs:',
+    '  - name: observations',
+    '    data_type: observation_table',
+    'parameters:',
+    '  type: object',
+    '  required: []',
+    '  properties:',
+    '    path:',
+    '      type: string',
+    '      description: "文件路径，执行时上传"',
+    '    prompt:',
+    '      type: string',
+    '      description: "LLM 提示词"',
+    `      default: "${yamlEscapeDouble(prompt)}"`,
+    '    file_engine:',
+    '      type: string',
+    '      description: "文件读取方式"',
+    `      default: "${yamlEscapeDouble(fileEngine)}"`,
+    '    experimental_object_code:',
+    '      type: string',
+    '      description: "关联实验对象编码"',
+    `      default: "${yamlEscapeDouble(expCode)}"`,
+    'timeout_seconds: 300',
+  ];
+  return lines.join('\n');
+}
+
+/** 实验对象下拉选项类型 */
+type ObjectOption = { value: string; label: string };
+
+/**
+ * 从 YAML 文本中尽量提取表单字段值（容错优先）。
+ *
+ * 每个字段独立正则匹配，提取失败则留 undefined。不抛异常、不报错。
+ * 用于高级模式 → 表单模式切换时尽量保留用户已编辑的内容。
+ */
+function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
+  const result: Partial<ComponentFormValues> = {};
+
+  // name: xxx（顶层，无引号）—— 用 [ \t]* 代替 \s* 避免空值时跨行匹配下一行内容
+  const nameMatch = yaml.match(/^name:[ \t]*(\S+)/m);
+  if (nameMatch) result.name = nameMatch[1];
+
+  // display_name: "xxx" 或 display_name: xxx
+  const dnMatch = yaml.match(/^display_name:[ \t]*["']?(.*?)["']?[ \t]*$/m);
+  if (dnMatch) result.display_name = dnMatch[1];
+
+  // description: "xxx" 或 description: xxx
+  const descMatch = yaml.match(/^description:[ \t]*["']?(.*?)["']?[ \t]*$/m);
+  if (descMatch) result.description = descMatch[1];
+
+  // prompt 的 default 值（parameters → properties → prompt → default）
+  const promptMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
+  if (promptMatch) result.prompt = promptMatch[1];
+
+  // file_engine 的 default 值
+  const feMatch = yaml.match(/file_engine:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
+  if (feMatch) result.file_engine = feMatch[1];
+
+  // experimental_object_code 的 default 值
+  const eocMatch = yaml.match(/experimental_object_code:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
+  if (eocMatch) result.experimental_object_code = eocMatch[1];
+
+  return result;
+}
+
+/** 组件表单字段（表单模式共用，绑定到外层 Form 上下文） */
+function ComponentFormFields({
+  objectOptions,
+  equipmentOptions,
+  objectMap,
+}: {
+  objectOptions: ObjectOption[];
+  equipmentOptions: ObjectOption[];
+  objectMap: Map<string, IndustrialObject>;
+}): JSX.Element {
+  const [eqFilter, setEqFilter] = useState<string | undefined>(undefined);
+
+  // 按选中的设备筛选实验对象选项
+  const filteredObjectOptions = eqFilter
+    ? objectOptions.filter((opt) => {
+        const obj = objectMap.get(opt.value);
+        return obj?.equipment_id === eqFilter;
+      })
+    : objectOptions;
+
+  return (
+    <>
+      <Row gutter={16}>
+        <Col span={12}>
+          <Form.Item
+            name="name"
+            label="组件编码"
+            rules={[
+              { required: true, message: '请输入组件编码' },
+              {
+                pattern: /^[a-z][a-z0-9_]*$/,
+                message: '仅允许小写字母/数字/下划线，且以字母开头',
+              },
+            ]}
+          >
+            <Input placeholder="例如：xrf_ez_extractor" />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item
+            name="display_name"
+            label="组件名称"
+            rules={[{ required: true, message: '请输入组件名称' }]}
+          >
+            <Input placeholder="例如：XRF-EZ扫描提取器" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Form.Item
+        name="description"
+        label="描述"
+        rules={[{ required: true, message: '请输入描述' }]}
+      >
+        <Input placeholder="LLM 驱动的文档提取组件" />
+      </Form.Item>
+      <Form.Item
+        name="prompt"
+        label="LLM 提示词"
+        rules={[{ required: true, message: '请输入 LLM 提示词' }]}
+      >
+        <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
+      </Form.Item>
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: 'inline-block', marginRight: 12, lineHeight: '32px', fontWeight: 500 }}>
+          文件读取方式
+        </div>
+        <Form.Item
+          name="file_engine"
+          initialValue="pymupdf"
+          rules={[{ required: true, message: '请选择文件读取方式' }]}
+          style={{ display: 'inline-block', marginBottom: 0 }}
+        >
+          <Radio.Group
+            optionType="button"
+            buttonStyle="solid"
+            options={[
+              { value: 'pymupdf', label: 'pymupdf' },
+              { value: 'image', label: 'image' },
+              { value: 'raw', label: 'raw' },
+            ]}
+          />
+        </Form.Item>
+      </div>
+      <Row gutter={16}>
+        <Col span={12}>
+          <Form.Item label="关联设备筛选">
+            <Select
+              placeholder="按设备筛选实验对象"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={equipmentOptions}
+              onChange={(val: string | undefined) => setEqFilter(val ?? undefined)}
+            />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
+          <Form.Item name="experimental_object_code" label="实验对象">
+            <Select
+              placeholder="请选择实验对象"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={filteredObjectOptions}
+            />
+          </Form.Item>
+        </Col>
+      </Row>
+    </>
+  );
+}
+
 /**
  * 工具箱页面
  *
@@ -97,6 +345,10 @@ export function ComponentsPage(): JSX.Element {
   const [kindFilter, setKindFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  // 新建工具：默认表单模式（高级模式关闭）
+  const [advancedMode, setAdvancedMode] = useState(false);
+  // 编辑组件：默认高级模式（已有完整 YAML）
+  const [editAdvancedMode, setEditAdvancedMode] = useState(true);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -116,6 +368,11 @@ export function ComponentsPage(): JSX.Element {
   const objectMap = new Map<string, IndustrialObject>(
     (objectData?.items ?? []).map((o) => [o.code, o]),
   );
+  // 实验对象下拉选项（显示 display_name，值为 code，用于表单模式的选择器）
+  const objectOptions: ObjectOption[] = (objectData?.items ?? []).map((o) => ({
+    value: o.code,
+    label: o.display_name,
+  }));
 
   // ---- 设备列表查询（用于通过实验对象的 equipment_id 显示关联设备名）----
   const { data: equipmentData } = useQuery({
@@ -126,6 +383,12 @@ export function ComponentsPage(): JSX.Element {
   const equipmentMap = new Map(
     (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
   );
+
+  // 设备选项（用于表单内设备筛选）
+  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
+    value: e.id,
+    label: e.display_name,
+  }));
 
   const allItems: ComponentSummary[] = (() => {
     const items = data?.items ?? [];
@@ -169,6 +432,9 @@ export function ComponentsPage(): JSX.Element {
       setEditModalOpen(false);
       form.resetFields();
       editForm.resetFields();
+      // 重置模式：新建回到表单模式，编辑回到高级模式
+      setAdvancedMode(false);
+      setEditAdvancedMode(true);
       message.success('组件发布成功');
     },
     onError: (err: unknown) => {
@@ -207,13 +473,63 @@ export function ComponentsPage(): JSX.Element {
   // ---- 事件处理 ----
   const handleOpenModal = (): void => {
     form.resetFields();
+    setAdvancedMode(false);
     setModalOpen(true);
+  };
+
+  /**
+   * 新建工具模式切换：尽量保留内容，能匹配就匹配，不能匹配就留空。
+   * - 表单 → 高级：用 buildManifestYaml 把表单值生成 YAML 填入高级模式
+   * - 高级 → 表单：用 parseYamlToFormValues 从 YAML 提取字段填入表单
+   */
+  const handleNewModeSwitch = (checked: boolean): void => {
+    if (checked) {
+      // 表单 → 高级：从表单值生成 YAML
+      const formValues = form.getFieldsValue([...FORM_FIELD_NAMES]);
+      const yaml = buildManifestYaml({
+        name: (formValues.name as string) ?? '',
+        display_name: (formValues.display_name as string) ?? '',
+        description: (formValues.description as string) ?? '',
+        prompt: (formValues.prompt as string) ?? '',
+        file_engine: (formValues.file_engine as string) ?? 'pymupdf',
+        experimental_object_code: (formValues.experimental_object_code as string) ?? '',
+      });
+      form.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
+    } else {
+      // 高级 → 表单：从 YAML 提取字段
+      const yaml = (form.getFieldValue('manifest_yaml') as string) ?? '';
+      const parsed = parseYamlToFormValues(yaml);
+      form.setFieldsValue({
+        ...FRESH_FORM_VALUES,
+        name: parsed.name,
+        display_name: parsed.display_name,
+        description: parsed.description,
+        prompt: parsed.prompt,
+        file_engine: parsed.file_engine ?? 'pymupdf',
+        experimental_object_code: parsed.experimental_object_code,
+        manifest_yaml: undefined,
+      });
+    }
+    setAdvancedMode(checked);
   };
 
   const handlePublish = async (): Promise<void> => {
     try {
-      const values = await form.validateFields();
-      publishMutation.mutate({ manifest_yaml: values.manifest_yaml });
+      if (advancedMode) {
+        const values = await form.validateFields(['manifest_yaml']);
+        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string });
+      } else {
+        const values = await form.validateFields([...FORM_FIELD_NAMES]);
+        const yaml = buildManifestYaml({
+          name: values.name as string,
+          display_name: values.display_name as string,
+          description: values.description as string,
+          prompt: values.prompt as string,
+          file_engine: values.file_engine as string,
+          experimental_object_code: (values.experimental_object_code as string) ?? '',
+        });
+        publishMutation.mutate({ manifest_yaml: yaml });
+      }
     } catch {
       // 表单校验失败
     }
@@ -228,14 +544,66 @@ export function ComponentsPage(): JSX.Element {
       const newVersion = `${versionMatch[1]}.${versionMatch[2]}.${Number(versionMatch[3]) + 1}`;
       yaml = yaml.replace(/^version:\s*["']?\d+\.\d+\.\d+["']?/m, `version: "${newVersion}"`);
     }
+    editForm.resetFields();
     editForm.setFieldsValue({ manifest_yaml: yaml });
+    // 编辑默认高级模式（有完整 YAML）
+    setEditAdvancedMode(true);
     setEditModalOpen(true);
+  };
+
+  /**
+   * 编辑组件模式切换：与新建工具一致，尽量保留内容。
+   * - 表单 → 高级：用 buildManifestYaml 生成 YAML
+   * - 高级 → 表单：用 parseYamlToFormValues 提取字段
+   */
+  const handleEditModeSwitch = (checked: boolean): void => {
+    if (checked) {
+      // 表单 → 高级
+      const formValues = editForm.getFieldsValue([...FORM_FIELD_NAMES]);
+      const yaml = buildManifestYaml({
+        name: (formValues.name as string) ?? '',
+        display_name: (formValues.display_name as string) ?? '',
+        description: (formValues.description as string) ?? '',
+        prompt: (formValues.prompt as string) ?? '',
+        file_engine: (formValues.file_engine as string) ?? 'pymupdf',
+        experimental_object_code: (formValues.experimental_object_code as string) ?? '',
+      });
+      editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
+    } else {
+      // 高级 → 表单
+      const yaml = (editForm.getFieldValue('manifest_yaml') as string) ?? '';
+      const parsed = parseYamlToFormValues(yaml);
+      editForm.setFieldsValue({
+        ...FRESH_FORM_VALUES,
+        name: parsed.name,
+        display_name: parsed.display_name,
+        description: parsed.description,
+        prompt: parsed.prompt,
+        file_engine: parsed.file_engine ?? 'pymupdf',
+        experimental_object_code: parsed.experimental_object_code,
+        manifest_yaml: undefined,
+      });
+    }
+    setEditAdvancedMode(checked);
   };
 
   const handleEditPublish = async (): Promise<void> => {
     try {
-      const values = await editForm.validateFields();
-      publishMutation.mutate({ manifest_yaml: values.manifest_yaml });
+      if (editAdvancedMode) {
+        const values = await editForm.validateFields(['manifest_yaml']);
+        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string });
+      } else {
+        const values = await editForm.validateFields([...FORM_FIELD_NAMES]);
+        const yaml = buildManifestYaml({
+          name: values.name as string,
+          display_name: values.display_name as string,
+          description: values.description as string,
+          prompt: values.prompt as string,
+          file_engine: values.file_engine as string,
+          experimental_object_code: (values.experimental_object_code as string) ?? '',
+        });
+        publishMutation.mutate({ manifest_yaml: yaml });
+      }
     } catch {
       // 表单校验失败
     }
@@ -248,14 +616,18 @@ export function ComponentsPage(): JSX.Element {
       key: 'name',
       width: 200,
       render: (_: unknown, record: ComponentSummary) => (
-        <div>
-          <Text strong>{record.display_name || record.name}</Text>
-          {record.display_name && (
-            <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
-              {record.name}
-            </Text>
-          )}
-        </div>
+        <Tooltip title={record.description || undefined} placement="topLeft">
+          <div>
+            <Text strong>{record.display_name || record.name}</Text>
+            {record.display_name && (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {record.name}
+                </Text>
+              </div>
+            )}
+          </div>
+        </Tooltip>
       ),
     },
     {
@@ -293,7 +665,7 @@ export function ComponentsPage(): JSX.Element {
             {eqName && (
               <div>
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                  设备: {eqName}
+                  {eqName}
                 </Text>
               </div>
             )}
@@ -404,11 +776,11 @@ export function ComponentsPage(): JSX.Element {
         </Button>
         <Select
           placeholder="类别筛选"
-          allowClear
           style={{ width: 160 }}
-          value={kindFilter}
-          onChange={(val: string | undefined) => setKindFilter(val)}
+          value={kindFilter ?? '__all__'}
+          onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
           options={[
+            { value: '__all__', label: '全部' },
             { value: 'ingestion', label: '数据接入' },
             { value: 'transform', label: '数据转换' },
             { value: 'quality', label: '质量校验' },
@@ -506,7 +878,7 @@ export function ComponentsPage(): JSX.Element {
         />
       </Card>
 
-      {/* 新建工具 Modal */}
+      {/* 新建工具 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
       <Modal
         title="新建工具"
         open={modalOpen}
@@ -514,27 +886,41 @@ export function ComponentsPage(): JSX.Element {
         onCancel={() => {
           setModalOpen(false);
           form.resetFields();
+          setAdvancedMode(false);
         }}
         confirmLoading={publishMutation.isPending}
         okText="发布"
         cancelText="取消"
         width={680}
       >
+        <div style={{ marginBottom: 16 }}>
+          <Space align="center">
+            <Text>高级模式</Text>
+            <Switch checked={advancedMode} onChange={handleNewModeSwitch} />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {advancedMode ? '直接编辑 YAML 全文' : '填写表单字段，自动生成 YAML'}
+            </Text>
+          </Space>
+        </div>
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="manifest_yaml"
-            label="组件清单 (YAML)"
-            rules={[
-              { required: true, message: '请粘贴组件清单 YAML' },
-              { min: 10, message: '清单内容过短' },
-            ]}
-          >
-            <Input.TextArea
-              placeholder={`name: my_component\nversion: "1.0.0"\nkind: transform\n...`}
-              rows={16}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-            />
-          </Form.Item>
+          {advancedMode ? (
+            <Form.Item
+              name="manifest_yaml"
+              label="组件清单 (YAML)"
+              rules={[
+                { required: true, message: '请粘贴组件清单 YAML' },
+                { min: 10, message: '清单内容过短' },
+              ]}
+            >
+              <Input.TextArea
+                placeholder={`name: my_component\nversion: "1.0.0"\nkind: transform\n...`}
+                rows={16}
+                style={{ fontFamily: 'monospace', fontSize: 13 }}
+              />
+            </Form.Item>
+          ) : (
+            <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
+          )}
         </Form>
       </Modal>
 
@@ -556,7 +942,7 @@ export function ComponentsPage(): JSX.Element {
         {detail && <ComponentDetailPanel detail={detail} detailId={detailId!} />}
       </Drawer>
 
-      {/* 编辑组件 Modal */}
+      {/* 编辑组件 Modal（双模式：默认高级模式，可切换到表单模式）*/}
       <Modal
         title="编辑组件"
         open={editModalOpen}
@@ -564,29 +950,52 @@ export function ComponentsPage(): JSX.Element {
         onCancel={() => {
           setEditModalOpen(false);
           editForm.resetFields();
+          setEditAdvancedMode(true);
         }}
         confirmLoading={publishMutation.isPending}
         okText="发布新版本"
         cancelText="取消"
         width={680}
       >
-        <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
-          修改 YAML 后点击发布，将创建新版本。版本号已自动递增，如需修改请手动调整。
-        </Text>
+        <div style={{ marginBottom: 16 }}>
+          <Space align="center">
+            <Text>高级模式</Text>
+            <Switch checked={editAdvancedMode} onChange={handleEditModeSwitch} />
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {editAdvancedMode
+                ? '直接编辑 YAML 全文'
+                : '填写表单字段，自动生成 YAML'}
+            </Text>
+          </Space>
+        </div>
         <Form form={editForm} layout="vertical">
-          <Form.Item
-            name="manifest_yaml"
-            label="组件清单 (YAML)"
-            rules={[
-              { required: true, message: '请输入组件清单 YAML' },
-              { min: 10, message: '清单内容过短' },
-            ]}
-          >
-            <Input.TextArea
-              rows={20}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-            />
-          </Form.Item>
+          {editAdvancedMode ? (
+            <>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+                修改 YAML 后点击发布，将创建新版本。版本号已自动递增，如需修改请手动调整。
+              </Text>
+              <Form.Item
+                name="manifest_yaml"
+                label="组件清单 (YAML)"
+                rules={[
+                  { required: true, message: '请输入组件清单 YAML' },
+                  { min: 10, message: '清单内容过短' },
+                ]}
+              >
+                <Input.TextArea
+                  rows={20}
+                  style={{ fontFamily: 'monospace', fontSize: 13 }}
+                />
+              </Form.Item>
+            </>
+          ) : (
+            <>
+              <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
+                填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
+              </Text>
+              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
+            </>
+          )}
         </Form>
       </Modal>
     </div>

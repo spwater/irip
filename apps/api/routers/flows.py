@@ -1,18 +1,22 @@
-"""流程管理路由：创建 / 发布 / 列表 / 详情 / 执行 / 恢复 / 取消 / 重试。
+"""流程管理路由：创建 / 发布 / 列表 / 详情 / 执行 / 恢复 / 取消 / 重试 / 删除。
 
 端点（IRIP V2-T03）：
   POST   /api/v1/flows                         — 创建流程定义（含 DAG 校验，flow:manage）
   POST   /api/v1/flows/{flow_id}/publish        — 发布流程版本（不可变，flow:manage）
   GET    /api/v1/flows                          — 列表（flow:read）
   GET    /api/v1/flows/{flow_id}                 — 详情（flow:read）
+  POST   /api/v1/flows/{flow_id}/archive         — 归档（flow:manage）
+  POST   /api/v1/flows/{flow_id}/restore         — 恢复（flow:manage）
+  DELETE /api/v1/flows/{flow_id}                 — 删除流程及关联记录（flow:manage）
   POST   /api/v1/flows/{flow_id}/runs            — 创建执行（202 Accepted，flow:execute）
   POST   /api/v1/flows/runs/{run_id}/resume      — 恢复（flow:execute）
   POST   /api/v1/flows/runs/{run_id}/cancel       — 取消（flow:execute）
   POST   /api/v1/flows/runs/{run_id}/retry/{node_id} — 重试节点（flow:execute）
   GET    /api/v1/flows/runs/{run_id}             — 运行详情（含节点状态，flow:read）
+  DELETE /api/v1/flows/runs/{run_id}            — 删除运行记录（flow:manage）
 
 安全约定：
-- 创建/发布需 require_permission("flow:manage")；
+- 创建/发布/归档/恢复/删除需 require_permission("flow:manage")；
 - 列表/详情/运行详情需 require_permission("flow:read")；
 - 创建执行/恢复/取消/重试需 require_permission("flow:execute")。
 
@@ -21,7 +25,7 @@ DI 约定（与 V1 standards 路由一致）：
   生产环境通过 dependency_overrides 注入按请求构造的实例。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 from typing import Annotated, Any
 from uuid import UUID
@@ -132,6 +136,14 @@ class CreateRunRequest(BaseModel):
     inputs: dict[str, Any] = Field(default_factory=dict)
 
 
+class UpdateFlowRequest(BaseModel):
+    """更新流程定义请求（允许修改 display_name 和 department_id）。"""
+
+    display_name: str = Field(..., min_length=1, max_length=200)
+    department_id: str | None = None
+    project_name: str | None = None
+
+
 # ---- 响应模型 ----
 
 
@@ -143,6 +155,8 @@ class FlowDefinitionResponse(BaseModel):
     display_name: str
     status: str
     lock_version: int
+    department_id: str | None = None
+    project_name: str | None = None
     created_at: datetime
     updated_at: datetime
     latest_version: dict[str, Any] | None = None
@@ -177,6 +191,7 @@ class FlowRunResponse(BaseModel):
     status: str
     job_id: str | None
     output_digest: str | None
+    output_summary: dict[str, Any] | None = None
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
@@ -252,6 +267,8 @@ def _definition_to_response(
         display_name=definition.display_name,
         status=definition.status,
         lock_version=definition.lock_version,
+        department_id=str(definition.department_id) if definition.department_id else None,
+        project_name=definition.project_name,
         created_at=definition.created_at,
         updated_at=definition.updated_at,
         latest_version=latest_version,
@@ -498,6 +515,66 @@ async def restore_flow(
     return _definition_to_response(definition, None)
 
 
+@flows_router.delete("/{flow_id}", status_code=204)
+async def delete_flow(
+    flow_id: UUID,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> None:
+    """删除流程定义及其所有版本和运行记录。
+
+    危险操作：将级联删除该流程的所有版本、运行记录及节点执行记录，
+    不可撤销。
+
+    Args:
+        flow_id: 流程定义 ID。
+        current_user: 当前认证用户（需 flow:manage 权限）。
+        service: 流程运行时服务。
+    """
+    await service.delete_flow(flow_id)
+
+
+@flows_router.patch("/{flow_id}", response_model=FlowDefinitionResponse)
+async def update_flow(
+    flow_id: UUID,
+    body: UpdateFlowRequest,
+    current_user: ManageUserDep,
+    service: FlowServiceDep,
+) -> FlowDefinitionResponse:
+    """更新流程定义（仅允许修改 display_name，code 不可变）。
+
+    Args:
+        flow_id: 流程定义 ID。
+        body: 更新请求。
+        current_user: 当前认证用户（需 flow:manage 权限）。
+        service: 流程运行时服务。
+
+    Returns:
+        FlowDefinitionResponse: 更新后的流程定义。
+    """
+    import sqlalchemy as sa
+
+    from packages.common.errors import AppError
+    from packages.common.database import session_scope
+    from packages.components.flow_runtime import FlowDefinition
+
+    async with session_scope(service._factory) as session:
+        stmt = sa.select(FlowDefinition).where(FlowDefinition.id == flow_id)
+        result = await session.execute(stmt)
+        definition = result.scalar_one_or_none()
+        if definition is None:
+            raise AppError(code="not_found", message="流程定义不存在")
+
+        definition.display_name = body.display_name
+        if body.department_id is not None:
+            from uuid import UUID as UUIDType
+            definition.department_id = UUIDType(body.department_id) if body.department_id else None
+        definition.project_name = body.project_name
+        definition.updated_at = datetime.now(timezone.utc)
+
+    return _definition_to_response(definition, None)
+
+
 # ---- 端点：执行管理 ----
 
 
@@ -510,7 +587,7 @@ async def list_runs(
     current_user: ReadUserDep,
     service: FlowServiceDep,
 ) -> list[FlowRunResponse]:
-    """列出流程的所有运行记录。
+    """列出流程的所有运行记录（含成功节点的输出摘要）。
 
     Args:
         flow_id: 流程定义 ID。
@@ -521,10 +598,29 @@ async def list_runs(
         list[FlowRunResponse]: 运行记录列表（按创建时间降序）。
     """
     import sqlalchemy as sa
-    from packages.components.flow_runtime import FlowRun
+
+    from packages.common.database import session_scope
+    from packages.components.flow_runtime import FlowRun, FlowNodeExecution
 
     runs = await service.list_runs(flow_id)
-    return [_run_to_response(r) for r in runs]
+    result = []
+    for r in runs:
+        resp = _run_to_response(r)
+        # 查询成功节点的 output_summary
+        async with session_scope(service._factory) as session:
+            node_stmt = (
+                sa.select(FlowNodeExecution)
+                .where(FlowNodeExecution.flow_run_id == r.id)
+                .where(FlowNodeExecution.status == 'succeeded')
+                .order_by(FlowNodeExecution.completed_at.desc())
+                .limit(1)
+            )
+            node_result = await session.execute(node_stmt)
+            node = node_result.scalar_one_or_none()
+            if node and node.output_summary:
+                resp.output_summary = node.output_summary
+        result.append(resp)
+    return result
 
 
 @flows_router.post(

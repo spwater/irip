@@ -108,6 +108,7 @@ class ComponentListItemResponse(BaseModel):
     id: str
     name: str
     display_name: str
+    description: str
     version: str
     kind: str
     runtime: str
@@ -159,6 +160,14 @@ def _parse_display_name(manifest_yaml: str) -> str:
     import re
 
     match = re.search(r'^display_name:\s*["\']?(.*?)["\']?\s*$', manifest_yaml, re.MULTILINE)
+    return match.group(1) if match else ""
+
+
+def _parse_description(manifest_yaml: str) -> str:
+    """从 manifest YAML 提取 description 字段。"""
+    import re
+
+    match = re.search(r'^description:\s*["\']?(.*?)["\']?\s*$', manifest_yaml, re.MULTILINE)
     return match.group(1) if match else ""
 
 
@@ -253,6 +262,7 @@ async def list_components(
                 id=str(ver.id),
                 name=comp.name,
                 display_name=_parse_display_name(ver.manifest_yaml),
+                description=_parse_description(ver.manifest_yaml),
                 version=ver.version,
                 kind=comp.kind,
                 runtime=ver.runtime,

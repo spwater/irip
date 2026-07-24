@@ -223,22 +223,21 @@ export function JobsPage(): JSX.Element {
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
           placeholder="状态筛选"
-          allowClear
           style={{ width: 160 }}
-          value={statusFilter}
-          onChange={(val: string | undefined) => setStatusFilter(val)}
-          options={Object.entries(STATUS_LABEL).map(([value, label]) => ({
-            value,
-            label,
-          }))}
+          value={statusFilter ?? '__all__'}
+          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+          options={[
+            { value: '__all__', label: '全部' },
+            ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+          ]}
         />
         <Select
           placeholder="类型筛选"
-          allowClear
           style={{ width: 200 }}
-          value={kindFilter}
-          onChange={(val: string | undefined) => setKindFilter(val)}
+          value={kindFilter ?? '__all__'}
+          onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
           options={[
+            { value: '__all__', label: '全部' },
             { value: 'echo', label: 'echo' },
             { value: 'parse_excel', label: 'parse_excel' },
             { value: 'audit_export', label: 'audit_export' },

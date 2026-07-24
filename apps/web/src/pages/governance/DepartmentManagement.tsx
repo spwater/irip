@@ -11,8 +11,11 @@ import {
   Table,
   Tag,
   Tooltip,
+  Typography,
   message,
 } from 'antd';
+
+const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -29,7 +32,7 @@ import { MemberDrawer } from '@/pages/governance/MemberDrawer';
 /**
  * 树形节点类型：DepartmentListItem + children 数组。
  */
-type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[] };
+type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]; level?: number };
 
 /**
  * 实验室管理组件（P0）
@@ -54,17 +57,17 @@ type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]
  */
 function buildTree(items: DepartmentListItem[]): DepartmentTreeNode[] {
   const map = new Map<string, DepartmentTreeNode>();
-  items.forEach((item) => map.set(item.id, { ...item, children: [] }));
+  items.forEach((item) => map.set(item.id, { ...item, children: [], level: 0 }));
   const roots: DepartmentTreeNode[] = [];
   map.forEach((item) => {
     if (item.parent_id && map.has(item.parent_id)) {
       const parent = map.get(item.parent_id)!;
+      item.level = (parent.level ?? 0) + 1;
       parent.children!.push(item);
     } else {
       roots.push(item);
     }
   });
-  // 子部门为 0 的节点去掉 children 属性，Ant Design Table 不再显示展开箭头
   map.forEach((item) => {
     if (item.children && item.children.length === 0) {
       delete item.children;
@@ -287,15 +290,18 @@ export function DepartmentManagement({
   // ---- 表格列定义 ----
   const columns: ColumnsType<DepartmentTreeNode> = [
     {
-      title: '编码',
-      dataIndex: 'code',
-      key: 'code',
-      width: 160,
-    },
-    {
       title: '名称',
       dataIndex: 'display_name',
       key: 'display_name',
+      width: 180,
+      render: (name: string, record: DepartmentTreeNode) => (
+        <Tooltip title={record.description || undefined} placement="topLeft">
+          <Space>
+            <Text strong>{name}</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>{record.code}</Text>
+          </Space>
+        </Tooltip>
+      ),
     },
     {
       title: '状态',
@@ -393,11 +399,11 @@ export function DepartmentManagement({
         </Button>
         <Select
           placeholder="状态筛选"
-          allowClear
           style={{ width: 140 }}
-          value={statusFilter}
-          onChange={(val: string | undefined) => setStatusFilter(val)}
+          value={statusFilter ?? '__all__'}
+          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
           options={[
+            { value: '__all__', label: '全部' },
             { value: 'active', label: '启用' },
             { value: 'disabled', label: '禁用' },
           ]}
@@ -411,11 +417,11 @@ export function DepartmentManagement({
         loading={isLoading}
         pagination={false}
         size="middle"
+        scroll={{ y: 600 }}
         expandable={{
           childrenColumnName: 'children',
           defaultExpandAllRows: true,
         }}
-        scroll={{ y: 600 }}
       />
 
       <Modal

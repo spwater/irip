@@ -216,6 +216,7 @@ export type DepartmentListItem = {
   id: string;
   code: string;
   display_name: string;
+  description: string | null;
   status: string;
   sort_order: number;
   member_count: number;
@@ -1041,9 +1042,19 @@ export async function apiGetFactObservations(factId: string): Promise<Observatio
   return res.data;
 }
 
+export type TaskInfo = {
+  task_name: string | null;
+  task_source: string | null;
+  project_name: string | null;
+  data_interface: string | null;
+  created_at: string | null;
+  experimental_object_codes: string[] | null;
+};
+
 export type FactData = {
   metadata: Record<string, unknown>;
   data: Record<string, unknown>[];
+  task_info?: TaskInfo;
 };
 
 export async function apiGetFactData(factId: string): Promise<FactData> {
@@ -1257,6 +1268,7 @@ export type EquipmentListItem = {
   id: string;
   code: string;
   display_name: string;
+  description: string | null;
   department_id: string;
   department_name: string;
   status: string;
@@ -1359,6 +1371,7 @@ export type ComponentSummary = {
   id: string;
   name: string;
   display_name: string;
+  description: string;
   version: string;
   kind: string;
   runtime: string;
@@ -1462,6 +1475,8 @@ export type FlowSummary = {
   display_name: string;
   status: string;
   lock_version: number;
+  department_id: string | null;
+  project_name: string | null;
   created_at: string;
   updated_at: string;
   latest_version: {
@@ -1497,6 +1512,7 @@ export type FlowRunSummary = {
   status: string;
   job_id: string | null;
   output_digest: string | null;
+  output_summary: Record<string, unknown> | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -1580,6 +1596,15 @@ export async function apiRestoreFlow(flowId: string): Promise<FlowSummary> {
   return { ...res.data, latest_version: res.data.latest_version ?? null };
 }
 
+export async function apiDeleteFlow(flowId: string): Promise<void> {
+  await http.delete(`/flows/${flowId}`);
+}
+
+export async function apiUpdateFlow(flowId: string, displayName: string, departmentId?: string | null, projectName?: string | null): Promise<FlowSummary> {
+  const res = await http.patch<FlowSummary>(`/flows/${flowId}`, { display_name: displayName, department_id: departmentId ?? null, project_name: projectName ?? null });
+  return { ...res.data, latest_version: res.data.latest_version ?? null };
+}
+
 /** 事实模板版本列表项 — 对应后端 TemplateSummary */
 export type FactTemplateVersionItem = {
   id: string;
@@ -1656,6 +1681,7 @@ export async function apiGetFlowRun(runId: string): Promise<FlowRunDetail> {
   // 后端字段 node_executions → 前端字段 nodes（兼容两个字段名）
   return {
     ...res.data,
+    output_summary: null,
     nodes: res.data.node_executions,
   };
 }
@@ -1684,6 +1710,31 @@ export async function apiBrowseFiles(path?: string): Promise<BrowseResponse> {
   const res = await http.get<BrowseResponse>('/files/browse', {
     params: path ? { path } : {},
   });
+  return res.data;
+}
+
+// ============================================================
+// 文件上传 API（/files/upload）— 组件参数文件上传
+// ============================================================
+
+/** 文件上传响应。 */
+export type UploadResponse = {
+  artifact_id: string;
+  filename: string;
+  size: number;
+};
+
+/**
+ * 上传文件到 MinIO，返回 artifact_id 供后续使用。
+ *
+ * 用于流程执行时文件参数的上传：用户在浏览器选择本地文件，
+ * 上传到服务器 MinIO，返回 artifact_id 后以 `artifact:{id}` 格式填入参数值。
+ */
+export async function apiUploadFile(file: File): Promise<UploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  // 不手动设 Content-Type，让浏览器自动设 multipart/form-data + boundary
+  const res = await http.post<UploadResponse>('/files/upload', formData);
   return res.data;
 }
 

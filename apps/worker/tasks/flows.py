@@ -35,6 +35,8 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     """
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
+    from packages.common.s3_repository import S3Repository
+    from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
     from packages.components.flow_runtime import FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
@@ -75,6 +77,24 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         created_by=organization_id,
     )
 
+    # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
+    s3_endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+    if not s3_endpoint.startswith("http"):
+        s3_endpoint = f"http://{s3_endpoint}"
+    s3_repo = S3Repository(
+        endpoint_url=s3_endpoint,
+        access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
+        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
+        region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
+    )
+    art_svc = ArtifactService(
+        s3_repo=s3_repo,
+        session_factory=factory,
+        organization_id=organization_id,
+        uploaded_by=organization_id,
+    )
+
     service = FlowRuntimeService(
         session_factory=factory,
         organization_id=organization_id,
@@ -82,6 +102,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         runner=runner,
         job_service=job_service,
         clock=SystemClock(),
+        artifact_service=art_svc,
     )
 
     run_uuid = UUID(run_id)
@@ -265,6 +286,24 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
         created_by=organization_id,
     )
 
+    # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
+    s3_endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+    if not s3_endpoint.startswith("http"):
+        s3_endpoint = f"http://{s3_endpoint}"
+    s3_repo = S3Repository(
+        endpoint_url=s3_endpoint,
+        access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
+        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
+        region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
+    )
+    art_svc = ArtifactService(
+        s3_repo=s3_repo,
+        session_factory=factory,
+        organization_id=organization_id,
+        uploaded_by=organization_id,
+    )
+
     service = FlowRuntimeService(
         session_factory=factory,
         organization_id=organization_id,
@@ -272,6 +311,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
         runner=runner,
         job_service=job_service,
         clock=SystemClock(),
+        artifact_service=art_svc,
     )
 
     run_uuid = UUID(run_id)

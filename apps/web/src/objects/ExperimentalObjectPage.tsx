@@ -9,14 +9,19 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
+  Typography,
   message,
 } from 'antd';
+
+const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateObject,
   apiDeleteObject,
   apiGetObject,
+  apiListDepartments,
   apiListEquipment,
   apiListObjects,
   apiUpdateObject,
@@ -41,6 +46,7 @@ import {
 
 /** 实验对象类型选项 */
 const EXP_OBJECT_TYPES = [
+  { value: '__all__', label: '全部' },
   { value: 'material', label: '物料' },
   { value: 'signal', label: '信号' },
 ];
@@ -75,6 +81,8 @@ export function ExperimentalObjectPage({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
+  const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
+  const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IndustrialObject | null>(null);
   const [form] = Form.useForm();
@@ -112,8 +120,36 @@ export function ExperimentalObjectPage({
     label: `${e.display_name} (${e.code})`,
   }));
   const equipmentMap = new Map(
-    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
+    (equipmentData?.items ?? []).map((e) => [e.id, e]),
   );
+
+  // 查部门列表，用于显示设备所属单位
+  const { data: deptData } = useQuery({
+    queryKey: ['departments-for-object-equipment'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+  });
+  const deptMap = new Map(
+    (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
+  );
+
+  // ---- 筛选逻辑 ----
+  // 选了具体设备就按设备筛；否则选了单位就按单位下所有设备筛
+  let filteredItems = items;
+  if (equipmentFilter) {
+    filteredItems = items.filter((o) => o.equipment_id === equipmentFilter);
+  } else if (deptFilter) {
+    const deptEquipIds = new Set(
+      (equipmentData?.items ?? [])
+        .filter((e) => e.department_id === deptFilter)
+        .map((e) => e.id),
+    );
+    filteredItems = items.filter((o) => o.equipment_id && deptEquipIds.has(o.equipment_id));
+  }
+
+  // 部门选项（只列出有设备的部门）
+  const deptOptions = (deptData?.items ?? [])
+    .filter((d) => (equipmentData?.items ?? []).some((e) => e.department_id === d.id))
+    .map((d) => ({ value: d.id, label: d.display_name }));
 
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
@@ -240,47 +276,63 @@ export function ExperimentalObjectPage({
   // ---- 表格列定义 ----
   const columns: ColumnsType<IndustrialObject> = [
     {
-      title: '编码',
-      dataIndex: 'code',
-      key: 'code',
-      width: 160,
-    },
-    {
       title: '名称',
-      dataIndex: 'display_name',
-      key: 'display_name',
+      key: 'name',
+      width: 200,
+      render: (_: unknown, record: IndustrialObject) => (
+        <Tooltip title={record.description || undefined} placement="topLeft">
+          <div>
+            <Text strong>{record.display_name}</Text>
+            <div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.code}
+              </Text>
+            </div>
+          </div>
+        </Tooltip>
+      ),
     },
     {
       title: '类型',
       dataIndex: 'object_type',
       key: 'object_type',
-      width: 100,
+      width: 80,
       render: (t: string) => TYPE_LABEL[t] ?? t,
     },
     {
       title: '关联设备',
       dataIndex: 'equipment_id',
       key: 'equipment_id',
-      width: 160,
-      render: (eid: string | null) => (eid && equipmentMap.has(eid) ? equipmentMap.get(eid)! : '-'),
+      width: 320,
+      render: (eid: string | null) => {
+        if (!eid) return <Text type="secondary">-</Text>;
+        const eq = equipmentMap.get(eid);
+        if (!eq) return <Text type="secondary">-</Text>;
+        const deptName = eq.department_id ? deptMap.get(eq.department_id) : null;
+        return (
+          <div>
+            <Text>{eq.display_name}</Text>
+            {deptName && (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {deptName}
+                </Text>
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 80,
       render: (s: string) => (
         <Tag color={STATUS_COLOR[s] ?? 'default'}>
           {STATUS_LABEL[s] ?? s}
         </Tag>
       ),
-    },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-      render: (d: string | null) => d ?? '-',
     },
     {
       title: '操作',
@@ -326,17 +378,38 @@ export function ExperimentalObjectPage({
         </Button>
         <Select
           placeholder="类型筛选"
-          allowClear
           style={{ width: 140 }}
-          value={typeFilter}
-          onChange={(val: string | undefined) => setTypeFilter(val)}
+          value={typeFilter ?? '__all__'}
+          onChange={(val: string) => setTypeFilter(val === '__all__' ? undefined : val)}
           options={EXP_OBJECT_TYPES}
+        />
+        <Select
+          placeholder="关联单位筛选"
+          style={{ width: 160 }}
+          value={deptFilter ?? '__all__'}
+          onChange={(val: string) => {
+            const v = val === '__all__' ? undefined : val;
+            setDeptFilter(v);
+            if (v) setEquipmentFilter(undefined);
+          }}
+          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+        />
+        <Select
+          placeholder="关联设备筛选"
+          style={{ width: 200 }}
+          value={equipmentFilter ?? '__all__'}
+          onChange={(val: string) => {
+            const v = val === '__all__' ? undefined : val;
+            setEquipmentFilter(v);
+            if (v) setDeptFilter(undefined);
+          }}
+          options={[{ value: '__all__', label: '全部' }, ...equipmentOptions]}
         />
       </Space>
 
       <Table<IndustrialObject>
         columns={columns}
-        dataSource={items}
+        dataSource={filteredItems}
         rowKey="id"
         loading={isLoading}
         pagination={{ pageSize: 20, showSizeChanger: false }}

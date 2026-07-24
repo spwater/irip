@@ -6,7 +6,7 @@ import { EquipmentPage } from '@/equipment/EquipmentPage';
 import { ComponentsPage } from '@/components/ComponentsPage';
 import { ModelsPage } from '@/models/ModelsPage';
 
-const { Title, Paragraph } = Typography;
+const { Title } = Typography;
 
 /**
  * 实验室建设页面
@@ -38,7 +38,6 @@ export function StandardsPage(): JSX.Element {
   return (
     <div>
       <Title level={2}>实验室建设</Title>
-      <Paragraph type="secondary">组织机构、设备仪器、实验对象、工具箱与模型管理</Paragraph>
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key)}

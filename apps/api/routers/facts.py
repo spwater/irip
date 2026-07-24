@@ -430,7 +430,66 @@ async def get_fact_data(
             uploaded_by=current_user.user_id,
         )
         data_bytes = await artifact_svc.get_bytes(fa.artifact_id)
-        return json_mod.loads(data_bytes.decode("utf-8"))
+        result_data = json_mod.loads(data_bytes.decode("utf-8"))
+
+        # 实时反查任务信息：通过 raw_observation.source_path → flow_run → flow_definition
+        task_info: dict = {}
+        try:
+            from packages.facts.entities import RawObservation
+            from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+
+            # 从 raw_observation 提取 run_id
+            raw_stmt = (
+                sa.select(RawObservation.source_path)
+                .where(RawObservation.fact_revision_id == revision_id)
+                .limit(1)
+            )
+            raw_result = await session.execute(raw_stmt)
+            source_path = raw_result.scalar_one_or_none()
+            if source_path and source_path.startswith("flow_run:"):
+                run_id_str = source_path[len("flow_run:"):]
+                from uuid import UUID as UUIDType
+                run_id = UUIDType(run_id_str)
+
+                # run → flow_version → flow_definition（用已有 session）
+                run_stmt = sa.select(FlowRun).where(FlowRun.id == run_id)
+                run_record = (await session.execute(run_stmt)).scalar_one_or_none()
+                if run_record:
+                    fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
+                    fv = (await session.execute(fv_stmt)).scalar_one_or_none()
+                    if fv:
+                        fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                        fd = (await session.execute(fd_stmt)).scalar_one_or_none()
+                        if fd:
+                            # 查部门名称
+                            dept_name = None
+                            if fd.department_id:
+                                from packages.departments.entities import Department
+                                dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
+                                dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
+                                if dept_record:
+                                    dept_name = dept_record.display_name
+
+                            # 查实验对象和组件信息
+                            nodes = fv.nodes_json or []
+                            comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+
+                            task_info = {
+                                "task_name": fd.display_name,
+                                "task_source": dept_name,
+                                "project_name": fd.project_name,
+                                "data_interface": ", ".join(comp_names) if comp_names else None,
+                                "created_at": fd.created_at.isoformat() if fd.created_at else None,
+                            }
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Failed to query task info for fact {fact_id}: {e}")
+
+        # 把任务信息附加到返回结果
+        if task_info:
+            result_data["task_info"] = task_info
+
+        return result_data
 
 
 @facts_router.delete("/{fact_id}", status_code=204)

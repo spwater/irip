@@ -558,12 +558,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             organization_id=org_id,
             created_by=current_user.user_id,
         )
+        art_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=session_factory,
+            organization_id=org_id,
+            uploaded_by=current_user.user_id,
+        )
         return FlowRuntimeService(
             session_factory=session_factory,
             organization_id=org_id,
             registry=registry,
             runner=_flow_runner,
             job_service=job_svc,
+            artifact_service=art_svc,
         )
 
     app.dependency_overrides[get_flow_service] = _get_flow_service_dep

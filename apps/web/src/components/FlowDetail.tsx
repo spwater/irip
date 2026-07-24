@@ -1,22 +1,20 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
-  Alert,
   Button,
   Card,
-  Checkbox,
-  Descriptions,
   Divider,
-  Empty,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Spin,
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -26,8 +24,10 @@ import {
   apiCancelFlowRun,
   apiCreateFlow,
   apiCreateFlowRun,
+  apiDeleteFlow,
   apiDeleteFlowRun,
   apiBrowseFiles,
+  apiUploadFile,
   apiArchiveFlow,
   apiRestoreFlow,
   apiPersistRunAsFact,
@@ -36,24 +36,25 @@ import {
   apiGetFlowRun,
   apiListComponents,
   apiListObjects,
+  apiListEquipment,
+  apiListDepartments,
   apiListFlows,
   apiListFlowRuns,
   apiPublishFlow,
   apiResumeFlowRun,
-  apiRetryFlowNode,
+  apiUpdateFlow,
   extractApiError,
   type BrowseResponse,
   type ComponentDetail,
   type ComponentSummary,
   type FlowEdgeSchema,
-  type FlowNodeExecution,
   type FlowNodeSchema,
-  type FlowRunDetail,
   type FlowRunSummary,
   type FlowSummary,
+  type IndustrialObject,
 } from '@/api/client';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 /** 流程状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
@@ -95,24 +96,6 @@ const RUN_STATUS_LABEL: Record<string, string> = {
   failed: '失败',
   cancelled: '已取消',
   paused: '已暂停',
-};
-
-/** 节点状态 → 颜色 */
-const NODE_STATUS_COLOR: Record<string, string> = {
-  pending: 'default',
-  running: 'processing',
-  succeeded: 'green',
-  failed: 'red',
-  skipped: 'orange',
-};
-
-/** 节点状态 → 中文标签 */
-const NODE_STATUS_LABEL: Record<string, string> = {
-  pending: '等待中',
-  running: '运行中',
-  succeeded: '成功',
-  failed: '失败',
-  skipped: '已跳过',
 };
 
 // ============================================================
@@ -450,9 +433,15 @@ export function FlowDetail(): JSX.Element {
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [publishModalOpen, setPublishModalOpen] = useState(false);
   const [runModalOpen, setRunModalOpen] = useState(false);
-  const [runFileBrowserOpen, setRunFileBrowserOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editFlowId, setEditFlowId] = useState<string | null>(null);
+  const [editForm] = Form.useForm();
+  const [dataRunId, setDataRunId] = useState<string | null>(null);
+  const [factModalOpen, setFactModalOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadLoading, setUploadLoading] = useState<string | null>(null);
+  const [artifactMap, setArtifactMap] = useState<Record<string, string>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [createForm] = Form.useForm();
   const [runForm] = Form.useForm();
@@ -488,23 +477,72 @@ export function FlowDetail(): JSX.Element {
       .map((c) => ({
         value: c.name,
         label: c.display_name ? `${c.display_name} (${c.name})` : c.name,
+        version: c.version,
+        summary: c,
       }));
   })();
 
   // ---- 流程列表查询 ----
   const [showArchived, setShowArchived] = useState(false);
+  const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const { data: listData, isLoading: listLoading } = useQuery({
     queryKey: ['flows'],
     queryFn: () => apiListFlows(),
   });
 
   const allFlows: FlowSummary[] = listData?.items ?? [];
-  const flows: FlowSummary[] = showArchived
+  let flows: FlowSummary[] = showArchived
     ? allFlows
     : allFlows.filter((f) => f.status !== 'deprecated');
+  if (deptFilter) {
+    flows = flows.filter((f) => f.department_id === deptFilter);
+  }
+
+  // ---- 查询组件列表、实验对象、设备，用于在流程列表展示关联信息 ----
+  const { data: compListData } = useQuery({
+    queryKey: ['components-for-flow-list'],
+    queryFn: () => apiListComponents(),
+  });
+  // component_name → ComponentSummary（取最新版本）
+  const compMap = new Map<string, ComponentSummary>();
+  for (const c of compListData?.items ?? []) {
+    const existing = compMap.get(c.name);
+    if (!existing || c.version > existing.version) {
+      compMap.set(c.name, c);
+    }
+  }
+
+  const { data: objListData } = useQuery({
+    queryKey: ['objects-for-flow-list'],
+    queryFn: () => apiListObjects({ page_size: 100 }),
+  });
+  const objMap = new Map<string, IndustrialObject>(
+    (objListData?.items ?? []).map((o) => [o.code, o]),
+  );
+
+  const { data: equipListData } = useQuery({
+    queryKey: ['equipment-for-flow-list'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  const equipMap = new Map<string, string>(
+    (equipListData?.items ?? []).map((e) => [e.id, e.display_name]),
+  );
+
+  const { data: deptListData } = useQuery({
+    queryKey: ['departments-for-flow-list'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+  });
+  const deptMap = new Map<string, string>(
+    (deptListData?.items ?? []).map((d) => [d.id, d.display_name]),
+  );
+  // 部门下拉选项（用于新建任务）
+  const deptOptions = (deptListData?.items ?? []).map((d) => ({
+    value: d.id,
+    label: d.display_name,
+  }));
 
   // ---- 选中流程详情查询 ----
-  const { data: flow, isLoading: flowLoading } = useQuery({
+  const { data: flow } = useQuery({
     queryKey: ['flow', selectedFlowId],
     queryFn: () => apiGetFlow(selectedFlowId!),
     enabled: !!selectedFlowId,
@@ -527,13 +565,6 @@ export function FlowDetail(): JSX.Element {
 
   const runs: FlowRunSummary[] = runsList ?? [];
 
-  // ---- 运行详情查询 ----
-  const { data: runDetail, isLoading: runLoading } = useQuery({
-    queryKey: ['flow-run', activeRunId],
-    queryFn: () => apiGetFlowRun(activeRunId!),
-    enabled: !!activeRunId,
-  });
-
   // ---- 创建流程 Mutation ----
   const createMutation = useMutation({
     mutationFn: apiCreateFlow,
@@ -554,8 +585,7 @@ export function FlowDetail(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['flows'] });
       void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
-      setPublishModalOpen(false);
-      message.success('流程版本发布成功');
+      message.success('流程发布成功');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
@@ -578,6 +608,35 @@ export function FlowDetail(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['flows'] });
       void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
       message.success('流程已恢复');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  // ---- 删除流程 Mutation ----
+  const deleteFlowMutation = useMutation({
+    mutationFn: apiDeleteFlow,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flows'] });
+      // 若删除的是当前选中流程，清除选中状态
+      setSelectedFlowId(null);
+      setActiveRunId(null);
+      message.success('流程已删除');
+    },
+    onError: (err: unknown) => message.error(extractApiError(err)),
+  });
+
+  // ---- 更新流程 Mutation ----
+  const updateFlowMutation = useMutation({
+    mutationFn: (vars: { flowId: string; displayName: string; departmentId?: string | null; projectName?: string | null }) =>
+      apiUpdateFlow(vars.flowId, vars.displayName, vars.departmentId, vars.projectName),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['flows'] });
+      if (selectedFlowId) {
+        void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
+      }
+      setEditModalOpen(false);
+      editForm.resetFields();
+      message.success('任务名称已更新');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
@@ -630,37 +689,52 @@ export function FlowDetail(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  // ---- 重试节点 Mutation ----
-  const retryMutation = useMutation({
-    mutationFn: (vars: { runId: string; nodeId: string }) =>
-      apiRetryFlowNode(vars.runId, vars.nodeId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['flow-run', activeRunId] });
-      message.success('节点已重试');
-    },
-    onError: (err: unknown) => message.error(extractApiError(err)),
-  });
-
   // ---- 事件处理 ----
   const handleCreate = async (): Promise<void> => {
     try {
       const values = await createForm.validateFields();
-      createMutation.mutate({
-        code: values.code,
-        display_name: values.display_name,
-      });
+      const comp = componentOptions.find((c) => c.value === values.component_name);
+      if (!comp) {
+        message.error('找不到选中的工具组件');
+        return;
+      }
+      // 从组件详情获取参数定义，填充到 node.params（值为空）
+      let params: Record<string, unknown> = {};
+      try {
+        const detail = await apiGetComponent(comp.summary.id);
+        const parsed = parseManifest(detail.manifest_yaml);
+        for (const p of parsed.params) {
+          params[p.name] = p.default ?? '';
+        }
+      } catch {
+        // 获取详情失败时用空 params
+      }
+      const nodes: FlowNodeSchema[] = [{
+        node_id: 'n1',
+        component_name: values.component_name,
+        component_version: comp.version,
+        params,
+      }];
+      createMutation.mutate(
+        { code: values.code, display_name: values.display_name, nodes },
+        {
+          onSuccess: async (data) => {
+            // 创建成功后立即发布
+            publishMutation.mutate(
+              { flowId: data.id, body: { nodes } },
+              {
+                onSuccess: () => {
+                  message.success('流程创建并发布成功');
+                  setSelectedFlowId(data.id);
+                },
+              },
+            );
+          },
+        },
+      );
     } catch {
       // 校验失败
     }
-  };
-
-  const handlePublish = (body: {
-    nodes: FlowNodeSchema[];
-    edges: FlowEdgeSchema[];
-    random_seed: number;
-  }): void => {
-    if (!selectedFlowId) return;
-    publishMutation.mutate({ flowId: selectedFlowId, body });
   };
 
   const handleCreateRun = async (): Promise<void> => {
@@ -677,9 +751,8 @@ export function FlowDetail(): JSX.Element {
             const formKey = `${prefix}${key}`;
             const formValue = values[formKey];
             if (formValue !== undefined && formValue !== '') {
-              // 检查这个参数是否需要跨节点共享
-              // 当前简单处理：所有节点共用同名参数
-              inputs[key] = formValue;
+              // 如果是上传的文件，用真实 artifact 值替换显示的文件名
+              inputs[key] = artifactMap[formKey] ?? formValue;
             }
           }
         }
@@ -697,8 +770,116 @@ export function FlowDetail(): JSX.Element {
 
   // ---- 表格列定义 ----
   const flowColumns: ColumnsType<FlowSummary> = [
-    { title: '编码', dataIndex: 'code', key: 'code', width: 180 },
-    { title: '名称', dataIndex: 'display_name', key: 'display_name' },
+    {
+      title: '名称',
+      key: 'name',
+      width: 200,
+      render: (_: unknown, record: FlowSummary) => (
+        <div>
+          <Text strong>{record.display_name || record.code}</Text>
+          <div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.code}
+            </Text>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      sorter: (a: FlowSummary, b: FlowSummary) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      defaultSortOrder: 'ascend',
+      render: (v: string) => fmtTime(v),
+    },
+    {
+      title: '任务来源',
+      key: 'department',
+      width: 240,
+      render: (_: unknown, record: FlowSummary) => {
+        if (!record.department_id) return <Text type="secondary">-</Text>;
+        const deptName = deptMap.get(record.department_id);
+        return (
+          <div>
+            {deptName ? <Text>{deptName}</Text> : <Text type="secondary">-</Text>}
+            {record.project_name && (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>{record.project_name}</Text>
+              </div>
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      title: '实验对象',
+      key: 'exp_objects',
+      width: 200,
+      render: (_: unknown, record: FlowSummary) => {
+        const nodes = (record.latest_version?.nodes ?? []) as { component_name?: string }[];
+        const compNames = Array.from(
+          new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))),
+        );
+        // 从组件的 experimental_object_code 收集实验对象编码
+        const objCodes = Array.from(
+          new Set(
+            compNames
+              .map((name) => compMap.get(name)?.experimental_object_code)
+              .filter((c): c is string => Boolean(c)),
+          ),
+        );
+        if (objCodes.length === 0) return <Text type="secondary">-</Text>;
+        return (
+          <div>
+            {objCodes.map((code) => {
+              const obj = objMap.get(code);
+              if (!obj) return <div key={code}><Text code>{code}</Text></div>;
+              const eqName = obj.equipment_id ? equipMap.get(obj.equipment_id) : null;
+              return (
+                <div key={code}>
+                  <Text>{obj.display_name}</Text>
+                  {eqName && (
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{eqName}</Text>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      },
+    },
+    {
+      title: '数据接口',
+      key: 'components',
+      width: 180,
+      render: (_: unknown, record: FlowSummary) => {
+        const nodes = (record.latest_version?.nodes ?? []) as { component_name?: string }[];
+        const compNames = Array.from(
+          new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))),
+        );
+        if (compNames.length === 0) return <Text type="secondary">-</Text>;
+        return (
+          <div>
+            {compNames.map((name) => {
+              const comp = compMap.get(name);
+              return (
+                <div key={name}>
+                  <Text>{comp?.display_name ?? name}</Text>
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{name}</Text>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      },
+    },
     {
       title: '状态',
       dataIndex: 'status',
@@ -709,29 +890,12 @@ export function FlowDetail(): JSX.Element {
       ),
     },
     {
-      title: '最新版本',
-      key: 'latest_version',
-      width: 120,
-      render: (_: unknown, record: FlowSummary) =>
-        record.latest_version ? `v${record.latest_version.version}` : '-',
-    },
-    {
       title: '操作',
       key: 'action',
-      width: 160,
-      render: (_: unknown, record: FlowSummary) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedFlowId(record.id);
-            }}
-          >
-            查看
-          </Button>
-          {record.status === 'deprecated' ? (
+      width: 180,
+      render: (_: unknown, record: FlowSummary) =>
+        record.status === 'deprecated' ? (
+          <Space size="small">
             <Popconfirm
               title="确定恢复该流程？"
               onConfirm={(e) => {
@@ -750,7 +914,47 @@ export function FlowDetail(): JSX.Element {
                 恢复
               </Button>
             </Popconfirm>
-          ) : (
+            <Popconfirm
+              title="确定删除该流程？"
+              description="将同时删除其所有版本和运行记录，不可撤销"
+              onConfirm={(e) => {
+                e?.stopPropagation();
+                deleteFlowMutation.mutate(record.id);
+              }}
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={(e) => e.stopPropagation()}
+                loading={deleteFlowMutation.isPending}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        ) : (
+          <Space size="small">
+            <Button
+              type="link"
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditFlowId(record.id);
+                editForm.setFieldsValue({
+                  display_name: record.display_name,
+                  code: record.code,
+                  department_id: record.department_id ?? undefined,
+                  project_name: record.project_name ?? undefined,
+                });
+                setEditModalOpen(true);
+              }}
+            >
+              编辑
+            </Button>
             <Popconfirm
               title="确定归档该流程？"
               onConfirm={(e) => {
@@ -770,124 +974,11 @@ export function FlowDetail(): JSX.Element {
                 归档
               </Button>
             </Popconfirm>
-          )}
-        </Space>
-      ),
-    },
-  ];
-
-  const nodeColumns: ColumnsType<FlowNodeExecution> = [
-    { title: '节点 ID', dataIndex: 'node_id', key: 'node_id', width: 140 },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 80,
-      render: (v: string) => (
-        <Tag color={NODE_STATUS_COLOR[v] ?? 'default'}>
-          {NODE_STATUS_LABEL[v] ?? v}
-        </Tag>
-      ),
-    },
-    {
-      title: '耗时',
-      dataIndex: 'duration_ms',
-      key: 'duration_ms',
-      width: 70,
-      render: (v: number | null) => (v != null ? `${v}ms` : '-'),
-    },
-    {
-      title: '摘要',
-      key: 'summary',
-      width: 200,
-      ellipsis: true,
-      render: (_: unknown, record: FlowNodeExecution) => {
-        // 失败节点优先显示错误信息（红色）
-        if (record.status === 'failed') {
-          const diag = record.diagnostics;
-          const errMsg = diag?.error_message;
-          if (errMsg) {
-            return <Text type="danger" strong>{String(errMsg)}</Text>;
-          }
-          return <Text type="danger">执行失败</Text>;
-        }
-        const out = record.output_summary;
-        if (!out) return '-';
-        return out._summary_text || '-';
-      },
-    },
-    {
-      title: '输出数据',
-      key: 'output',
-      render: (_: unknown, record: FlowNodeExecution) => {
-        const out = record.output_summary;
-        if (!out) {
-          // 失败节点显示更显眼的错误信息
-          const diag = record.diagnostics;
-          if (diag && diag.error_message) {
-            return (
-              <Alert
-                type="error"
-                message="执行失败"
-                description={String(diag.error_message)}
-                style={{ padding: '8px 12px' }}
-              />
-            );
-          }
-          return '-';
-        }
-        // 提取输出端口数据（排除 _metadata 和 _summary_text）
-        const entries = Object.entries(out)
-          .filter(([k]) => k !== '_metadata' && k !== '_summary_text');
-        if (entries.length === 0) return '-';
-
-        return (
-          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-            {entries.map(([portName, portValue]) => {
-              let displayValue: string;
-              if (portName === 'statistics') {
-                // 统计组件输出特殊处理
-                const stats = portValue as Record<string, Record<string, number>>;
-                displayValue = Object.entries(stats)
-                  .map(([col, vals]) => `${col}: mean=${vals.mean?.toFixed(3)}, std=${vals.std?.toFixed(3)}, median=${vals.median?.toFixed(3)}`)
-                  .join('\n');
-              } else if (typeof portValue === 'string') {
-                displayValue = portValue.length > 200 ? portValue.slice(0, 200) + '...' : portValue;
-              } else {
-                displayValue = JSON.stringify(portValue, null, 2);
-                if (displayValue.length > 300) displayValue = displayValue.slice(0, 300) + '...';
-              }
-              return (
-                <div key={portName}>
-                  <Text type="secondary" style={{ fontSize: 11, fontWeight: 500 }}>{portName}:</Text>
-                  <pre style={{ fontSize: 11, margin: '2px 0', padding: '4px 8px', background: '#f5f5f5', borderRadius: 4, overflow: 'auto', maxHeight: 120 }}>
-                    {displayValue}
-                  </pre>
-                </div>
-              );
-            })}
           </Space>
-        );
-      },
-    },
-    {
-      title: '操作',
-      key: 'action',
-      width: 80,
-      render: (_: unknown, record: FlowNodeExecution) =>
-        record.status === 'failed' ? (
-          <Button
-            type="link"
-            size="small"
-            onClick={() =>
-              activeRunId && retryMutation.mutate({ runId: activeRunId, nodeId: record.node_id })
-            }
-          >
-            重试
-          </Button>
-        ) : null,
+        ),
     },
   ];
+
 
   const canExecute = flow?.status === 'published' || !!flow?.latest_version;
 
@@ -895,18 +986,31 @@ export function FlowDetail(): JSX.Element {
     <div>
       <Space style={{ marginBottom: 16, alignItems: 'center' }}>
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
-          新建流程
+          新建任务
         </Button>
-        <Checkbox
-          checked={showArchived}
-          onChange={(e) => setShowArchived(e.target.checked)}
+        <Button
+          type={showArchived ? 'default' : 'primary'}
+          onClick={() => setShowArchived(false)}
         >
-          显示已归档
-        </Checkbox>
+          活跃
+        </Button>
+        <Button
+          type={showArchived ? 'primary' : 'default'}
+          onClick={() => setShowArchived(true)}
+        >
+          归档
+        </Button>
+        <Select
+          placeholder="执行实验部门筛选"
+          style={{ width: 200 }}
+          value={deptFilter ?? '__all__'}
+          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+        />
       </Space>
 
-      {/* 流程列表 */}
-      <Card title="流程列表" style={{ marginBottom: 16 }}>
+      {/* 任务列表 */}
+      <Card title="任务列表" style={{ marginBottom: 16 }}>
         <Table<FlowSummary>
           columns={flowColumns}
           dataSource={flows}
@@ -921,102 +1025,88 @@ export function FlowDetail(): JSX.Element {
         />
       </Card>
 
-      {/* 流程详情 */}
-      {selectedFlowId && (
-        <Card title="流程详情" style={{ marginBottom: 16 }} loading={flowLoading}>
-          {flow && (
-            <>
-              <Descriptions bordered column={2} size="small">
-                <Descriptions.Item label="编码">
-                  <Text strong>{flow.code}</Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="名称">{flow.display_name}</Descriptions.Item>
-                <Descriptions.Item label="最新版本">
-                  {flow.latest_version
-                    ? `v${flow.latest_version.version} (${flow.latest_version.digest.slice(0, 12)}…)`
-                    : '未发布'}
-                </Descriptions.Item>
-                <Descriptions.Item label="创建时间">{fmtTime(flow.created_at)}</Descriptions.Item>
-              </Descriptions>
-
-              <Space style={{ marginTop: 16 }} wrap>
-                <Button
-                  onClick={() => setPublishModalOpen(true)}
-                >
-                  发布版本
-                </Button>
-                <Button
-                  type="primary"
-                  disabled={!canExecute}
-                  onClick={() => {
-                    runForm.resetFields();
-                    setRunModalOpen(true);
-                  }}
-                >
-                  创建执行
-                </Button>
-                {!canExecute && (
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    需先发布版本才能执行
-                  </Text>
-                )}
-                {flow.status === 'deprecated' ? (
-                  <Popconfirm
-                    title="确定恢复该流程？"
-                    description="恢复后流程将重新显示在活跃列表中"
-                    onConfirm={() => selectedFlowId && restoreMutation.mutate(selectedFlowId)}
-                    okText="恢复"
-                    cancelText="取消"
-                  >
-                    <Button
-                      loading={restoreMutation.isPending}
-                    >
-                      恢复
-                    </Button>
-                  </Popconfirm>
-                ) : (
-                  <Popconfirm
-                    title="确定归档该流程？"
-                    description="归档后流程将标记为已弃用，不再显示在活跃列表中"
-                    onConfirm={() => selectedFlowId && archiveMutation.mutate(selectedFlowId)}
-                    okText="归档"
-                    cancelText="取消"
-                  >
-                    <Button
-                      danger
-                      loading={archiveMutation.isPending}
-                    >
-                      归档
-                    </Button>
-                  </Popconfirm>
-                )}
-              </Space>
-            </>
-          )}
-        </Card>
-      )}
-
       {/* 运行管理 */}
       {selectedFlowId && (
-        <Card title="运行管理" style={{ marginBottom: 16 }}>
+        <Card
+          title={
+            <Space>
+              <span>运行管理</span>
+              <Button
+                type="primary"
+                size="small"
+                disabled={!canExecute}
+                onClick={() => {
+                  runForm.resetFields();
+                  setRunModalOpen(true);
+                }}
+              >
+                执行
+              </Button>
+            </Space>
+          }
+          style={{ marginBottom: 16 }}
+        >
           {/* 运行列表 */}
           <Table<FlowRunSummary>
             columns={[
               { title: '作业 ID', dataIndex: 'job_id', key: 'job_id', width: 280, ellipsis: true,
-                render: (v: string | null) => v ? <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text> : '-' },
+                render: (v: string | null, record: FlowRunSummary) => {
+                  if (!v) return '-';
+                  const out = record.output_summary;
+                  const meta = (out?._metadata ?? {}) as Record<string, unknown>;
+                  const header = (meta.header ?? {}) as Record<string, unknown>;
+                  const previewText = Object.keys(header).length > 0
+                    ? JSON.stringify(header, null, 2)
+                    : '';
+                  return (
+                    <Tooltip
+                      title={previewText ? (
+                        <pre style={{ fontSize: 11, maxHeight: 300, overflow: 'auto', margin: 0 }}>
+                          {previewText}
+                        </pre>
+                      ) : '暂无输出数据'}
+                      placement="rightTop"
+                      overlayStyle={{ maxWidth: 500 }}
+                    >
+                      <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>
+                    </Tooltip>
+                  );
+                },
+              },
+              { title: '摘要', key: 'summary', width: 120, ellipsis: true,
+                render: (_: unknown, record: FlowRunSummary) => {
+                  const out = record.output_summary;
+                  if (!out) return '-';
+                  const meta = (out._metadata ?? {}) as Record<string, unknown>;
+                  const rows = (meta.all_rows ?? meta.preview_rows ?? []) as Record<string, unknown>[];
+                  return rows.length > 0 ? `${rows.length} 行` : '-';
+                },
+              },
               { title: '状态', dataIndex: 'status', key: 'status', width: 100,
                 render: (s: string) => <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
               { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
                 render: (v: string) => fmtTime(v) },
-              { title: '完成时间', dataIndex: 'completed_at', key: 'completed_at', width: 180,
-                render: (v: string | null) => fmtTime(v) },
+              { title: '耗时', key: 'duration', width: 100,
+                render: (_: unknown, record: FlowRunSummary) => {
+                  if (!record.started_at || !record.completed_at) return '-';
+                  const ms = new Date(record.completed_at).getTime() - new Date(record.started_at).getTime();
+                  if (ms < 1000) return `${ms}ms`;
+                  return `${(ms / 1000).toFixed(1)}s`;
+                },
+              },
               { title: '操作', key: 'action', width: 200,
                 render: (_: unknown, record: FlowRunSummary) => (
                   <Space size="small">
-                    <Button type="link" size="small"
-                      onClick={() => setActiveRunId(record.id)}>
-                      查看详情
-                    </Button>
+                    {record.status === 'succeeded' && (
+                      <Button type="link" size="small"
+                        onClick={() => {
+                          setDataRunId(record.id);
+                          setFactModalOpen(true);
+                        }}
+                      >
+                        数据入库
+                      </Button>
+                    )}
                     {record.status === 'pending' && (
                       <Button type="link" size="small"
                         loading={resumeMutation.isPending}
@@ -1058,26 +1148,21 @@ export function FlowDetail(): JSX.Element {
             style={{ marginBottom: 16 }}
           />
 
-          {/* 选中运行的详情 */}
-          {activeRunId ? (
-            runLoading ? (
-              <div style={{ textAlign: 'center', padding: 24 }}>
-                <Spin />
-              </div>
-            ) : runDetail ? (
-              <RunDetailPanel run={runDetail} nodeColumns={nodeColumns} />
-            ) : (
-              <Empty description="未找到运行记录" />
-            )
-          ) : (
-            <Empty description="点击上方查看详情按钮加载执行详情" />
-          )}
+          {/* 数据入库 Modal */}
+          <FactModal
+            runId={dataRunId}
+            flow={flow}
+            deptMap={deptMap}
+            compMap={compMap}
+            open={factModalOpen}
+            onClose={() => setFactModalOpen(false)}
+          />
         </Card>
       )}
 
-      {/* 新建流程 Modal */}
+      {/* 新建任务 Modal */}
       <Modal
-        title="新建流程"
+        title="新建任务"
         open={createModalOpen}
         onOk={handleCreate}
         onCancel={() => {
@@ -1089,6 +1174,18 @@ export function FlowDetail(): JSX.Element {
         cancelText="取消"
       >
         <Form form={createForm} layout="vertical">
+          <Form.Item
+            name="department_id"
+            label="执行实验部门"
+            rules={[{ required: true, message: '请选择执行实验部门' }]}
+          >
+            <Select
+              placeholder="请选择执行实验部门"
+              showSearch
+              optionFilterProp="label"
+              options={deptOptions}
+            />
+          </Form.Item>
           <Form.Item
             name="component_name"
             label="选择工具"
@@ -1130,17 +1227,64 @@ export function FlowDetail(): JSX.Element {
           >
             <Input placeholder="如：篦冷机分析流程" maxLength={200} />
           </Form.Item>
+          <Form.Item name="project_name" label="项目名称">
+            <Input placeholder="可选" maxLength={200} />
+          </Form.Item>
         </Form>
       </Modal>
 
-      {/* 发布版本 Modal — 可视化节点构建器 */}
-      <PublishVersionModal
-        open={publishModalOpen}
-        onClose={() => setPublishModalOpen(false)}
-        onPublish={handlePublish}
-        publishing={publishMutation.isPending}
-        existingVersion={flow?.latest_version ?? null}
-      />
+      {/* 编辑任务 Modal */}
+      <Modal
+        title="编辑任务"
+        open={editModalOpen}
+        onOk={async () => {
+          try {
+            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name']);
+            if (editFlowId) {
+              updateFlowMutation.mutate({
+                flowId: editFlowId,
+                displayName: values.display_name as string,
+                departmentId: (values.department_id as string) ?? null,
+                projectName: (values.project_name as string) ?? null,
+              });
+            }
+          } catch {
+            // 校验失败
+          }
+        }}
+        onCancel={() => {
+          setEditModalOpen(false);
+          editForm.resetFields();
+        }}
+        confirmLoading={updateFlowMutation.isPending}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={editForm} layout="vertical">
+          <Form.Item name="code" label="流程编码">
+            <Input disabled />
+          </Form.Item>
+          <Form.Item
+            name="display_name"
+            label="流程名称"
+            rules={[{ required: true, message: '请输入流程名称' }]}
+          >
+            <Input placeholder="请输入流程名称" maxLength={200} />
+          </Form.Item>
+          <Form.Item name="department_id" label="执行实验部门">
+            <Select
+              placeholder="请选择执行实验部门"
+              showSearch
+              optionFilterProp="label"
+              allowClear
+              options={deptOptions}
+            />
+          </Form.Item>
+          <Form.Item name="project_name" label="项目名称">
+            <Input placeholder="可选" maxLength={200} />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* 创建执行 Modal */}
       <Modal
@@ -1159,24 +1303,68 @@ export function FlowDetail(): JSX.Element {
         <Form form={runForm} layout="vertical">
           {(flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.map((node) => {
             const params = node.params as Record<string, unknown> ?? {};
-            const paramEntries = Object.entries(params);
+            const paramEntries = Object.entries(params).filter(
+              ([key]) => key !== 'experimental_object_code',
+            );
             if (paramEntries.length === 0) return null;
+            // 控制参数渲染顺序：path → file_engine → prompt → 其余
+            const orderedKeys = ['path', 'file_engine', 'prompt'];
+            const sortedEntries = [...paramEntries].sort((a, b) => {
+              const ai = orderedKeys.indexOf(a[0]);
+              const bi = orderedKeys.indexOf(b[0]);
+              if (ai >= 0 && bi >= 0) return ai - bi;
+              if (ai >= 0) return -1;
+              if (bi >= 0) return 1;
+              return 0;
+            });
             return (
               <div key={node.node_id}>
-                <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                  节点：{node.node_id}（{node.component_name}）
-                </Text>
-                {paramEntries.map(([key, defaultVal]) => {
+                {sortedEntries.map(([key, defaultVal]) => {
                   const formKey = `${node.node_id}__${key}`;
-                  const isPath = /path|file/i.test(key);
-                  return (
-                    <Form.Item
-                      key={formKey}
-                      name={formKey}
-                      label={key}
-                      initialValue={defaultVal || ''}
-                    >
-                      {isPath ? (
+                  const isPath = key === 'path';
+                  const isFileEngine = key === 'file_engine';
+                  // 参数标签映射
+                  const labelMap: Record<string, string> = {
+                    path: '实验报告文件',
+                    file_engine: '文件读取方式',
+                    prompt: '大模型提示词',
+                  };
+                  const label = labelMap[key] ?? key;
+
+                  if (isFileEngine) {
+                    // 文件读取方式：水平按钮组
+                    return (
+                      <div key={formKey} style={{ marginBottom: 24 }}>
+                        <div style={{ display: 'inline-block', marginRight: 12, lineHeight: '32px', fontWeight: 500 }}>
+                          {label}
+                        </div>
+                        <Form.Item
+                          name={formKey}
+                          initialValue={defaultVal || 'pymupdf'}
+                          style={{ display: 'inline-block', marginBottom: 0 }}
+                        >
+                          <Radio.Group
+                            optionType="button"
+                            buttonStyle="solid"
+                            options={[
+                              { value: 'pymupdf', label: 'pymupdf' },
+                              { value: 'image', label: 'image' },
+                              { value: 'raw', label: 'raw' },
+                            ]}
+                          />
+                        </Form.Item>
+                      </div>
+                    );
+                  }
+
+                  if (isPath) {
+                    return (
+                      <Form.Item
+                        key={formKey}
+                        name={formKey}
+                        label={label}
+                        initialValue={defaultVal || ''}
+                      >
                         <Input.Group compact style={{ display: 'flex' }}>
                           <Form.Item name={formKey} noStyle>
                             <Input
@@ -1185,29 +1373,52 @@ export function FlowDetail(): JSX.Element {
                             />
                           </Form.Item>
                           <Button
-                            size="small"
-                            onClick={() => setRunFileBrowserOpen(true)}
+                            loading={uploadLoading === formKey}
+                            onClick={() => fileInputRef.current?.click()}
                           >
-                            浏览
+                            上传
                           </Button>
-                          <FileBrowserModal
-                            open={runFileBrowserOpen}
-                            onClose={() => setRunFileBrowserOpen(false)}
-                            onSelect={(selectedPath) => {
-                              runForm.setFieldValue(formKey, selectedPath);
-                              setRunFileBrowserOpen(false);
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            style={{ display: 'none' }}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setUploadLoading(formKey);
+                              try {
+                                const res = await apiUploadFile(file);
+                                runForm.setFieldValue(formKey, file.name);
+                                setArtifactMap((prev) => ({ ...prev, [formKey]: `artifact:${res.artifact_id}` }));
+                                message.success(`文件已上传: ${file.name}`);
+                              } catch (err) {
+                                message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
+                              } finally {
+                                setUploadLoading(null);
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                              }
                             }}
                           />
                         </Input.Group>
-                      ) : (
-                        <Input
-                          placeholder={defaultVal ? String(defaultVal) : `输入 ${key}`}
-                        />
-                      )}
+                      </Form.Item>
+                    );
+                  }
+
+                  // 其余参数（含 prompt）
+                  return (
+                    <Form.Item
+                      key={formKey}
+                      name={formKey}
+                      label={label}
+                      initialValue={defaultVal || ''}
+                    >
+                      <Input.TextArea
+                        rows={key === 'prompt' ? 6 : 1}
+                        placeholder={defaultVal ? String(defaultVal) : `输入 ${key}`}
+                      />
                     </Form.Item>
                   );
                 })}
-                <Divider style={{ margin: '12px 0' }} />
               </div>
             );
           })}
@@ -1224,20 +1435,50 @@ export function FlowDetail(): JSX.Element {
   );
 }
 
-/** 运行详情面板 */
-function RunDetailPanel({
-  run,
-  nodeColumns,
+/** 数据入库 Modal */
+function FactModal({
+  runId,
+  flow,
+  deptMap,
+  compMap,
+  open,
+  onClose,
 }: {
-  run: FlowRunDetail;
-  nodeColumns: ColumnsType<FlowNodeExecution>;
+  runId: string | null;
+  flow: FlowSummary | undefined;
+  deptMap: Map<string, string>;
+  compMap: Map<string, ComponentSummary>;
+  open: boolean;
+  onClose: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [factModalOpen, setFactModalOpen] = useState(false);
-  const [factObjectId, setFactObjectId] = useState<string | undefined>();
 
-  // 从成功的节点中提取 metadata 和全部数据
-  const succeededNode = run.nodes.find(
+  // 从流程节点的 params 中提取 experimental_object_code
+  const flowNodes = (flow?.latest_version?.nodes ?? []) as FlowNodeSchema[];
+  const expObjectCode = flowNodes
+    .map((n) => (n.params as Record<string, unknown> | undefined)?.experimental_object_code as string | undefined)
+    .find((v): v is string => Boolean(v));
+
+  // 查询工业对象（找到 code 对应的 object_id）
+  const { data: objectsData } = useQuery({
+    queryKey: ['objects-for-fact'],
+    queryFn: () => apiListObjects({ page_size: 100 }),
+    enabled: open,
+  });
+  const objects = objectsData?.items ?? [];
+  const matchedObject = expObjectCode
+    ? objects.find((o) => o.code === expObjectCode)
+    : undefined;
+  const factObjectId = matchedObject?.id;
+
+  // 查询运行详情获取输出数据
+  const { data: runDetail } = useQuery({
+    queryKey: ['flow-run', runId],
+    queryFn: () => apiGetFlowRun(runId!),
+    enabled: open && !!runId,
+  });
+
+  const succeededNode = runDetail?.nodes.find(
     (n) => n.status === 'succeeded' && n.output_summary,
   );
   const meta = (succeededNode?.output_summary?._metadata ?? {}) as Record<string, unknown>;
@@ -1245,178 +1486,133 @@ function RunDetailPanel({
   const header = (meta.header ?? {}) as Record<string, unknown>;
   const exportData = { metadata: header, data: allRows };
 
-  // 查询工业对象
-  const { data: objectsData } = useQuery({
-    queryKey: ['objects-for-fact'],
-    queryFn: () => apiListObjects({ page_size: 100 }),
-    enabled: factModalOpen,
-  });
-  const objectOptions = (objectsData?.items ?? []).map((o) => ({
-    value: o.id,
-    label: `${o.display_name} (${o.code})`,
-  }));
-
   // 写入事实 Mutation
   const persistFactMutation = useMutation({
     mutationFn: () =>
-      apiPersistRunAsFact(run.id, {
+      apiPersistRunAsFact(runId!, {
         object_id: factObjectId!,
         template_version_id: null,
       }),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['facts'] });
-      setFactModalOpen(false);
+      onClose();
       message.success(`已写入事实：${data.raw_count} 条观察值（fact_id=${data.fact_id.slice(0, 8)}...）`);
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  const canPersistFact = run.status === 'succeeded';
-
-  // 从第一个失败节点提取错误信息，用于 run 级别错误提示
-  const failedNode = run.nodes.find((n) => n.status === 'failed');
-  const runErrorMessage: string | null = failedNode?.diagnostics?.error_message
-    ? String(failedNode.diagnostics.error_message)
-    : null;
+  // 提取任务信息
+  const taskName = flow?.display_name ?? '-';
+  const deptName = flow?.department_id ? (deptMap.get(flow.department_id) ?? '-') : '-';
+  const createdTime = flow ? fmtTime(flow.created_at) : '-';
+  // 数据接口（组件名）
+  const compNames = Array.from(
+    new Set(
+      flowNodes
+        .map((n) => n.component_name)
+        .filter((n): n is string => Boolean(n)),
+    ),
+  );
+  const compDisplay = compNames.map((n) => compMap.get(n)?.display_name ?? n).join(', ') || '-';
+  // 实验对象
+  const expObjDisplay = matchedObject ? `${matchedObject.display_name}（${matchedObject.code}）` : '-';
 
   return (
-    <div>
-      {/* 流程执行失败时在顶部显著展示错误信息 */}
-      {run.status === 'failed' && runErrorMessage && (
-        <Alert
-          type="error"
-          message="流程执行失败"
-          description={runErrorMessage}
-          showIcon
-          style={{ marginBottom: 16 }}
-        />
-      )}
-
-      {canPersistFact && (
-        <div style={{ marginBottom: 16 }}>
-          <Button type="primary" onClick={() => setFactModalOpen(true)}>
-            查看数据 & 写入事实
-          </Button>
-        </div>
-      )}
-
-      <Title level={5}>节点执行（{run.nodes.length} 个）</Title>
-      <Table<FlowNodeExecution>
-        columns={nodeColumns}
-        dataSource={run.nodes}
-        rowKey="id"
-        pagination={false}
-        size="small"
-      />
-      {run.nodes.length === 0 && (
-        <Paragraph type="secondary">暂无节点执行记录</Paragraph>
-      )}
-
-      {/* 查看数据 & 写入事实 Modal */}
-      <Modal
-        title="执行结果数据"
-        open={factModalOpen}
-        onCancel={() => setFactModalOpen(false)}
-        footer={
-          <Space>
-            <Button onClick={() => setFactModalOpen(false)}>关闭</Button>
-            <Button
-              type="primary"
-              disabled={!factObjectId}
-              loading={persistFactMutation.isPending}
-              onClick={() => persistFactMutation.mutate()}
-            >
-              写入事实
-            </Button>
-          </Space>
-        }
-        width={720}
-      >
-        {/* metadata 区域 */}
-        <Text strong>Metadata</Text>
-        <pre
-          style={{
-            background: '#f5f5f5',
-            padding: 12,
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'monospace',
-            maxHeight: 200,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            marginTop: 4,
-            marginBottom: 16,
-          }}
-        >
-          {JSON.stringify(header, null, 2)}
-        </pre>
-
-        {/* 全部数据区域 */}
-        <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
-          <Text strong>数据（{allRows.length} 行）</Text>
+    <Modal
+      title="执行结果数据"
+      open={open}
+      onCancel={onClose}
+      footer={
+        <Space>
+          <Button onClick={onClose}>关闭</Button>
           <Button
-            size="small"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `run-${run.id.slice(0, 8)}.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
+            type="primary"
+            disabled={!factObjectId}
+            loading={persistFactMutation.isPending}
+            onClick={() => persistFactMutation.mutate()}
           >
-            导出 JSON
+            写入事实
           </Button>
         </Space>
-        <pre
-          style={{
-            background: '#f5f5f5',
-            padding: 12,
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'monospace',
-            maxHeight: 400,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            marginTop: 4,
+      }
+      width={720}
+    >
+      {/* 任务信息 */}
+      <Card size="small" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px' }}>
+          <div><Text type="secondary">任务名称：</Text><Text strong>{taskName}</Text></div>
+          <div><Text type="secondary">任务来源：</Text><Text>{deptName}</Text></div>
+          <div><Text type="secondary">实验对象：</Text><Text>{expObjDisplay}</Text></div>
+          <div><Text type="secondary">数据接口：</Text><Text>{compDisplay}</Text></div>
+          <div><Text type="secondary">创建时间：</Text><Text>{createdTime}</Text></div>
+        </div>
+      </Card>
+      {/* metadata 区域 */}
+      <Text strong>Metadata</Text>
+      <pre
+        style={{
+          background: '#f5f5f5',
+          padding: 12,
+          borderRadius: 6,
+          fontSize: 13,
+          fontFamily: 'monospace',
+          maxHeight: 200,
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          marginTop: 4,
+          marginBottom: 16,
+        }}
+      >
+        {JSON.stringify(header, null, 2)}
+      </pre>
+
+      {/* 全部数据区域 */}
+      <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
+        <Text strong>数据（{allRows.length} 行）</Text>
+        <Button
+          size="small"
+          onClick={() => {
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `run-${runId?.slice(0, 8)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
           }}
         >
-          {JSON.stringify(allRows, null, 2)}
-        </pre>
-
-        {/* 写入事实区域 */}
-        <Divider />
-        <Form layout="vertical">
-          <Form.Item label="工业对象" required>
-            <Select
-              placeholder="选择工业对象"
-              showSearch
-              optionFilterProp="label"
-              options={objectOptions}
-              value={factObjectId}
-              onChange={setFactObjectId}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
-    </div>
+          导出 JSON
+        </Button>
+      </Space>
+      <pre
+        style={{
+          background: '#f5f5f5',
+          padding: 12,
+          borderRadius: 6,
+          fontSize: 13,
+          fontFamily: 'monospace',
+          maxHeight: 400,
+          overflow: 'auto',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          marginTop: 4,
+        }}
+      >
+        {JSON.stringify(allRows, null, 2)}
+      </pre>
+    </Modal>
   );
 }
 
 // ============================================================
-// 发布版本弹窗 — 可视化节点构建器
+// 发布版本弹窗 — 可视化节点构建器（已弃用，创建时自动发布）
 // ============================================================
 
-/**
- * 发布流程版本弹窗
- *
- * 提供两种模式：
- * 1. 可视化模式（默认）：通过组件选择器、参数表单、边连线可视化构建流程
- * 2. 高级模式：直接编辑 JSON（保留原始功能作为 fallback）
- */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+// PublishVersionModal 已弃用，创建时自动发布，不再需要手动发布版本
+// 保留代码以备将来需要复杂流程编排时恢复
+// @ts-expect-error — 保留未使用的组件定义
 function PublishVersionModal({
   open,
   onClose,
@@ -2119,7 +2315,7 @@ function NodeEditorCard({
  * 根据参数类型自动选择合适的输入控件：
  * - boolean → Select (true/false)
  * - array/object → TextArea (JSON)
- * - string 且参数名含 path/file → Input + 浏览按钮（打开文件浏览器）
+ * - string 且参数名含 path/file → Input + 上传按钮（选本地文件上传到 MinIO）
  * - 其他 → Input
  */
 function ParamInputRow({
@@ -2132,12 +2328,28 @@ function ParamInputRow({
   onChange: (newValue: unknown) => void;
 }): JSX.Element {
   const t = param.type.toLowerCase();
-  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 判断是否需要文件浏览器（参数名含 path/file 且为 string 类型）
-  const needsFileBrowser =
+  // 判断是否需要文件上传（参数名含 path/file 且为 string 类型）
+  const needsFileUpload =
     (t === 'string') &&
     /path|file/i.test(param.name);
+
+  // 处理文件上传
+  const handleFileUpload = async (file: File): Promise<void> => {
+    setUploading(true);
+    try {
+      const res = await apiUploadFile(file);
+      // 以 artifact:{artifact_id} 格式填入参数值
+      onChange(convertParamValue(`artifact:${res.artifact_id}`, param.type));
+      message.success(`上传成功: ${res.filename} (${(res.size / 1024).toFixed(1)} KB)`);
+    } catch (err) {
+      message.error(`上传失败: ${extractApiError(err)}`);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
     <div style={{ marginBottom: 8 }}>
@@ -2185,8 +2397,8 @@ function ParamInputRow({
               : `输入 ${param.type} 格式的 JSON`
           }
         />
-      ) : needsFileBrowser ? (
-        /* 文件路径参数：输入框 + 浏览按钮 */
+      ) : needsFileUpload ? (
+        /* 文件路径参数：输入框 + 上传按钮 */
         <>
         <div style={{ display: 'flex', gap: 4 }}>
           <Input
@@ -2200,24 +2412,30 @@ function ParamInputRow({
             placeholder={
               param.default !== undefined
                 ? String(param.default)
-                : `请输入 ${param.name}`
+                : `请输入 ${param.name} 或点击上传`
             }
+          />
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const selectedFile = e.target.files?.[0];
+              if (selectedFile) {
+                void handleFileUpload(selectedFile);
+              }
+              // 清空 input 值，使同一文件可重复选择
+              e.target.value = '';
+            }}
           />
           <Button
             size="small"
-            onClick={() => setFileBrowserOpen(true)}
+            loading={uploading}
+            onClick={() => fileInputRef.current?.click()}
           >
-            浏览
+            上传
           </Button>
         </div>
-        <FileBrowserModal
-          open={fileBrowserOpen}
-          onClose={() => setFileBrowserOpen(false)}
-          onSelect={(selectedPath) => {
-            onChange(convertParamValue(selectedPath, param.type));
-            setFileBrowserOpen(false);
-          }}
-        />
         </>
       ) : (
         <Input
@@ -2242,12 +2460,8 @@ function ParamInputRow({
 // 文件浏览器弹窗
 // ============================================================
 
-/**
- * 文件浏览器弹窗
- *
- * 调用后端 /files/browse API 列出服务器端目录内容，
- * 支持目录导航和文件选择。
- */
+// 文件浏览器弹窗（已弃用，改用文件上传方式）
+// @ts-expect-error — 保留未使用的组件定义
 function FileBrowserModal({
   open,
   onClose,

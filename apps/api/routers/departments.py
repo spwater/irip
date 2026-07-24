@@ -113,6 +113,7 @@ class DepartmentListItem(BaseModel):
     id: str
     code: str
     display_name: str
+    description: str | None
     status: str
     sort_order: int
     member_count: int
@@ -210,6 +211,7 @@ async def list_departments(
             id=str(dept.id),
             code=dept.code,
             display_name=dept.display_name,
+            description=dept.description,
             status=dept.status,
             sort_order=dept.sort_order,
             member_count=member_count,
