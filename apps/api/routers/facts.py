@@ -124,6 +124,8 @@ class FactRevisionResponse(BaseModel):
     fact_type: str
     subject_id: str
     status: str
+    task_code: str | None = None
+    task_name: str | None = None
 
 
 class FactListResponse(BaseModel):
@@ -287,10 +289,88 @@ async def list_facts(
         cursor=cursor,
         page_size=page_size,
     )
+
+    # 批量反查 task_code 和 task_name
+    items = [_ref_to_response(r) for r in refs]
+    if items:
+        await _enrich_with_task_info(items, service)
+
     return FactListResponse(
-        items=[_ref_to_response(r) for r in refs],
+        items=items,
         next_cursor=next_cursor,
     )
+
+
+async def _enrich_with_task_info(items: list[FactRevisionResponse], service: FactServiceDep) -> None:
+    """为每个 fact 反查关联的任务编码和名称（通过 raw_observation.source_path → flow_run → flow_definition）。"""
+    import sqlalchemy as sa
+    from packages.facts.entities import RawObservation
+    from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+
+    revision_ids = [item.revision_id for item in items]
+
+    async with service._factory() as session:
+        # 批量查 raw_observation 的 source_path
+        raw_stmt = (
+            sa.select(RawObservation.fact_revision_id, RawObservation.source_path)
+            .where(RawObservation.fact_revision_id.in_([
+                __import__('uuid').UUID(rid) for rid in revision_ids
+            ]))
+        )
+        raw_result = await session.execute(raw_stmt)
+        raw_map: dict[str, str] = {}
+        for row in raw_result:
+            rid_str = str(row[0])
+            sp = row[1]
+            if sp and sp.startswith("flow_run:") and rid_str not in raw_map:
+                raw_map[rid_str] = sp[len("flow_run:"):]
+
+        if not raw_map:
+            return
+
+        # 批量查 flow_run → flow_version → flow_definition
+        run_ids = [__import__('uuid').UUID(rid) for rid in raw_map.values()]
+        run_stmt = sa.select(FlowRun.id, FlowRun.flow_version_id).where(FlowRun.id.in_(run_ids))
+        run_result = await session.execute(run_stmt)
+        run_to_fv: dict[str, str] = {}
+        for row in run_result:
+            run_to_fv[str(row[0])] = str(row[1])
+
+        if not run_to_fv:
+            return
+
+        fv_ids = [__import__('uuid').UUID(fv) for fv in run_to_fv.values()]
+        fv_stmt = sa.select(FlowDefinitionVersionORM.id, FlowDefinitionVersionORM.flow_definition_id).where(FlowDefinitionVersionORM.id.in_(fv_ids))
+        fv_result = await session.execute(fv_stmt)
+        fv_to_fd: dict[str, str] = {}
+        for row in fv_result:
+            fv_to_fd[str(row[0])] = str(row[1])
+
+        if not fv_to_fd:
+            return
+
+        fd_ids = [__import__('uuid').UUID(fd) for fd in fv_to_fd.values()]
+        fd_stmt = sa.select(FlowDefinition.id, FlowDefinition.code, FlowDefinition.display_name).where(FlowDefinition.id.in_(fd_ids))
+        fd_result = await session.execute(fd_stmt)
+        fd_info: dict[str, tuple[str, str]] = {}
+        for row in fd_result:
+            fd_info[str(row[0])] = (row[1], row[2])
+
+        # 填充 items
+        for item in items:
+            run_id = raw_map.get(item.revision_id)
+            if not run_id:
+                continue
+            fv_id = run_to_fv.get(run_id)
+            if not fv_id:
+                continue
+            fd_id = fv_to_fd.get(fv_id)
+            if not fd_id:
+                continue
+            info = fd_info.get(fd_id)
+            if info:
+                item.task_code = info[0]
+                item.task_name = info[1]
 
 
 @facts_router.get("/search", response_model=FactListResponse)
@@ -319,8 +399,11 @@ async def search_facts(
         cursor=cursor,
         page_size=page_size,
     )
+    items = [_ref_to_response(r) for r in refs]
+    if items:
+        await _enrich_with_task_info(items, service)
     return FactListResponse(
-        items=[_ref_to_response(r) for r in refs],
+        items=items,
         next_cursor=next_cursor,
     )
 
@@ -488,6 +571,52 @@ async def get_fact_data(
         # 把任务信息附加到返回结果
         if task_info:
             result_data["task_info"] = task_info
+
+        # 查原始文件（PDF 等）：先从 fact_artifact 找非 JSON 的，再从 raw_observation.source_name 找
+        try:
+            # 方式1：从 fact_artifact 找非 JSON artifact
+            pdf_stmt = (
+                sa.select(FactArtifact, Artifact)
+                .where(
+                    FactArtifact.fact_revision_id == revision_id,
+                    FactArtifact.artifact_id == Artifact.id,
+                    Artifact.media_type != "application/json",
+                )
+                .limit(1)
+            )
+            pdf_result = await session.execute(pdf_stmt)
+            pdf_row = pdf_result.first()
+            if pdf_row:
+                pdf_artifact = pdf_row[1]
+                result_data["source_file"] = {
+                    "filename": pdf_artifact.filename or "原始文件",
+                    "media_type": pdf_artifact.media_type,
+                    "artifact_id": str(pdf_artifact.id),
+                }
+            else:
+                # 方式2：从 raw_observation.source_name 提取 artifact:xxx
+                from packages.facts.entities import RawObservation
+                raw_name_stmt = (
+                    sa.select(RawObservation.source_name)
+                    .where(RawObservation.fact_revision_id == revision_id)
+                    .limit(1)
+                )
+                raw_name_result = await session.execute(raw_name_stmt)
+                source_name = raw_name_result.scalar_one_or_none()
+                if source_name and source_name.startswith("artifact:"):
+                    artifact_id_str = source_name[len("artifact:"):]
+                    # 查 artifact 详情
+                    art_stmt = sa.select(Artifact).where(Artifact.id == __import__('uuid').UUID(artifact_id_str))
+                    art_result = await session.execute(art_stmt)
+                    art_record = art_result.scalar_one_or_none()
+                    if art_record:
+                        result_data["source_file"] = {
+                            "filename": art_record.filename or "原始文件",
+                            "media_type": art_record.media_type,
+                            "artifact_id": str(art_record.id),
+                        }
+        except Exception:
+            pass
 
         return result_data
 

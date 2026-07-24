@@ -452,6 +452,8 @@ export type FactSummary = {
   fact_type: string;
   subject_id: string;
   status: string;
+  task_code: string | null;
+  task_name: string | null;
 };
 
 export type FactDetail = {
@@ -1055,6 +1057,11 @@ export type FactData = {
   metadata: Record<string, unknown>;
   data: Record<string, unknown>[];
   task_info?: TaskInfo;
+  source_file?: {
+    filename: string;
+    media_type: string;
+    artifact_id: string;
+  };
 };
 
 export async function apiGetFactData(factId: string): Promise<FactData> {

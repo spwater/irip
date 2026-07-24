@@ -9,6 +9,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Typography,
 } from 'antd';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
@@ -20,6 +21,8 @@ import {
   type FactSummary,
 } from '@/api/client';
 import { IngestionWizard } from '@/ingestions/IngestionWizard';
+
+const { Text } = Typography;
 
 /** 状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
@@ -35,13 +38,83 @@ const STATUS_LABEL: Record<string, string> = {
   withdrawn: '已撤回',
 };
 
+/** 树形数据类型：父节点为任务，子节点为该任务下的 fact */
+type TreeNode = {
+  key: string;
+  fact_id?: string;
+  revision?: number;
+  fact_type?: string;
+  subject_id?: string;
+  status?: string;
+  task_code: string | null;
+  task_name: string | null;
+  isGroup: boolean;
+  childCount?: number;
+  children?: TreeNode[];
+};
 
+/** 将扁平 fact 列表按 task_code 分组为树形结构 */
+function groupByTask(facts: FactSummary[]): TreeNode[] {
+  const groups = new Map<string, FactSummary[]>();
+  const noTaskKey = '__no_task__';
+
+  for (const f of facts) {
+    const key = f.task_code ?? noTaskKey;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(f);
+  }
+
+  const tree: TreeNode[] = [];
+
+  for (const [taskCode, groupFacts] of groups) {
+    if (taskCode === noTaskKey) {
+      // 没有关联任务的 fact 直接作为叶子节点
+      for (const f of groupFacts) {
+        tree.push({
+          key: `fact-${f.fact_id}`,
+          fact_id: f.fact_id,
+          revision: f.revision,
+          fact_type: f.fact_type,
+          subject_id: f.subject_id,
+          status: f.status,
+          task_code: null,
+          task_name: null,
+          isGroup: false,
+        });
+      }
+    } else {
+      // 有关联任务的 fact 收拢为子节点
+      const first = groupFacts[0];
+      const children: TreeNode[] = groupFacts.map((f) => ({
+        key: `fact-${f.fact_id}`,
+        fact_id: f.fact_id,
+        revision: f.revision,
+        fact_type: f.fact_type,
+        subject_id: f.subject_id,
+        status: f.status,
+        task_code: f.task_code,
+        task_name: f.task_name,
+        isGroup: false,
+      }));
+      tree.push({
+        key: `task-${taskCode}`,
+        task_code: taskCode,
+        task_name: first.task_name,
+        isGroup: true,
+        childCount: groupFacts.length,
+        children,
+      });
+    }
+  }
+
+  return tree;
+}
 
 /**
  * 实验事实列表页面
  *
  * 功能：
- * - Ant Design Table 列表（ID / 事实类型 / 主体ID / 状态 / 质量 / 版本数 / 创建时间 / 操作）
+ * - 树形表格：按任务编码分组，同任务下的 fact 收拢为子节点
  * - 搜索框（支持全文搜索）
  * - 状态筛选 Select
  * - 游标分页（加载更多）
@@ -82,6 +155,7 @@ export function FactsPage(): JSX.Element {
   });
 
   const items: FactSummary[] = data?.pages.flatMap((p) => p.items) ?? [];
+  const treeData = groupByTask(items);
 
   // ---- 搜索处理 ----
   const handleSearch = (val: string): void => {
@@ -89,28 +163,33 @@ export function FactsPage(): JSX.Element {
   };
 
   // ---- 表格列定义 ----
-  const columns: ColumnsType<FactSummary> = [
+  const columns: ColumnsType<TreeNode> = [
     {
-      title: 'Fact ID',
-      dataIndex: 'fact_id',
-      key: 'fact_id',
-      width: 280,
-      ellipsis: true,
-      render: (id: string) => <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{id}</span>,
+      title: '名称 / 主体ID',
+      key: 'name',
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) {
+          return (
+            <div>
+              <Text strong>{record.task_name ?? record.task_code}</Text>
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>{record.task_code}</Text>
+              </div>
+            </div>
+          );
+        }
+        return <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{record.subject_id}</span>;
+      },
     },
     {
       title: '事实类型',
       dataIndex: 'fact_type',
       key: 'fact_type',
       width: 130,
-      render: (t: string) => <Tag color="blue">{t}</Tag>,
-    },
-    {
-      title: '主体ID',
-      dataIndex: 'subject_id',
-      key: 'subject_id',
-      width: 180,
-      render: (s: string) => <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{s}</span>,
+      render: (t: string | undefined, record: TreeNode) => {
+        if (record.isGroup) return <Text type="secondary">{record.childCount} 条数据</Text>;
+        return t ? <Tag color="blue">{t}</Tag> : '-';
+      },
     },
     {
       title: '修订号',
@@ -118,50 +197,60 @@ export function FactsPage(): JSX.Element {
       key: 'revision',
       width: 80,
       align: 'center' as const,
+      render: (r: number | undefined, record: TreeNode) => {
+        if (record.isGroup) return '-';
+        return r;
+      },
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status: string) => (
-        <Tag color={STATUS_COLOR[status] ?? 'default'}>
-          {STATUS_LABEL[status] ?? status}
-        </Tag>
-      ),
+      render: (status: string | undefined, record: TreeNode) => {
+        if (record.isGroup) return '-';
+        return status ? (
+          <Tag color={STATUS_COLOR[status] ?? 'default'}>
+            {STATUS_LABEL[status] ?? status}
+          </Tag>
+        ) : '-';
+      },
     },
     {
       title: '操作',
       key: 'action',
       width: 160,
-      render: (_: unknown, record: FactSummary) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            onClick={() => void navigate({ to: `/facts/${record.fact_id}` })}
-          >
-            查看详情
-          </Button>
-          <Popconfirm
-            title="确定删除该事实？此操作不可撤销。"
-            description="将同时删除所有修订、观察值和关联数据"
-            onConfirm={() => deleteMutation.mutate(record.fact_id)}
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) return null;
+        return (
+          <Space size="small">
             <Button
               type="link"
               size="small"
-              danger
-              loading={deleteMutation.isPending}
+              onClick={() => record.fact_id && void navigate({ to: `/facts/${record.fact_id}` })}
             >
-              删除
+              查看详情
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title="确定删除该事实？此操作不可撤销。"
+              description="将同时删除所有修订、观察值和关联数据"
+              onConfirm={() => record.fact_id && deleteMutation.mutate(record.fact_id)}
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+            >
+              <Button
+                type="link"
+                size="small"
+                danger
+                loading={deleteMutation.isPending}
+              >
+                删除
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -196,13 +285,17 @@ export function FactsPage(): JSX.Element {
                   />
                 </Space>
 
-                <Table<FactSummary>
+                <Table<TreeNode>
                   columns={columns}
-                  dataSource={items}
-                  rowKey="fact_id"
+                  dataSource={treeData}
+                  rowKey="key"
                   loading={isLoading}
                   pagination={false}
                   size="middle"
+                  expandable={{
+                    defaultExpandAllRows: true,
+                    rowExpandable: (record) => record.isGroup,
+                  }}
                 />
 
                 {hasNextPage && (

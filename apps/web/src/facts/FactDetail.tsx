@@ -79,6 +79,7 @@ export function FactDetail(): JSX.Element {
 
   // ---- 提取任务信息（实时反查）----
   const taskInfo = factData?.task_info;
+  const sourceFile = factData?.source_file;
 
   // ---- 构建展示数据 ----
   const metadata = fact
@@ -160,6 +161,19 @@ export function FactDetail(): JSX.Element {
             </Descriptions.Item>
             <Descriptions.Item label="创建时间">
               {fmtTime(taskInfo.created_at)}
+            </Descriptions.Item>
+            <Descriptions.Item label="原始数据">
+              {sourceFile ? (
+                <a
+                  href={`/api/v1/artifacts/${sourceFile.artifact_id}/download`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {sourceFile.filename}
+                </a>
+              ) : (
+                '-'
+              )}
             </Descriptions.Item>
           </Descriptions>
         </Card>
