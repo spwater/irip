@@ -181,6 +181,10 @@ class FactRepository:
         revision_reason: str | None = None,
         revision_summary: dict | None = None,
         created_by: UUID | None = None,
+        task_code: str | None = None,
+        task_name: str | None = None,
+        department_name: str | None = None,
+        flow_run_id: UUID | None = None,
     ) -> FactRevision:
         """插入事实修订行，返回 ORM 实体。
 
@@ -216,6 +220,10 @@ class FactRepository:
             revision_reason=revision_reason,
             revision_summary=revision_summary,
             created_by=created_by,
+            task_code=task_code,
+            task_name=task_name,
+            department_name=department_name,
+            flow_run_id=flow_run_id,
         )
         session.add(rev)
         await session.flush()

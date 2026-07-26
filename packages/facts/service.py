@@ -80,6 +80,11 @@ class CreateFactCommand:
     artifacts: tuple
     idempotency_key: str | None
     created_by: UUID
+    # 入库时的任务信息快照
+    task_code: str | None = None
+    task_name: str | None = None
+    department_name: str | None = None
+    flow_run_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -283,6 +288,10 @@ class FactService:
                 ended_at=command.ended_at,
                 revision_reason=None,
                 created_by=command.created_by,
+                task_code=command.task_code,
+                task_name=command.task_name,
+                department_name=command.department_name,
+                flow_run_id=command.flow_run_id,
             )
 
             # 9. 创建 raw_observations

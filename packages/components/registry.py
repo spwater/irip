@@ -117,6 +117,8 @@ class ComponentVersion(Base):
     version: Mapped[str] = mapped_column(sa.Text, nullable=False)
     manifest_yaml: Mapped[str] = mapped_column(sa.Text, nullable=False)
     manifest_sha256: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    # 从 manifest 提取的实验对象编码（独立列，便于查询关联）
+    experimental_object_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     runtime: Mapped[str] = mapped_column(sa.Text, nullable=False)
     port_schemas: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict
@@ -213,7 +215,8 @@ class ComponentRegistryService:
         self._clock: Clock = clock if clock is not None else SystemClock()
 
     async def publish(
-        self, manifest: ComponentManifest
+        self, manifest: ComponentManifest,
+        experimental_object_code: str | None = None,
     ) -> ComponentVersion:
         """发布组件版本。
 
@@ -294,6 +297,7 @@ class ComponentRegistryService:
                 version=manifest.version,
                 manifest_yaml=manifest.raw_yaml,
                 manifest_sha256=manifest.sha256,
+                experimental_object_code=experimental_object_code,
                 runtime=manifest.runtime,
                 port_schemas=port_schemas,
                 status="published",

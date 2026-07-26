@@ -164,6 +164,16 @@ class FactRevision(Base):
         sa.ForeignKey("method_version.id"),
         nullable=True,
     )
+    # 入库时的任务信息快照（避免反查时的多表 JOIN）
+    task_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    task_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    department_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    # 外键关联到 flow_run（nullable，兼容非 flow_run 来源的数据）
+    flow_run_id: Mapped[UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("flow_run.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     started_at: Mapped[datetime | None] = mapped_column(
         UTCDateTime, nullable=True
     )

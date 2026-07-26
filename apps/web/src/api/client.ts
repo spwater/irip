@@ -454,6 +454,7 @@ export type FactSummary = {
   status: string;
   task_code: string | null;
   task_name: string | null;
+  department_name: string | null;
 };
 
 export type FactDetail = {
@@ -1417,6 +1418,7 @@ export async function apiGetComponent(id: string): Promise<ComponentDetail> {
 
 export async function apiPublishComponent(body: {
   manifest_yaml: string;
+  experimental_object_code?: string | null;
 }): Promise<ComponentSummary> {
   const res = await http.post<ComponentSummary>('/components/', body);
   return res.data;
@@ -1523,6 +1525,7 @@ export type FlowRunSummary = {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  persisted_as_fact?: boolean;
 };
 
 /** 节点执行记录。 */

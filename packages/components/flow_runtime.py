@@ -81,7 +81,11 @@ class FlowDefinition(Base):
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
-    department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    department_id: Mapped[UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     project_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)

@@ -146,7 +146,6 @@ function buildManifestYaml(v: ComponentFormValues): string {
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const fileEngine = v.file_engine ?? 'pymupdf';
-  const expCode = v.experimental_object_code ?? '';
   const lines: string[] = [
     `name: ${name}`,
     'version: "1.0.0"',
@@ -172,10 +171,6 @@ function buildManifestYaml(v: ComponentFormValues): string {
     '      type: string',
     '      description: "文件读取方式"',
     `      default: "${yamlEscapeDouble(fileEngine)}"`,
-    '    experimental_object_code:',
-    '      type: string',
-    '      description: "关联实验对象编码"',
-    `      default: "${yamlEscapeDouble(expCode)}"`,
     'timeout_seconds: 300',
   ];
   return lines.join('\n');
@@ -516,8 +511,11 @@ export function ComponentsPage(): JSX.Element {
   const handlePublish = async (): Promise<void> => {
     try {
       if (advancedMode) {
-        const values = await form.validateFields(['manifest_yaml']);
-        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string });
+        const values = await form.validateFields(['manifest_yaml', 'experimental_object_code']);
+        publishMutation.mutate({
+          manifest_yaml: values.manifest_yaml as string,
+          experimental_object_code: (values.experimental_object_code as string) ?? null,
+        });
       } else {
         const values = await form.validateFields([...FORM_FIELD_NAMES]);
         const yaml = buildManifestYaml({
@@ -526,9 +524,12 @@ export function ComponentsPage(): JSX.Element {
           description: values.description as string,
           prompt: values.prompt as string,
           file_engine: values.file_engine as string,
-          experimental_object_code: (values.experimental_object_code as string) ?? '',
+          experimental_object_code: '',
         });
-        publishMutation.mutate({ manifest_yaml: yaml });
+        publishMutation.mutate({
+          manifest_yaml: yaml,
+          experimental_object_code: (values.experimental_object_code as string) ?? null,
+        });
       }
     } catch {
       // 表单校验失败
@@ -1032,7 +1033,10 @@ function ComponentDetailPanel({
         const newVersion = `${versionMatch[1]}.${versionMatch[2]}.${Number(versionMatch[3]) + 1}`;
         yaml = yaml.replace(/^version:\s*["']?\d+\.\d+\.\d+["']?/m, `version: "${newVersion}"`);
       }
-      return apiPublishComponent({ manifest_yaml: yaml });
+      return apiPublishComponent({
+        manifest_yaml: yaml,
+        experimental_object_code: oldDetail.experimental_object_code ?? undefined,
+      });
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });

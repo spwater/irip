@@ -67,6 +67,9 @@ ExecuteUserDep = Annotated[
     CurrentUser, Depends(require_permission("flow:execute"))
 ]
 
+# 从 facts 路由复用响应模型
+from apps.api.routers.facts import FactListResponse, FactRevisionResponse
+
 
 def get_flow_service() -> FlowRuntimeService:
     """获取 FlowRuntimeService 实例（由 DI 容器或测试覆盖提供）。
@@ -195,6 +198,7 @@ class FlowRunResponse(BaseModel):
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
+    persisted_as_fact: bool = False
 
 
 class FlowNodeExecutionResponse(BaseModel):
@@ -604,8 +608,23 @@ async def list_runs(
 
     runs = await service.list_runs(flow_id)
     result = []
+    # 批量查哪些 run 已入库（fact_revision.flow_run_id）
+    run_ids = [r.id for r in runs]
+    persisted_ids: set = set()
+    if run_ids:
+        from packages.facts.entities import FactRevision
+        async with session_scope(service._factory) as session:
+            persist_stmt = (
+                sa.select(FactRevision.flow_run_id)
+                .where(FactRevision.flow_run_id.in_(run_ids))
+                .distinct()
+            )
+            persist_result = await session.execute(persist_stmt)
+            persisted_ids = {row[0] for row in persist_result}
+
     for r in runs:
         resp = _run_to_response(r)
+        resp.persisted_as_fact = r.id in persisted_ids
         # 查询成功节点的 output_summary
         async with session_scope(service._factory) as session:
             node_stmt = (
@@ -940,7 +959,33 @@ async def persist_run_as_fact(
             )
         )
 
-    # 6. 创建事实
+    # 6. 查询任务信息快照（入库时保存，避免后续反查 JOIN）
+    task_code: str | None = None
+    task_name: str | None = None
+    department_name: str | None = None
+    try:
+        import sqlalchemy as sa
+        from packages.common.database import session_scope
+        from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
+        from packages.departments.entities import Department
+        async with session_scope(service._factory) as sess:
+            fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run.flow_version_id)
+            fv = (await sess.execute(fv_stmt)).scalar_one_or_none()
+            if fv:
+                fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                fd = (await sess.execute(fd_stmt)).scalar_one_or_none()
+                if fd:
+                    task_code = fd.code
+                    task_name = fd.display_name
+                    if fd.department_id:
+                        dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
+                        dept_record = (await sess.execute(dept_stmt)).scalar_one_or_none()
+                        if dept_record:
+                            department_name = dept_record.display_name
+    except Exception:
+        pass
+
+    # 7. 创建事实
     fact_service = FactService(
         session_factory=service._factory,
         organization_id=service._org_id,
@@ -965,6 +1010,10 @@ async def persist_run_as_fact(
         artifacts=all_artifacts,
         idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
         created_by=current_user.user_id,
+        task_code=task_code,
+        task_name=task_name,
+        department_name=department_name,
+        flow_run_id=run_id,
     )
 
     ref = await fact_service.create(command)
@@ -976,3 +1025,77 @@ async def persist_run_as_fact(
         raw_count=len(all_rows),
         artifact_id=data_artifact_id,
     )
+
+
+@flows_router.get(
+    "/{flow_id}/facts",
+    response_model=FactListResponse,
+)
+async def list_facts_by_flow(
+    flow_id: UUID,
+    current_user: ReadUserDep,
+    service: FlowServiceDep,
+) -> FactListResponse:
+    """查询某个任务（flow_definition）产出的所有事实。
+
+    通过 flow_run_id 外键反查：flow_definition → flow_definition_version → flow_run → fact_revision。
+    """
+    import sqlalchemy as sa
+    from packages.common.database import session_scope
+    from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM, FlowRun
+    from packages.facts.entities import FactRevision, Fact
+    from packages.facts.observations import FactRevisionRef
+
+    async with session_scope(service._factory) as session:
+        # flow_definition → flow_definition_version → flow_run → fact_revision
+        stmt = (
+            sa.select(FactRevision)
+            .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+            .join(FlowDefinitionVersionORM, FlowRun.flow_version_id == FlowDefinitionVersionORM.id)
+            .where(FlowDefinitionVersionORM.flow_definition_id == flow_id)
+            .order_by(FactRevision.created_at.desc())
+        )
+        result = await session.execute(stmt)
+        revisions = result.scalars().all()
+
+        # 构造 FactRevisionRef 列表
+        refs: list[FactRevisionRef] = []
+        for rev in revisions:
+            # 查 fact 状态
+            fact = await session.get(Fact, rev.fact_id)
+            refs.append(FactRevisionRef(
+                fact_id=rev.fact_id,
+                revision=rev.revision,
+                revision_id=rev.id,
+                fact_type=rev.fact_type,
+                subject_id=rev.subject_id,
+                status=fact.status if fact else "unknown",
+            ))
+
+        items = [FactRevisionResponse(
+            fact_id=str(r.fact_id),
+            revision=r.revision,
+            revision_id=str(r.revision_id),
+            fact_type=r.fact_type,
+            subject_id=r.subject_id,
+            status=r.status,
+        ) for r in refs]
+
+        # 填充快照字段
+        if items:
+            snap_stmt = (
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                .where(FactRevision.id.in_([__import__('uuid').UUID(i.revision_id) for i in items]))
+            )
+            snap_result = await session.execute(snap_stmt)
+            snap_map: dict[str, tuple] = {}
+            for row in snap_result:
+                snap_map[str(row[0])] = (row[1], row[2], row[3])
+            for item in items:
+                snap = snap_map.get(item.revision_id)
+                if snap:
+                    item.task_code = snap[0]
+                    item.task_name = snap[1]
+                    item.department_name = snap[2]
+
+        return FactListResponse(items=items, next_cursor=None)

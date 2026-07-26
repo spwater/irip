@@ -721,6 +721,12 @@ export function FlowDetail(): JSX.Element {
                   return `${(ms / 1000).toFixed(1)}s`;
                 },
               },
+              { title: '已存', key: 'persisted', width: 60, align: 'center' as const,
+                render: (_: unknown, record: FlowRunSummary) =>
+                  record.persisted_as_fact
+                    ? <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 16 }}>&#10003;</span>
+                    : null,
+              },
               { title: '操作', key: 'action', width: 200,
                 render: (_: unknown, record: FlowRunSummary) => (
                   <Space size="small">

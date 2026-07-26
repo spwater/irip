@@ -126,6 +126,7 @@ class FactRevisionResponse(BaseModel):
     status: str
     task_code: str | None = None
     task_name: str | None = None
+    department_name: str | None = None
 
 
 class FactListResponse(BaseModel):
@@ -290,87 +291,32 @@ async def list_facts(
         page_size=page_size,
     )
 
-    # 批量反查 task_code 和 task_name
+    # 直接从 fact_revision 表读快照字段（零 JOIN）
     items = [_ref_to_response(r) for r in refs]
     if items:
-        await _enrich_with_task_info(items, service)
+        import sqlalchemy as sa
+        from packages.facts.entities import FactRevision
+        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
+        async with service._factory() as session:
+            snap_stmt = (
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                .where(FactRevision.id.in_(revision_ids))
+            )
+            snap_result = await session.execute(snap_stmt)
+            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
+            for row in snap_result:
+                snap_map[str(row[0])] = (row[1], row[2], row[3])
+            for item in items:
+                snap = snap_map.get(item.revision_id)
+                if snap:
+                    item.task_code = snap[0]
+                    item.task_name = snap[1]
+                    item.department_name = snap[2]
 
     return FactListResponse(
         items=items,
         next_cursor=next_cursor,
     )
-
-
-async def _enrich_with_task_info(items: list[FactRevisionResponse], service: FactServiceDep) -> None:
-    """为每个 fact 反查关联的任务编码和名称（通过 raw_observation.source_path → flow_run → flow_definition）。"""
-    import sqlalchemy as sa
-    from packages.facts.entities import RawObservation
-    from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
-
-    revision_ids = [item.revision_id for item in items]
-
-    async with service._factory() as session:
-        # 批量查 raw_observation 的 source_path
-        raw_stmt = (
-            sa.select(RawObservation.fact_revision_id, RawObservation.source_path)
-            .where(RawObservation.fact_revision_id.in_([
-                __import__('uuid').UUID(rid) for rid in revision_ids
-            ]))
-        )
-        raw_result = await session.execute(raw_stmt)
-        raw_map: dict[str, str] = {}
-        for row in raw_result:
-            rid_str = str(row[0])
-            sp = row[1]
-            if sp and sp.startswith("flow_run:") and rid_str not in raw_map:
-                raw_map[rid_str] = sp[len("flow_run:"):]
-
-        if not raw_map:
-            return
-
-        # 批量查 flow_run → flow_version → flow_definition
-        run_ids = [__import__('uuid').UUID(rid) for rid in raw_map.values()]
-        run_stmt = sa.select(FlowRun.id, FlowRun.flow_version_id).where(FlowRun.id.in_(run_ids))
-        run_result = await session.execute(run_stmt)
-        run_to_fv: dict[str, str] = {}
-        for row in run_result:
-            run_to_fv[str(row[0])] = str(row[1])
-
-        if not run_to_fv:
-            return
-
-        fv_ids = [__import__('uuid').UUID(fv) for fv in run_to_fv.values()]
-        fv_stmt = sa.select(FlowDefinitionVersionORM.id, FlowDefinitionVersionORM.flow_definition_id).where(FlowDefinitionVersionORM.id.in_(fv_ids))
-        fv_result = await session.execute(fv_stmt)
-        fv_to_fd: dict[str, str] = {}
-        for row in fv_result:
-            fv_to_fd[str(row[0])] = str(row[1])
-
-        if not fv_to_fd:
-            return
-
-        fd_ids = [__import__('uuid').UUID(fd) for fd in fv_to_fd.values()]
-        fd_stmt = sa.select(FlowDefinition.id, FlowDefinition.code, FlowDefinition.display_name).where(FlowDefinition.id.in_(fd_ids))
-        fd_result = await session.execute(fd_stmt)
-        fd_info: dict[str, tuple[str, str]] = {}
-        for row in fd_result:
-            fd_info[str(row[0])] = (row[1], row[2])
-
-        # 填充 items
-        for item in items:
-            run_id = raw_map.get(item.revision_id)
-            if not run_id:
-                continue
-            fv_id = run_to_fv.get(run_id)
-            if not fv_id:
-                continue
-            fd_id = fv_to_fd.get(fv_id)
-            if not fd_id:
-                continue
-            info = fd_info.get(fd_id)
-            if info:
-                item.task_code = info[0]
-                item.task_name = info[1]
 
 
 @facts_router.get("/search", response_model=FactListResponse)
@@ -401,7 +347,24 @@ async def search_facts(
     )
     items = [_ref_to_response(r) for r in refs]
     if items:
-        await _enrich_with_task_info(items, service)
+        import sqlalchemy as sa
+        from packages.facts.entities import FactRevision
+        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
+        async with service._factory() as session:
+            snap_stmt = (
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                .where(FactRevision.id.in_(revision_ids))
+            )
+            snap_result = await session.execute(snap_stmt)
+            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
+            for row in snap_result:
+                snap_map[str(row[0])] = (row[1], row[2], row[3])
+            for item in items:
+                snap = snap_map.get(item.revision_id)
+                if snap:
+                    item.task_code = snap[0]
+                    item.task_name = snap[1]
+                    item.department_name = snap[2]
     return FactListResponse(
         items=items,
         next_cursor=next_cursor,
@@ -515,58 +478,78 @@ async def get_fact_data(
         data_bytes = await artifact_svc.get_bytes(fa.artifact_id)
         result_data = json_mod.loads(data_bytes.decode("utf-8"))
 
-        # 实时反查任务信息：通过 raw_observation.source_path → flow_run → flow_definition
+        # 优先从快照字段读任务信息（零 JOIN），旧数据 fallback 到实时反查
         task_info: dict = {}
         try:
-            from packages.facts.entities import RawObservation
-            from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+            rev_stmt = sa.select(FactRevision).where(FactRevision.id == revision_id)
+            rev_record = (await session.execute(rev_stmt)).scalar_one_or_none()
+            if rev_record and (rev_record.task_code or rev_record.task_name):
+                # 快照命中
+                task_info = {
+                    "task_name": rev_record.task_name,
+                    "task_source": rev_record.department_name,
+                    "data_interface": None,
+                    "created_at": None,
+                }
+                # 通过 flow_run_id 外键补查 data_interface 和 created_at
+                if rev_record.flow_run_id:
+                    from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+                    run_stmt = sa.select(FlowRun).where(FlowRun.id == rev_record.flow_run_id)
+                    run_record = (await session.execute(run_stmt)).scalar_one_or_none()
+                    if run_record:
+                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
+                        fv = (await session.execute(fv_stmt)).scalar_one_or_none()
+                        if fv:
+                            fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                            fd = (await session.execute(fd_stmt)).scalar_one_or_none()
+                            if fd:
+                                nodes = fv.nodes_json or []
+                                comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+                                task_info["data_interface"] = ", ".join(comp_names) if comp_names else None
+                                task_info["created_at"] = fd.created_at.isoformat() if fd.created_at else None
+        except Exception:
+            pass
 
-            # 从 raw_observation 提取 run_id
-            raw_stmt = (
-                sa.select(RawObservation.source_path)
-                .where(RawObservation.fact_revision_id == revision_id)
-                .limit(1)
-            )
-            raw_result = await session.execute(raw_stmt)
-            source_path = raw_result.scalar_one_or_none()
-            if source_path and source_path.startswith("flow_run:"):
-                run_id_str = source_path[len("flow_run:"):]
-                from uuid import UUID as UUIDType
-                run_id = UUIDType(run_id_str)
+        # 快照没命中，fallback 到通过 flow_run_id 外键反查（兼容旧数据）
+        if not task_info:
+            try:
+                from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
 
-                # run → flow_version → flow_definition（用已有 session）
-                run_stmt = sa.select(FlowRun).where(FlowRun.id == run_id)
-                run_record = (await session.execute(run_stmt)).scalar_one_or_none()
-                if run_record:
-                    fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
-                    fv = (await session.execute(fv_stmt)).scalar_one_or_none()
-                    if fv:
-                        fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
-                        fd = (await session.execute(fd_stmt)).scalar_one_or_none()
-                        if fd:
-                            # 查部门名称
-                            dept_name = None
-                            if fd.department_id:
-                                from packages.departments.entities import Department
-                                dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
-                                dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
-                                if dept_record:
-                                    dept_name = dept_record.display_name
+                # 优先用 flow_run_id 外键（不再解析 source_path 字符串）
+                rev_stmt2 = sa.select(FactRevision.flow_run_id).where(FactRevision.id == revision_id)
+                flow_run_id = (await session.execute(rev_stmt2)).scalar_one_or_none()
 
-                            # 查实验对象和组件信息
-                            nodes = fv.nodes_json or []
-                            comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+                if flow_run_id:
+                    run_stmt = sa.select(FlowRun).where(FlowRun.id == flow_run_id)
+                    run_record = (await session.execute(run_stmt)).scalar_one_or_none()
+                    if run_record:
+                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
+                        fv = (await session.execute(fv_stmt)).scalar_one_or_none()
+                        if fv:
+                            fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                            fd = (await session.execute(fd_stmt)).scalar_one_or_none()
+                            if fd:
+                                dept_name = None
+                                if fd.department_id:
+                                    from packages.departments.entities import Department
+                                    dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
+                                    dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
+                                    if dept_record:
+                                        dept_name = dept_record.display_name
 
-                            task_info = {
-                                "task_name": fd.display_name,
-                                "task_source": dept_name,
-                                "project_name": fd.project_name,
-                                "data_interface": ", ".join(comp_names) if comp_names else None,
-                                "created_at": fd.created_at.isoformat() if fd.created_at else None,
-                            }
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Failed to query task info for fact {fact_id}: {e}")
+                                nodes = fv.nodes_json or []
+                                comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+
+                                task_info = {
+                                    "task_name": fd.display_name,
+                                    "task_source": dept_name,
+                                    "project_name": fd.project_name,
+                                    "data_interface": ", ".join(comp_names) if comp_names else None,
+                                    "created_at": fd.created_at.isoformat() if fd.created_at else None,
+                                }
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to query task info for fact {fact_id}: {e}")
 
         # 把任务信息附加到返回结果
         if task_info:

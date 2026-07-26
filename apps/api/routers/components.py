@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
 
@@ -81,6 +82,10 @@ class PublishComponentRequest(BaseModel):
         max_length=200000,
         description="组件清单 YAML 文本",
     )
+    experimental_object_code: str | None = Field(
+        None,
+        description="关联实验对象编码（独立字段，不再从 YAML 解析）",
+    )
 
 
 # ---- 响应模型 ----
@@ -136,6 +141,7 @@ class ComponentDetailResponse(BaseModel):
     kind: str
     runtime: str
     status: str
+    experimental_object_code: str | None = None
     manifest_sha256: str
     manifest_yaml: str
     published_at: datetime | None
@@ -216,7 +222,28 @@ async def publish_component(
     validator = ManifestValidator(_SCHEMA_PATH)
     manifest = validator.validate(body.manifest_yaml)
 
-    version = await service.publish(manifest)
+    # 优先用请求体的 experimental_object_code，fallback 到 YAML 解析
+    exp_code = body.experimental_object_code or _parse_experimental_object_code(body.manifest_yaml)
+    if exp_code:
+        import sqlalchemy as sa
+        from packages.common.database import session_scope
+        from packages.objects.entities import IndustrialObject
+        async with session_scope(service._factory) as sess:
+            obj = await sess.scalar(
+                sa.select(IndustrialObject).where(
+                    IndustrialObject.code == exp_code,
+                    IndustrialObject.organization_id == service._org_id,
+                )
+            )
+            if obj is None:
+                raise AppError(
+                    code="validation_failed",
+                    message=f"实验对象编码不存在: {exp_code}",
+                    retryable=False,
+                    fields={"experimental_object_code": exp_code},
+                )
+
+    version = await service.publish(manifest, experimental_object_code=exp_code or None)
 
     return ComponentVersionResponse(
         id=str(version.id),
@@ -267,7 +294,7 @@ async def list_components(
                 kind=comp.kind,
                 runtime=ver.runtime,
                 engine=_detect_engine(ver.manifest_yaml),
-                experimental_object_code=_parse_experimental_object_code(ver.manifest_yaml),
+                experimental_object_code=ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml),
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
@@ -308,6 +335,7 @@ async def get_component(
         kind=comp.kind,
         runtime=ver.runtime,
         status=comp.status,
+        experimental_object_code=ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml),
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,
         published_at=ver.published_at,
