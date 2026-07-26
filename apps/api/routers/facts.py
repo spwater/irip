@@ -376,6 +376,68 @@ async def list_facts(
     )
 
 
+@facts_router.get("/search", response_model=FactListResponse)
+async def search_facts(
+    current_user: ReadUserDep,
+    service: FactServiceDep,
+    q: str = Query(..., min_length=1, description="搜索查询"),
+    fact_type: str | None = Query(None, description="按事实类型过滤"),
+    object_id: UUID | None = Query(None, description="按工业对象过滤"),
+    status: str | None = Query(None, description="按状态过滤"),
+    cursor: str | None = Query(None, description="分页游标"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+) -> FactListResponse:
+    """全文搜索事实（基于 subject_id 和 fact_type）。"""
+    filters: dict = {}
+    if fact_type is not None:
+        filters["fact_type"] = fact_type
+    if object_id is not None:
+        filters["object_id"] = object_id
+    if status is not None:
+        filters["status"] = status
+
+    refs, next_cursor = await service.search(
+        query=q,
+        filters=filters if filters else None,
+        cursor=cursor,
+        page_size=page_size,
+    )
+    items = [_ref_to_response(r) for r in refs]
+    if items:
+        import sqlalchemy as sa
+        from packages.facts.entities import FactRevision
+        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
+        async with service._factory() as session:
+            snap_stmt = (
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                .where(FactRevision.id.in_(revision_ids))
+            )
+            snap_result = await session.execute(snap_stmt)
+            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
+            for row in snap_result:
+                snap_map[str(row[0])] = (row[1], row[2], row[3])
+            for item in items:
+                snap = snap_map.get(item.revision_id)
+                if snap:
+                    item.task_code = snap[0]
+                    item.task_name = snap[1]
+                    item.department_name = snap[2]
+
+            count_stmt = (
+                sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
+                .where(FactRevision.task_code.isnot(None))
+                .group_by(FactRevision.task_code)
+            )
+            count_result = await session.execute(count_stmt)
+            group_counts = {str(row[0]): row[1] for row in count_result}
+
+    return FactListResponse(
+        items=items,
+        next_cursor=next_cursor,
+        group_counts=group_counts if items else {},
+    )
+
+
 @facts_router.get("/search-data", response_model=FactListResponse)
 async def search_facts_by_data(
     current_user: ReadUserDep,
