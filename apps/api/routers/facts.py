@@ -575,10 +575,9 @@ async def search_facts_by_data(
                     if rows:
                         parts = []
                         for r in rows:
-                            if isinstance(r, dict):
-                                vals = [str(v) for v in r.values() if v is not None][:2]
-                                if vals:
-                                    parts.append("=".join(vals))
+                            comp = r.get("组分", r.get("component", ""))
+                            val = r.get("结果", r.get("result", r.get("value", "")))
+                            parts.append(f"{comp}={val}")
                         item.data_summary = "；".join(parts) + ("..." if len(parsed.get("data", [])) > 3 else "")
             except Exception:
                 pass
