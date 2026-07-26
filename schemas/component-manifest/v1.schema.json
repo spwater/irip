@@ -4,7 +4,7 @@
   "title": "IRIP Component Manifest v1",
   "description": "Validation schema for IRIP component manifests (V2-T01).",
   "type": "object",
-  "required": ["name", "version", "kind"],
+  "required": ["name", "kind"],
   "properties": {
     "name": {
       "type": "string",

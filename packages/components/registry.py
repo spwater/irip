@@ -270,31 +270,44 @@ class ComponentRegistryService:
                         fields={"name": manifest.name},
                     )
 
-            # 3. 版本唯一性检查
+            # 3. 自动计算版本号（忽略 YAML 里的 version，系统自动管理）
+            # 查当前组件的最大版本号
+            latest_version: ComponentVersion | None = await session.scalar(
+                sa.select(ComponentVersion)
+                .where(ComponentVersion.component_id == component.id)
+                .order_by(ComponentVersion.created_at.desc())
+                .limit(1)
+            )
+            if latest_version:
+                # 递增 patch 号（如 1.0.5 → 1.0.6）
+                parts = latest_version.version.split('.')
+                if len(parts) == 3:
+                    auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
+                else:
+                    auto_version = "1.0.0"
+            else:
+                # 新组件，从 1.0.0 开始
+                auto_version = "1.0.0"
+
+            # 版本唯一性检查（系统自动分配的版本号一般不会冲突，但防御性检查）
             existing: ComponentVersion | None = await session.scalar(
                 sa.select(ComponentVersion).where(
                     ComponentVersion.component_id == component.id,
-                    ComponentVersion.version == manifest.version,
+                    ComponentVersion.version == auto_version,
                 )
             )
             if existing is not None:
-                raise AppError(
-                    code="conflict",
-                    message=(
-                        f"组件版本已存在: "
-                        f"{manifest.name}@{manifest.version}"
-                    ),
-                    retryable=False,
-                    fields={
-                        "name": manifest.name,
-                        "version": manifest.version,
-                    },
-                )
+                # 如果 manifest 内容完全相同（sha256 一致），说明是回滚同一个版本，直接返回
+                if existing.manifest_sha256 == manifest.sha256:
+                    return existing
+                # 版本号冲突，再递增一次
+                parts = auto_version.split('.')
+                auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
 
             # 4. 插入版本
             version = ComponentVersion(
                 component_id=component.id,
-                version=manifest.version,
+                version=auto_version,
                 manifest_yaml=manifest.raw_yaml,
                 manifest_sha256=manifest.sha256,
                 experimental_object_code=experimental_object_code,
@@ -404,7 +417,9 @@ class ComponentRegistryService:
         kind: str | None = None,
         status: str | None = None,
     ) -> list[tuple[Component, ComponentVersion]]:
-        """列表查询组件及其版本。
+        """列表查询组件及其最新版本。
+
+        每个组件只返回 created_at 最新的那个版本（即当前活跃版本）。
 
         Args:
             kind: 可选，按类别过滤
@@ -414,14 +429,30 @@ class ComponentRegistryService:
 
         Returns:
             list[tuple[Component, ComponentVersion]]:
-                组件 + 版本记录列表，按 name, created_at 排序。
+                组件 + 最新版本记录列表。
         """
         async with session_scope(self._factory) as session:
+            # 子查询：每个组件 created_at 最新的版本 id
+            latest_version_subq = (
+                sa.select(
+                    ComponentVersion.component_id,
+                    sa.func.max(ComponentVersion.created_at).label("max_created"),
+                )
+                .group_by(ComponentVersion.component_id)
+                .subquery()
+            )
             query = (
                 sa.select(Component, ComponentVersion)
                 .join(
                     ComponentVersion,
                     ComponentVersion.component_id == Component.id,
+                )
+                .join(
+                    latest_version_subq,
+                    sa.and_(
+                        latest_version_subq.c.component_id == ComponentVersion.component_id,
+                        latest_version_subq.c.max_created == ComponentVersion.created_at,
+                    ),
                 )
                 .where(Component.organization_id == self._org_id)
             )
@@ -430,9 +461,7 @@ class ComponentRegistryService:
             if status is not None:
                 query = query.where(Component.status == status)
 
-            query = query.order_by(
-                Component.name, ComponentVersion.created_at
-            )
+            query = query.order_by(Component.name)
             result = await session.execute(query)
             return [(row[0], row[1]) for row in result.all()]
 
@@ -519,6 +548,49 @@ class ComponentRegistryService:
             component.lock_version += 1
             await session.flush()
             return component
+
+    async def activate_version(self, version_id: UUID) -> ComponentVersion:
+        """切换组件的当前活跃版本（回滚）。
+
+        将目标版本的 created_at 更新为当前时间，使其成为列表中最新的版本。
+        同时恢复组件主记录状态为 published。
+
+        Args:
+            version_id: 要激活的组件版本 UUID。
+
+        Returns:
+            ComponentVersion: 激活后的版本记录。
+
+        Raises:
+            AppError: code="not_found"，当版本不存在。
+        """
+        now: datetime = self._clock.now()
+        async with session_scope(self._factory) as session:
+            version: ComponentVersion | None = await session.scalar(
+                sa.select(ComponentVersion).where(
+                    ComponentVersion.id == version_id,
+                )
+            )
+            if version is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"组件版本不存在: {version_id}",
+                    retryable=False,
+                )
+            # 更新 created_at 使其成为最新版本
+            version.created_at = now
+            # 恢复组件主记录状态
+            component: Component | None = await session.scalar(
+                sa.select(Component).where(
+                    Component.id == version.component_id,
+                )
+            )
+            if component and component.status == "deprecated":
+                component.status = "published"
+                component.updated_at = now
+                component.lock_version += 1
+            await session.flush()
+            return version
 
     async def delete_component(self, component_id: UUID) -> None:
         """彻底删除组件及其所有版本。

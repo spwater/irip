@@ -227,7 +227,7 @@ async def publish_component(
     if exp_code:
         import sqlalchemy as sa
         from packages.common.database import session_scope
-        from packages.objects.entities import IndustrialObject
+        from packages.standards.objects import IndustrialObject
         async with session_scope(service._factory) as sess:
             obj = await sess.scalar(
                 sa.select(IndustrialObject).where(
@@ -430,6 +430,26 @@ async def restore_component(
     comp, _ = await service.get_version_by_id(component_id)
     await service.restore(comp.name)
     return {"status": "published"}
+
+
+@components_router.post("/{component_id}/activate")
+async def activate_version(
+    component_id: UUID,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> dict[str, str]:
+    """切换组件的当前活跃版本（回滚）。
+
+    Args:
+        component_id: 要激活的组件版本 UUID。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        dict: {"status": "activated"}
+    """
+    await service.activate_version(component_id)
+    return {"status": "activated"}
 
 
 @components_router.delete("/{component_id}")

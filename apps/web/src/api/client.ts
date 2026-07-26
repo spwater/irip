@@ -455,6 +455,7 @@ export type FactSummary = {
   task_code: string | null;
   task_name: string | null;
   department_name: string | null;
+  data_summary: string | null;
 };
 
 export type FactDetail = {
@@ -1002,14 +1003,22 @@ export async function apiCreateFact(body: {
   return res.data;
 }
 
+/** 事实列表响应（含每个 task_code 的总数，不受分页限制） */
+export type FactListResult = {
+  items: FactSummary[];
+  next_cursor: string | null;
+  has_more: boolean;
+  group_counts: Record<string, number>;
+};
+
 export async function apiListFacts(params?: {
   cursor?: string;
   page_size?: number;
   fact_type?: string;
   status?: string;
   object_id?: string;
-}): Promise<CursorPage<FactSummary>> {
-  const res = await http.get<CursorPage<FactSummary>>('/facts', { params });
+}): Promise<FactListResult> {
+  const res = await http.get<FactListResult>('/facts', { params });
   return res.data;
 }
 
@@ -1020,8 +1029,8 @@ export async function apiSearchFacts(params: {
   fact_type?: string;
   status?: string;
   object_id?: string;
-}): Promise<CursorPage<FactSummary>> {
-  const res = await http.get<CursorPage<FactSummary>>('/facts/search', { params });
+}): Promise<FactListResult> {
+  const res = await http.get<FactListResult>('/facts/search', { params });
   return res.data;
 }
 
@@ -1045,6 +1054,14 @@ export async function apiGetFactObservations(factId: string): Promise<Observatio
   return res.data;
 }
 
+export type DataSourceItem = {
+  component: string;
+  experimental_object_code?: string;
+  object_name?: string;
+  equipment_name?: string;
+  department_name?: string;
+};
+
 export type TaskInfo = {
   task_name: string | null;
   task_source: string | null;
@@ -1052,6 +1069,7 @@ export type TaskInfo = {
   data_interface: string | null;
   created_at: string | null;
   experimental_object_codes: string[] | null;
+  data_source_list?: DataSourceItem[];
 };
 
 export type FactData = {
@@ -1072,6 +1090,10 @@ export async function apiGetFactData(factId: string): Promise<FactData> {
 
 export async function apiDeleteFact(factId: string): Promise<void> {
   await http.delete(`/facts/${factId}`);
+}
+
+export async function apiDeleteFactsByTask(taskCode: string): Promise<void> {
+  await http.delete(`/facts/by-task/${encodeURIComponent(taskCode)}`);
 }
 
 // ============================================================
@@ -1450,6 +1472,10 @@ export async function apiRestoreComponent(componentId: string): Promise<void> {
   await http.patch(`/components/${componentId}/restore`);
 }
 
+export async function apiActivateVersion(versionId: string): Promise<void> {
+  await http.post(`/components/${versionId}/activate`);
+}
+
 export async function apiDeleteComponent(componentId: string): Promise<void> {
   await http.delete(`/components/${componentId}`);
 }
@@ -1464,7 +1490,11 @@ export type PersistFactResult = {
 
 export async function apiPersistRunAsFact(
   runId: string,
-  body: { object_id: string; template_version_id?: string | null },
+  body: {
+    object_id: string;
+    template_version_id?: string | null;
+    custom_data?: { metadata: Record<string, unknown>; data: Record<string, unknown>[] } | null;
+  },
 ): Promise<PersistFactResult> {
   const res = await http.post<PersistFactResult>(
     `/flows/runs/${runId}/persist-fact`,
@@ -1567,6 +1597,8 @@ export type FlowEdgeSchema = {
 export async function apiCreateFlow(body: {
   code: string;
   display_name: string;
+  department_id?: string | null;
+  project_name?: string | null;
   nodes?: FlowNodeSchema[];
   edges?: FlowEdgeSchema[];
 }): Promise<FlowSummary> {
@@ -1746,6 +1778,12 @@ export async function apiUploadFile(file: File): Promise<UploadResponse> {
   // 不手动设 Content-Type，让浏览器自动设 multipart/form-data + boundary
   const res = await http.post<UploadResponse>('/files/upload', formData);
   return res.data;
+}
+
+/** 获取 artifact 预签名下载 URL */
+export async function apiGetArtifactDownloadUrl(artifactId: string): Promise<string> {
+  const res = await http.get<{ download_url: string }>(`/artifacts/${artifactId}/download`);
+  return res.data.download_url;
 }
 
 // ============================================================

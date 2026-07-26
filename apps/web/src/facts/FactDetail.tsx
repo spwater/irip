@@ -1,20 +1,25 @@
+import { useMemo, useState } from 'react';
 import {
   Button,
   Card,
+  Col,
   Descriptions,
   Empty,
+  Radio,
+  Row,
   Spin,
+  Table,
   Tag,
-  Timeline,
   Typography,
+  message,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import {
   apiGetFact,
   apiGetFactData,
-  apiListFactRevisions,
-  type FactRevision,
+  apiGetArtifactDownloadUrl,
 } from '@/api/client';
 
 const { Text } = Typography;
@@ -27,43 +32,18 @@ function fmtTime(v: string | null | undefined): string {
   return d.toLocaleString('zh-CN', { hour12: false });
 }
 
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  active: 'green',
-  superseded: 'orange',
-  withdrawn: 'red',
-};
-
-/** 状态 → 中文标签 */
-const STATUS_LABEL: Record<string, string> = {
-  active: '活跃',
-  superseded: '已替代',
-  withdrawn: '已撤回',
-};
-
 /**
- * 事实详情页面
- *
- * 后端 API 返回结构：
- * - GET /facts/{id} → FactDetail（fact_id, revision, revision_id, fact_type, subject_id, status）
- * - GET /facts/{id}/revisions → { items: FactRevision[], next_cursor }
- * - GET /facts/{id}/observations → { raw: RawObservation[], normalized: NormalizedObservation[] }
+ * 实验数据详情页面
  */
 export function FactDetail(): JSX.Element {
   const params = useParams({ strict: false });
   const factId = String((params as Record<string, unknown>).factId ?? '');
   const navigate = useNavigate();
+  const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
 
-  // ---- 数据查询 ----
   const { data: fact, isLoading: factLoading } = useQuery({
     queryKey: ['fact', factId],
     queryFn: () => apiGetFact(factId),
-    enabled: !!factId,
-  });
-
-  const { data: revisionsResp } = useQuery({
-    queryKey: ['fact-revisions', factId],
-    queryFn: () => apiListFactRevisions(factId),
     enabled: !!factId,
   });
 
@@ -73,27 +53,35 @@ export function FactDetail(): JSX.Element {
     enabled: !!factId,
   });
 
-  // ---- 提取干净的行数据 ----
   const allData: Record<string, unknown>[] = factData?.data ?? [];
-  const artifactMetadata: Record<string, unknown> = factData?.metadata ?? {};
-
-  // ---- 提取任务信息（实时反查）----
   const taskInfo = factData?.task_info;
   const sourceFile = factData?.source_file;
 
-  // ---- 构建展示数据 ----
-  const metadata = fact
-    ? {
-        fact_id: fact.fact_id,
-        fact_type: fact.fact_type,
-        subject_id: fact.subject_id,
-        status: fact.status,
-        revision: fact.revision,
-        ...artifactMetadata,
+  // 通用表格列：从所有行的 key 并集提取，保持首次出现顺序
+  const tableColumns: ColumnsType<Record<string, unknown>> = useMemo(() => {
+    const keySet = new Set<string>();
+    const orderedKeys: string[] = [];
+    for (const row of allData) {
+      for (const key of Object.keys(row)) {
+        if (!keySet.has(key)) {
+          keySet.add(key);
+          orderedKeys.push(key);
+        }
       }
-    : {};
+    }
+    return orderedKeys.map((key) => ({
+      title: key,
+      dataIndex: key,
+      key,
+      ellipsis: true,
+      render: (val: unknown) => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'number') return val;
+        return String(val);
+      },
+    }));
+  }, [allData]);
 
-  // ---- 加载与空状态 ----
   if (factLoading) {
     return (
       <div style={{ textAlign: 'center', padding: 48 }}>
@@ -103,7 +91,7 @@ export function FactDetail(): JSX.Element {
   }
 
   if (!fact) {
-    return <Empty description="未找到事实" />;
+    return <Empty description="未找到数据" />;
   }
 
   return (
@@ -115,174 +103,155 @@ export function FactDetail(): JSX.Element {
         返回列表
       </Button>
 
-      {/* 事实基本信息 */}
-      <Card title="事实详情" style={{ marginBottom: 16 }}>
-        <Descriptions bordered column={2}>
-          <Descriptions.Item label="Fact ID">
-            <Text copyable style={{ fontFamily: 'monospace', fontSize: 13 }}>
-              {fact.fact_id}
-            </Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="事实类型">
-            <Tag color="blue">{fact.fact_type}</Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="主体ID">
-            <Text code>{fact.subject_id}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="状态">
-            <Tag color={STATUS_COLOR[fact.status] ?? 'default'}>
-              {STATUS_LABEL[fact.status] ?? fact.status}
-            </Tag>
-          </Descriptions.Item>
-          <Descriptions.Item label="修订号">第 {fact.revision} 版</Descriptions.Item>
-          <Descriptions.Item label="修订ID">
-            <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 13 }}>
-              {fact.revision_id.slice(0, 8)}...
-            </Text>
-          </Descriptions.Item>
-        </Descriptions>
-      </Card>
+      <Row gutter={16}>
+        {/* 左侧：导入数据来源 */}
+        <Col span={10}>
+          <Card title="导入数据来源">
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="任务名称">
+                {taskInfo?.task_name ?? '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="项目名称">
+                {taskInfo?.project_name ?? '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="当前数据ID">
+                <Text code>{fact.subject_id}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="数据来源">
+                {taskInfo?.data_source_list && taskInfo.data_source_list.length > 0
+                  ? taskInfo.data_source_list.map((ds, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                          {ds.component}
+                        </Tag>
+                        {ds.object_name && (
+                          <>
+                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                            <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                              {ds.object_name}
+                            </Tag>
+                          </>
+                        )}
+                        {ds.equipment_name && (
+                          <>
+                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                            <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                              {ds.equipment_name}
+                            </Tag>
+                          </>
+                        )}
+                        {ds.department_name && (
+                          <>
+                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                            <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                              {ds.department_name}
+                            </Tag>
+                          </>
+                        )}
+                      </div>
+                    ))
+                  : (taskInfo?.data_interface ?? '-')}
+              </Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {fmtTime(taskInfo?.created_at)}
+              </Descriptions.Item>
+              <Descriptions.Item label="事实类型">
+                <Tag color="blue">{fact.fact_type}</Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="原始数据">
+                {sourceFile ? (
+                  <a
+                    style={{ cursor: 'pointer' }}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      try {
+                        const url = await apiGetArtifactDownloadUrl(sourceFile.artifact_id);
+                        window.open(url, '_blank');
+                      } catch {
+                        message.error('下载失败');
+                      }
+                    }}
+                  >
+                    {sourceFile.filename}
+                  </a>
+                ) : (
+                  '-'
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        </Col>
 
-      {/* 任务信息 */}
-      {taskInfo && (
-        <Card title="任务信息" style={{ marginBottom: 16 }}>
-          <Descriptions bordered column={2}>
-            <Descriptions.Item label="任务名称">
-              {taskInfo.task_name ?? '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="任务来源">
-              {taskInfo.task_source ?? '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="项目名称">
-              {taskInfo.project_name ?? '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="数据接口">
-              {taskInfo.data_interface ?? '-'}
-            </Descriptions.Item>
-            <Descriptions.Item label="创建时间">
-              {fmtTime(taskInfo.created_at)}
-            </Descriptions.Item>
-            <Descriptions.Item label="原始数据">
-              {sourceFile ? (
-                <a
-                  href={`/api/v1/artifacts/${sourceFile.artifact_id}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
+        {/* 右侧：导入数据详情 */}
+        <Col span={14}>
+          <Card
+            title={`导入数据详情（${allData.length} 条）`}
+            extra={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <Radio.Group
+                  size="small"
+                  value={viewMode}
+                  onChange={(e) => setViewMode(e.target.value)}
+                  optionType="button"
+                  buttonStyle="solid"
                 >
-                  {sourceFile.filename}
-                </a>
-              ) : (
-                '-'
-              )}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-      )}
-
-      {/* 修订历史 */}
-      <Card title="修订历史" style={{ marginBottom: 16 }}>
-        <Timeline
-          items={(revisionsResp?.items ?? []).map((r: FactRevision) => ({
-            color: r.status === 'active' ? 'green' : r.status === 'withdrawn' ? 'red' : 'orange',
-            children: (
-              <div>
-                <Text strong>第 {r.revision} 版</Text>
-                <br />
-                <Tag color={STATUS_COLOR[r.status] ?? 'default'}>
-                  {STATUS_LABEL[r.status] ?? r.status}
-                </Tag>
-                <br />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  主体: {r.subject_id}
-                </Text>
+                  <Radio.Button value="table">表格</Radio.Button>
+                  <Radio.Button value="json">原始</Radio.Button>
+                </Radio.Group>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    const fullData = {
+                      metadata: factData?.metadata ?? {},
+                      data: allData,
+                    };
+                    const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `fact-${fact.fact_id.slice(0, 8)}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                >
+                  导出
+                </Button>
               </div>
-            ),
-          }))}
-        />
-        {(revisionsResp?.items ?? []).length === 0 && (
-          <Text type="secondary">暂无修订历史</Text>
-        )}
-      </Card>
-
-      {/* Metadata */}
-      <Card
-        title="Metadata"
-        style={{ marginBottom: 16 }}
-        extra={
-          <Button
-            size="small"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(metadata, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `fact-${fact.fact_id.slice(0, 8)}-metadata.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
+            }
           >
-            导出 JSON
-          </Button>
-        }
-      >
-        <pre
-          style={{
-            background: '#f5f5f5',
-            padding: 12,
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'monospace',
-            maxHeight: 300,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-          }}
-        >
-          {JSON.stringify(metadata, null, 2)}
-        </pre>
-      </Card>
-
-      {/* 全部数据 */}
-      <Card
-        title={`数据（${allData.length} 条）`}
-        extra={
-          <Button
-            size="small"
-            onClick={() => {
-              const blob = new Blob([JSON.stringify(allData, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `fact-${fact.fact_id.slice(0, 8)}-data.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-          >
-            导出 JSON
-          </Button>
-        }
-      >
-        <pre
-          style={{
-            background: '#f5f5f5',
-            padding: 12,
-            borderRadius: 6,
-            fontSize: 13,
-            fontFamily: 'monospace',
-            maxHeight: 500,
-            overflow: 'auto',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            margin: 0,
-          }}
-        >
-          {JSON.stringify(allData, null, 2)}
-        </pre>
-        {allData.length === 0 && (
-          <Text type="secondary">暂无数据</Text>
-        )}
-      </Card>
+            {viewMode === 'table' && allData.length > 0 ? (
+              <Table<Record<string, unknown>>
+                columns={tableColumns}
+                dataSource={allData}
+                rowKey={(_, idx) => String(idx)}
+                size="small"
+                pagination={false}
+                scroll={{ y: 540 }}
+              />
+            ) : (
+              <pre
+                style={{
+                  background: '#f5f5f5',
+                  padding: 12,
+                  borderRadius: 6,
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  maxHeight: 600,
+                  overflow: 'auto',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  margin: 0,
+                }}
+              >
+                {JSON.stringify({ metadata: factData?.metadata ?? {}, data: allData }, null, 2)}
+              </pre>
+            )}
+            {allData.length === 0 && (
+              <Text type="secondary">暂无数据</Text>
+            )}
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 }

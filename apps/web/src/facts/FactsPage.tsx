@@ -7,54 +7,39 @@ import {
   Select,
   Space,
   Table,
-  Tabs,
   Tag,
   Typography,
 } from 'antd';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiDeleteFact,
+  apiDeleteFactsByTask,
+  apiListDepartments,
   apiListFacts,
   apiSearchFacts,
   type FactSummary,
 } from '@/api/client';
-import { IngestionWizard } from '@/ingestions/IngestionWizard';
 
 const { Text } = Typography;
-
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  active: 'green',
-  superseded: 'orange',
-  withdrawn: 'red',
-};
-
-/** 状态 → 中文标签 */
-const STATUS_LABEL: Record<string, string> = {
-  active: '活跃',
-  superseded: '已替代',
-  withdrawn: '已撤回',
-};
 
 /** 树形数据类型：父节点为任务，子节点为该任务下的 fact */
 type TreeNode = {
   key: string;
   fact_id?: string;
-  revision?: number;
   fact_type?: string;
   subject_id?: string;
-  status?: string;
+  data_summary?: string | null;
   task_code: string | null;
   task_name: string | null;
   isGroup: boolean;
-  childCount?: number;
+  totalCount?: number;
   children?: TreeNode[];
 };
 
 /** 将扁平 fact 列表按 task_code 分组为树形结构 */
-function groupByTask(facts: FactSummary[]): TreeNode[] {
+function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>): TreeNode[] {
   const groups = new Map<string, FactSummary[]>();
   const noTaskKey = '__no_task__';
 
@@ -68,30 +53,26 @@ function groupByTask(facts: FactSummary[]): TreeNode[] {
 
   for (const [taskCode, groupFacts] of groups) {
     if (taskCode === noTaskKey) {
-      // 没有关联任务的 fact 直接作为叶子节点
       for (const f of groupFacts) {
         tree.push({
           key: `fact-${f.fact_id}`,
           fact_id: f.fact_id,
-          revision: f.revision,
           fact_type: f.fact_type,
           subject_id: f.subject_id,
-          status: f.status,
+          data_summary: f.data_summary,
           task_code: null,
           task_name: null,
           isGroup: false,
         });
       }
     } else {
-      // 有关联任务的 fact 收拢为子节点
       const first = groupFacts[0];
       const children: TreeNode[] = groupFacts.map((f) => ({
         key: `fact-${f.fact_id}`,
         fact_id: f.fact_id,
-        revision: f.revision,
         fact_type: f.fact_type,
         subject_id: f.subject_id,
-        status: f.status,
+        data_summary: f.data_summary,
         task_code: f.task_code,
         task_name: f.task_name,
         isGroup: false,
@@ -101,7 +82,7 @@ function groupByTask(facts: FactSummary[]): TreeNode[] {
         task_code: taskCode,
         task_name: first.task_name,
         isGroup: true,
-        childCount: groupFacts.length,
+        totalCount: groupCounts[taskCode] ?? groupFacts.length,
         children,
       });
     }
@@ -112,27 +93,53 @@ function groupByTask(facts: FactSummary[]): TreeNode[] {
 
 /**
  * 实验事实列表页面
- *
- * 功能：
- * - 树形表格：按任务编码分组，同任务下的 fact 收拢为子节点
- * - 搜索框（支持全文搜索）
- * - 状态筛选 Select
- * - 游标分页（加载更多）
- * - 点击「查看详情」跳转到事实详情页
  */
 export function FactsPage(): JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
 
-  // ---- 删除 Mutation ----
+  // ---- 部门列表查询（用于筛选） ----
+  const { data: deptListData } = useQuery({
+    queryKey: ['departments-for-facts'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+  });
+  const deptOptions = (deptListData?.items ?? []).map((d) => ({
+    value: d.display_name,
+    label: d.display_name,
+  }));
+
+  // 构建部门树：选父部门时自动包含所有子部门
+  const deptChildrenMap: Record<string, string[]> = {};
+  for (const d of deptListData?.items ?? []) {
+    if (d.parent_id) {
+      const parent = deptListData?.items.find((p) => p.id === d.parent_id);
+      if (parent) {
+        if (!deptChildrenMap[parent.display_name]) deptChildrenMap[parent.display_name] = [];
+        deptChildrenMap[parent.display_name].push(d.display_name);
+      }
+    }
+  }
+
+  // ---- 单条删除 Mutation ----
   const deleteMutation = useMutation({
     mutationFn: apiDeleteFact,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
       void queryClient.refetchQueries({ queryKey: ['facts'], exact: false });
       message.success('事实已删除');
+    },
+    onError: (err: unknown) => message.error(String(err)),
+  });
+
+  // ---- 批量删除 Mutation ----
+  const batchDeleteMutation = useMutation({
+    mutationFn: apiDeleteFactsByTask,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
+      void queryClient.refetchQueries({ queryKey: ['facts'], exact: false });
+      message.success('该任务下所有数据已删除');
     },
     onError: (err: unknown) => message.error(String(err)),
   });
@@ -145,19 +152,31 @@ export function FactsPage(): JSX.Element {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['facts', statusFilter, searchQuery],
+    queryKey: ['facts', searchQuery],
     queryFn: ({ pageParam }) =>
       searchQuery
         ? apiSearchFacts({ q: searchQuery, cursor: pageParam, page_size: 20 })
-        : apiListFacts({ cursor: pageParam, page_size: 20, status: statusFilter }),
+        : apiListFacts({ cursor: pageParam, page_size: 20 }),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
   });
 
-  const items: FactSummary[] = data?.pages.flatMap((p) => p.items) ?? [];
-  const treeData = groupByTask(items);
+  const allItems: FactSummary[] = data?.pages.flatMap((p) => p.items) ?? [];
+  const allGroupCounts: Record<string, number> = {};
+  for (const page of data?.pages ?? []) {
+    if (page.group_counts) {
+      Object.assign(allGroupCounts, page.group_counts);
+    }
+  }
+  const items: FactSummary[] = deptFilter
+    ? allItems.filter((f) => {
+        if (f.department_name === deptFilter) return true;
+        const children = deptChildrenMap[deptFilter];
+        return children && children.includes(f.department_name ?? '');
+      })
+    : allItems;
+  const treeData = groupByTask(items, allGroupCounts);
 
-  // ---- 搜索处理 ----
   const handleSearch = (val: string): void => {
     setSearchQuery(val);
   };
@@ -165,20 +184,29 @@ export function FactsPage(): JSX.Element {
   // ---- 表格列定义 ----
   const columns: ColumnsType<TreeNode> = [
     {
-      title: '名称 / 主体ID',
+      title: '名称',
       key: 'name',
+      width: 480,
       render: (_: unknown, record: TreeNode) => {
         if (record.isGroup) {
           return (
-            <div>
+            <Space size={6}>
               <Text strong>{record.task_name ?? record.task_code}</Text>
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>{record.task_code}</Text>
-              </div>
-            </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>{record.task_code}</Text>
+            </Space>
           );
         }
         return <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{record.subject_id}</span>;
+      },
+    },
+    {
+      title: '摘要',
+      key: 'summary',
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) return null;
+        return record.data_summary
+          ? <Text type="secondary" style={{ fontSize: 12 }}>{record.data_summary}</Text>
+          : <Text type="secondary">-</Text>;
       },
     },
     {
@@ -187,55 +215,22 @@ export function FactsPage(): JSX.Element {
       key: 'fact_type',
       width: 130,
       render: (t: string | undefined, record: TreeNode) => {
-        if (record.isGroup) return <Text type="secondary">{record.childCount} 条数据</Text>;
+        if (record.isGroup) return <Text type="secondary">{record.totalCount} 条数据</Text>;
         return t ? <Tag color="blue">{t}</Tag> : '-';
-      },
-    },
-    {
-      title: '修订号',
-      dataIndex: 'revision',
-      key: 'revision',
-      width: 80,
-      align: 'center' as const,
-      render: (r: number | undefined, record: TreeNode) => {
-        if (record.isGroup) return '-';
-        return r;
-      },
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: string | undefined, record: TreeNode) => {
-        if (record.isGroup) return '-';
-        return status ? (
-          <Tag color={STATUS_COLOR[status] ?? 'default'}>
-            {STATUS_LABEL[status] ?? status}
-          </Tag>
-        ) : '-';
       },
     },
     {
       title: '操作',
       key: 'action',
-      width: 160,
+      width: 120,
       render: (_: unknown, record: TreeNode) => {
-        if (record.isGroup) return null;
-        return (
-          <Space size="small">
-            <Button
-              type="link"
-              size="small"
-              onClick={() => record.fact_id && void navigate({ to: `/facts/${record.fact_id}` })}
-            >
-              查看详情
-            </Button>
+        if (record.isGroup) {
+          return (
             <Popconfirm
-              title="确定删除该事实？此操作不可撤销。"
-              description="将同时删除所有修订、观察值和关联数据"
-              onConfirm={() => record.fact_id && deleteMutation.mutate(record.fact_id)}
-              okText="删除"
+              title={`删除「${record.task_name ?? record.task_code}」下的全部数据？`}
+              description={`将删除 ${record.totalCount ?? 0} 条数据，此操作不可撤销`}
+              onConfirm={() => record.task_code && batchDeleteMutation.mutate(record.task_code)}
+              okText="全部删除"
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
@@ -243,12 +238,31 @@ export function FactsPage(): JSX.Element {
                 type="link"
                 size="small"
                 danger
-                loading={deleteMutation.isPending}
+                loading={batchDeleteMutation.isPending}
               >
-                删除
+                全部删除
               </Button>
             </Popconfirm>
-          </Space>
+          );
+        }
+        return (
+          <Popconfirm
+            title="确定删除该事实？此操作不可撤销。"
+            description="将同时删除所有关联数据"
+            onConfirm={() => record.fact_id && deleteMutation.mutate(record.fact_id)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              loading={deleteMutation.isPending}
+            >
+              删除
+            </Button>
+          </Popconfirm>
         );
       },
     },
@@ -256,68 +270,53 @@ export function FactsPage(): JSX.Element {
 
   return (
     <div>
-      <Tabs
-        defaultActiveKey="list"
-        items={[
-          {
-            key: 'list',
-            label: '事实列表',
-            children: (
-              <>
-                <Space style={{ marginBottom: 16 }}>
-                  <Input.Search
-                    placeholder="搜索事实..."
-                    allowClear
-                    style={{ width: 300 }}
-                    onSearch={handleSearch}
-                  />
-                  <Select
-                    placeholder="状态筛选"
-                    style={{ width: 140 }}
-                    value={statusFilter ?? '__all__'}
-                    onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-                    options={[
-                      { value: '__all__', label: '全部' },
-                      { value: 'active', label: '活跃' },
-                      { value: 'superseded', label: '已替代' },
-                      { value: 'withdrawn', label: '已撤回' },
-                    ]}
-                  />
-                </Space>
+      <Space style={{ marginBottom: 16 }}>
+        <Input.Search
+          placeholder="搜索事实..."
+          allowClear
+          style={{ width: 300 }}
+          onSearch={handleSearch}
+        />
+        <Select
+          placeholder="实验室筛选"
+          style={{ width: 200 }}
+          value={deptFilter ?? '__all__'}
+          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+        />
+      </Space>
 
-                <Table<TreeNode>
-                  columns={columns}
-                  dataSource={treeData}
-                  rowKey="key"
-                  loading={isLoading}
-                  pagination={false}
-                  size="middle"
-                  expandable={{
-                    defaultExpandAllRows: true,
-                    rowExpandable: (record) => record.isGroup,
-                  }}
-                />
-
-                {hasNextPage && (
-                  <div style={{ textAlign: 'center', marginTop: 16 }}>
-                    <Button
-                      loading={isFetchingNextPage}
-                      onClick={() => void fetchNextPage()}
-                    >
-                      加载更多
-                    </Button>
-                  </div>
-                )}
-              </>
-            ),
+      <Table<TreeNode>
+        columns={columns}
+        dataSource={treeData}
+        rowKey="key"
+        loading={isLoading}
+        pagination={false}
+        size="middle"
+        expandable={{
+          defaultExpandAllRows: true,
+          rowExpandable: (record) => record.isGroup,
+        }}
+        onRow={(record) => ({
+          onClick: () => {
+            if (!record.isGroup && record.fact_id) {
+              void navigate({ to: `/facts/${record.fact_id}` });
+            }
           },
-          {
-            key: 'ingest',
-            label: '数据摄入',
-            children: <IngestionWizard />,
-          },
-        ]}
+          style: record.isGroup ? {} : { cursor: 'pointer' },
+        })}
       />
+
+      {hasNextPage && (
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <Button
+            loading={isFetchingNextPage}
+            onClick={() => void fetchNextPage()}
+          >
+            加载更多
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

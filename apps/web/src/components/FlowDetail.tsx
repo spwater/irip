@@ -9,6 +9,7 @@ import {
   Radio,
   Select,
   Space,
+  Spin,
   Table,
   Tag,
   Tooltip,
@@ -28,6 +29,7 @@ import {
   apiRestoreFlow,
   apiGetComponent,
   apiGetFlow,
+  apiGetFlowRun,
   apiListComponents,
   apiListObjects,
   apiListEquipment,
@@ -70,8 +72,14 @@ export function FlowDetail(): JSX.Element {
   const [uploadLoading, setUploadLoading] = useState<string | null>(null);
   const [artifactMap, setArtifactMap] = useState<Record<string, string>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [flowPageSize, setFlowPageSize] = useState(10);
+  const [runPageSize, setRunPageSize] = useState(10);
   const [createForm] = Form.useForm();
   const [runForm] = Form.useForm();
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null);
 
   /** 比较版本号 */
   const cmpVer = (a: string, b: string): number => {
@@ -112,6 +120,7 @@ export function FlowDetail(): JSX.Element {
   // ---- 流程列表查询 ----
   const [showArchived, setShowArchived] = useState(false);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
+  const [equipFilter, setEquipFilter] = useState<string | undefined>(undefined);
   const { data: listData, isLoading: listLoading } = useQuery({
     queryKey: ['flows'],
     queryFn: () => apiListFlows(),
@@ -119,10 +128,21 @@ export function FlowDetail(): JSX.Element {
 
   const allFlows: FlowSummary[] = listData?.items ?? [];
   let flows: FlowSummary[] = showArchived
-    ? allFlows
+    ? allFlows.filter((f) => f.status === 'deprecated')
     : allFlows.filter((f) => f.status !== 'deprecated');
   if (deptFilter) {
     flows = flows.filter((f) => f.department_id === deptFilter);
+  }
+  if (equipFilter) {
+    flows = flows.filter((f) => {
+      const nodes = (f.latest_version?.nodes ?? []) as { component_name?: string }[];
+      const compNames = Array.from(new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))));
+      const objCodes = Array.from(new Set(compNames.map((name) => compMap.get(name)?.experimental_object_code).filter((c): c is string => Boolean(c))));
+      return objCodes.some((code) => {
+        const obj = objMap.get(code);
+        return obj?.equipment_id === equipFilter;
+      });
+    });
   }
 
   // ---- 查询组件列表、实验对象、设备，用于在流程列表展示关联信息 ----
@@ -166,6 +186,10 @@ export function FlowDetail(): JSX.Element {
   const deptOptions = (deptListData?.items ?? []).map((d) => ({
     value: d.id,
     label: d.display_name,
+  }));
+  const equipOptions = (equipListData?.items ?? []).map((e) => ({
+    value: e.id,
+    label: e.display_name,
   }));
 
   // ---- 选中流程详情查询 ----
@@ -222,7 +246,8 @@ export function FlowDetail(): JSX.Element {
     mutationFn: apiArchiveFlow,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['flows'] });
-      void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
+      void queryClient.refetchQueries({ queryKey: ['flows'] });
+      setSelectedFlowId(null);
       message.success('流程已归档');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
@@ -343,7 +368,13 @@ export function FlowDetail(): JSX.Element {
         params,
       }];
       createMutation.mutate(
-        { code: values.code, display_name: values.display_name, nodes },
+        {
+          code: values.code,
+          display_name: values.display_name,
+          department_id: (values.department_id as string) ?? null,
+          project_name: (values.project_name as string) ?? null,
+          nodes,
+        },
         {
           onSuccess: async (data) => {
             // 创建成功后立即发布
@@ -384,21 +415,71 @@ export function FlowDetail(): JSX.Element {
           }
         }
       }
-      // 也保留原始 JSON 输入
-      if (values.inputs_json) {
-        const jsonInputs = JSON.parse(values.inputs_json as string);
-        Object.assign(inputs, jsonInputs);
-      }
       createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
     } catch (err) {
       message.error(`参数解析失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
+  // ---- 批量执行 ----
+  const handleBatchExecute = async (): Promise<void> => {
+    if (!selectedFlowId || batchFiles.length === 0) return;
+    setBatchRunning(true);
+    setBatchProgress({ current: 0, total: batchFiles.length, status: '开始执行...' });
+
+    const nodeParams = flow?.latest_version?.nodes as FlowNodeSchema[] | undefined;
+    for (let i = 0; i < batchFiles.length; i++) {
+      const file = batchFiles[i];
+      setBatchProgress({ current: i, total: batchFiles.length, status: `正在上传: ${file.name}` });
+      try {
+        // 1. 上传文件
+        const uploadRes = await apiUploadFile(file);
+        // 2. 构建 inputs
+        const inputs: Record<string, unknown> = {};
+        if (nodeParams) {
+          for (const node of nodeParams) {
+            for (const key of Object.keys(node.params ?? {})) {
+              if (key === 'path') {
+                inputs[key] = `artifact:${uploadRes.artifact_id}`;
+              } else if (key === 'experimental_object_code') {
+                inputs[key] = (node.params as Record<string, unknown>)?.experimental_object_code ?? '';
+              } else {
+                const defaultVal = (node.params as Record<string, unknown>)?.[key];
+                inputs[key] = defaultVal ?? '';
+              }
+            }
+          }
+        }
+        // 3. 创建运行
+        setBatchProgress({ current: i, total: batchFiles.length, status: `正在执行: ${file.name}` });
+        const run = await apiCreateFlowRun(selectedFlowId, { inputs });
+        // 4. 等待执行完成（轮询）
+        let done = false;
+        let attempts = 0;
+        while (!done && attempts < 120) {
+          await new Promise((r) => setTimeout(r, 2000));
+          attempts++;
+          const updated = await apiGetFlowRun(run.id);
+          if (['succeeded', 'failed', 'cancelled'].includes(updated.status)) {
+            done = true;
+          }
+        }
+      } catch (err) {
+        message.error(`文件 ${file.name} 执行失败: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    setBatchProgress({ current: batchFiles.length, total: batchFiles.length, status: '全部完成' });
+    void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
+    setBatchRunning(false);
+    setBatchFiles([]);
+    setBatchModalOpen(false);
+    message.success(`批量执行完成: ${batchFiles.length} 个文件`);
+  };
+
   // ---- 表格列定义 ----
   const flowColumns: ColumnsType<FlowSummary> = [
     {
-      title: '名称',
+      title: '任务名称',
       key: 'name',
       width: 200,
       render: (_: unknown, record: FlowSummary) => (
@@ -425,65 +506,17 @@ export function FlowDetail(): JSX.Element {
     {
       title: '任务来源',
       key: 'department',
-      width: 240,
-      render: (_: unknown, record: FlowSummary) => {
-        if (!record.department_id) return <Text type="secondary">-</Text>;
-        const deptName = deptMap.get(record.department_id);
-        return (
-          <div>
-            {deptName ? <Text>{deptName}</Text> : <Text type="secondary">-</Text>}
-            {record.project_name && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>{record.project_name}</Text>
-              </div>
-            )}
-          </div>
-        );
-      },
+      width: 160,
+      render: (_: unknown, record: FlowSummary) => (
+        record.project_name
+          ? <Text>{record.project_name}</Text>
+          : <Text type="secondary">-</Text>
+      ),
     },
     {
-      title: '实验对象',
-      key: 'exp_objects',
-      width: 200,
-      render: (_: unknown, record: FlowSummary) => {
-        const nodes = (record.latest_version?.nodes ?? []) as { component_name?: string }[];
-        const compNames = Array.from(
-          new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))),
-        );
-        // 从组件的 experimental_object_code 收集实验对象编码
-        const objCodes = Array.from(
-          new Set(
-            compNames
-              .map((name) => compMap.get(name)?.experimental_object_code)
-              .filter((c): c is string => Boolean(c)),
-          ),
-        );
-        if (objCodes.length === 0) return <Text type="secondary">-</Text>;
-        return (
-          <div>
-            {objCodes.map((code) => {
-              const obj = objMap.get(code);
-              if (!obj) return <div key={code}><Text code>{code}</Text></div>;
-              const eqName = obj.equipment_id ? equipMap.get(obj.equipment_id) : null;
-              return (
-                <div key={code}>
-                  <Text>{obj.display_name}</Text>
-                  {eqName && (
-                    <div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>{eqName}</Text>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        );
-      },
-    },
-    {
-      title: '数据接口',
-      key: 'components',
-      width: 180,
+      title: '数据来源',
+      key: 'data_source',
+      width: 400,
       render: (_: unknown, record: FlowSummary) => {
         const nodes = (record.latest_version?.nodes ?? []) as { component_name?: string }[];
         const compNames = Array.from(
@@ -491,15 +524,43 @@ export function FlowDetail(): JSX.Element {
         );
         if (compNames.length === 0) return <Text type="secondary">-</Text>;
         return (
-          <div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {compNames.map((name) => {
               const comp = compMap.get(name);
+              const compLabel = comp?.display_name ?? name;
+              const objCode = comp?.experimental_object_code;
+              const obj = objCode ? objMap.get(objCode) : null;
+              const eqName = obj?.equipment_id ? equipMap.get(obj.equipment_id) : null;
+              const deptName = record.department_id ? deptMap.get(record.department_id) : null;
               return (
-                <div key={name}>
-                  <Text>{comp?.display_name ?? name}</Text>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>{name}</Text>
-                  </div>
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                    {compLabel}
+                  </Tag>
+                  {obj && (
+                    <>
+                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                      <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                        {obj.display_name}
+                      </Tag>
+                    </>
+                  )}
+                  {eqName && (
+                    <>
+                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                      <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                        {eqName}
+                      </Tag>
+                    </>
+                  )}
+                  {deptName && (
+                    <>
+                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                      <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                        {deptName}
+                      </Tag>
+                    </>
+                  )}
                 </div>
               );
             })}
@@ -634,6 +695,13 @@ export function FlowDetail(): JSX.Element {
           onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
           options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
         />
+        <Select
+          placeholder="实验设备筛选"
+          style={{ width: 200 }}
+          value={equipFilter ?? '__all__'}
+          onChange={(val: string) => setEquipFilter(val === '__all__' ? undefined : val)}
+          options={[{ value: '__all__', label: '全部' }, ...equipOptions]}
+        />
       </Space>
 
       {/* 任务列表 */}
@@ -643,7 +711,12 @@ export function FlowDetail(): JSX.Element {
           dataSource={flows}
           rowKey="id"
           loading={listLoading}
-          pagination={{ pageSize: 10, showSizeChanger: false }}
+          pagination={{
+            pageSize: flowPageSize,
+            showSizeChanger: true,
+            pageSizeOptions: [10, 20, 50],
+            onShowSizeChange: (_: number, size: number) => setFlowPageSize(size),
+          }}
           size="middle"
           onRow={(record) => ({
             onClick: () => setSelectedFlowId(record.id),
@@ -668,6 +741,17 @@ export function FlowDetail(): JSX.Element {
                 }}
               >
                 执行
+              </Button>
+              <Button
+                size="small"
+                disabled={!canExecute}
+                onClick={() => {
+                  setBatchFiles([]);
+                  setBatchProgress(null);
+                  setBatchModalOpen(true);
+                }}
+              >
+                批量执行
               </Button>
             </Space>
           }
@@ -776,7 +860,12 @@ export function FlowDetail(): JSX.Element {
             dataSource={runs}
             rowKey="id"
             loading={runsLoading}
-            pagination={{ pageSize: 10, showSizeChanger: false }}
+            pagination={{
+              pageSize: runPageSize,
+              showSizeChanger: true,
+              pageSizeOptions: [10, 20, 50],
+              onShowSizeChange: (_: number, size: number) => setRunPageSize(size),
+            }}
             size="small"
             style={{ marginBottom: 16 }}
           />
@@ -1055,14 +1144,95 @@ export function FlowDetail(): JSX.Element {
               </div>
             );
           })}
-          <Form.Item name="inputs_json" label="额外参数 (JSON，可选)">
-            <Input.TextArea
-              rows={3}
-              style={{ fontFamily: 'monospace', fontSize: 13 }}
-              placeholder={`{\n  "key": "value"\n}`}
-            />
-          </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 批量执行 Modal */}
+      <Modal
+        title="批量执行"
+        open={batchModalOpen}
+        onCancel={() => {
+          if (!batchRunning) {
+            setBatchModalOpen(false);
+            setBatchFiles([]);
+            setBatchProgress(null);
+          }
+        }}
+        footer={
+          batchRunning ? null : (
+            <Space>
+              <Button onClick={() => setBatchModalOpen(false)}>取消</Button>
+              <Button
+                type="primary"
+                disabled={batchFiles.length === 0}
+                onClick={() => void handleBatchExecute()}
+              >
+                开始执行 ({batchFiles.length} 个文件)
+              </Button>
+            </Space>
+          )
+        }
+        width={600}
+      >
+        {batchRunning && batchProgress ? (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <Spin size="large" />
+            <div style={{ marginTop: 16 }}>
+              <Text strong>
+                进度: {batchProgress.current} / {batchProgress.total}
+              </Text>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <Text type="secondary">{batchProgress.status}</Text>
+            </div>
+          </div>
+        ) : (
+          <>
+            <input
+              type="file"
+              multiple
+              id="batch-file-input"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                setBatchFiles(files);
+                if (e.target) e.target.value = '';
+              }}
+            />
+            <div
+              onClick={() => document.getElementById('batch-file-input')?.click()}
+              style={{
+                border: '2px dashed #d9d9d9',
+                borderRadius: 8,
+                padding: 32,
+                textAlign: 'center',
+                cursor: 'pointer',
+                marginBottom: 16,
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 14 }}>
+                {batchFiles.length > 0
+                  ? `已选择 ${batchFiles.length} 个文件`
+                  : '点击选择多个文件'}
+              </Text>
+              {batchFiles.length > 0 && (
+                <div style={{ marginTop: 8, textAlign: 'left', maxHeight: 200, overflow: 'auto' }}>
+                  {batchFiles.map((f, i) => (
+                    <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                      <Text style={{ fontSize: 13 }}>{f.name}</Text>
+                      <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                        ({(f.size / 1024).toFixed(0)} KB)
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              将使用当前任务的数据接口，逐个上传文件并执行。文件合规性由用户自行负责。
+            </Text>
+          </>
+        )}
       </Modal>
     </div>
   );

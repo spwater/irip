@@ -233,14 +233,12 @@ export function EquipmentPage({
       width: 180,
       render: (_: unknown, record: EquipmentListItem) => (
         <Tooltip title={record.description || undefined} placement="topLeft">
-          <div>
+          <Space size={6}>
             <Text strong>{record.display_name}</Text>
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {record.code}
-              </Text>
-            </div>
-          </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.code}
+            </Text>
+          </Space>
         </Tooltip>
       ),
     },

@@ -121,6 +121,8 @@ class CreateFlowRequest(BaseModel):
         description="流程编码，仅小写字母/数字/下划线",
     )
     display_name: str = Field(..., min_length=1, max_length=200)
+    department_id: UUID | None = Field(None, description="执行实验部门 ID")
+    project_name: str | None = Field(None, max_length=200, description="项目名称")
     nodes: list[FlowNodeSchema] = Field(default_factory=list)
     edges: list[FlowEdgeSchema] = Field(default_factory=list)
 
@@ -372,6 +374,8 @@ async def create_flow(
         display_name=body.display_name,
         nodes=nodes,
         edges=edges,
+        department_id=body.department_id,
+        project_name=body.project_name,
     )
     return _definition_to_response(definition, None)
 
@@ -832,6 +836,7 @@ class PersistFactRequest(BaseModel):
 
     object_id: UUID
     template_version_id: UUID | None = None
+    custom_data: dict | None = None  # 可选：编辑后的自定义数据 {metadata: {...}, data: [...]}
 
 
 class PersistFactResponse(BaseModel):
@@ -884,6 +889,16 @@ async def persist_run_as_fact(
     source_path: str = ""
     for exec_record in succeeded_nodes:
         meta = exec_record.output_summary.get("_metadata", {})
+        if meta.get("data"):
+            all_rows = meta["data"]
+            header = meta.get("metadata", {})
+            # 向后兼容：旧格式用 header/rows
+            if not header and meta.get("header"):
+                header = meta["header"]
+            if not all_rows and meta.get("rows"):
+                all_rows = meta["rows"]
+            break
+        # 向后兼容旧格式
         if meta.get("all_rows"):
             all_rows = meta["all_rows"]
             header = meta.get("header", {})
@@ -899,6 +914,13 @@ async def persist_run_as_fact(
             message="执行结果中无可用的数据行",
             retryable=False,
         )
+
+    # 2a. 如果传入了编辑后的自定义数据，覆盖提取的数据
+    if body.custom_data:
+        if isinstance(body.custom_data.get("data"), list):
+            all_rows = body.custom_data["data"]
+        if isinstance(body.custom_data.get("metadata"), dict):
+            header = body.custom_data["metadata"]
 
     # 3. 从 input_snapshot 获取源文件路径
     input_snapshot = run.input_snapshot or {}
@@ -1001,7 +1023,7 @@ async def persist_run_as_fact(
         template_version_id=body.template_version_id,
         organization_id=service._org_id,
         object_id=body.object_id,
-        subject_id=str(header.get("sample_name", run_id)),
+        subject_id=f"{task_name or ''}-{header.get('sample_name') or header.get('subject_id') or str(run_id)}",
         started_at=run.started_at or run.created_at,
         ended_at=run.completed_at,
         method_version_id=None,

@@ -281,14 +281,12 @@ export function ExperimentalObjectPage({
       width: 200,
       render: (_: unknown, record: IndustrialObject) => (
         <Tooltip title={record.description || undefined} placement="topLeft">
-          <div>
+          <Space size={6}>
             <Text strong>{record.display_name}</Text>
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {record.code}
-              </Text>
-            </div>
-          </div>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {record.code}
+            </Text>
+          </Space>
         </Tooltip>
       ),
     },
@@ -310,14 +308,17 @@ export function ExperimentalObjectPage({
         if (!eq) return <Text type="secondary">-</Text>;
         const deptName = eq.department_id ? deptMap.get(eq.department_id) : null;
         return (
-          <div>
-            <Text>{eq.display_name}</Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
+              {eq.display_name}
+            </Tag>
             {deptName && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+              <>
+                <span style={{ color: '#999', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
+                <Tag color="geekblue" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
                   {deptName}
-                </Text>
-              </div>
+                </Tag>
+              </>
             )}
           </div>
         );

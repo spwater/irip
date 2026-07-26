@@ -11,12 +11,12 @@ import { AppShell } from '@/app/AppShell';
 import { WorkbenchPage } from '@/pages/WorkbenchPage';
 import { StandardsPage as StandardsPageV1 } from '@/standards/StandardsPage';
 import { LabOpsPage } from '@/pages/LabOpsPage';
+import { PlatformPage } from '@/pages/PlatformPage';
 import { FactDetail } from '@/facts/FactDetail';
 import { ComponentsPage } from '@/components/ComponentsPage';
 import { ModelsPage } from '@/models/ModelsPage';
 import { ModelDetail } from '@/models/ModelDetail';
 import { PredictionWorkbench } from '@/models/PredictionWorkbench';
-import { AssistantPage } from '@/assistant/AssistantPage';
 import { GovernanceConsole } from '@/governance/GovernanceConsole';
 import { JobsPage } from '@/jobs/JobsPage';
 import { JobDetail } from '@/jobs/JobDetail';
@@ -174,11 +174,14 @@ export function createAppRouter() {
     }),
   });
 
-  // V3 AI 助手路由
-  const assistantRoute = createRoute({
+  // 平台应用页面（Tab：AI 助手 / 数据抽取）
+  const platformRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
-    path: '/assistant',
-    component: AssistantPage,
+    path: '/platform',
+    component: PlatformPage,
+    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+      tab: typeof search.tab === 'string' ? search.tab : undefined,
+    }),
   });
 
   // V3 平台治理路由（Tabs 内部切换子页面）
@@ -215,10 +218,10 @@ export function createAppRouter() {
       componentsRoute,
       flowsRoute,
       labOpsRoute,
+      platformRoute,
       modelsRoute,
       modelDetailRoute,
       predictionRoute,
-      assistantRoute,
       governanceRoute,
       jobsRoute,
       jobDetailRoute,

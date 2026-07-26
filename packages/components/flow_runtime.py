@@ -574,6 +574,8 @@ class FlowRuntimeService:
         display_name: str,
         nodes: tuple[FlowNode, ...] = (),
         edges: tuple[FlowEdge, ...] = (),
+        department_id: UUID | None = None,
+        project_name: str | None = None,
     ) -> FlowDefinition:
         """创建流程定义（含 DAG 校验）。
 
@@ -625,6 +627,8 @@ class FlowRuntimeService:
                 organization_id=self._org_id,
                 code=code,
                 display_name=display_name,
+                department_id=department_id,
+                project_name=project_name,
                 status="draft",
             )
             session.add(definition)

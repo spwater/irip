@@ -3,18 +3,13 @@ import { Tabs, Typography } from 'antd';
 import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
 import { EquipmentPage } from '@/equipment/EquipmentPage';
-import { ComponentsPage } from '@/components/ComponentsPage';
-import { ModelsPage } from '@/models/ModelsPage';
 
 const { Title } = Typography;
 
 /**
  * 实验室建设页面
  *
- * 五个 Tab：组织机构 / 设备仪器 / 实验对象 / 工具箱 / 模型管理
- * 支持跨 Tab 快捷操作：
- * - 组织机构行点"+仪器" → 切到设备 Tab，预填所属机构
- * - 设备仪器行点"+对象" → 切到实验对象 Tab，预填关联设备
+ * 三个 Tab：组织机构 / 设备仪器 / 实验对象
  */
 export function StandardsPage(): JSX.Element {
   const [activeTab, setActiveTab] = useState('departments');
@@ -67,16 +62,6 @@ export function StandardsPage(): JSX.Element {
                 onPresetConsumed={() => setPresetEquipmentId(undefined)}
               />
             ),
-          },
-          {
-            key: 'components',
-            label: '工具箱',
-            children: <ComponentsPage />,
-          },
-          {
-            key: 'models',
-            label: '模型管理',
-            children: <ModelsPage />,
           },
         ]}
       />

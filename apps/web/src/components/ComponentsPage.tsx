@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Button,
-  Card,
   Col,
   Descriptions,
   Drawer,
@@ -16,7 +15,6 @@ import {
   Spin,
   Switch,
   Table,
-  Tabs,
   Tag,
   Tooltip,
   Typography,
@@ -25,6 +23,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
+  apiActivateVersion,
   apiArchiveComponent,
   apiDeleteComponent,
   apiGetComponent,
@@ -137,8 +136,8 @@ function yamlEscapeDouble(value: string): string {
 /**
  * 把表单字段值组装成 ingestion 组件的 manifest YAML。
  *
- * 固定结构：version 固定 "1.0.0"（后端自动递增），kind 固定 ingestion，
- * inputs 固定 []，outputs 固定 observation_table。
+ * 固定结构：kind 固定 ingestion，inputs 固定 []，outputs 固定 observation_table。
+ * version 由系统自动管理，不在 YAML 里。
  */
 function buildManifestYaml(v: ComponentFormValues): string {
   const name = v.name ?? '';
@@ -146,9 +145,9 @@ function buildManifestYaml(v: ComponentFormValues): string {
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const fileEngine = v.file_engine ?? 'pymupdf';
+  const expCode = v.experimental_object_code ?? '';
   const lines: string[] = [
     `name: ${name}`,
-    'version: "1.0.0"',
     'kind: ingestion',
     `display_name: "${yamlEscapeDouble(displayName)}"`,
     `description: "${yamlEscapeDouble(description)}"`,
@@ -166,11 +165,15 @@ function buildManifestYaml(v: ComponentFormValues): string {
     '    prompt:',
     '      type: string',
     '      description: "LLM 提示词"',
-    `      default: "${yamlEscapeDouble(prompt)}"`,
+    `      default: |\n        ${prompt.replace(/\n/g, '\n        ')}`,
     '    file_engine:',
     '      type: string',
     '      description: "文件读取方式"',
     `      default: "${yamlEscapeDouble(fileEngine)}"`,
+    '    experimental_object_code:',
+    '      type: string',
+    '      description: "关联实验对象编码"',
+    `      default: "${yamlEscapeDouble(expCode)}"`,
     'timeout_seconds: 300',
   ];
   return lines.join('\n');
@@ -200,9 +203,15 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
   const descMatch = yaml.match(/^description:[ \t]*["']?(.*?)["']?[ \t]*$/m);
   if (descMatch) result.description = descMatch[1];
 
-  // prompt 的 default 值（parameters → properties → prompt → default）
-  const promptMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
-  if (promptMatch) result.prompt = promptMatch[1];
+  // prompt 的 default 值（支持双引号格式和块标量 | 格式）
+  const promptBlockMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*\|\s*\n((?:\s{8,}.*\n?)*)/m);
+  if (promptBlockMatch) {
+    // 块标量格式：去掉每行前面的 8 个空格缩进
+    result.prompt = promptBlockMatch[1].replace(/^        /gm, '').replace(/\n$/, '');
+  } else {
+    const promptMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
+    if (promptMatch) result.prompt = promptMatch[1];
+  }
 
   // file_engine 的 default 值
   const feMatch = yaml.match(/file_engine:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
@@ -218,23 +227,14 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
 /** 组件表单字段（表单模式共用，绑定到外层 Form 上下文） */
 function ComponentFormFields({
   objectOptions,
-  equipmentOptions,
-  objectMap,
+  objectMap: _objectMap,
+  isEdit = false,
 }: {
   objectOptions: ObjectOption[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
+  isEdit?: boolean;
 }): JSX.Element {
-  const [eqFilter, setEqFilter] = useState<string | undefined>(undefined);
-
-  // 按选中的设备筛选实验对象选项
-  const filteredObjectOptions = eqFilter
-    ? objectOptions.filter((opt) => {
-        const obj = objectMap.get(opt.value);
-        return obj?.equipment_id === eqFilter;
-      })
-    : objectOptions;
-
   return (
     <>
       <Row gutter={16}>
@@ -250,7 +250,7 @@ function ComponentFormFields({
               },
             ]}
           >
-            <Input placeholder="例如：xrf_ez_extractor" />
+            <Input placeholder="例如：xrf_ez_extractor" disabled={isEdit} />
           </Form.Item>
         </Col>
         <Col span={12}>
@@ -298,31 +298,15 @@ function ComponentFormFields({
           />
         </Form.Item>
       </div>
-      <Row gutter={16}>
-        <Col span={12}>
-          <Form.Item label="关联设备筛选">
-            <Select
-              placeholder="按设备筛选实验对象"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={equipmentOptions}
-              onChange={(val: string | undefined) => setEqFilter(val ?? undefined)}
-            />
-          </Form.Item>
-        </Col>
-        <Col span={12}>
-          <Form.Item name="experimental_object_code" label="实验对象">
-            <Select
-              placeholder="请选择实验对象"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={filteredObjectOptions}
-            />
-          </Form.Item>
-        </Col>
-      </Row>
+      <Form.Item name="experimental_object_code" label="关联实验对象">
+        <Select
+          placeholder="请选择实验对象"
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          options={objectOptions}
+        />
+      </Form.Item>
     </>
   );
 }
@@ -336,8 +320,7 @@ function ComponentFormFields({
  */
 export function ComponentsPage(): JSX.Element {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'modern' | 'classic' | 'archived'>('modern');
-  const [kindFilter, setKindFilter] = useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   // 新建工具：默认表单模式（高级模式关闭）
@@ -350,8 +333,8 @@ export function ComponentsPage(): JSX.Element {
 
   // ---- 列表查询 ----
   const { data, isLoading } = useQuery({
-    queryKey: ['components', kindFilter],
-    queryFn: () => apiListComponents({ kind: kindFilter }),
+    queryKey: ['components'],
+    queryFn: () => apiListComponents(),
   });
 
   // ---- 实验对象列表查询（用于显示"实验对象"列）----
@@ -398,11 +381,10 @@ export function ComponentsPage(): JSX.Element {
     return Array.from(latestByName.values());
   })();
 
-  // 按摩登/古法/归档分组（engine=llm → 摩登，engine=code → 古法）
+  // 按摩登/归档分组（engine=llm → 摩登，其余归入归档）
   const modernItems = allItems.filter((i) => i.engine === 'llm' && i.status !== 'deprecated');
-  const classicItems = allItems.filter((i) => i.engine !== 'llm' && i.status !== 'deprecated');
   const archivedItems = allItems.filter((i) => i.status === 'deprecated');
-  const currentItems = activeTab === 'modern' ? modernItems : activeTab === 'classic' ? classicItems : archivedItems;
+  const currentItems = activeTab === 'modern' ? modernItems : archivedItems;
 
   // ---- 详情查询 ----
   const { data: detail, isLoading: detailLoading } = useQuery({
@@ -416,10 +398,11 @@ export function ComponentsPage(): JSX.Element {
     mutationFn: apiPublishComponent,
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      void queryClient.refetchQueries({ queryKey: ['components'] });
       // 刷新旧版本详情和版本历史
       if (detailId) {
         void queryClient.invalidateQueries({ queryKey: ['component', detailId] });
-        void queryClient.invalidateQueries({ queryKey: ['component-versions', detailId] });
+        void queryClient.refetchQueries({ queryKey: ['component-versions', detailId] });
       }
       // 指向新版本，让详情自动刷新
       setDetailId(data.id);
@@ -427,9 +410,9 @@ export function ComponentsPage(): JSX.Element {
       setEditModalOpen(false);
       form.resetFields();
       editForm.resetFields();
-      // 重置模式：新建回到表单模式，编辑回到高级模式
+      // 重置模式：新建和编辑都回到表单模式
       setAdvancedMode(false);
-      setEditAdvancedMode(true);
+      setEditAdvancedMode(false);
       message.success('组件发布成功');
     },
     onError: (err: unknown) => {
@@ -524,7 +507,7 @@ export function ComponentsPage(): JSX.Element {
           description: values.description as string,
           prompt: values.prompt as string,
           file_engine: values.file_engine as string,
-          experimental_object_code: '',
+          experimental_object_code: (values.experimental_object_code as string) ?? '',
         });
         publishMutation.mutate({
           manifest_yaml: yaml,
@@ -536,19 +519,33 @@ export function ComponentsPage(): JSX.Element {
     }
   };
 
-  const handleOpenEdit = (): void => {
-    if (!detail) return;
-    // 自动递增版本号（如 1.0.0 → 1.0.1）
-    let yaml = detail.manifest_yaml;
-    const versionMatch = yaml.match(/^version:\s*["']?(\d+)\.(\d+)\.(\d+)["']?/m);
-    if (versionMatch) {
-      const newVersion = `${versionMatch[1]}.${versionMatch[2]}.${Number(versionMatch[3]) + 1}`;
-      yaml = yaml.replace(/^version:\s*["']?\d+\.\d+\.\d+["']?/m, `version: "${newVersion}"`);
+  const handleOpenEdit = async (record?: ComponentSummary): Promise<void> => {
+    // 如果传了 record，直接用它；否则用已加载的 detail
+    let compDetail = detail;
+    if (!compDetail && record) {
+      try {
+        compDetail = await apiGetComponent(record.id);
+      } catch {
+        return;
+      }
     }
+    if (!compDetail) return;
+    // 版本号由后端自动管理，前端不需要处理
+    const yaml = compDetail.manifest_yaml;
+    // 从 YAML 解析表单字段值
+    const parsed = parseYamlToFormValues(yaml);
     editForm.resetFields();
-    editForm.setFieldsValue({ manifest_yaml: yaml });
-    // 编辑默认高级模式（有完整 YAML）
-    setEditAdvancedMode(true);
+    editForm.setFieldsValue({
+      manifest_yaml: yaml,
+      name: parsed.name,
+      display_name: parsed.display_name,
+      description: parsed.description,
+      prompt: parsed.prompt,
+      file_engine: parsed.file_engine,
+      experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
+    });
+    // 编辑默认表单模式
+    setEditAdvancedMode(false);
     setEditModalOpen(true);
   };
 
@@ -595,7 +592,7 @@ export function ComponentsPage(): JSX.Element {
         publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string });
       } else {
         const values = await editForm.validateFields([...FORM_FIELD_NAMES]);
-        const yaml = buildManifestYaml({
+        let yaml = buildManifestYaml({
           name: values.name as string,
           display_name: values.display_name as string,
           description: values.description as string,
@@ -618,16 +615,14 @@ export function ComponentsPage(): JSX.Element {
       width: 200,
       render: (_: unknown, record: ComponentSummary) => (
         <Tooltip title={record.description || undefined} placement="topLeft">
-          <div>
+          <Space size={6}>
             <Text strong>{record.display_name || record.name}</Text>
             {record.display_name && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {record.name}
-                </Text>
-              </div>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.name}
+              </Text>
             )}
-          </div>
+          </Space>
         </Tooltip>
       ),
     },
@@ -661,14 +656,17 @@ export function ComponentsPage(): JSX.Element {
           ? equipmentMap.get(obj.equipment_id)
           : null;
         return (
-          <div>
-            <Text>{obj.display_name}</Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Tag color="green" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
+              {obj.display_name}
+            </Tag>
             {eqName && (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+              <>
+                <span style={{ color: '#999', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
+                <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
                   {eqName}
-                </Text>
-              </div>
+                </Tag>
+              </>
             )}
           </div>
         );
@@ -696,10 +694,10 @@ export function ComponentsPage(): JSX.Element {
             size="small"
             onClick={(e) => {
               e.stopPropagation();
-              setDetailId(record.id);
+              void handleOpenEdit(record);
             }}
           >
-            详情
+            编辑
           </Button>
           {activeTab === 'archived' ? (
             <>
@@ -775,109 +773,32 @@ export function ComponentsPage(): JSX.Element {
         <Button type="primary" onClick={handleOpenModal}>
           新建工具
         </Button>
-        <Select
-          placeholder="类别筛选"
-          style={{ width: 160 }}
-          value={kindFilter ?? '__all__'}
-          onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'ingestion', label: '数据接入' },
-            { value: 'transform', label: '数据转换' },
-            { value: 'quality', label: '质量校验' },
-            { value: 'statistics', label: '统计分析' },
-            { value: 'output', label: '结果输出' },
-            { value: 'model', label: '模型推理' },
-          ]}
-        />
+        <Button
+          type={activeTab === 'modern' ? 'primary' : 'default'}
+          onClick={() => setActiveTab('modern')}
+        >
+          活跃
+        </Button>
+        <Button
+          type={activeTab === 'archived' ? 'primary' : 'default'}
+          onClick={() => setActiveTab('archived')}
+        >
+          归档
+        </Button>
       </Space>
 
-      <Card>
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'modern' | 'classic' | 'archived')}
-          items={[
-            {
-              key: 'modern',
-              label: (
-                <span>
-                  <Tag color="purple" style={{ marginRight: 4 }}>AI</Tag>
-                  摩登
-                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
-                    ({modernItems.length})
-                  </Text>
-                </span>
-              ),
-              children: (
-                <Table<ComponentSummary>
-                  columns={columns}
-                  dataSource={currentItems}
-                  rowKey="id"
-                  loading={isLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                  onRow={(record) => ({
-                    onClick: () => setDetailId(record.id),
-                    style: { cursor: 'pointer' },
-                  })}
-                />
-              ),
-            },
-            {
-              key: 'classic',
-              label: (
-                <span>
-                  <Tag color="blue" style={{ marginRight: 4 }}>Code</Tag>
-                  古法
-                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
-                    ({classicItems.length})
-                  </Text>
-                </span>
-              ),
-              children: (
-                <Table<ComponentSummary>
-                  columns={columns}
-                  dataSource={currentItems}
-                  rowKey="id"
-                  loading={isLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                  onRow={(record) => ({
-                    onClick: () => setDetailId(record.id),
-                    style: { cursor: 'pointer' },
-                  })}
-                />
-              ),
-            },
-            {
-              key: 'archived',
-              label: (
-                <span>
-                  <Tag color="default" style={{ marginRight: 4 }}>Archived</Tag>
-                  归档
-                  <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>
-                    ({archivedItems.length})
-                  </Text>
-                </span>
-              ),
-              children: (
-                <Table<ComponentSummary>
-                  columns={columns}
-                  dataSource={currentItems}
-                  rowKey="id"
-                  loading={isLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                  onRow={(record) => ({
-                    onClick: () => setDetailId(record.id),
-                    style: { cursor: 'pointer' },
-                  })}
-                />
-              ),
-            },
-          ]}
-        />
-      </Card>
+      <Table<ComponentSummary>
+        columns={columns}
+        dataSource={currentItems}
+        rowKey="id"
+        loading={isLoading}
+        pagination={{ pageSize: 20, showSizeChanger: false }}
+        size="middle"
+        onRow={(record) => ({
+          onClick: () => setDetailId(record.id),
+          style: { cursor: 'pointer' },
+        })}
+      />
 
       {/* 新建工具 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
       <Modal
@@ -914,7 +835,7 @@ export function ComponentsPage(): JSX.Element {
               ]}
             >
               <Input.TextArea
-                placeholder={`name: my_component\nversion: "1.0.0"\nkind: transform\n...`}
+                placeholder={`name: my_component\nkind: transform\ndisplay_name: "组件名"\n...`}
                 rows={16}
                 style={{ fontFamily: 'monospace', fontSize: 13 }}
               />
@@ -934,7 +855,7 @@ export function ComponentsPage(): JSX.Element {
         loading={detailLoading}
         extra={
           detail && (
-            <Button type="primary" size="small" onClick={handleOpenEdit}>
+            <Button type="primary" size="small" onClick={() => void handleOpenEdit()}>
               编辑
             </Button>
           )
@@ -994,7 +915,7 @@ export function ComponentsPage(): JSX.Element {
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
+              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} isEdit />
             </>
           )}
         </Form>
@@ -1012,37 +933,22 @@ function ComponentDetailPanel({
   detailId: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [rollbackVersion, setRollbackVersion] = useState<string | null>(null);
-
   // ---- 版本历史查询 ----
   const { data: versions, isLoading: versionsLoading } = useQuery({
     queryKey: ['component-versions', detailId],
     queryFn: () => apiListComponentVersions(detailId),
   });
 
-  // ---- 回滚 Mutation（用旧版本 manifest 重新发布）----
+  // ---- 回滚 Mutation（切换当前活跃版本）----
   const rollbackMutation = useMutation({
     mutationFn: async (versionId: string) => {
-      // 获取旧版本详情（拿 manifest_yaml）
-      const oldDetail = await apiGetComponent(versionId);
-      const oldManifest = oldDetail.manifest_yaml;
-      // 自动递增版本号
-      let yaml = oldManifest;
-      const versionMatch = yaml.match(/^version:\s*["']?(\d+)\.(\d+)\.(\d+)["']?/m);
-      if (versionMatch) {
-        const newVersion = `${versionMatch[1]}.${versionMatch[2]}.${Number(versionMatch[3]) + 1}`;
-        yaml = yaml.replace(/^version:\s*["']?\d+\.\d+\.\d+["']?/m, `version: "${newVersion}"`);
-      }
-      return apiPublishComponent({
-        manifest_yaml: yaml,
-        experimental_object_code: oldDetail.experimental_object_code ?? undefined,
-      });
+      await apiActivateVersion(versionId);
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
       void queryClient.invalidateQueries({ queryKey: ['component-versions', detailId] });
-      setRollbackVersion(null);
-      message.success('已回滚并发布新版本');
+      void queryClient.refetchQueries({ queryKey: ['component-versions', detailId] });
+      message.success('已回滚到该版本');
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -1106,8 +1012,8 @@ function ComponentDetailPanel({
         </div>
       ) : versions && versions.length > 0 ? (
         <div style={{ maxHeight: 300, overflow: 'auto' }}>
-          {versions.map((v: ComponentVersionItem) => {
-            const isCurrent = v.id === detailId;
+          {versions.map((v: ComponentVersionItem, idx: number) => {
+            const isCurrent = idx === 0;
             return (
               <div
                 key={v.id}
@@ -1136,15 +1042,15 @@ function ComponentDetailPanel({
                 {!isCurrent && (
                   <Popconfirm
                     title={`回滚到 v${v.version}？`}
-                    description="将用该版本的 manifest 发布一个新版本号"
-                    onConfirm={() => setRollbackVersion(v.id)}
+                    description="将恢复该版本的 manifest 为当前活跃版本"
+                    onConfirm={() => rollbackMutation.mutate(v.id)}
                     okText="回滚"
                     cancelText="取消"
                   >
                     <Button
                       type="link"
                       size="small"
-                      loading={rollbackVersion === v.id && rollbackMutation.isPending}
+                      loading={rollbackMutation.isPending}
                     >
                       回滚
                     </Button>

@@ -13,7 +13,7 @@ const NAV_ITEMS: MenuProps['items'] = [
   { key: '/workbench', label: '研发看板' },
   { key: '/standards', label: '实验室建设' },
   { key: '/lab-ops', label: '实验室运营' },
-  { key: '/assistant', label: 'AI 助手' },
+  { key: '/platform', label: '平台应用' },
   { key: '/governance', label: '平台治理' },
 ];
 

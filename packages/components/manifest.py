@@ -174,7 +174,7 @@ class ManifestValidator:
         return ComponentManifest(
             name=raw["name"],
             display_name=raw.get("display_name", ""),
-            version=raw["version"],
+            version=raw.get("version", "0.0.0"),
             kind=raw["kind"],
             runtime=raw.get("runtime", "python"),
             inputs=inputs,

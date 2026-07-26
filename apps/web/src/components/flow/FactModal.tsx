@@ -8,11 +8,13 @@
 import {
   Button,
   Card,
+  Input,
   Modal,
   Space,
   Typography,
   message,
 } from 'antd';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   apiGetFlowRun,
@@ -73,19 +75,43 @@ export function FactModal({
     (n) => n.status === 'succeeded' && n.output_summary,
   );
   const meta = (succeededNode?.output_summary?._metadata ?? {}) as Record<string, unknown>;
-  const allRows = (meta.all_rows ?? meta.preview_rows ?? []) as Record<string, unknown>[];
-  const header = (meta.header ?? {}) as Record<string, unknown>;
-  const exportData = { metadata: header, data: allRows };
+  const allRows = (meta.data ?? meta.all_rows ?? meta.preview_rows ?? meta.rows ?? []) as Record<string, unknown>[];
+  const header = (meta.metadata ?? meta.header ?? {}) as Record<string, unknown>;
+
+  // 可编辑的数据
+  const [headerText, setHeaderText] = useState('');
+  const [dataText, setDataText] = useState('');
+
+  // 数据加载后初始化编辑框
+  useEffect(() => {
+    if (open && runDetail && allRows.length > 0) {
+      setHeaderText(JSON.stringify(header, null, 2));
+      setDataText(JSON.stringify(allRows, null, 2));
+    }
+  }, [open, runDetail]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 写入事实 Mutation
   const persistFactMutation = useMutation({
-    mutationFn: () =>
-      apiPersistRunAsFact(runId!, {
+    mutationFn: () => {
+      // 解析编辑后的数据
+      let customData: { metadata: Record<string, unknown>; data: Record<string, unknown>[] } | undefined;
+      try {
+        const parsedHeader = JSON.parse(headerText);
+        const parsedData = JSON.parse(dataText);
+        customData = { metadata: parsedHeader, data: parsedData };
+      } catch {
+        // 解析失败用原始数据
+      }
+      return apiPersistRunAsFact(runId!, {
         object_id: factObjectId!,
         template_version_id: null,
-      }),
+        custom_data: customData,
+      });
+    },
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: ['facts'] });
+      void queryClient.invalidateQueries({ queryKey: ['flow-runs'] });
+      void queryClient.refetchQueries({ queryKey: ['flow-runs'] });
       onClose();
       message.success(`已写入事实：${data.raw_count} 条观察值（fact_id=${data.fact_id.slice(0, 8)}...）`);
     },
@@ -140,31 +166,25 @@ export function FactModal({
       </Card>
       {/* metadata 区域 */}
       <Text strong>Metadata</Text>
-      <pre
+      <Input.TextArea
+        value={headerText}
+        onChange={(e) => setHeaderText(e.target.value)}
+        rows={6}
         style={{
-          background: '#f5f5f5',
-          padding: 12,
-          borderRadius: 6,
-          fontSize: 13,
           fontFamily: 'monospace',
-          maxHeight: 200,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          fontSize: 13,
           marginTop: 4,
           marginBottom: 16,
         }}
-      >
-        {JSON.stringify(header, null, 2)}
-      </pre>
+      />
 
       {/* 全部数据区域 */}
       <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
-        <Text strong>数据（{allRows.length} 行）</Text>
+        <Text strong>数据（可编辑）</Text>
         <Button
           size="small"
           onClick={() => {
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const blob = new Blob([dataText], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -176,22 +196,16 @@ export function FactModal({
           导出 JSON
         </Button>
       </Space>
-      <pre
+      <Input.TextArea
+        value={dataText}
+        onChange={(e) => setDataText(e.target.value)}
+        rows={16}
         style={{
-          background: '#f5f5f5',
-          padding: 12,
-          borderRadius: 6,
-          fontSize: 13,
           fontFamily: 'monospace',
-          maxHeight: 400,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          fontSize: 13,
           marginTop: 4,
         }}
-      >
-        {JSON.stringify(allRows, null, 2)}
-      </pre>
+      />
     </Modal>
   );
 }
