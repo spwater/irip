@@ -135,13 +135,12 @@ export function FlowDetail(): JSX.Element {
   }
   if (equipFilter) {
     flows = flows.filter((f) => {
-      const nodes = (f.latest_version?.nodes ?? []) as { component_name?: string }[];
-      const compNames = Array.from(new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))));
-      const objCodes = Array.from(new Set(compNames.map((name) => compMap.get(name)?.experimental_object_code).filter((c): c is string => Boolean(c))));
-      return objCodes.some((code) => {
-        const obj = objMap.get(code);
-        return obj?.equipment_id === equipFilter;
-      });
+      const node = (f.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
+      const compName = node?.component_name;
+      const objCode = compName ? compMap.get(compName)?.experimental_object_code : undefined;
+      if (!objCode) return false;
+      const obj = objMap.get(objCode);
+      return obj?.equipment_id === equipFilter;
     });
   }
 
@@ -198,6 +197,23 @@ export function FlowDetail(): JSX.Element {
     queryFn: () => apiGetFlow(selectedFlowId!),
     enabled: !!selectedFlowId,
   });
+
+  // 单节点：取任务的第一个（唯一）节点参数
+  const runNode = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
+  const runParamEntries = (() => {
+    if (!runNode) return [];
+    const params = (runNode.params as Record<string, unknown>) ?? {};
+    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code');
+    const orderedKeys = ['path', 'file_engine', 'prompt'];
+    return entries.sort((a, b) => {
+      const ai = orderedKeys.indexOf(a[0]);
+      const bi = orderedKeys.indexOf(b[0]);
+      if (ai >= 0 && bi >= 0) return ai - bi;
+      if (ai >= 0) return -1;
+      if (bi >= 0) return 1;
+      return 0;
+    });
+  })();
 
   // ---- 选中流程的运行列表查询 ----
   const { data: runsList, isLoading: runsLoading } = useQuery({
@@ -401,17 +417,15 @@ export function FlowDetail(): JSX.Element {
       const values = await runForm.validateFields();
       // 从表单收集参数值，构建 inputs
       const inputs: Record<string, unknown> = {};
-      const nodeParams = flow?.latest_version?.nodes as FlowNodeSchema[] | undefined;
-      if (nodeParams) {
-        for (const node of nodeParams) {
-          const prefix = `${node.node_id}__`;
-          for (const key of Object.keys(node.params ?? {})) {
-            const formKey = `${prefix}${key}`;
-            const formValue = values[formKey];
-            if (formValue !== undefined && formValue !== '') {
-              // 如果是上传的文件，用真实 artifact 值替换显示的文件名
-              inputs[key] = artifactMap[formKey] ?? formValue;
-            }
+      const node = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
+      if (node) {
+        const prefix = `${node.node_id}__`;
+        for (const key of Object.keys(node.params ?? {})) {
+          const formKey = `${prefix}${key}`;
+          const formValue = values[formKey];
+          if (formValue !== undefined && formValue !== '') {
+            // 如果是上传的文件，用真实 artifact 值替换显示的文件名
+            inputs[key] = artifactMap[formKey] ?? formValue;
           }
         }
       }
@@ -427,7 +441,7 @@ export function FlowDetail(): JSX.Element {
     setBatchRunning(true);
     setBatchProgress({ current: 0, total: batchFiles.length, status: '开始执行...' });
 
-    const nodeParams = flow?.latest_version?.nodes as FlowNodeSchema[] | undefined;
+    const node = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
     for (let i = 0; i < batchFiles.length; i++) {
       const file = batchFiles[i];
       setBatchProgress({ current: i, total: batchFiles.length, status: `正在上传: ${file.name}` });
@@ -436,17 +450,15 @@ export function FlowDetail(): JSX.Element {
         const uploadRes = await apiUploadFile(file);
         // 2. 构建 inputs
         const inputs: Record<string, unknown> = {};
-        if (nodeParams) {
-          for (const node of nodeParams) {
-            for (const key of Object.keys(node.params ?? {})) {
-              if (key === 'path') {
-                inputs[key] = `artifact:${uploadRes.artifact_id}`;
-              } else if (key === 'experimental_object_code') {
-                inputs[key] = (node.params as Record<string, unknown>)?.experimental_object_code ?? '';
-              } else {
-                const defaultVal = (node.params as Record<string, unknown>)?.[key];
-                inputs[key] = defaultVal ?? '';
-              }
+        if (node) {
+          for (const key of Object.keys(node.params ?? {})) {
+            if (key === 'path') {
+              inputs[key] = `artifact:${uploadRes.artifact_id}`;
+            } else if (key === 'experimental_object_code') {
+              inputs[key] = (node.params as Record<string, unknown>)?.experimental_object_code ?? '';
+            } else {
+              const defaultVal = (node.params as Record<string, unknown>)?.[key];
+              inputs[key] = defaultVal ?? '';
             }
           }
         }
@@ -518,52 +530,44 @@ export function FlowDetail(): JSX.Element {
       key: 'data_source',
       width: 400,
       render: (_: unknown, record: FlowSummary) => {
-        const nodes = (record.latest_version?.nodes ?? []) as { component_name?: string }[];
-        const compNames = Array.from(
-          new Set(nodes.map((n) => n.component_name).filter((n): n is string => Boolean(n))),
-        );
-        if (compNames.length === 0) return <Text type="secondary">-</Text>;
+        const node = (record.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
+        const compName = node?.component_name;
+        if (!compName) return <Text type="secondary">-</Text>;
+        const comp = compMap.get(compName);
+        const compLabel = comp?.display_name ?? compName;
+        const objCode = comp?.experimental_object_code;
+        const obj = objCode ? objMap.get(objCode) : null;
+        const eqName = obj?.equipment_id ? equipMap.get(obj.equipment_id) : null;
+        const deptName = record.department_id ? deptMap.get(record.department_id) : null;
         return (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {compNames.map((name) => {
-              const comp = compMap.get(name);
-              const compLabel = comp?.display_name ?? name;
-              const objCode = comp?.experimental_object_code;
-              const obj = objCode ? objMap.get(objCode) : null;
-              const eqName = obj?.equipment_id ? equipMap.get(obj.equipment_id) : null;
-              const deptName = record.department_id ? deptMap.get(record.department_id) : null;
-              return (
-                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                    {compLabel}
-                  </Tag>
-                  {obj && (
-                    <>
-                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
-                      <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                        {obj.display_name}
-                      </Tag>
-                    </>
-                  )}
-                  {eqName && (
-                    <>
-                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
-                      <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                        {eqName}
-                      </Tag>
-                    </>
-                  )}
-                  {deptName && (
-                    <>
-                      <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
-                      <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                        {deptName}
-                      </Tag>
-                    </>
-                  )}
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+              {compLabel}
+            </Tag>
+            {obj && (
+              <>
+                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                  {obj.display_name}
+                </Tag>
+              </>
+            )}
+            {eqName && (
+              <>
+                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                  {eqName}
+                </Tag>
+              </>
+            )}
+            {deptName && (
+              <>
+                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                  {deptName}
+                </Tag>
+              </>
+            )}
           </div>
         );
       },
@@ -1023,26 +1027,10 @@ export function FlowDetail(): JSX.Element {
         width={600}
       >
         <Form form={runForm} layout="vertical">
-          {(flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.map((node) => {
-            const params = node.params as Record<string, unknown> ?? {};
-            const paramEntries = Object.entries(params).filter(
-              ([key]) => key !== 'experimental_object_code',
-            );
-            if (paramEntries.length === 0) return null;
-            // 控制参数渲染顺序：path → file_engine → prompt → 其余
-            const orderedKeys = ['path', 'file_engine', 'prompt'];
-            const sortedEntries = [...paramEntries].sort((a, b) => {
-              const ai = orderedKeys.indexOf(a[0]);
-              const bi = orderedKeys.indexOf(b[0]);
-              if (ai >= 0 && bi >= 0) return ai - bi;
-              if (ai >= 0) return -1;
-              if (bi >= 0) return 1;
-              return 0;
-            });
-            return (
-              <div key={node.node_id}>
-                {sortedEntries.map(([key, defaultVal]) => {
-                  const formKey = `${node.node_id}__${key}`;
+          {runNode && runParamEntries.length > 0 && (
+            <div key={runNode.node_id}>
+              {runParamEntries.map(([key, defaultVal]) => {
+                const formKey = `${runNode.node_id}__${key}`;
                   const isPath = key === 'path';
                   const isFileEngine = key === 'file_engine';
                   // 参数标签映射
@@ -1141,9 +1129,8 @@ export function FlowDetail(): JSX.Element {
                     </Form.Item>
                   );
                 })}
-              </div>
-            );
-          })}
+            </div>
+          )}
         </Form>
       </Modal>
 
