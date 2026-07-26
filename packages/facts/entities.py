@@ -393,3 +393,42 @@ class FactRevisionLink(Base):
             f"to_revision_id={self.to_revision_id!r}, "
             f"link_type={self.link_type!r})"
         )
+
+
+class FactDataIndex(Base):
+    """事实数据索引实体（对应 fact_data_index 表）。
+
+    通用 KV 展平索引：将 data 数组每行每列拆成 key-value 对，
+    支持跨任务、跨实验类型的内容搜索。
+
+    不管 XRF 的 {组分, 单位, 结果} 还是粒度分析的 {D10, D50, D90}，
+    所有字段都会被拆成 (key, value_text, value_number) 三列存储。
+
+    Attributes:
+        id: 索引 UUID（PK）。
+        fact_revision_id: 事实修订 ID（FK→fact_revision，CASCADE）。
+        row_index: data 数组中的行号（0-based）。
+        key: 字段名（如 "组分"、"结果"、"D50"）。
+        value_text: 字符串值（非数值时存这里）。
+        value_number: 数值值（数值时存这里，非数值为 None）。
+    """
+
+    __tablename__ = "fact_data_index"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    fact_revision_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("fact_revision.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    row_index: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    key: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    value_text: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    value_number: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"FactDataIndex(id={self.id!r}, "
+            f"fact_revision_id={self.fact_revision_id!r}, "
+            f"row_index={self.row_index!r}, key={self.key!r})"
+        )

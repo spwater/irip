@@ -376,7 +376,114 @@ async def list_facts(
     )
 
 
-@facts_router.get("/search", response_model=FactListResponse)
+@facts_router.get("/search-data", response_model=FactListResponse)
+async def search_facts_by_data(
+    current_user: ReadUserDep,
+    service: FactServiceDep,
+    q: str | None = Query(None, description="全文搜索（匹配任意 key 或 value）"),
+    key: str | None = Query(None, description="精确匹配 key（字段名）"),
+    value: str | None = Query(None, description="精确匹配 value（字符串）"),
+    min_value: float | None = Query(None, description="数值下限"),
+    max_value: float | None = Query(None, description="数值上限"),
+    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
+) -> FactListResponse:
+    """按数据内容搜索事实（跨任务、跨实验类型，通用 KV 索引）。
+
+    支持三种搜索模式：
+    - 全文：q=Na2O → 匹配任意 key 或 value_text 包含 "Na2O"
+    - 精确键值：key=组分&value=Na2O → 匹配 key="组分" AND value_text="Na2O"
+    - 数值范围：key=结果&min_value=5 → 匹配 key="结果" AND value_number >= 5
+    """
+    import sqlalchemy as sa
+    from packages.facts.entities import FactDataIndex, FactRevision
+
+    # 构建 WHERE 条件
+    conditions = []
+    if q is not None:
+        like_q = f"%{q}%"
+        conditions.append(
+            sa.or_(
+                FactDataIndex.key.ilike(like_q),
+                FactDataIndex.value_text.ilike(like_q),
+            )
+        )
+    if key is not None:
+        conditions.append(FactDataIndex.key == key)
+    if value is not None:
+        conditions.append(FactDataIndex.value_text == value)
+    if min_value is not None:
+        conditions.append(FactDataIndex.value_number >= min_value)
+    if max_value is not None:
+        conditions.append(FactDataIndex.value_number <= max_value)
+
+    if not conditions:
+        raise AppError(
+            code="validation_failed",
+            message="至少提供一个搜索条件（q / key / value / min_value / max_value）",
+            retryable=False,
+        )
+
+    async with service._factory() as session:
+        # 查匹配的 fact_revision_id（去重）
+        stmt = (
+            sa.select(FactDataIndex.fact_revision_id)
+            .where(sa.and_(*conditions))
+            .distinct()
+            .limit(page_size)
+        )
+        result = await session.execute(stmt)
+        revision_ids = [row[0] for row in result]
+
+        if not revision_ids:
+            return FactListResponse(items=[], next_cursor=None, group_counts={})
+
+        # 查这些 revision 的快照信息
+        snap_stmt = (
+            sa.select(
+                FactRevision.id,
+                FactRevision.fact_id,
+                FactRevision.revision,
+                FactRevision.fact_type,
+                FactRevision.subject_id,
+                FactRevision.task_code,
+                FactRevision.task_name,
+                FactRevision.department_name,
+            )
+            .where(FactRevision.id.in_(revision_ids))
+        )
+        snap_result = await session.execute(snap_stmt)
+
+        items: list[FactRevisionResponse] = []
+        for row in snap_result:
+            items.append(FactRevisionResponse(
+                fact_id=str(row[1]),
+                revision=row[2],
+                revision_id=str(row[0]),
+                fact_type=row[3],
+                subject_id=row[4],
+                status="active",  # status 在 Fact 表，这里统一返回 active
+                task_code=row[5],
+                task_name=row[6],
+                department_name=row[7],
+            ))
+
+        # 查 group_counts
+        count_stmt = (
+            sa.select(FactRevision.task_code, sa.func.count(sa.func.distinct(FactRevision.fact_id)))
+            .where(
+                FactRevision.id.in_(revision_ids),
+                FactRevision.task_code.isnot(None),
+            )
+            .group_by(FactRevision.task_code)
+        )
+        count_result = await session.execute(count_stmt)
+        group_counts = {str(row[0]): row[1] for row in count_result}
+
+    return FactListResponse(
+        items=items,
+        next_cursor=None,
+        group_counts=group_counts,
+    )
 async def search_facts(
     current_user: ReadUserDep,
     service: FactServiceDep,

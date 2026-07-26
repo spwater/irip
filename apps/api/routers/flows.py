@@ -1040,6 +1040,47 @@ async def persist_run_as_fact(
 
     ref = await fact_service.create(command)
 
+    # 写入通用数据索引（KV 展平），支持跨任务内容搜索
+    try:
+        import sqlalchemy as sa
+        from packages.facts.entities import FactDataIndex
+        from packages.common.database import session_scope
+        from packages.common.ids import new_id
+
+        index_rows = []
+        for row_idx, row in enumerate(all_rows):
+            if not isinstance(row, dict):
+                continue
+            for key, value in row.items():
+                # 数值存 value_number，其他存 value_text
+                val_num = None
+                val_text = None
+                if isinstance(value, (int, float)):
+                    val_num = float(value)
+                    val_text = str(value)
+                elif value is not None:
+                    val_text = str(value)
+                else:
+                    continue
+                index_rows.append({
+                    "id": new_id(),
+                    "fact_revision_id": __import__('uuid').UUID(ref.revision_id),
+                    "row_index": row_idx,
+                    "key": str(key),
+                    "value_text": val_text,
+                    "value_number": val_num,
+                })
+
+        if index_rows:
+            async with session_scope(service._factory) as sess:
+                await sess.execute(
+                    sa.insert(FactDataIndex),
+                    index_rows,
+                )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to write data index: {e}")
+
     return PersistFactResponse(
         fact_id=str(ref.fact_id),
         revision=ref.revision,

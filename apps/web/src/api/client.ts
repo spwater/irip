@@ -1034,6 +1034,18 @@ export async function apiSearchFacts(params: {
   return res.data;
 }
 
+export async function apiSearchFactsByData(params: {
+  q?: string;
+  key?: string;
+  value?: string;
+  min_value?: number;
+  max_value?: number;
+  page_size?: number;
+}): Promise<FactListResult> {
+  const res = await http.get<FactListResult>('/facts/search-data', { params });
+  return res.data;
+}
+
 export async function apiGetFact(factId: string): Promise<FactDetail> {
   const res = await http.get<FactDetail>(`/facts/${factId}`);
   return res.data;
