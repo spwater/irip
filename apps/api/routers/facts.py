@@ -541,6 +541,48 @@ async def search_facts_by_data(
         count_result = await session.execute(count_stmt)
         group_counts = {str(row[0]): row[1] for row in count_result}
 
+        # 查 data_summary（从 artifact JSON 取前3行）
+        import json as json_mod
+        from packages.facts.entities import FactArtifact
+        from packages.common.artifacts import Artifact
+        from apps.api.main import _build_s3_repo
+        from packages.common.artifacts import ArtifactService
+
+        s3_repo = _build_s3_repo()
+        artifact_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=service._factory,
+            organization_id=service._org_id,
+            uploaded_by=current_user.user_id,
+        )
+        for item in items:
+            try:
+                fa_stmt = (
+                    sa.select(FactArtifact.artifact_id)
+                    .join(Artifact, FactArtifact.artifact_id == Artifact.id)
+                    .where(
+                        FactArtifact.fact_revision_id == __import__('uuid').UUID(item.revision_id),
+                        Artifact.media_type == "application/json",
+                    )
+                    .limit(1)
+                )
+                fa_result = await session.execute(fa_stmt)
+                artifact_id = fa_result.scalar_one_or_none()
+                if artifact_id:
+                    data_bytes = await artifact_svc.get_bytes(artifact_id)
+                    parsed = json_mod.loads(data_bytes.decode("utf-8"))
+                    rows = parsed.get("data", [])[:3]
+                    if rows:
+                        parts = []
+                        for r in rows:
+                            if isinstance(r, dict):
+                                vals = [str(v) for v in r.values() if v is not None][:2]
+                                if vals:
+                                    parts.append("=".join(vals))
+                        item.data_summary = "；".join(parts) + ("..." if len(parsed.get("data", [])) > 3 else "")
+            except Exception:
+                pass
+
     return FactListResponse(
         items=items,
         next_cursor=None,
