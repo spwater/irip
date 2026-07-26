@@ -798,7 +798,10 @@ export function FlowDetail(): JSX.Element {
                 },
               },
               { title: '状态', dataIndex: 'status', key: 'status', width: 100,
-                render: (s: string) => <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
+                render: (s: string, record: FlowRunSummary) =>
+                  s === 'failed' && record.error_message
+                    ? <Tooltip title={record.error_message}><Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag></Tooltip>
+                    : <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
               { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
                 render: (v: string) => fmtTime(v) },
               { title: '耗时', key: 'duration', width: 100,

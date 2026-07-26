@@ -197,6 +197,7 @@ class FlowRunResponse(BaseModel):
     job_id: str | None
     output_digest: str | None
     output_summary: dict[str, Any] | None = None
+    error_message: str | None = None
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
@@ -629,19 +630,21 @@ async def list_runs(
     for r in runs:
         resp = _run_to_response(r)
         resp.persisted_as_fact = r.id in persisted_ids
-        # 查询成功节点的 output_summary
+        # 查询成功节点的 output_summary，或失败节点的 error_message
         async with session_scope(service._factory) as session:
             node_stmt = (
                 sa.select(FlowNodeExecution)
                 .where(FlowNodeExecution.flow_run_id == r.id)
-                .where(FlowNodeExecution.status == 'succeeded')
                 .order_by(FlowNodeExecution.completed_at.desc())
                 .limit(1)
             )
             node_result = await session.execute(node_stmt)
             node = node_result.scalar_one_or_none()
-            if node and node.output_summary:
-                resp.output_summary = node.output_summary
+            if node:
+                if node.status == 'succeeded' and node.output_summary:
+                    resp.output_summary = node.output_summary
+                elif node.status == 'failed' and node.diagnostics:
+                    resp.error_message = node.diagnostics.get("error_message", str(node.diagnostics))
         result.append(resp)
     return result
 

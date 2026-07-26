@@ -1563,6 +1563,7 @@ export type FlowRunSummary = {
   job_id: string | null;
   output_digest: string | null;
   output_summary: Record<string, unknown> | null;
+  error_message?: string | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
