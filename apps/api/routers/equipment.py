@@ -1,4 +1,4 @@
-"""设备仪器管理路由：创建、列表、详情、编辑、状态切换、物理量关联、删除。
+"""设备仪器管理路由：创建、列表、详情、编辑、状态切换、删除。
 
 端点：
   POST   /api/v1/equipment                  — 创建设备（equipment:manage）
@@ -7,12 +7,10 @@
   PATCH  /api/v1/equipment/{id}             — 编辑（equipment:manage，不含 code）
   PATCH  /api/v1/equipment/{id}/status      — 启用/禁用（equipment:manage）
   DELETE /api/v1/equipment/{id}            — 删除（equipment:manage）
-  GET    /api/v1/equipment/{id}/variables   — 物理量列表（equipment:read）
-  PUT    /api/v1/equipment/{id}/variables   — 设置物理量（equipment:manage）
 
 安全约定：
-- 创建/编辑/状态切换/删除/设置物理量需 require_permission("equipment:manage")；
-- 列表/详情/物理量列表需 require_permission("equipment:read")；
+- 创建/编辑/状态切换/删除需 require_permission("equipment:manage")；
+- 列表/详情需 require_permission("equipment:read")；
 - code 创建后锁定：UpdateEquipmentBody 不含 code 字段；
 - 乐观锁：编辑/状态切换请求必须携带 lock_version；
 - 删除为硬删除，会级联删除物理量关联。
@@ -95,12 +93,6 @@ class UpdateEquipmentStatusBody(BaseModel):
     lock_version: int = Field(..., ge=0)
 
 
-class SetEquipmentVariablesBody(BaseModel):
-    """设置设备物理量请求。"""
-
-    variable_ids: list[str] = Field(default_factory=list)
-
-
 # ---- 响应模型 ----
 
 
@@ -121,7 +113,7 @@ class EquipmentResponse(BaseModel):
 
 
 class EquipmentListItem(BaseModel):
-    """设备列表项（含部门名 + 物理量数）。"""
+    """设备列表项（含部门名）。"""
 
     id: str
     code: str
@@ -131,7 +123,6 @@ class EquipmentListItem(BaseModel):
     department_name: str
     status: str
     sort_order: int
-    variable_count: int
 
 
 class EquipmentListResponse(BaseModel):
@@ -140,20 +131,6 @@ class EquipmentListResponse(BaseModel):
     items: list[EquipmentListItem]
     next_cursor: str | None
     has_more: bool
-
-
-class EquipmentVariableItem(BaseModel):
-    """设备物理量列表项。"""
-
-    id: str
-    code: str
-    name_zh: str
-    name_en: str
-    quantity_kind: str
-    data_type: str
-    status: str
-    current_version: str | None
-
 
 # ---- 辅助函数 ----
 
@@ -248,9 +225,8 @@ async def list_equipment(
             department_name=dept_name,
             status=equip.status,
             sort_order=equip.sort_order,
-            variable_count=var_count,
         )
-        for equip, dept_name, var_count in result.items
+        for equip, dept_name in result.items
     ]
     return EquipmentListResponse(
         items=items,
@@ -278,7 +254,7 @@ async def get_equipment(
     Raises:
         AppError: code="not_found"，当设备不存在时。
     """
-    equipment, _ = await service.get(equipment_id)
+    equipment = await service.get(equipment_id)
     return _to_response(equipment)
 
 
@@ -357,76 +333,13 @@ async def update_equipment_status(
     return _to_response(equipment)
 
 
-@equipment_router.get(
-    "/{equipment_id}/variables", response_model=list[EquipmentVariableItem]
-)
-async def list_equipment_variables(
-    equipment_id: UUID,
-    current_user: ReadUserDep,
-    service: EquipmentServiceDep,
-) -> list[EquipmentVariableItem]:
-    """获取设备的物理量列表。
-
-    Args:
-        equipment_id: 设备 UUID。
-        current_user: 当前认证用户（需 equipment:read 权限）。
-        service: 设备服务。
-
-    Returns:
-        list[EquipmentVariableItem]: 物理量列表。
-
-    Raises:
-        AppError: code="not_found"，当设备不存在时。
-    """
-    variables = await service.list_variables(equipment_id)
-    return [
-        EquipmentVariableItem(
-            id=v["id"],
-            code=v["code"],
-            name_zh=v["name_zh"],
-            name_en=v["name_en"],
-            quantity_kind=v["quantity_kind"],
-            data_type=v["data_type"],
-            status=v["status"],
-            current_version=v["current_version"],
-        )
-        for v in variables
-    ]
-
-
-@equipment_router.put("/{equipment_id}/variables")
-async def set_equipment_variables(
-    equipment_id: UUID,
-    body: SetEquipmentVariablesBody,
-    current_user: ManageUserDep,
-    service: EquipmentServiceDep,
-) -> dict:
-    """设置设备的物理量产出（全量替换）。
-
-    Args:
-        equipment_id: 设备 UUID。
-        body: 设置请求体。
-        current_user: 当前认证用户（需 equipment:manage 权限）。
-        service: 设备服务。
-
-    Returns:
-        dict: {"ok": true}。
-
-    Raises:
-        AppError: code="not_found"，当设备不存在时。
-    """
-    variable_ids = [UUID(vid) for vid in body.variable_ids]
-    await service.set_variables(equipment_id, variable_ids)
-    return {"ok": True}
-
-
 @equipment_router.delete("/{equipment_id}", status_code=204)
 async def delete_equipment(
     equipment_id: UUID,
     current_user: ManageUserDep,
     service: EquipmentServiceDep,
 ) -> None:
-    """删除设备（硬删除，含物理量关联）。
+    """删除设备（硬删除）。
 
     Args:
         equipment_id: 设备 UUID。

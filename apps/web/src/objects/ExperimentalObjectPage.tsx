@@ -85,6 +85,9 @@ export function ExperimentalObjectPage({
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IndustrialObject | null>(null);
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchText, setBatchText] = useState('');
+  const [batchImporting, setBatchImporting] = useState(false);
   const [form] = Form.useForm();
 
   // 当 presetEquipmentId 变化时，自动打开新建弹窗并预填
@@ -218,6 +221,77 @@ export function ExperimentalObjectPage({
     setEditingItem(null);
     form.resetFields();
     setModalOpen(true);
+  };
+
+  // ---- 批量导入 ----
+  // CSV 格式：编码,名称,类型,设备编码,描述
+  // 类型：material / signal（默认 material）
+  // 设备编码：可选，按 equipment.code 匹配
+  const handleBatchImport = async (): Promise<void> => {
+    const lines = batchText.trim().split('\n').filter((l) => l.trim());
+    if (lines.length === 0) {
+      message.warning('请粘贴 CSV 数据');
+      return;
+    }
+    setBatchImporting(true);
+    let success = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    // 构建设备编码→ID映射
+    const equipCodeMap = new Map<string, string>();
+    for (const eq of equipmentData?.items ?? []) {
+      equipCodeMap.set(eq.code, eq.id);
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const parts = lines[i].split(',').map((p) => p.trim());
+      if (parts.length < 2) {
+        failed++;
+        errors.push(`第${i + 1}行：列数不足`);
+        continue;
+      }
+      const [code, display_name, objectType, equipCode, description] = parts;
+      if (!code || !display_name) {
+        failed++;
+        errors.push(`第${i + 1}行：编码或名称为空`);
+        continue;
+      }
+      try {
+        const equipment_id = equipCode ? equipCodeMap.get(equipCode) : undefined;
+        if (equipCode && !equipment_id) {
+          failed++;
+          errors.push(`第${i + 1}行：设备编码"${equipCode}"不存在`);
+          continue;
+        }
+        await apiCreateObject({
+          code,
+          display_name,
+          object_type: objectType || 'material',
+          equipment_id,
+          description: description || undefined,
+        });
+        success++;
+      } catch (err) {
+        failed++;
+        errors.push(`第${i + 1}行：${extractApiError(err)}`);
+      }
+    }
+
+    setBatchImporting(false);
+    if (success > 0) {
+      void queryClient.invalidateQueries({ queryKey: ['objects'] });
+      void queryClient.refetchQueries({ queryKey: ['objects'] });
+      message.success(`导入完成：成功 ${success} 条${failed > 0 ? `，失败 ${failed} 条` : ''}`);
+    }
+    if (failed > 0 && errors.length > 0) {
+      console.error('导入失败详情：', errors.join('\n'));
+      message.warning(`${failed} 条失败，详情请查看控制台`);
+    }
+    if (success > 0 && failed === 0) {
+      setBatchOpen(false);
+      setBatchText('');
+    }
   };
 
   const handleEdit = async (record: IndustrialObject): Promise<void> => {
@@ -377,6 +451,9 @@ export function ExperimentalObjectPage({
         <Button type="primary" onClick={handleCreate}>
           新建实验对象
         </Button>
+        <Button onClick={() => setBatchOpen(true)}>
+          批量导入
+        </Button>
         <Select
           placeholder="类型筛选"
           style={{ width: 140 }}
@@ -525,6 +602,43 @@ export function ExperimentalObjectPage({
             />
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* 批量导入弹窗 */}
+      <Modal
+        title="批量导入实验对象"
+        open={batchOpen}
+        onCancel={() => { setBatchOpen(false); setBatchText(''); }}
+        onOk={handleBatchImport}
+        confirmLoading={batchImporting}
+        okText="开始导入"
+        width={680}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            CSV 格式，每行一个实验对象，列用逗号分隔：
+          </Text>
+          <br />
+          <Text code style={{ fontSize: 12 }}>
+            编码,名称,类型,设备编码,描述
+          </Text>
+          <br />
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            类型：material（物料，默认）或 signal（信号）。设备编码：可选，按设备编码匹配关联设备。描述：可选。
+          </Text>
+        </div>
+        <Input.TextArea
+          value={batchText}
+          onChange={(e) => setBatchText(e.target.value)}
+          rows={10}
+          placeholder={`sample_01,1号样品,material,xrf_ez,XRF扫描样品\nsample_02,2号样品,material,xrf_ez,\nsample_03,3号样品,material,,备注信息`}
+          style={{ fontFamily: 'monospace', fontSize: 13 }}
+        />
+        <div style={{ marginTop: 8 }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            提示：也可从 Excel 复制多行数据直接粘贴（需先将列用逗号分隔）
+          </Text>
+        </div>
       </Modal>
     </div>
   );

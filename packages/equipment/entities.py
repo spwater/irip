@@ -92,38 +92,3 @@ class Equipment(Base):
             f"Equipment(id={self.id!r}, code={self.code!r}, "
             f"display_name={self.display_name!r}, status={self.status!r})"
         )
-
-
-class EquipmentVariable(Base):
-    """设备-物理量关联实体（对应 equipment_variable 表）。
-
-    复合主键 (equipment_id, variable_id)，CASCADE 删除。
-    表示一台设备能产出哪些物理量（标准变量）。
-
-    Attributes:
-        equipment_id: 设备 ID（PK + FK→equipment.id）。
-        variable_id: 物理量 ID（PK + FK→variable.id）。
-        created_at: 关联创建时间。
-    """
-
-    __tablename__ = "equipment_variable"
-
-    equipment_id: Mapped[UUID] = mapped_column(
-        GUID,
-        sa.ForeignKey("equipment.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    variable_id: Mapped[UUID] = mapped_column(
-        GUID,
-        sa.ForeignKey("variable.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, server_default=sa.func.now(), nullable=False
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"EquipmentVariable(equipment_id={self.equipment_id!r}, "
-            f"variable_id={self.variable_id!r})"
-        )

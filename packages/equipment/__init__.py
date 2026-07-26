@@ -1,5 +1,5 @@
-"""设备仪器管理包：equipment + equipment_variable。"""
+"""设备仪器管理包。"""
 
-from packages.equipment.entities import Equipment, EquipmentStatus, EquipmentVariable
+from packages.equipment.entities import Equipment, EquipmentStatus
 
-__all__ = ["Equipment", "EquipmentStatus", "EquipmentVariable"]
+__all__ = ["Equipment", "EquipmentStatus"]

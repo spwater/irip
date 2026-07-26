@@ -1,4 +1,4 @@
-"""设备仪器业务服务：create / list / get / update / set_status / set_variables / list_variables。
+"""设备仪器业务服务：create / list / get / update / set_status / delete。
 
 核心流程：
 
@@ -8,24 +8,17 @@ create(department_id, code, display_name, description, sort_order):
   3. 返回 Equipment。
 
 list(department_id, status, cursor, limit):
-  1. 分页查询设备列表 + 部门名 JOIN + 物理量数聚合；
+  1. 分页查询设备列表 + 部门名 JOIN；
   2. 编码 next_cursor（keyset pagination）。
 
 get(equipment_id):
-  1. 查询设备 → 不存在抛 AppError(not_found)；
-  2. 查询关联的物理量数。
+  1. 查询设备 → 不存在抛 AppError(not_found)。
 
 update(equipment_id, display_name, description, department_id, sort_order, lock_version):
   1. 乐观锁 UPDATE（不含 code 列）→ 影响 0 行抛 AppError(conflict)。
 
 set_status(equipment_id, status, lock_version):
   1. 乐观锁 UPDATE status → 影响 0 行抛 AppError(conflict)。
-
-set_variables(equipment_id, variable_ids):
-  1. 全量替换设备的物理量关联（DELETE + INSERT）。
-
-list_variables(equipment_id):
-  1. JOIN equipment_variable + variable，返回已发布的物理量列表。
 
 关键约束：
 - code 创建后锁定不可修改（UpdateEquipmentBody 不含 code，UPDATE 不写 code 列）；
@@ -51,25 +44,21 @@ from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from packages.equipment.entities import Equipment, EquipmentStatus
-from packages.equipment.repository import (
-    EquipmentRepository,
-    EquipmentVariableRepository,
-)
-from packages.standards.variables import Variable
+from packages.equipment.repository import EquipmentRepository
 
 
 class EquipmentListResult:
     """设备分页列表结果。
 
     Attributes:
-        items: (Equipment, department_name, variable_count) 元组列表。
+        items: (Equipment, department_name) 元组列表。
         next_cursor: 下一页游标（base64url 字符串），无更多数据时为 None。
         has_more: 是否还有更多数据。
     """
 
     def __init__(
         self,
-        items: list[tuple[Equipment, str, int]],
+        items: list[tuple[Equipment, str]],
         next_cursor: str | None,
         has_more: bool,
     ) -> None:
@@ -170,22 +159,10 @@ class EquipmentService:
         cursor: str | None = None,
         limit: int = DEFAULT_PAGE_SIZE,
     ) -> EquipmentListResult:
-        """分页查询设备列表（含部门名 + 物理量数）。
+        """分页查询设备列表（含部门名）。
 
         排序：sort_order ASC, created_at ASC, id ASC。
         Keyset 分页：cursor 编码 (sort_order, created_at_iso, id)。
-
-        Args:
-            department_id: 部门 ID 筛选（None = 不过滤）。
-            status: 状态筛选（None = 不过滤，"active" / "disabled"）。
-            cursor: 上一页返回的 next_cursor（base64url 字符串）。
-            limit: 每页数量（默认 20，最大 100）。
-
-        Returns:
-            EquipmentListResult: 分页列表结果。
-
-        Raises:
-            AppError: code="invalid_cursor"，当游标格式不合法时。
         """
         effective_limit = min(max(limit, 1), MAX_PAGE_SIZE)
 
@@ -216,7 +193,7 @@ class EquipmentService:
 
         next_cursor: str | None = None
         if has_more and page_items:
-            last_equip, _, _ = page_items[-1]
+            last_equip, _ = page_items[-1]
             next_cursor = _encode_cursor(
                 last_equip.sort_order, last_equip.created_at, last_equip.id
             )
@@ -227,14 +204,14 @@ class EquipmentService:
             has_more=has_more,
         )
 
-    async def get(self, equipment_id: UUID) -> tuple[Equipment, int]:
-        """查询单个设备详情（含物理量数）。
+    async def get(self, equipment_id: UUID) -> Equipment:
+        """查询单个设备详情。
 
         Args:
             equipment_id: 设备 UUID。
 
         Returns:
-            tuple[Equipment, int]: (设备实体, 物理量关联数)。
+            Equipment: 设备实体。
 
         Raises:
             AppError: code="not_found"，当设备不存在时。
@@ -255,10 +232,7 @@ class EquipmentService:
                     retryable=False,
                     fields={"equipment_id": str(equipment_id)},
                 )
-            count = await EquipmentVariableRepository.count_by_equipment(
-                session, equipment_id
-            )
-        return equipment, count
+        return equipment
 
     async def update(
         self,
@@ -363,93 +337,8 @@ class EquipmentService:
                 fields={"lock_version": lock_version},
             )
 
-    async def set_variables(
-        self,
-        equipment_id: UUID,
-        variable_ids: list[UUID],
-    ) -> None:
-        """设置设备的物理量产出（全量替换）。
-
-        先校验设备存在且属于当前组织，然后全量替换关联。
-
-        Args:
-            equipment_id: 设备 UUID。
-            variable_ids: 物理量 ID 列表（全量替换）。
-
-        Raises:
-            AppError: code="not_found"，当设备不存在时。
-        """
-        async with session_scope(self._factory) as session:
-            equipment = await EquipmentRepository.select_by_id(session, equipment_id)
-            if equipment is None or equipment.organization_id != self._org_id:
-                raise AppError(
-                    code="not_found",
-                    message="设备不存在",
-                    retryable=False,
-                    fields={"equipment_id": str(equipment_id)},
-                )
-            await EquipmentVariableRepository.set_variables(
-                session, equipment_id, variable_ids
-            )
-
-    async def list_variables(
-        self,
-        equipment_id: UUID,
-    ) -> list[dict]:
-        """获取设备的物理量列表（JOIN variable 表）。
-
-        返回已关联的 variable 记录，仅返回属于当前组织的变量。
-
-        Args:
-            equipment_id: 设备 UUID。
-
-        Returns:
-            list[dict]: 物理量字典列表，每项含 id, code, display_name, data_type,
-            quantity_kind, status。
-
-        Raises:
-            AppError: code="not_found"，当设备不存在时。
-        """
-        async with self._factory() as session:
-            equipment = await EquipmentRepository.select_by_id(session, equipment_id)
-            if equipment is None or equipment.organization_id != self._org_id:
-                raise AppError(
-                    code="not_found",
-                    message="设备不存在",
-                    retryable=False,
-                    fields={"equipment_id": str(equipment_id)},
-                )
-
-            # JOIN equipment_variable + variable
-            from packages.equipment.entities import EquipmentVariable
-
-            result = await session.execute(
-                sa.select(Variable)
-                .join(
-                    EquipmentVariable,
-                    EquipmentVariable.variable_id == Variable.id,
-                )
-                .where(EquipmentVariable.equipment_id == equipment_id)
-                .order_by(Variable.code.asc())
-            )
-            variables = result.scalars().all()
-
-        return [
-            {
-                "id": str(v.id),
-                "code": v.code,
-                "name_zh": v.display_name,
-                "name_en": v.code,
-                "quantity_kind": v.quantity_kind or "",
-                "data_type": v.data_type,
-                "status": v.status,
-                "current_version": str(v.version_count) if v.version_count > 0 else None,
-            }
-            for v in variables
-        ]
-
     async def delete(self, equipment_id: UUID) -> None:
-        """删除设备（硬删除，含关联的物理量关系）。
+        """删除设备（硬删除）。
 
         Args:
             equipment_id: 设备 UUID。
@@ -466,15 +355,6 @@ class EquipmentService:
                     retryable=False,
                     fields={"equipment_id": str(equipment_id)},
                 )
-
-            # 先删除物理量关联
-            from packages.equipment.entities import EquipmentVariable
-            await session.execute(
-                sa.delete(EquipmentVariable).where(
-                    EquipmentVariable.equipment_id == equipment_id
-                )
-            )
-            # 再删除设备
             await session.execute(
                 sa.delete(Equipment).where(Equipment.id == equipment_id)
             )

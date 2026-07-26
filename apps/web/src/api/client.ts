@@ -1303,7 +1303,6 @@ export type EquipmentListItem = {
   department_name: string;
   status: string;
   sort_order: number;
-  variable_count: number;
 };
 
 /** 设备仪器分页列表响应 */

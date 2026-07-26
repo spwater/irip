@@ -133,6 +133,7 @@ export function DepartmentManagement({
     mutationFn: apiCreateDepartment,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.refetchQueries({ queryKey: ['departments'] });
       setModalOpen(false);
       form.resetFields();
       message.success('实验室创建成功');
@@ -157,6 +158,7 @@ export function DepartmentManagement({
     }) => apiUpdateDepartment(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.refetchQueries({ queryKey: ['departments'] });
       setModalOpen(false);
       setEditingDept(null);
       form.resetFields();
@@ -176,6 +178,7 @@ export function DepartmentManagement({
     }) => apiUpdateDepartmentStatus(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.refetchQueries({ queryKey: ['departments'] });
       message.success('状态更新成功');
     },
     onError: (err: unknown) => {
@@ -189,6 +192,7 @@ export function DepartmentManagement({
     mutationFn: apiDeleteDepartment,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['departments'] });
+      void queryClient.refetchQueries({ queryKey: ['departments'] });
       setModalOpen(false);
       setEditingDept(null);
       form.resetFields();
