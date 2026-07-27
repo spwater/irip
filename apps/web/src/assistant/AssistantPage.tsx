@@ -263,7 +263,7 @@ export function AssistantPage(): JSX.Element {
       // 刷新数据库消息（可能用户消息已保存但 AI 回答失败）
       void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
     }
-  }, [inputText, isSending, selectedConvId, thinkingEnabled, queryClient]);
+  }, [inputText, isSending, selectedConvId, thinkingEnabled, factContext, queryClient]);
 
   // 清理定时器
   useEffect(() => {

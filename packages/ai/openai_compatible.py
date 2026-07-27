@@ -171,6 +171,9 @@ class OpenAICompatibleProvider:
         system_context = request.user_context.get("system_context") if request.user_context else None
         if system_context:
             system_content += "\n\n" + system_context
+            # 日志：确认 system_context 传到了
+            import logging
+            logging.getLogger("irip.ai").info(f"system_context 已拼接, 长度={len(system_context)}")
 
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": system_content}
