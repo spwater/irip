@@ -364,12 +364,6 @@ export function AssistantPage(): JSX.Element {
                 }
                 description={
                   <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
-                    <Tag
-                      color={conv.provider_mode === 'offline' ? 'default' : 'blue'}
-                      style={{ fontSize: 10, margin: 0 }}
-                    >
-                      {conv.provider_mode === 'offline' ? '离线' : '在线'}
-                    </Tag>
                     {conv.pinned && <Tag color='gold' style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>置顶</Tag>}
                     {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>归档</Tag>}
                   </div>
