@@ -140,9 +140,11 @@ class OpenAICompatibleProvider:
             ) from exc
 
         if resp.status_code != 200:
+            import logging
+            logging.getLogger(__name__).error(f"AI provider error {resp.status_code}: {resp.text[:500]}")
             raise AppError(
                 code="ai_provider_error",
-                message=f"AI 服务返回错误状态码 {resp.status_code}",
+                message=f"AI 服务返回错误状态码 {resp.status_code}: {resp.text[:200]}",
                 retryable=resp.status_code >= 500,
                 fields={},
             )
@@ -158,30 +160,26 @@ class OpenAICompatibleProvider:
         }
 
     def _build_payload(self, request: AIRequest) -> dict[str, Any]:
-        """构建 OpenAI Chat Completions 请求体。
+        """构建 OpenAI Chat Completions 请求体。"""
+        # 基础 system 消息
+        system_content = (
+            "你是 IRIP 工业研发智能平台的 AI 助手。"
+            "你可以回答关于工业研究、材料科学、数据分析的问题。"
+            "回答使用中文。"
+        )
+        # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
+        system_context = request.user_context.get("system_context") if request.user_context else None
+        if system_context:
+            system_content += "\n\n" + system_context
 
-        将 IRIP AIRequest 转换为 OpenAI API 格式：
-        - messages 直接透传（已为 OpenAI 格式）；
-        - tools 暂不传递（避免大模型对普通问题也尝试调用工具）。
-        """
         messages: list[dict[str, Any]] = [
-            {
-                "role": "system",
-                "content": (
-                    "你是 IRIP 工业研发智能平台的 AI 助手。"
-                    "你可以回答关于工业研究、材料科学、数据分析的问题。"
-                    "回答使用中文。"
-                ),
-            }
+            {"role": "system", "content": system_content}
         ]
-        # 加入用户传入的 system 上下文（如实验数据）
-        for msg in request.messages:
-            if msg.get("role") == "system":
-                messages.append(msg)
-        # 加入非 system 的历史消息和当前问题
+        # 加入历史消息和当前问题（不含 system role）
         messages.extend(
             {"role": m.get("role", "user"), "content": str(m.get("content", ""))}
             for m in request.messages
+            if m.get("role") != "system"
         )
 
         payload: dict[str, Any] = {

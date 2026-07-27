@@ -562,12 +562,18 @@ class AIService:
         }
 
         # 构建消息元组（历史 + 当前问题）
-        # 如果有系统上下文（如实验数据），作为 system 消息加入
-        msg_list: list[dict[str, Any]] = list(history_messages)
-        if system_context:
-            msg_list.insert(0, {"role": "system", "content": system_context})
+        # 如果有系统上下文（如实验数据），拼到默认 system 消息后面，不单独加 system role
+        msg_list: list[dict[str, Any]] = []
+        for m in history_messages:
+            if m.get("role") == "system":
+                continue  # 跳过历史中的 system 消息
+            msg_list.append(m)
         msg_list.append({"role": "user", "content": question})
         messages: tuple[dict[str, Any], ...] = tuple(msg_list)
+
+        # 把 system_context 存到 user_context 里，让 provider 拼到 system 消息
+        if system_context:
+            user_context["system_context"] = system_context
 
         # 构建工具名称元组（全部白名单 + 候选）
         tool_names: tuple[str, ...] = self._tool_registry.names()
