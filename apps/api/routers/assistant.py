@@ -129,7 +129,7 @@ class SendMessageRequest(BaseModel):
         False, description="是否启用思考模式"
     )
     system_context: str | None = Field(
-        None, max_length=64000, description="系统上下文（如实验数据JSON），约32K token上限"
+        None, max_length=100000, description="系统上下文（如实验数据JSON）"
     )
 
 
