@@ -108,7 +108,7 @@ export function FlowDetail(): JSX.Element {
       }
     }
     return Array.from(latestByName.values())
-      .filter((c) => c.status !== 'deprecated')
+      .filter((c) => c.status !== 'deprecated' && c.experimental_object_code)
       .map((c) => ({
         value: c.name,
         label: c.display_name ? `${c.display_name} (${c.name})` : c.name,
@@ -925,11 +925,11 @@ export function FlowDetail(): JSX.Element {
           </Form.Item>
           <Form.Item
             name="component_name"
-            label="选择工具"
-            rules={[{ required: true, message: '请选择工具' }]}
+            label="数据接口"
+            rules={[{ required: true, message: '请选择数据接口' }]}
           >
             <Select
-              placeholder="选择工具组件"
+              placeholder="选择数据接口"
               showSearch
               optionFilterProp="label"
               options={componentOptions}
