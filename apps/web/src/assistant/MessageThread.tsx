@@ -79,10 +79,18 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
         const option = JSON.parse(optionStr);
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
-          // 显式设宽度为父容器宽度，避免 dangerouslySetInnerHTML 容器宽度为 0
-          const parent = div.parentElement;
-          const width = parent ? parent.clientWidth : 600;
-          (div as HTMLElement).style.width = width + 'px';
+          // 找消息气泡容器（向上遍历到有 padding 的 div）
+          let el: HTMLElement = div as HTMLElement;
+          let width = 0;
+          while (el.parentElement) {
+            el = el.parentElement;
+            if (el.clientWidth > 0) {
+              width = el.clientWidth - 32; // 减去 padding (12px*2 + 一点余量)
+              break;
+            }
+          }
+          if (width < 200) width = 500; // 兜底
+          (div as HTMLElement).style.width = '100%';
           const chart = echarts.init(div as HTMLElement, undefined, { width, height: 400 });
           chart.setOption(option);
         });
