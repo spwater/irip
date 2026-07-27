@@ -63,7 +63,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
     // 渲染 ECharts 图表
     const charts = containerRef.current.querySelectorAll('.echarts-chart');
     charts.forEach((div) => {
-      const optionStr = div.getAttribute('data-option') || '';
+      const optionStr = (div.getAttribute('data-option') || '').replace(/&quot;/g, '"');
       try {
         const option = JSON.parse(optionStr);
         // 动态导入 echarts 避免首屏加载慢
@@ -71,8 +71,8 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
           const chart = echarts.init(div as HTMLElement);
           chart.setOption(option);
         });
-      } catch {
-        div.textContent = '图表配置解析失败';
+      } catch (e) {
+        div.textContent = '图表配置解析失败: ' + (e as Error).message;
       }
     });
   });
