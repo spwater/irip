@@ -125,7 +125,7 @@ export function FactDetail(): JSX.Element {
                   ? taskInfo.data_source_list.map((ds, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                         <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                          {ds.component}
+                          {ds.component_display_name ?? ds.component}
                         </Tag>
                         {ds.object_name && (
                           <>

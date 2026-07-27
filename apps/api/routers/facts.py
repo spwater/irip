@@ -839,8 +839,9 @@ async def get_fact_data(
                                 data_source_list = []
                                 for comp_name in comp_names:
                                     ds: dict = {"component": comp_name}
-                                    # 查组件的 experimental_object_code
+                                    # 查组件的 display_name 和 experimental_object_code
                                     from packages.components.registry import ComponentVersion, Component
+                                    import yaml as yaml_lib
                                     cv_stmt = (
                                         sa.select(ComponentVersion)
                                         .join(Component, ComponentVersion.component_id == Component.id)
@@ -849,6 +850,12 @@ async def get_fact_data(
                                         .limit(1)
                                     )
                                     cv = (await session.execute(cv_stmt)).scalar_one_or_none()
+                                    if cv:
+                                        try:
+                                            manifest = yaml_lib.safe_load(cv.manifest_yaml)
+                                            ds["component_display_name"] = manifest.get("display_name", comp_name)
+                                        except Exception:
+                                            ds["component_display_name"] = comp_name
                                     if cv and cv.experimental_object_code:
                                         ds["experimental_object_code"] = cv.experimental_object_code
                                         from packages.standards.objects import IndustrialObject

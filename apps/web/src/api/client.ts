@@ -1067,6 +1067,7 @@ export async function apiGetFactObservations(factId: string): Promise<Observatio
 
 export type DataSourceItem = {
   component: string;
+  component_display_name?: string;
   experimental_object_code?: string;
   object_name?: string;
   equipment_name?: string;
