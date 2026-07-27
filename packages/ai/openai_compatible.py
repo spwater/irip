@@ -176,6 +176,8 @@ class OpenAICompatibleProvider:
             "```"
             "支持的图表类型：bar(柱状图), line(折线图), pie(饼图), scatter(散点图)。"
             "数值保留原始精度，不要用字符串。"
+            "\n注意：需要把数据点连成线时直接用 line 类型，不要用 scatter + markLine。"
+            "line 类型加 smooth:true 可画平滑曲线，加 symbol:'circle' 显示数据点。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = request.user_context.get("system_context") if request.user_context else None
