@@ -5,61 +5,15 @@ import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
-import katex from 'katex';
-import { visit } from 'unist-util-visit';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 const { Text, Paragraph } = Typography;
 
-/**
- * 自定义 rehype 插件：处理 math 节点，用 katex.renderToString 生成 HTML
- *
- * 兼容 remark-math v6 生成的节点类型：mathinline / inlineMath / math / displayMath
- */
-function rehypeKatexCustom() {
-  return (tree: any) => {
-    visit(tree, (node: any) => {
-      if (
-        node.type === 'math' ||
-        node.type === 'inlineMath' ||
-        node.type === 'mathinline' ||
-        node.type === 'displayMath'
-      ) {
-        const mathStr = node.value || (node.children?.[0]?.value ?? '');
-        const displayMode = node.type === 'math' || node.type === 'displayMath';
-        try {
-          const html = katex.renderToString(mathStr, {
-            displayMode,
-            throwOnError: false,
-            strict: false,
-          });
-          node.type = 'element';
-          node.tagName = displayMode ? 'div' : 'span';
-          node.properties = {
-            className: displayMode ? 'katex-display' : '',
-            dangerouslySetInnerHTML: { __html: html },
-          };
-          node.children = [];
-        } catch {
-          // 渲染失败保留原文
-        }
-      }
-    });
-  };
-}
-
-// KaTeX 公式样式修正：确保上下标正确显示，公式不溢出
+// KaTeX 公式样式：只控制溢出，不覆盖 KaTeX 内部定位
 const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; }
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
-.ai-markdown-body .katex .vlist-t { border-collapse: collapse; }
-.ai-markdown-body .katex .vlist-r { display: table-row; }
-.ai-markdown-body .katex .vlist { display: table-cell; position: relative; vertical-align: bottom; }
-.ai-markdown-body .katex .vlist > span { display: block; height: 0; position: relative; }
-.ai-markdown-body .katex .vlist > span > span { display: inline-block; }
-.ai-markdown-body .katex .msupsub { text-align: left; }
-.ai-markdown-body .katex .mfrac > span > span { text-align: center; }
-.ai-markdown-body .katex .mfrac .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
 `;
 
 /**
@@ -272,7 +226,7 @@ export function MessageThread({
                   <style>{katexStyle}</style>
                   <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatexCustom]}
+                    rehypePlugins={[rehypeKatex]}
                     components={markdownComponents}
                   >
                     {msg.content}
