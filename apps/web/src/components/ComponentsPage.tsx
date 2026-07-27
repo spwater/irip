@@ -50,16 +50,6 @@ function fmtTime(v: string | null | undefined): string {
 
 const { Title, Text } = Typography;
 
-/** 组件类别 → 中文标签 */
-const KIND_LABEL: Record<string, string> = {
-  ingestion: '数据接入',
-  transform: '数据转换',
-  quality: '质量校验',
-  statistics: '统计分析',
-  output: '结果输出',
-  model: '模型推理',
-};
-
 /** 组件状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
   draft: 'blue',
@@ -323,7 +313,7 @@ export function ComponentsPage(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
-  // 新建工具：默认表单模式（高级模式关闭）
+  // 新建接口：默认表单模式（高级模式关闭）
   const [advancedMode, setAdvancedMode] = useState(false);
   // 编辑组件：默认高级模式（已有完整 YAML）
   const [editAdvancedMode, setEditAdvancedMode] = useState(true);
@@ -456,7 +446,7 @@ export function ComponentsPage(): JSX.Element {
   };
 
   /**
-   * 新建工具模式切换：尽量保留内容，能匹配就匹配，不能匹配就留空。
+   * 新建接口模式切换：尽量保留内容，能匹配就匹配，不能匹配就留空。
    * - 表单 → 高级：用 buildManifestYaml 把表单值生成 YAML 填入高级模式
    * - 高级 → 表单：用 parseYamlToFormValues 从 YAML 提取字段填入表单
    */
@@ -550,7 +540,7 @@ export function ComponentsPage(): JSX.Element {
   };
 
   /**
-   * 编辑组件模式切换：与新建工具一致，尽量保留内容。
+   * 编辑组件模式切换：与新建接口一致，尽量保留内容。
    * - 表单 → 高级：用 buildManifestYaml 生成 YAML
    * - 高级 → 表单：用 parseYamlToFormValues 提取字段
    */
@@ -631,17 +621,6 @@ export function ComponentsPage(): JSX.Element {
       dataIndex: 'version',
       key: 'version',
       width: 100,
-    },
-    {
-      title: '类别',
-      dataIndex: 'kind',
-      key: 'kind',
-      width: 120,
-      render: (v: string) => (
-        <Tag color={activeTab === 'modern' ? 'purple' : 'blue'}>
-          {KIND_LABEL[v] ?? v}
-        </Tag>
-      ),
     },
     {
       title: '实验对象',
@@ -771,7 +750,7 @@ export function ComponentsPage(): JSX.Element {
     <div>
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={handleOpenModal}>
-          新建工具
+          新建接口
         </Button>
         <Button
           type={activeTab === 'modern' ? 'primary' : 'default'}
@@ -800,9 +779,9 @@ export function ComponentsPage(): JSX.Element {
         })}
       />
 
-      {/* 新建工具 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
+      {/* 新建接口 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
       <Modal
-        title="新建工具"
+        title="新建接口"
         open={modalOpen}
         onOk={handlePublish}
         onCancel={() => {
@@ -967,9 +946,6 @@ function ComponentDetailPanel({
           )}
         </Descriptions.Item>
         <Descriptions.Item label="版本">{detail.version}</Descriptions.Item>
-        <Descriptions.Item label="类别">
-          <Tag color="blue">{KIND_LABEL[detail.kind] ?? detail.kind}</Tag>
-        </Descriptions.Item>
         <Descriptions.Item label="状态">
           <Tag color={STATUS_COLOR[detail.status] ?? 'default'}>
             {STATUS_LABEL[detail.status] ?? detail.status}

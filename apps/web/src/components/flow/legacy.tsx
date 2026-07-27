@@ -39,7 +39,6 @@ import {
   convertParamValue,
   genKey,
   isComplexType,
-  KIND_LABEL,
   parseManifest,
   type ParamDef,
   type ParsedManifest,
@@ -604,9 +603,9 @@ function NodeEditorCard({
                     <Text type="secondary" style={{ fontSize: 11 }}>
                       v{c.version}
                     </Text>
-                    {KIND_LABEL[c.kind] && (
+                    {c.kind && (
                       <Tag style={{ fontSize: 10, margin: 0 }}>
-                        {KIND_LABEL[c.kind]}
+                        {c.kind}
                       </Tag>
                     )}
                   </Space>
@@ -640,9 +639,9 @@ function NodeEditorCard({
                     <Text type="secondary" style={{ fontSize: 11 }}>
                       v{c.version}
                     </Text>
-                    {KIND_LABEL[c.kind] && (
+                    {c.kind && (
                       <Tag style={{ fontSize: 10, margin: 0 }}>
-                        {KIND_LABEL[c.kind]}
+                        {c.kind}
                       </Tag>
                     )}
                   </Space>

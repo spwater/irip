@@ -40,16 +40,6 @@ export const RUN_STATUS_LABEL: Record<string, string> = {
   paused: '已暂停',
 };
 
-/** 组件类别 → 中文标签 */
-export const KIND_LABEL: Record<string, string> = {
-  ingestion: '数据接入',
-  transform: '数据转换',
-  quality: '质量校验',
-  statistics: '统计分析',
-  output: '结果输出',
-  model: '模型推理',
-};
-
 // ---- 工具函数 ----
 
 /** 把 UTC 时间字符串转成本地时间显示 */
