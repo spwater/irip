@@ -36,6 +36,8 @@ type TreeNode = {
   task_name: string | null;
   isGroup: boolean;
   totalCount?: number;
+  department_name?: string | null;
+  operator?: string | null;
   children?: TreeNode[];
 };
 
@@ -76,12 +78,16 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
         data_summary: f.data_summary,
         task_code: f.task_code,
         task_name: f.task_name,
+        department_name: f.department_name,
+        operator: f.operator,
         isGroup: false,
       }));
       tree.push({
         key: `task-${taskCode}`,
         task_code: taskCode,
         task_name: first.task_name,
+        department_name: first.department_name,
+        operator: first.operator,
         isGroup: true,
         totalCount: groupCounts[taskCode] ?? groupFacts.length,
         children,
@@ -195,7 +201,7 @@ export function FactsPage(): JSX.Element {
     {
       title: '名称',
       key: 'name',
-      width: 480,
+      width: 360,
       render: (_: unknown, record: TreeNode) => {
         if (record.isGroup) {
           return (
@@ -206,6 +212,26 @@ export function FactsPage(): JSX.Element {
           );
         }
         return <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{record.subject_id}</span>;
+      },
+    },
+    {
+      title: '任务来源',
+      key: 'department_name',
+      width: 160,
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) return null;
+        return record.department_name
+          ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{record.department_name}</Tag>
+          : <Text type="secondary">-</Text>;
+      },
+    },
+    {
+      title: '执行人',
+      key: 'operator',
+      width: 100,
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) return null;
+        return record.operator ? <Text>{record.operator}</Text> : <Text type="secondary">-</Text>;
       },
     },
     {
