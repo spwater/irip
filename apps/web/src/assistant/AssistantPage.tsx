@@ -537,7 +537,7 @@ export function AssistantPage(): JSX.Element {
               onClick={() => setFactModalOpen(true)}
               style={{ flexShrink: 0 }}
             >
-              {factContext ? '📊 数据已加载' : '插入实验数据'}
+              {factContext ? '📊 数据已加载' : '载入实验数据'}
             </Button>
             {factContext && (
               <Tooltip title={`已加载: ${factContextLabel}（点击清除）`}>
@@ -621,16 +621,17 @@ export function AssistantPage(): JSX.Element {
         </div>
       </Card>
 
-      {/* 插入实验数据 Modal */}
+      {/* 载入实验数据 Modal */}
       <Modal
-        title="插入实验数据"
+        title="载入实验数据"
         open={factModalOpen}
         onOk={handleInsertFact}
         onCancel={() => { setFactModalOpen(false); setSelectedFactIds([]); }}
         confirmLoading={insertingFact}
-        okText={`插入 ${selectedFactIds.length > 0 ? `(${selectedFactIds.length})` : ''}`}
+        okText={`载入 ${selectedFactIds.length > 0 ? `(${selectedFactIds.length})` : ''}`}
         cancelText="取消"
         width={600}
+        styles={{ body: { height: 'calc(100vh - 280px)', overflow: 'auto' } }}
       >
         <div style={{ marginBottom: 8 }}>
           <Text type="secondary">选择一个或多个样品，数据将作为系统上下文随问题一起发送给 AI</Text>
