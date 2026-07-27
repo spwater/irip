@@ -240,7 +240,9 @@ class ComponentRegistryService:
         now: datetime = self._clock.now()
 
         async with session_scope(self._factory) as session:
-            # 1. 查找/创建组件主记录
+            # 1. 自动生成编码，查找/创建组件主记录
+            from packages.common.ids import gen_code
+            component_name = gen_code("iface")
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.organization_id == self._org_id,
@@ -250,7 +252,7 @@ class ComponentRegistryService:
             if component is None:
                 component = Component(
                     organization_id=self._org_id,
-                    name=manifest.name,
+                    name=component_name,
                     kind=manifest.kind,
                     status="draft",
                 )
@@ -304,11 +306,21 @@ class ComponentRegistryService:
                 parts = auto_version.split('.')
                 auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
 
-            # 4. 插入版本
+            # 4. 替换 manifest_yaml 里的 name 为自动生成的编码
+            import re
+            updated_yaml = re.sub(
+                r'^name:\s*\S+',
+                f'name: {component_name}',
+                manifest.raw_yaml,
+                count=1,
+                flags=re.MULTILINE,
+            )
+
+            # 5. 插入版本
             version = ComponentVersion(
                 component_id=component.id,
                 version=auto_version,
-                manifest_yaml=manifest.raw_yaml,
+                manifest_yaml=updated_yaml,
                 manifest_sha256=manifest.sha256,
                 experimental_object_code=experimental_object_code,
                 runtime=manifest.runtime,
