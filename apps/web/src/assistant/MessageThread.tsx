@@ -10,6 +10,13 @@ import 'katex/dist/katex.min.css';
 
 const { Text, Paragraph } = Typography;
 
+// KaTeX 公式样式修正：确保上下标正确显示，公式不溢出
+const katexStyle = `
+.ai-markdown-body .katex { font-size: 1.05em; }
+.ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
+.ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
+`;
+
 /**
  * 消息角色 → 头像首字母
  */
@@ -83,8 +90,11 @@ const markdownComponents = {
       {...props}
     />
   ),
-  code: ({ node, inline, ...props }: any) => {
-    if (inline) {
+  code: ({ node, className, children, ...props }: any) => {
+    // react-markdown v10: 通过 className 判断行内代码 vs 代码块
+    // 代码块有 className="language-xxx"，行内代码没有
+    const isBlock = className && typeof className === 'string' && className.includes('language-');
+    if (!isBlock) {
       return (
         <code
           style={{
@@ -95,11 +105,14 @@ const markdownComponents = {
             fontFamily: 'monospace',
           }}
           {...props}
-        />
+        >
+          {children}
+        </code>
       );
     }
     return (
       <code
+        className={className}
         style={{
           display: 'block',
           background: '#f5f5f5',
@@ -111,7 +124,9 @@ const markdownComponents = {
           margin: '6px 0',
         }}
         {...props}
-      />
+      >
+        {children}
+      </code>
     );
   },
   blockquote: ({ node, ...props }: any) => (
@@ -209,8 +224,9 @@ export function MessageThread({
                 </Paragraph>
               ) : (
                 <div className="ai-markdown-body">
+                  <style>{katexStyle}</style>
                   <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
+                    remarkPlugins={[remarkMath, remarkGfm]}
                     rehypePlugins={[rehypeKatex]}
                     components={markdownComponents}
                   >
