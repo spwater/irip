@@ -97,6 +97,28 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
           (div as HTMLElement).style.width = '100%';
           const chart = echarts.init(div as HTMLElement, undefined, { width, height: 400 });
           chart.setOption(option);
+
+          // 在图表右上角添加复制按钮（hover 时显示）
+          const wrapper = div.parentElement;
+          if (wrapper && !wrapper.querySelector('.echarts-copy-btn')) {
+            wrapper.style.position = 'relative';
+            const btn = document.createElement('div');
+            btn.className = 'echarts-copy-btn';
+            btn.innerHTML = '📋';
+            btn.title = '复制 ECharts 配置';
+            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.9);border:1px solid #d9d9d9;border-radius:4px;font-size:14px;z-index:10;opacity:0;transition:opacity 0.2s';
+            btn.onmouseenter = () => { btn.style.opacity = '1'; };
+            btn.onmouseleave = () => { btn.style.opacity = '0'; };
+            btn.onclick = (e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(JSON.stringify(option, null, 2)).then(() => {
+                btn.innerHTML = '✓';
+                btn.title = '已复制';
+                setTimeout(() => { btn.innerHTML = '📋'; btn.title = '复制 ECharts 配置'; }, 1500);
+              });
+            };
+            wrapper.appendChild(btn);
+          }
         });
       } catch (e) {
         div.textContent = '图表配置解析失败: ' + (e as Error).message;
