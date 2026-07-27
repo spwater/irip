@@ -77,9 +77,16 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
       const optionStr = chartOptions.current[idx];
       try {
         const option = JSON.parse(optionStr);
-        // 补充默认 grid 配置，确保轴标签不被裁切
+        // 确保 grid 配置足够留白，防止轴标签裁切
         if (!option.grid) {
           option.grid = { left: 80, right: 80, top: 60, bottom: 60, containLabel: true };
+        } else {
+          // LLM 给了 grid 但可能留白不够，强制补充
+          option.grid.left = option.grid.left || 80;
+          option.grid.right = option.grid.right || 80;
+          option.grid.top = option.grid.top || 60;
+          option.grid.bottom = option.grid.bottom || 60;
+          option.grid.containLabel = true;
         }
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
