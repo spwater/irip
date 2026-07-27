@@ -369,7 +369,7 @@ async def create_flow(
     )
     from packages.common.ids import gen_code
     definition = await service.create_definition(
-        code=gen_code("flow"),
+        code=gen_code("task"),
         display_name=body.display_name,
         nodes=nodes,
         edges=edges,
