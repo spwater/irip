@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, App as AntApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
+import 'katex/dist/katex.min.css';
 
 /** TanStack Query 客户端实例 */
 const queryClient = new QueryClient();

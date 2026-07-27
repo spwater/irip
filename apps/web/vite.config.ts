@@ -13,6 +13,8 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
+  // 确保 Vite 正确处理 KaTeX 字体文件（woff2/woff/ttf）
+  assetsInclude: ['**/*.woff2', '**/*.woff', '**/*.ttf'],
   server: {
     port: 5173,
     proxy: {
