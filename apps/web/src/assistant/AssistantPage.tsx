@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   Button,
   Card,
+  Checkbox,
   Input,
   List,
   Modal,
   Popconfirm,
-  Select,
   Space,
   Switch,
   Tag,
@@ -60,6 +60,7 @@ export function AssistantPage(): JSX.Element {
   const [insertingFact, setInsertingFact] = useState(false);
   const [factContext, setFactContext] = useState<string | null>(null);
   const [factContextLabel, setFactContextLabel] = useState<string | null>(null);
+  const [factSearchText, setFactSearchText] = useState('');
 
   // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
@@ -67,6 +68,54 @@ export function AssistantPage(): JSX.Element {
     queryFn: () => apiListFacts({ page_size: 100 }),
     enabled: factModalOpen,
   });
+
+  // 按任务分组样品，支持搜索过滤
+  const factGroups = useMemo(() => {
+    const allFacts = factsData?.items ?? [];
+    const filtered = factSearchText.trim()
+      ? allFacts.filter((f) =>
+          f.subject_id.toLowerCase().includes(factSearchText.toLowerCase()) ||
+          (f.task_name ?? '').toLowerCase().includes(factSearchText.toLowerCase())
+        )
+      : allFacts;
+    const groups: Record<string, { taskName: string; facts: FactSummary[] }> = {};
+    for (const f of filtered) {
+      const key = f.task_code ?? '未分组';
+      if (!groups[key]) groups[key] = { taskName: f.task_name ?? f.task_code ?? '未分组', facts: [] };
+      groups[key].facts.push(f);
+    }
+    return groups;
+  }, [factsData, factSearchText]);
+
+  const allFilteredFactIds = useMemo(() => {
+    return Object.values(factGroups).flatMap((g) => g.facts.map((f) => f.fact_id));
+  }, [factGroups]);
+
+  const allSelected = allFilteredFactIds.length > 0 && allFilteredFactIds.every((id) => selectedFactIds.includes(id));
+  const someSelected = allFilteredFactIds.some((id) => selectedFactIds.includes(id));
+
+  const handleSelectAll = () => {
+    if (allSelected) {
+      setSelectedFactIds((prev) => prev.filter((id) => !allFilteredFactIds.includes(id)));
+    } else {
+      setSelectedFactIds((prev) => Array.from(new Set([...prev, ...allFilteredFactIds])));
+    }
+  };
+
+  const handleToggleFact = (factId: string) => {
+    setSelectedFactIds((prev) =>
+      prev.includes(factId) ? prev.filter((id) => id !== factId) : [...prev, factId]
+    );
+  };
+
+  const handleToggleGroup = (groupFactIds: string[]) => {
+    const allInGroup = groupFactIds.every((id) => selectedFactIds.includes(id));
+    if (allInGroup) {
+      setSelectedFactIds((prev) => prev.filter((id) => !groupFactIds.includes(id)));
+    } else {
+      setSelectedFactIds((prev) => Array.from(new Set([...prev, ...groupFactIds])));
+    }
+  };
 
   // 本地消息缓存：用户消息立即显示 + AI 回答流式追加
   const [localMessages, setLocalMessages] = useState<AssistantMessage[]>([]);
@@ -630,30 +679,100 @@ export function AssistantPage(): JSX.Element {
         title="载入实验数据"
         open={factModalOpen}
         onOk={handleInsertFact}
-        onCancel={() => { setFactModalOpen(false); setSelectedFactIds([]); }}
+        onCancel={() => { setFactModalOpen(false); setSelectedFactIds([]); setFactSearchText(''); }}
         confirmLoading={insertingFact}
         okText={`载入 ${selectedFactIds.length > 0 ? `(${selectedFactIds.length})` : ''}`}
         cancelText="取消"
-        width={600}
-        styles={{ body: { height: 'calc(100vh - 280px)', overflow: 'auto' } }}
+        width={700}
+        styles={{ body: { padding: 0 } }}
       >
-        <div style={{ marginBottom: 8 }}>
-          <Text type="secondary">选择一个或多个样品，数据将作为系统上下文随问题一起发送给 AI</Text>
+        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 280px)' }}>
+          {/* 搜索栏 */}
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid #f0f0f0' }}>
+            <Input.Search
+              placeholder="搜索样品名称或任务名称..."
+              value={factSearchText}
+              onChange={(e) => setFactSearchText(e.target.value)}
+              allowClear
+              size="middle"
+            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <Checkbox
+                checked={allSelected}
+                indeterminate={!allSelected && someSelected}
+                onChange={handleSelectAll}
+              >
+                全选 ({allFilteredFactIds.length} 个样品)
+              </Checkbox>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                已选 {selectedFactIds.length} 个
+              </Text>
+            </div>
+          </div>
+
+          {/* 分组列表 */}
+          <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px' }}>
+            {Object.keys(factGroups).length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+                <Text type="secondary">暂无数据或未找到匹配的样品</Text>
+              </div>
+            ) : (
+              Object.entries(factGroups).map(([taskCode, group]) => {
+                const groupIds = group.facts.map((f) => f.fact_id);
+                const groupAllSelected = groupIds.every((id) => selectedFactIds.includes(id));
+                const groupSomeSelected = groupIds.some((id) => selectedFactIds.includes(id));
+                return (
+                  <div key={taskCode} style={{ marginBottom: 12 }}>
+                    {/* 任务分组标题 */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 0',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f5f5f5',
+                      }}
+                      onClick={() => handleToggleGroup(groupIds)}
+                    >
+                      <Checkbox
+                        checked={groupAllSelected}
+                        indeterminate={!groupAllSelected && groupSomeSelected}
+                        onChange={() => handleToggleGroup(groupIds)}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <Text strong style={{ fontSize: 13 }}>{group.taskName}</Text>
+                      <Tag style={{ fontSize: 10, margin: 0 }}>{group.facts.length}</Tag>
+                    </div>
+                    {/* 样品列表 */}
+                    <div style={{ paddingLeft: 28 }}>
+                      {group.facts.map((f) => (
+                        <div
+                          key={f.fact_id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            padding: '4px 0',
+                            cursor: 'pointer',
+                          }}
+                          onClick={() => handleToggleFact(f.fact_id)}
+                        >
+                          <Checkbox
+                            checked={selectedFactIds.includes(f.fact_id)}
+                            onChange={() => handleToggleFact(f.fact_id)}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
-        <Select
-          mode="multiple"
-          placeholder="选择样品（支持搜索）"
-          style={{ width: '100%' }}
-          showSearch
-          optionFilterProp="label"
-          value={selectedFactIds}
-          onChange={setSelectedFactIds}
-          maxTagCount="responsive"
-          options={(factsData?.items ?? []).map((f: FactSummary) => ({
-            value: f.fact_id,
-            label: `${f.subject_id}${f.task_name ? ` (${f.task_name})` : ''}`,
-          }))}
-        />
       </Modal>
     </div>
   );
