@@ -643,12 +643,14 @@ export function FlowDetail(): JSX.Element {
               onClick={(e) => {
                 e.stopPropagation();
                 setEditFlowId(record.id);
+                const currentNode = (record.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
                 editForm.setFieldsValue({
                   display_name: record.display_name,
                   code: record.code,
                   department_id: record.department_id ?? undefined,
                   project_name: record.project_name ?? undefined,
                   operator: record.operator ?? undefined,
+                  component_name: currentNode?.component_name ?? undefined,
                 });
                 setEditModalOpen(true);
               }}
@@ -970,15 +972,50 @@ export function FlowDetail(): JSX.Element {
         open={editModalOpen}
         onOk={async () => {
           try {
-            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name', 'operator']);
+            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name', 'operator', 'component_name']);
             if (editFlowId) {
-              updateFlowMutation.mutate({
-                flowId: editFlowId,
-                displayName: values.display_name as string,
-                departmentId: (values.department_id as string) ?? null,
-                projectName: (values.project_name as string) ?? null,
-                operator: (values.operator as string) ?? null,
-              });
+              updateFlowMutation.mutate(
+                {
+                  flowId: editFlowId,
+                  displayName: values.display_name as string,
+                  departmentId: (values.department_id as string) ?? null,
+                  projectName: (values.project_name as string) ?? null,
+                  operator: (values.operator as string) ?? null,
+                },
+                {
+                  onSuccess: async () => {
+                    // 如果数据接口变了，重新发布
+                    const newCompName = values.component_name as string | undefined;
+                    const flow = editFlowId ? queryClient.getQueryData<FlowSummary>(['flow', editFlowId]) : undefined;
+                    const currentNode = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
+                    if (newCompName && newCompName !== currentNode?.component_name) {
+                      const comp = componentOptions.find((c) => c.value === newCompName);
+                      if (comp) {
+                        try {
+                          const detail = await apiGetComponent(comp.summary.id);
+                          const parsed = parseManifest(detail.manifest_yaml);
+                          const params: Record<string, unknown> = {};
+                          for (const p of parsed.params) {
+                            params[p.name] = p.default ?? '';
+                          }
+                          const nodes: FlowNodeSchema[] = [{
+                            node_id: 'n1',
+                            component_name: newCompName,
+                            component_version: comp.version,
+                            params,
+                          }];
+                          await apiPublishFlow(editFlowId, { nodes });
+                          void queryClient.invalidateQueries({ queryKey: ['flows'] });
+                          void queryClient.invalidateQueries({ queryKey: ['flow', editFlowId] });
+                          message.success('任务已更新并重新发布');
+                        } catch (err) {
+                          message.error(`重新发布失败: ${err instanceof Error ? err.message : String(err)}`);
+                        }
+                      }
+                    }
+                  },
+                },
+              );
             }
           } catch {
             // 校验失败
@@ -1018,6 +1055,14 @@ export function FlowDetail(): JSX.Element {
             rules={[{ required: true, message: '请输入执行人' }]}
           >
             <Input placeholder="如：宋昊" maxLength={100} />
+          </Form.Item>
+          <Form.Item name="component_name" label="数据接口">
+            <Select
+              placeholder="选择数据接口"
+              showSearch
+              optionFilterProp="label"
+              options={componentOptions}
+            />
           </Form.Item>
         </Form>
       </Modal>
