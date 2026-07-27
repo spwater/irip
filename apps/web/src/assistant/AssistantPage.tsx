@@ -532,21 +532,19 @@ export function AssistantPage(): JSX.Element {
               </div>
             </Tooltip>
             <Button
-              size="small"
               type={factContext ? 'primary' : 'default'}
               onClick={() => setFactModalOpen(true)}
-              style={{ flexShrink: 0 }}
+              style={{ flexShrink: 0, height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
             >
               {factContext ? '📊 数据已加载' : '载入实验数据'}
             </Button>
             {factContext && (
               <Tooltip title={`已加载: ${factContextLabel}（点击清除）`}>
                 <Button
-                  size="small"
                   type="link"
                   danger
                   onClick={handleClearFactContext}
-                  style={{ flexShrink: 0, padding: '0 4px' }}
+                  style={{ flexShrink: 0, padding: '0 4px', height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
                 >
                   ✕
                 </Button>
