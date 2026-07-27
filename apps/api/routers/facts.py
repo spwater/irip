@@ -127,6 +127,7 @@ class FactRevisionResponse(BaseModel):
     task_code: str | None = None
     task_name: str | None = None
     department_name: str | None = None
+    operator: str | None = None
     data_summary: str | None = None
 
 
@@ -306,19 +307,20 @@ async def list_facts(
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
         async with service._factory() as session:
             snap_stmt = (
-                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
             for item in items:
                 snap = snap_map.get(item.revision_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
                     item.department_name = snap[2]
+                    item.operator = snap[3]
 
             # 查每个 task_code 的总数（不受分页限制）
             count_stmt = (
@@ -409,19 +411,20 @@ async def search_facts(
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
         async with service._factory() as session:
             snap_stmt = (
-                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
             for item in items:
                 snap = snap_map.get(item.revision_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
                     item.department_name = snap[2]
+                    item.operator = snap[3]
 
             count_stmt = (
                 sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
@@ -510,6 +513,7 @@ async def search_facts_by_data(
                 FactRevision.task_code,
                 FactRevision.task_name,
                 FactRevision.department_name,
+                FactRevision.operator,
             )
             .where(FactRevision.id.in_(revision_ids))
         )
@@ -527,6 +531,7 @@ async def search_facts_by_data(
                 task_code=row[5],
                 task_name=row[6],
                 department_name=row[7],
+                operator=row[8],
             ))
 
         # 查 group_counts
@@ -621,19 +626,20 @@ async def search_facts(
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
         async with service._factory() as session:
             snap_stmt = (
-                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
+                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
             for item in items:
                 snap = snap_map.get(item.revision_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
                     item.department_name = snap[2]
+                    item.operator = snap[3]
 
             # 查每个 task_code 的总数
             count_stmt = (
@@ -808,6 +814,7 @@ async def get_fact_data(
                 task_info = {
                     "task_name": rev_record.task_name,
                     "task_source": rev_record.department_name,
+                    "operator": rev_record.operator,
                     "project_name": None,
                     "data_interface": None,
                     "created_at": None,

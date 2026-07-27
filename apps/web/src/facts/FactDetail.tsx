@@ -111,6 +111,9 @@ export function FactDetail(): JSX.Element {
               <Descriptions.Item label="任务名称">
                 {taskInfo?.task_name ?? '-'}
               </Descriptions.Item>
+              <Descriptions.Item label="执行人">
+                {taskInfo?.operator ?? '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="项目名称">
                 {taskInfo?.project_name ?? '-'}
               </Descriptions.Item>

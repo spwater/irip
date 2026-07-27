@@ -84,6 +84,7 @@ class CreateFactCommand:
     task_code: str | None = None
     task_name: str | None = None
     department_name: str | None = None
+    operator: str | None = None
     flow_run_id: UUID | None = None
 
 
@@ -291,6 +292,7 @@ class FactService:
                 task_code=command.task_code,
                 task_name=command.task_name,
                 department_name=command.department_name,
+                operator=command.operator,
                 flow_run_id=command.flow_run_id,
             )
 

@@ -295,8 +295,8 @@ export function FlowDetail(): JSX.Element {
 
   // ---- 更新流程 Mutation ----
   const updateFlowMutation = useMutation({
-    mutationFn: (vars: { flowId: string; displayName: string; departmentId?: string | null; projectName?: string | null }) =>
-      apiUpdateFlow(vars.flowId, vars.displayName, vars.departmentId, vars.projectName),
+    mutationFn: (vars: { flowId: string; displayName: string; departmentId?: string | null; projectName?: string | null; operator?: string | null }) =>
+      apiUpdateFlow(vars.flowId, vars.displayName, vars.departmentId, vars.projectName, vars.operator),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['flows'] });
       if (selectedFlowId) {
@@ -389,6 +389,7 @@ export function FlowDetail(): JSX.Element {
           display_name: values.display_name,
           department_id: (values.department_id as string) ?? null,
           project_name: (values.project_name as string) ?? null,
+          operator: (values.operator as string) ?? '',
           nodes,
         },
         {
@@ -641,6 +642,7 @@ export function FlowDetail(): JSX.Element {
                   code: record.code,
                   department_id: record.department_id ?? undefined,
                   project_name: record.project_name ?? undefined,
+                  operator: record.operator ?? undefined,
                 });
                 setEditModalOpen(true);
               }}
@@ -956,6 +958,13 @@ export function FlowDetail(): JSX.Element {
           >
             <Input placeholder="如：篦冷机分析流程" maxLength={200} />
           </Form.Item>
+          <Form.Item
+            name="operator"
+            label="执行人"
+            rules={[{ required: true, message: '请输入执行人' }]}
+          >
+            <Input placeholder="如：宋昊" maxLength={100} />
+          </Form.Item>
           <Form.Item name="project_name" label="项目名称">
             <Input placeholder="可选" maxLength={200} />
           </Form.Item>
@@ -968,13 +977,14 @@ export function FlowDetail(): JSX.Element {
         open={editModalOpen}
         onOk={async () => {
           try {
-            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name']);
+            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name', 'operator']);
             if (editFlowId) {
               updateFlowMutation.mutate({
                 flowId: editFlowId,
                 displayName: values.display_name as string,
                 departmentId: (values.department_id as string) ?? null,
                 projectName: (values.project_name as string) ?? null,
+                operator: (values.operator as string) ?? null,
               });
             }
           } catch {
@@ -1011,6 +1021,13 @@ export function FlowDetail(): JSX.Element {
           </Form.Item>
           <Form.Item name="project_name" label="项目名称">
             <Input placeholder="可选" maxLength={200} />
+          </Form.Item>
+          <Form.Item
+            name="operator"
+            label="执行人"
+            rules={[{ required: true, message: '请输入执行人' }]}
+          >
+            <Input placeholder="如：宋昊" maxLength={100} />
           </Form.Item>
         </Form>
       </Modal>

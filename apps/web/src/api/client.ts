@@ -455,6 +455,7 @@ export type FactSummary = {
   task_code: string | null;
   task_name: string | null;
   department_name: string | null;
+  operator: string | null;
   data_summary: string | null;
 };
 
@@ -1077,6 +1078,7 @@ export type DataSourceItem = {
 export type TaskInfo = {
   task_name: string | null;
   task_source: string | null;
+  operator: string | null;
   project_name: string | null;
   data_interface: string | null;
   created_at: string | null;
@@ -1527,6 +1529,7 @@ export type FlowSummary = {
   lock_version: number;
   department_id: string | null;
   project_name: string | null;
+  operator: string | null;
   created_at: string;
   updated_at: string;
   latest_version: {
@@ -1611,6 +1614,7 @@ export async function apiCreateFlow(body: {
   display_name: string;
   department_id?: string | null;
   project_name?: string | null;
+  operator: string;
   nodes?: FlowNodeSchema[];
   edges?: FlowEdgeSchema[];
 }): Promise<FlowSummary> {
@@ -1654,8 +1658,8 @@ export async function apiDeleteFlow(flowId: string): Promise<void> {
   await http.delete(`/flows/${flowId}`);
 }
 
-export async function apiUpdateFlow(flowId: string, displayName: string, departmentId?: string | null, projectName?: string | null): Promise<FlowSummary> {
-  const res = await http.patch<FlowSummary>(`/flows/${flowId}`, { display_name: displayName, department_id: departmentId ?? null, project_name: projectName ?? null });
+export async function apiUpdateFlow(flowId: string, displayName: string, departmentId?: string | null, projectName?: string | null, operator?: string | null): Promise<FlowSummary> {
+  const res = await http.patch<FlowSummary>(`/flows/${flowId}`, { display_name: displayName, department_id: departmentId ?? null, project_name: projectName ?? null, operator: operator ?? null });
   return { ...res.data, latest_version: res.data.latest_version ?? null };
 }
 

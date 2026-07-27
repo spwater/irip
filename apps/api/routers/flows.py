@@ -123,6 +123,7 @@ class CreateFlowRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     department_id: UUID | None = Field(None, description="执行实验部门 ID")
     project_name: str | None = Field(None, max_length=200, description="项目名称")
+    operator: str = Field(..., min_length=1, max_length=100, description="执行人")
     nodes: list[FlowNodeSchema] = Field(default_factory=list)
     edges: list[FlowEdgeSchema] = Field(default_factory=list)
 
@@ -147,6 +148,7 @@ class UpdateFlowRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     department_id: str | None = None
     project_name: str | None = None
+    operator: str | None = Field(None, max_length=100, description="执行人")
 
 
 # ---- 响应模型 ----
@@ -162,6 +164,7 @@ class FlowDefinitionResponse(BaseModel):
     lock_version: int
     department_id: str | None = None
     project_name: str | None = None
+    operator: str | None = None
     created_at: datetime
     updated_at: datetime
     latest_version: dict[str, Any] | None = None
@@ -276,6 +279,7 @@ def _definition_to_response(
         lock_version=definition.lock_version,
         department_id=str(definition.department_id) if definition.department_id else None,
         project_name=definition.project_name,
+        operator=definition.operator,
         created_at=definition.created_at,
         updated_at=definition.updated_at,
         latest_version=latest_version,
@@ -377,6 +381,7 @@ async def create_flow(
         edges=edges,
         department_id=body.department_id,
         project_name=body.project_name,
+        operator=body.operator,
     )
     return _definition_to_response(definition, None)
 
@@ -579,6 +584,8 @@ async def update_flow(
             from uuid import UUID as UUIDType
             definition.department_id = UUIDType(body.department_id) if body.department_id else None
         definition.project_name = body.project_name
+        if body.operator is not None:
+            definition.operator = body.operator
         definition.updated_at = datetime.now(timezone.utc)
 
     return _definition_to_response(definition, None)
@@ -988,6 +995,7 @@ async def persist_run_as_fact(
     task_code: str | None = None
     task_name: str | None = None
     department_name: str | None = None
+    operator: str | None = None
     try:
         import sqlalchemy as sa
         from packages.common.database import session_scope
@@ -1002,6 +1010,7 @@ async def persist_run_as_fact(
                 if fd:
                     task_code = fd.code
                     task_name = fd.display_name
+                    operator = fd.operator
                     if fd.department_id:
                         dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
                         dept_record = (await sess.execute(dept_stmt)).scalar_one_or_none()
@@ -1038,6 +1047,7 @@ async def persist_run_as_fact(
         task_code=task_code,
         task_name=task_name,
         department_name=department_name,
+        operator=operator,
         flow_run_id=run_id,
     )
 

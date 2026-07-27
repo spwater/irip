@@ -87,6 +87,7 @@ class FlowDefinition(Base):
         nullable=True,
     )
     project_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    operator: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -576,6 +577,7 @@ class FlowRuntimeService:
         edges: tuple[FlowEdge, ...] = (),
         department_id: UUID | None = None,
         project_name: str | None = None,
+        operator: str | None = None,
     ) -> FlowDefinition:
         """创建流程定义（含 DAG 校验）。
 
@@ -629,6 +631,7 @@ class FlowRuntimeService:
                 display_name=display_name,
                 department_id=department_id,
                 project_name=project_name,
+                operator=operator,
                 status="draft",
             )
             session.add(definition)

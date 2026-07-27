@@ -168,6 +168,7 @@ class FactRevision(Base):
     task_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     task_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     department_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    operator: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     # 外键关联到 flow_run（nullable，兼容非 flow_run 来源的数据）
     flow_run_id: Mapped[UUID | None] = mapped_column(
         GUID,

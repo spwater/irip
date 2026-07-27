@@ -184,6 +184,7 @@ class FactRepository:
         task_code: str | None = None,
         task_name: str | None = None,
         department_name: str | None = None,
+        operator: str | None = None,
         flow_run_id: UUID | None = None,
     ) -> FactRevision:
         """插入事实修订行，返回 ORM 实体。
@@ -223,6 +224,7 @@ class FactRepository:
             task_code=task_code,
             task_name=task_name,
             department_name=department_name,
+            operator=operator,
             flow_run_id=flow_run_id,
         )
         session.add(rev)
