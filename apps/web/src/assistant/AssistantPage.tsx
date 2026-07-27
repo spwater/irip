@@ -4,7 +4,9 @@ import {
   Card,
   Input,
   List,
+  Modal,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Tag,
@@ -27,9 +29,14 @@ import {
   apiSendMessage,
   apiTogglePin,
   apiToggleArchive,
+  apiListFlows,
+  apiListFacts,
+  apiGetFactData,
   extractApiError,
   type AssistantMessage,
   type ConversationSummary,
+  type FlowSummary,
+  type FactSummary,
 } from '@/api/client';
 
 const { Title, Text } = Typography;
@@ -50,6 +57,22 @@ export function AssistantPage(): JSX.Element {
   const [isSending, setIsSending] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [factModalOpen, setFactModalOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
+  const [insertingFact, setInsertingFact] = useState(false);
+
+  // 查询任务列表和事实列表（用于插入实验数据）
+  const { data: flowsData } = useQuery({
+    queryKey: ['flows-for-fact-insert'],
+    queryFn: () => apiListFlows(),
+    enabled: factModalOpen,
+  });
+  const { data: factsData } = useQuery({
+    queryKey: ['facts-for-insert', selectedTaskId],
+    queryFn: () => apiListFacts({ page_size: 100 }),
+    enabled: factModalOpen,
+  });
 
   // 本地消息缓存：用户消息立即显示 + AI 回答流式追加
   const [localMessages, setLocalMessages] = useState<AssistantMessage[]>([]);
@@ -116,6 +139,29 @@ export function AssistantPage(): JSX.Element {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [displayMessages, streamingAnswer]);
+
+  // ---- 插入实验数据 ----
+  const handleInsertFact = async (): Promise<void> => {
+    if (!selectedFactId) {
+      message.warning('请选择一个样品');
+      return;
+    }
+    setInsertingFact(true);
+    try {
+      const data = await apiGetFactData(selectedFactId);
+      const jsonStr = JSON.stringify(data, null, 2);
+      const prefix = `\n\n---以下是实验数据（JSON格式），请基于此数据回答用户问题---\n`;
+      setInputText((prev) => prev + (prev ? '\n' : '') + prefix + jsonStr + '\n---实验数据结束---\n\n');
+      setFactModalOpen(false);
+      setSelectedTaskId(null);
+      setSelectedFactId(null);
+      message.success('实验数据已插入，输入问题后发送');
+    } catch (err) {
+      message.error(`获取数据失败: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setInsertingFact(false);
+    }
+  };
 
   // ---- 发送消息 ----
   const handleSend = useCallback(async (): Promise<void> => {
@@ -475,6 +521,13 @@ export function AssistantPage(): JSX.Element {
                 </Text>
               </div>
             </Tooltip>
+            <Button
+              size="small"
+              onClick={() => setFactModalOpen(true)}
+              style={{ flexShrink: 0 }}
+            >
+              插入实验数据
+            </Button>
             <TextArea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -543,6 +596,58 @@ export function AssistantPage(): JSX.Element {
           </div>
         </div>
       </Card>
+
+      {/* 插入实验数据 Modal */}
+      <Modal
+        title="插入实验数据"
+        open={factModalOpen}
+        onOk={handleInsertFact}
+        onCancel={() => { setFactModalOpen(false); setSelectedTaskId(null); setSelectedFactId(null); }}
+        confirmLoading={insertingFact}
+        okText="插入"
+        cancelText="取消"
+        width={500}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>选择任务</Text>
+            <Select
+              placeholder="选择任务"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="label"
+              value={selectedTaskId ?? undefined}
+              onChange={(v: string) => { setSelectedTaskId(v); setSelectedFactId(null); }}
+              options={(flowsData?.items ?? []).map((f: FlowSummary) => ({
+                value: f.id,
+                label: f.display_name,
+              }))}
+            />
+          </div>
+          <div>
+            <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>选择样品</Text>
+            <Select
+              placeholder="选择样品"
+              style={{ width: '100%' }}
+              showSearch
+              optionFilterProp="label"
+              value={selectedFactId ?? undefined}
+              onChange={(v: string) => setSelectedFactId(v)}
+              disabled={!selectedTaskId}
+              options={(factsData?.items ?? [])
+                .filter((f: FactSummary) => {
+                  if (!selectedTaskId) return true;
+                  const flow = (flowsData?.items ?? []).find((fl: FlowSummary) => fl.id === selectedTaskId);
+                  return f.task_code === flow?.code;
+                })
+                .map((f: FactSummary) => ({
+                  value: f.fact_id,
+                  label: f.subject_id,
+                }))}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
