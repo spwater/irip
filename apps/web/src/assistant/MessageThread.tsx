@@ -77,17 +77,8 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
       const optionStr = chartOptions.current[idx];
       try {
         const option = JSON.parse(optionStr);
-        // 确保 grid 配置足够留白，防止轴标签裁切
-        if (!option.grid) {
-          option.grid = { left: 80, right: 80, top: 60, bottom: 60, containLabel: true };
-        } else {
-          // LLM 给了 grid 但可能留白不够，强制补充
-          option.grid.left = option.grid.left || 80;
-          option.grid.right = option.grid.right || 80;
-          option.grid.top = option.grid.top || 60;
-          option.grid.bottom = option.grid.bottom || 60;
-          option.grid.containLabel = true;
-        }
+        // 统一用固定像素 grid，确保轴标签不被裁切，不依赖 LLM 给的值
+        option.grid = { left: 60, right: 30, top: 50, bottom: 70, containLabel: true };
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
           // 找消息气泡容器（向上遍历到有 padding 的 div）
