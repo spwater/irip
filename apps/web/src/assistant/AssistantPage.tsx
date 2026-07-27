@@ -149,7 +149,9 @@ export function AssistantPage(): JSX.Element {
         const fact = (factsData?.items ?? []).find((f: FactSummary) => f.fact_id === factId);
         const label = fact?.subject_id ?? factId;
         labels.push(label);
-        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``);
+        // 只传 metadata + data，去掉 task_info 和 source_file 减少体积
+        const compact = { metadata: data.metadata, data: data.data };
+        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\``);
       }
       const context = `以下是实验数据，请基于此数据回答用户的问题：\n\n${allData.join('\n\n')}`;
       setFactContext(context);
