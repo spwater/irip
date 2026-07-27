@@ -171,8 +171,10 @@ class EZScanExtractor:
         llm_content: str = choices[0]["message"]["content"]
 
         extracted_data: dict[str, Any] = _parse_llm_json(llm_content)
-        raw_rows: list[dict[str, Any]] = extracted_data.get("rows", [])
-        header: dict[str, Any] = extracted_data.get("header", {})
+        # 兼容两种格式：提示词返回 {"data": [...], "metadata": {...}}
+        # 旧格式返回 {"rows": [...], "header": {...}}
+        raw_rows: list[dict[str, Any]] = extracted_data.get("data", extracted_data.get("rows", []))
+        header: dict[str, Any] = extracted_data.get("metadata", extracted_data.get("header", {}))
 
         # 7. 从 LLM 返回的数据中自动推断列名
         if not raw_rows:
