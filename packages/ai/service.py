@@ -66,6 +66,9 @@ class AIConversation(Base):
     archived: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
     )
+    system_context: Mapped[str | None] = mapped_column(
+        sa.Text, nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, default=lambda: SystemClock().now()
     )
@@ -129,6 +132,7 @@ class ConversationRef:
     archived: bool
     created_at: datetime
     updated_at: datetime
+    system_context: str | None = None
 
 
 @dataclass(frozen=True)
@@ -319,6 +323,7 @@ class AIService:
                     archived=r.archived,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
+                    system_context=r.system_context,
                 )
                 for r in rows
             ]
@@ -574,6 +579,8 @@ class AIService:
         # 把 system_context 存到 user_context 里，让 provider 拼到 system 消息
         if system_context:
             user_context["system_context"] = system_context
+            # 同时存到对话记录里，切回对话时恢复
+            conv.system_context = system_context
 
         # 构建工具名称元组（全部白名单 + 候选）
         tool_names: tuple[str, ...] = self._tool_registry.names()

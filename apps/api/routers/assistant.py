@@ -146,6 +146,7 @@ class ConversationResponse(BaseModel):
     archived: bool = False
     created_at: datetime
     updated_at: datetime
+    system_context: str | None = None
 
 
 class ConversationListResponse(BaseModel):
@@ -260,6 +261,7 @@ async def create_conversation(
         archived=ref.archived,
         created_at=ref.created_at,
         updated_at=ref.updated_at,
+        system_context=ref.system_context,
     )
 
 
@@ -302,6 +304,7 @@ async def list_conversations(
                 archived=r.archived,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
+                system_context=r.system_context,
             )
             for r in refs
         ]

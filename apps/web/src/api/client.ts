@@ -1950,6 +1950,7 @@ export type ConversationSummary = {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  system_context: string | null;
 };
 
 /** AI 消息 */
@@ -1999,6 +2000,7 @@ type ConversationApiResponse = {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  system_context: string | null;
 };
 
 /** 后端 /assistant/conversations/{id}/messages 实际返回的原始结构 */

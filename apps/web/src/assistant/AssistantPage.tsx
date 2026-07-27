@@ -274,13 +274,23 @@ export function AssistantPage(): JSX.Element {
     };
   }, []);
 
-  // 切换对话/新建对话时清空本地消息和实验数据上下文
+  // 切换对话时清空本地消息，恢复该对话关联的实验数据上下文
   useEffect(() => {
     if (!isSending) {
       setLocalMessages([]);
       setStreamingAnswer(null);
-      setFactContext(null);
-      setFactContextLabel(null);
+      // 从对话列表里找到选中的对话，恢复其 system_context
+      const conv = conversationList.find((c) => c.id === selectedConvId);
+      if (conv?.system_context) {
+        setFactContext(conv.system_context);
+        // 从 system_context 里提取样品标签
+        const labels = (conv.system_context.match(/### 样品: (.+)/g) || [])
+          .map((s) => s.replace('### 样品: ', ''));
+        setFactContextLabel(labels.length > 0 ? labels.join(', ') : '已加载');
+      } else {
+        setFactContext(null);
+        setFactContextLabel(null);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConvId]);
