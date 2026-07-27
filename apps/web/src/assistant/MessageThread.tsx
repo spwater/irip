@@ -79,7 +79,11 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
         const option = JSON.parse(optionStr);
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
-          const chart = echarts.init(div as HTMLElement);
+          // 显式设宽度为父容器宽度，避免 dangerouslySetInnerHTML 容器宽度为 0
+          const parent = div.parentElement;
+          const width = parent ? parent.clientWidth : 600;
+          (div as HTMLElement).style.width = width + 'px';
+          const chart = echarts.init(div as HTMLElement, undefined, { width, height: 400 });
           chart.setOption(option);
         });
       } catch (e) {
