@@ -261,6 +261,7 @@ export function FactsPage(): JSX.Element {
       render: (_: unknown, record: TreeNode) => {
         if (record.isGroup) {
           return (
+            <div onClick={(e) => e.stopPropagation()}>
             <Popconfirm
               title={`删除「${record.task_name ?? record.task_code}」下的全部数据？`}
               description={`将删除 ${record.totalCount ?? 0} 个样品，此操作不可撤销`}
@@ -278,9 +279,11 @@ export function FactsPage(): JSX.Element {
                 全部删除
               </Button>
             </Popconfirm>
+            </div>
           );
         }
         return (
+          <div onClick={(e) => e.stopPropagation()}>
           <Popconfirm
             title="确定删除该事实？此操作不可撤销。"
             description="将同时删除所有关联数据"
@@ -298,6 +301,7 @@ export function FactsPage(): JSX.Element {
               删除
             </Button>
           </Popconfirm>
+          </div>
         );
       },
     },
