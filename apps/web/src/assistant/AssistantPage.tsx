@@ -109,7 +109,9 @@ export function AssistantPage(): JSX.Element {
     const newLocalMessages = localMessages;
 
     if (streamingAnswer !== null) {
-      // 流式输出中：历史消息 + 本地新消息 + 流式 AI 消息
+      // 流式输出中：数据库历史消息（去掉刚发的用户消息避免重复）+ 流式 AI 消息
+      const localIds = new Set(newLocalMessages.map((m) => m.id));
+      const dbHistory = dbMessages.filter((m) => !localIds.has(m.id) && m.role !== 'assistant');
       const aiMsg: AssistantMessage = {
         id: 'streaming-ai',
         conversation_id: selectedConvId ?? '',
@@ -120,7 +122,7 @@ export function AssistantPage(): JSX.Element {
         uncertainty: null,
         created_at: new Date().toISOString(),
       };
-      return [...dbMessages, ...newLocalMessages, aiMsg];
+      return [...dbHistory, ...newLocalMessages, aiMsg];
     }
     // 非流式：合并数据库消息和本地消息（避免重复）
     if (newLocalMessages.length > 0 && dbMessages.length === 0) {
