@@ -45,6 +45,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
   // 渲染完后，用 katex.render 替换占位符
   useEffect(() => {
     if (!containerRef.current) return;
+    // 渲染 KaTeX 公式
     const spans = containerRef.current.querySelectorAll('.katex-math');
     spans.forEach((span) => {
       const latex = span.getAttribute('data-latex') || '';
@@ -57,6 +58,21 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
         });
       } catch {
         span.textContent = latex;
+      }
+    });
+    // 渲染 ECharts 图表
+    const charts = containerRef.current.querySelectorAll('.echarts-chart');
+    charts.forEach((div) => {
+      const optionStr = div.getAttribute('data-option') || '';
+      try {
+        const option = JSON.parse(optionStr);
+        // 动态导入 echarts 避免首屏加载慢
+        import('echarts').then((echarts) => {
+          const chart = echarts.init(div as HTMLElement);
+          chart.setOption(option);
+        });
+      } catch {
+        div.textContent = '图表配置解析失败';
       }
     });
   });
@@ -75,8 +91,12 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
 function renderMarkdownToHtml(md: string): string {
   let html = md;
 
-  // 代码块 ```
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
+  // 代码块 ```（echarts 代码块用 div 占位，useEffect 里用 ECharts 渲染）
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    if (lang === 'echarts') {
+      const escaped = code.trim().replace(/"/g, '&quot;');
+      return `<div class="echarts-chart" data-option="${escaped}" style="width:100%;height:400px;margin:8px 0"></div>`;
+    }
     return `<pre style="background:#f5f5f5;padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:monospace"><code>${escapeHtml(code.trim())}</code></pre>`;
   });
 

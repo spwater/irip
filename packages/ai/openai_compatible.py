@@ -166,6 +166,16 @@ class OpenAICompatibleProvider:
             "你是 IRIP 工业研发智能平台的 AI 助手。"
             "你可以回答关于工业研究、材料科学、数据分析的问题。"
             "回答使用中文。"
+            "\n\n当用户要求画图、可视化、绘图时，"
+            "请返回 ECharts 配置 JSON，用 ```echarts 代码块包裹。"
+            "不要返回 Python 代码。"
+            "ECharts 配置示例：\n"
+            "```echarts\n"
+            '{"title":{"text":"标题"},"xAxis":{"type":"category","data":["A","B","C"]},'
+            '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[1,2,3]}]}\n'
+            "```"
+            "支持的图表类型：bar(柱状图), line(折线图), pie(饼图), scatter(散点图)。"
+            "数值保留原始精度，不要用字符串。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = request.user_context.get("system_context") if request.user_context else None
