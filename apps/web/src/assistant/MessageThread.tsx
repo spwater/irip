@@ -2,167 +2,138 @@ import { Avatar, Typography } from 'antd';
 import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { useMemo } from 'react';
+import { useEffect, useRef } from 'react';
 
 const { Text, Paragraph } = Typography;
 
-/**
- * 渲染包含公式的 Markdown
- *
- * 方案：先用正则提取 $$...$$ 和 $...$ 公式，替换为占位符，
- * 用 ReactMarkdown 渲染剩余 Markdown，再用 katex.renderToString 替换占位符。
- * 避免 react-markdown + rehype-katex 对 KaTeX HTML 的二次处理导致 vlist 定位错误。
- */
-function MarkdownWithMath({ content }: { content: string }): JSX.Element {
-  const html = useMemo(() => {
-    // 1. 提取块级公式 $$...$$ 和行内公式 $...$
-    const mathBlocks: { latex: string; display: boolean }[] = [];
-    let processed = content;
-
-    // 先提取 $$...$$（块级）
-    processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
-      mathBlocks.push({ latex: latex.trim(), display: true });
-      return `\u0000MATH${mathBlocks.length - 1}\u0000`;
-    });
-
-    // 再提取 $...$（行内），避免匹配到 $$ 残留
-    processed = processed.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$/g, (_, latex: string) => {
-      mathBlocks.push({ latex: latex.trim(), display: false });
-      return `\u0000MATH${mathBlocks.length - 1}\u0000`;
-    });
-
-    // 2. 用 div 包裹让 ReactMarkdown 渲染纯文本部分
-    // 但 ReactMarkdown 不直接输出 HTML，我们需要另一种方式
-    // 改为：直接生成 HTML 字符串
-    return { processed, mathBlocks };
-  }, [content]);
-
-  // 3. 用 ReactMarkdown 渲染，然后用 rehype 替换占位符为 KaTeX HTML
-  const renderedHtml = useMemo(() => {
-    const { processed, mathBlocks } = html;
-    // 简单方式：用 react-markdown 渲染 processed（占位符作为纯文本保留）
-    // 然后用 dangerouslySetInnerHTML 方式
-    return { processed, mathBlocks };
-  }, [html]);
-
-  // 渲染：ReactMarkdown 输出 React 元素，我们在 code 组件里拦截占位符
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        ...markdownComponents,
-        // 拦截文本节点中的占位符
-        p: ({ children, ...props }: any) => {
-          const processed = processMathInText(children, renderedHtml.mathBlocks);
-          return <p style={{ margin: '4px 0', lineHeight: 1.7 }} {...props}>{processed}</p>;
-        },
-        li: ({ children, ...props }: any) => {
-          const processed = processMathInText(children, renderedHtml.mathBlocks);
-          return <li style={{ margin: '2px 0', lineHeight: 1.7 }} {...props}>{processed}</li>;
-        },
-        code: ({ className, children, ...props }: any) => {
-          const text = String(children);
-          // 检查是否是公式占位符
-          const match = text.match(/\u0000MATH(\d+)\u0000/);
-          if (match) {
-            const idx = parseInt(match[1], 10);
-            const block = renderedHtml.mathBlocks[idx];
-            if (block) {
-              const span = document.createElement('span');
-              katex.render(block.latex, span, {
-                displayMode: block.display,
-                throwOnError: false,
-                strict: false,
-              });
-              return <span dangerouslySetInnerHTML={{ __html: span.innerHTML }} {...props} />;
-            }
-          }
-          const isBlock = className && typeof className === 'string' && className.includes('language-');
-          if (!isBlock) {
-            return <code style={{ background: '#f0f0f0', padding: '1px 4px', borderRadius: 3, fontSize: 13, fontFamily: 'monospace' }} {...props}>{children}</code>;
-          }
-          return <code className={className} style={{ display: 'block', background: '#f5f5f5', padding: '8px 12px', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', overflow: 'auto', margin: '6px 0' }} {...props}>{children}</code>;
-        },
-      }}
-    >
-      {renderedHtml.processed}
-    </ReactMarkdown>
-  );
-}
-
-/** 处理文本节点中的公式占位符，替换为 KaTeX 渲染的 span */
-function processMathInText(children: React.ReactNode, mathBlocks: { latex: string; display: boolean }[]): React.ReactNode {
-  if (!children) return children;
-  if (typeof children === 'string') {
-    return renderMathInString(children, mathBlocks);
-  }
-  if (Array.isArray(children)) {
-    return children.map((child, i) => {
-      if (typeof child === 'string') {
-        return renderMathInString(child, mathBlocks, i);
-      }
-      return child;
-    });
-  }
-  return children;
-}
-
-/** 在字符串中找到公式占位符并替换 */
-function renderMathInString(str: string, mathBlocks: { latex: string; display: boolean }[], key?: number): React.ReactNode {
-  const parts = str.split(/(\u0000MATH\d+\u0000)/);
-  if (parts.length === 1) return str;
-  return parts.map((part, i) => {
-    const match = part.match(/\u0000MATH(\d+)\u0000/);
-    if (match) {
-      const idx = parseInt(match[1], 10);
-      const block = mathBlocks[idx];
-      if (block) {
-        try {
-          const html = katex.renderToString(block.latex, {
-            displayMode: block.display,
-            throwOnError: false,
-            strict: false,
-          });
-          return <span key={`${key}-${i}`} dangerouslySetInnerHTML={{ __html: html }} />;
-        } catch {
-          return part;
-        }
-      }
-    }
-    return part;
-  });
-}
-
-// KaTeX 公式样式：修复 Antd reset.css 的 box-sizing:border-box 干扰 KaTeX vlist 定位
-// 用 !important + 高优先级选择器确保覆盖 Antd 的全局 reset
+// KaTeX 公式样式
 const katexStyle = `
 .ai-markdown-body .katex { font-size: 1.05em; }
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
-.ai-markdown-body .katex *,
-.ai-markdown-body .katex *::before,
-.ai-markdown-body .katex *::after {
-  box-sizing: content-box !important;
-}
-.ai-markdown-body .katex .vlist-t { border-collapse: collapse !important; display: inline-table !important; }
-.ai-markdown-body .katex .vlist-r { display: table-row !important; }
-.ai-markdown-body .katex .vlist { display: table-cell !important; position: relative !important; vertical-align: bottom !important; }
-.ai-markdown-body .katex .vlist > span { display: block !important; height: 0 !important; position: relative !important; }
-.ai-markdown-body .katex .vlist > span > span { display: inline-block !important; }
-.ai-markdown-body .katex .msupsub { text-align: left !important; }
-.ai-markdown-body .katex .mfrac > span > span { text-align: center !important; }
-.ai-markdown-body .katex .mfrac .frac-line {
-  border-bottom-style: solid !important;
-  display: inline-block !important;
-  width: 100% !important;
-  min-height: 1px !important;
-}
-.ai-markdown-body .katex .strut { display: inline-block !important; }
+.ai-markdown-body .katex * { box-sizing: content-box !important; }
 `;
+
+/**
+ * 渲染包含 LaTeX 公式的 Markdown
+ *
+ * 方案：
+ * 1. 用正则把 $$...$$ 和 $...$ 替换为 <span class="katex-math" data-latex="..." data-display="..."></span>
+ * 2. 用简易 Markdown → HTML 转换处理其余语法
+ * 3. useEffect 里找到所有 .katex-math span，用 katex.render 渲染公式
+ *
+ * 这样 KaTeX HTML 完全由 katex.render 生成，不经过 react-markdown 处理。
+ */
+function MarkdownWithMath({ content }: { content: string }): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 提取公式，替换为 span 占位符
+  const processed = content
+    // 块级公式 $$...$$
+    .replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
+      const escaped = latex.trim().replace(/"/g, '&quot;');
+      return `<span class="katex-math" data-latex="${escaped}" data-display="true"></span>`;
+    })
+    // 行内公式 $...$
+    .replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$/g, (_, latex: string) => {
+      const escaped = latex.trim().replace(/"/g, '&quot;');
+      return `<span class="katex-math" data-latex="${escaped}" data-display="false"></span>`;
+    });
+
+  // 渲染完后，用 katex.render 替换占位符
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const spans = containerRef.current.querySelectorAll('.katex-math');
+    spans.forEach((span) => {
+      const latex = span.getAttribute('data-latex') || '';
+      const display = span.getAttribute('data-display') === 'true';
+      try {
+        katex.render(latex, span as HTMLElement, {
+          displayMode: display,
+          throwOnError: false,
+          strict: false,
+        });
+      } catch {
+        span.textContent = latex;
+      }
+    });
+  });
+
+  return (
+    <div ref={containerRef} dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(processed) }} />
+  );
+}
+
+/**
+ * 简易 Markdown → HTML 转换
+ *
+ * 不用 react-markdown，直接用正则处理常见的 Markdown 语法。
+ * 避免 react-markdown 对 HTML 标签的转义和重新处理。
+ */
+function renderMarkdownToHtml(md: string): string {
+  let html = md;
+
+  // 代码块 ```
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
+    return `<pre style="background:#f5f5f5;padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:monospace"><code>${escapeHtml(code.trim())}</code></pre>`;
+  });
+
+  // 行内代码 `...`
+  html = html.replace(/`([^`]+)`/g, (_, code) => {
+    return `<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace">${escapeHtml(code)}</code>`;
+  });
+
+  // 标题
+  html = html.replace(/^### (.+)$/gm, '<h3 style="font-size:15px;font-weight:600;margin:8px 0 4px">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 style="font-size:16px;font-weight:700;margin:10px 0 6px">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 style="font-size:18px;font-weight:700;margin:12px 0 8px">$1</h1>');
+
+  // 粗体 **...**
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // 斜体 *...*
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+
+  // 表格
+  html = html.replace(/^\|(.+)\|\n\|([-| :]+)\|\n((?:\|.*\|\n?)*)/gm, (_, header, _sep, body) => {
+    const headers = header.split('|').map((h: string) => h.trim()).filter(Boolean);
+    const rows = body.trim().split('\n').map((r: string) => r.split('|').map((c: string) => c.trim()).filter(Boolean));
+    let table = '<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px">';
+    table += '<tr>' + headers.map((h: string) => `<th style="border:1px solid #d9d9d9;padding:6px 10px;background:#fafafa;font-weight:600;text-align:left">${h}</th>`).join('') + '</tr>';
+    rows.forEach((row: string[]) => {
+      table += '<tr>' + row.map((c: string) => `<td style="border:1px solid #d9d9d9;padding:6px 10px">${c}</td>`).join('') + '</tr>';
+    });
+    table += '</table>';
+    return table;
+  });
+
+  // 引用块 >
+  html = html.replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #91caff;margin:6px 0;padding:4px 12px;color:#666;background:#f6f8fa">$1</blockquote>');
+
+  // 无序列表 - 或 *
+  html = html.replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
+  html = html.replace(/(<li[^<]*<\/li>\n?)+/g, (m) => `<ul style="margin:4px 0;padding-left:20px">${m}</ul>`);
+
+  // 有序列表 1.
+  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
+
+  // 分隔线 ---
+  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e8e8e8;margin:12px 0" />');
+
+  // 段落（把连续的非标签行用 p 包裹）
+  html = html.replace(/^(?!<[a-z/])((?!<[a-z]).+)$/gm, '<p style="margin:4px 0;line-height:1.7">$1</p>');
+
+  // 清理多余空行
+  html = html.replace(/\n{3,}/g, '\n\n');
+
+  return html;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 /**
  * 消息角色 → 头像首字母
@@ -189,108 +160,6 @@ const ROLE_LABEL: Record<string, string> = {
   user: '我',
   assistant: 'AI 助手',
   tool: '工具',
-};
-
-/**
- * Markdown 组件样式覆盖
- *
- * 让 AI 回答中的标题、表格、代码块、公式等正确渲染。
- */
-const markdownComponents = {
-  h1: ({ node, ...props }: any) => <h1 style={{ fontSize: 18, fontWeight: 700, margin: '12px 0 8px' }} {...props} />,
-  h2: ({ node, ...props }: any) => <h2 style={{ fontSize: 16, fontWeight: 700, margin: '10px 0 6px' }} {...props} />,
-  h3: ({ node, ...props }: any) => <h3 style={{ fontSize: 15, fontWeight: 600, margin: '8px 0 4px' }} {...props} />,
-  h4: ({ node, ...props }: any) => <h4 style={{ fontSize: 14, fontWeight: 600, margin: '6px 0 4px' }} {...props} />,
-  p: ({ node, ...props }: any) => <p style={{ margin: '4px 0', lineHeight: 1.7 }} {...props} />,
-  ul: ({ node, ...props }: any) => <ul style={{ margin: '4px 0', paddingLeft: 20 }} {...props} />,
-  ol: ({ node, ...props }: any) => <ol style={{ margin: '4px 0', paddingLeft: 20 }} {...props} />,
-  li: ({ node, ...props }: any) => <li style={{ margin: '2px 0', lineHeight: 1.7 }} {...props} />,
-  table: ({ node, ...props }: any) => (
-    <table
-      style={{
-        borderCollapse: 'collapse',
-        width: '100%',
-        margin: '8px 0',
-        fontSize: 13,
-      }}
-      {...props}
-    />
-  ),
-  th: ({ node, ...props }: any) => (
-    <th
-      style={{
-        border: '1px solid #d9d9d9',
-        padding: '6px 10px',
-        background: '#fafafa',
-        fontWeight: 600,
-        textAlign: 'left',
-      }}
-      {...props}
-    />
-  ),
-  td: ({ node, ...props }: any) => (
-    <td
-      style={{
-        border: '1px solid #d9d9d9',
-        padding: '6px 10px',
-      }}
-      {...props}
-    />
-  ),
-  code: ({ node, className, children, ...props }: any) => {
-    // react-markdown v10: 通过 className 判断行内代码 vs 代码块
-    // 代码块有 className="language-xxx"，行内代码没有
-    const isBlock = className && typeof className === 'string' && className.includes('language-');
-    if (!isBlock) {
-      return (
-        <code
-          style={{
-            background: '#f0f0f0',
-            padding: '1px 4px',
-            borderRadius: 3,
-            fontSize: 13,
-            fontFamily: 'monospace',
-          }}
-          {...props}
-        >
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code
-        className={className}
-        style={{
-          display: 'block',
-          background: '#f5f5f5',
-          padding: '8px 12px',
-          borderRadius: 6,
-          fontSize: 13,
-          fontFamily: 'monospace',
-          overflow: 'auto',
-          margin: '6px 0',
-        }}
-        {...props}
-      >
-        {children}
-      </code>
-    );
-  },
-  blockquote: ({ node, ...props }: any) => (
-    <blockquote
-      style={{
-        borderLeft: '3px solid #91caff',
-        margin: '6px 0',
-        padding: '4px 12px',
-        color: '#666',
-        background: '#f6f8fa',
-      }}
-      {...props}
-    />
-  ),
-  a: ({ node, ...props }: any) => (
-    <a style={{ color: '#1677ff' }} target="_blank" rel="noopener noreferrer" {...props} />
-  ),
 };
 
 /**
