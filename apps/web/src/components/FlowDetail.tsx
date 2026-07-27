@@ -798,13 +798,21 @@ export function FlowDetail(): JSX.Element {
                   );
                 },
               },
-              { title: '摘要', key: 'summary', width: 120, ellipsis: true,
-                render: (_: unknown, record: FlowRunSummary) => {
-                  const out = record.output_summary;
-                  if (!out) return '-';
-                  const meta = (out._metadata ?? {}) as Record<string, unknown>;
-                  const rows = (meta.all_rows ?? meta.preview_rows ?? []) as Record<string, unknown>[];
-                  return rows.length > 0 ? `${rows.length} 行` : '-';
+              { title: '数据接口', key: 'component', width: 200,
+                render: () => {
+                  const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string; component_version?: string } | undefined;
+                  if (!node?.component_name) return <Text type="secondary">-</Text>;
+                  const comp = compMap.get(node.component_name);
+                  return (
+                    <Space size={4}>
+                      <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                        {comp?.display_name ?? node.component_name}
+                      </Tag>
+                      {node.component_version && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>v{node.component_version}</Text>
+                      )}
+                    </Space>
+                  );
                 },
               },
               { title: '状态', dataIndex: 'status', key: 'status', width: 100,
