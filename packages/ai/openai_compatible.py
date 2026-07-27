@@ -188,6 +188,7 @@ class OpenAICompatibleProvider:
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
+            "max_tokens": 8192,
         }
         # 思考模式：Qwen3 vLLM 通过 chat_template_kwargs 控制思考开关
         # 顶层 enable_thinking 参数无效，只有 chat_template_kwargs 生效
