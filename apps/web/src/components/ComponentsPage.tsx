@@ -214,17 +214,19 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
 function ComponentFormFields({
   objectOptions,
   objectMap: _objectMap,
+  originalName,
 }: {
   objectOptions: ObjectOption[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
+  originalName?: string;
 }): JSX.Element {
   return (
     <>
       <Row gutter={16}>
         <Col span={12}>
           <Form.Item label="接口编码">
-            <Input value="iface_ffffffff" disabled />
+            <Input value={originalName ?? 'iface_ffffffff'} disabled />
           </Form.Item>
         </Col>
         <Col span={12}>
@@ -876,7 +878,7 @@ export function ComponentsPage(): JSX.Element {
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
+              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} originalName={editOriginalName} />
             </>
           )}
         </Form>
