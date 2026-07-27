@@ -242,17 +242,23 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             # 1. 自动生成编码，查找/创建组件主记录
             from packages.common.ids import gen_code
-            component_name = gen_code("iface")
-            component: Component | None = await session.scalar(
-                sa.select(Component).where(
-                    Component.organization_id == self._org_id,
-                    Component.name == manifest.name,
+
+            # 占位值 iface_ffffffff 表示新建接口，不用于查找
+            is_placeholder = manifest.name.startswith("iface_ffff")
+            component: Component | None = None
+            if not is_placeholder:
+                # 非占位值：按 name 查已有组件（发新版本）
+                component = await session.scalar(
+                    sa.select(Component).where(
+                        Component.organization_id == self._org_id,
+                        Component.name == manifest.name,
+                    )
                 )
-            )
             if component is None:
+                # 新建接口：用自动生成的编码
                 component = Component(
                     organization_id=self._org_id,
-                    name=component_name,
+                    name=gen_code("iface"),
                     kind=manifest.kind,
                     status="draft",
                 )
@@ -306,11 +312,11 @@ class ComponentRegistryService:
                 parts = auto_version.split('.')
                 auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
 
-            # 4. 替换 manifest_yaml 里的 name 为自动生成的编码
+            # 4. 替换 manifest_yaml 里的 name 为组件真实编码
             import re
             updated_yaml = re.sub(
-                r'^name:\s*\S+',
-                f'name: {component_name}',
+                r'^name:\s*\S+.*',
+                f'name: {component.name}',
                 manifest.raw_yaml,
                 count=1,
                 flags=re.MULTILINE,
