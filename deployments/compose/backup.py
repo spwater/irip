@@ -64,13 +64,31 @@ BACKUP_TAR_AGE_FILENAME: str = "backup.tar.age"
 
 
 def _to_sync_url(url: str) -> str:
-    """将异步驱动 URL 转换为同步驱动 URL（pg_dump 需要同步连接）。
+    """将异步驱动 URL 转换为 psycopg3 同步驱动 URL（SQLAlchemy create_engine 用）。
 
     Args:
         url: 数据库连接字符串（可能含 ``postgresql+psycopg_async://``）。
 
     Returns:
-        str: 同步驱动的连接字符串（``postgresql://`` 或 ``postgresql+psycopg://``）。
+        str: psycopg3 同步驱动 URL（``postgresql+psycopg://``）。
+    """
+    if url.startswith("postgresql+psycopg_async://"):
+        return url.replace(
+            "postgresql+psycopg_async://", "postgresql+psycopg://", 1
+        )
+    return url
+
+
+def _to_pg_dump_url(url: str) -> str:
+    """将数据库 URL 转换为 pg_dump 可识别的标准格式（``postgresql://``）。
+
+    pg_dump 不识别 SQLAlchemy 驱动前缀（如 ``+psycopg``），需要纯 postgresql URL。
+
+    Args:
+        url: 数据库连接字符串。
+
+    Returns:
+        str: 标准postgresql://` 连接字符串。
     """
     if url.startswith("postgresql+psycopg_async://"):
         return url.replace(
@@ -235,7 +253,7 @@ class BackupService:
         Raises:
             RuntimeError: pg_dump 执行失败时。
         """
-        sync_url: str = _to_sync_url(self._config.db_url)
+        sync_url: str = _to_pg_dump_url(self._config.db_url)
         cmd: list[str] = [
             "pg_dump",
             "--format=custom",

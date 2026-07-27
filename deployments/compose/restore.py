@@ -29,6 +29,7 @@ import logging
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,13 +70,31 @@ SMOKE_QUERIES: list[tuple[str, str]] = [
 
 
 def _to_sync_url(url: str) -> str:
-    """将异步驱动 URL 转换为同步驱动 URL（pg_restore 需要同步连接）。
+    """将异步驱动 URL 转换为 psycopg3 同步驱动 URL（SQLAlchemy create_engine 用）。
 
     Args:
         url: 数据库连接字符串。
 
     Returns:
-        str: 同步驱动的连接字符串。
+        str: psycopg3 同步驱动 URL（``postgresql+psycopg://``）。
+    """
+    if url.startswith("postgresql+psycopg_async://"):
+        return url.replace(
+            "postgresql+psycopg_async://", "postgresql+psycopg://", 1
+        )
+    return url
+
+
+def _to_pg_restore_url(url: str) -> str:
+    """将数据库 URL 转换为 pg_restore 可识别的标准格式（``postgresql://``）。
+
+    pg_restore 不识别 SQLAlchemy 驱动前缀（如 ``+psycopg``）。
+
+    Args:
+        url: 数据库连接字符串。
+
+    Returns:
+        str: 标准postgresql://` 连接字符串。
     """
     if url.startswith("postgresql+psycopg_async://"):
         return url.replace(
@@ -320,7 +339,7 @@ class RestoreService:
         Raises:
             RuntimeError: pg_restore 执行失败时。
         """
-        sync_url: str = _to_sync_url(self._config.db_url)
+        sync_url: str = _to_pg_restore_url(self._config.db_url)
 
         # 先确保目标数据库存在
         self._ensure_database_exists(sync_url)
@@ -622,8 +641,13 @@ def main() -> None:
         )
 
     service: RestoreService = RestoreService(config)
-    manifest: BackupManifest = asyncio.run(service.restore())
-    print(f"\n恢复完成: {manifest.to_json()}")
+    try:
+        manifest: BackupManifest = asyncio.run(service.restore())
+        print(f"\n恢复完成: {manifest.to_json()}")
+    except FileNotFoundError as exc:
+        logger.info("无备份文件，跳过恢复: %s", exc)
+        print(f"\n无备份文件，跳过恢复: {exc}")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

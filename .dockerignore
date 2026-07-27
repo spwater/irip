@@ -1,0 +1,47 @@
+# IRIP Docker 构建上下文排除清单
+# 避免构建上下文过大，加快镜像构建
+
+# ---- Python 虚拟环境 ----
+.venv/
+
+# ---- Node.js ----
+apps/web/node_modules/
+
+# ---- Git / CI ----
+.git/
+.github/
+
+# ---- WorkBuddy 工作目录 ----
+.workbuddy/
+
+# ---- 测试用实验数据 ----
+测试用实验数据/
+
+# ---- 运维产物 ----
+backups/
+deliverables/
+
+# ---- 文档 ----
+docs/
+
+# ---- 系统文件 ----
+.DS_Store
+*.pyc
+__pycache__/
+
+# ---- 环境变量（不打进镜像，用环境变量注入）----
+.env
+
+# ---- 本地覆盖文件 ----
+compose.override.local.yaml
+
+# ---- 测试 ----
+tests/
+
+# ---- 脚本 ----
+scripts/
+run_local.py
+
+# ---- IDE ----
+.vscode/
+.idea/

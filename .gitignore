@@ -75,6 +75,7 @@ docker-compose.override.yml
 *.db
 data/
 tmp/
+backups/
 
 ## ===== 测试 / 覆盖率 =====
 .pytest_cache/

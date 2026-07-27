@@ -15,6 +15,7 @@ import {
 } from 'antd';
 
 const { Text } = Typography;
+import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -80,6 +81,7 @@ export function ExperimentalObjectPage({
   onPresetConsumed?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
@@ -410,7 +412,7 @@ export function ExperimentalObjectPage({
     {
       title: '操作',
       key: 'action',
-      width: 160,
+      width: 200,
       render: (_: unknown, record: IndustrialObject) => (
         <Space size="small">
           <Button
@@ -419,6 +421,15 @@ export function ExperimentalObjectPage({
             onClick={() => handleEdit(record)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            onClick={() => {
+              void navigate({ to: '/lab-ops', search: { tab: 'components', prefill_object: record.code } });
+            }}
+          >
+            +接口
           </Button>
           <Popconfirm
             title={

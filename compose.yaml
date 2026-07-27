@@ -137,7 +137,8 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
-    command: ["python", "-m", "deployments.compose.bootstrap"]
+    # 先跑 alembic 迁移建表，再跑 bootstrap 创建组织+角色+管理员+bucket
+    command: ["sh", "-c", "alembic upgrade head && python -m deployments.compose.bootstrap"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://redis:6379/0

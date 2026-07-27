@@ -52,7 +52,8 @@ export function AppShell(): JSX.Element | null {
             height: 48,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
+            padding: '0 24px',
             fontWeight: 700,
             fontSize: 18,
             color: '#1677ff',
@@ -71,14 +72,13 @@ export function AppShell(): JSX.Element | null {
         <Header
           style={{
             display: 'flex',
-            justifyContent: 'space-between',
+            justifyContent: 'flex-end',
             alignItems: 'center',
             background: '#fff',
             padding: '0 24px',
             borderBottom: '1px solid #f0f0f0',
           }}
         >
-          <Text strong>IRIP 控制台</Text>
           <Space size="middle">
             <JobDrawerButton />
             <Space size="small">

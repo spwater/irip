@@ -19,6 +19,9 @@ export function LabOpsPage(): JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const tabRaw = (search as Record<string, unknown>).tab;
+  const prefillObjectRaw = (search as Record<string, unknown>).prefill_object;
+  const prefillObject: string | undefined =
+    typeof prefillObjectRaw === 'string' ? prefillObjectRaw : undefined;
   const activeTab: LabOpsTab = (
     VALID_TABS as readonly string[]
   ).includes(typeof tabRaw === 'string' ? tabRaw : '')
@@ -49,7 +52,7 @@ export function LabOpsPage(): JSX.Element {
           {
             key: 'components',
             label: '数据接口',
-            children: <ComponentsPage />,
+            children: <ComponentsPage prefillObject={prefillObject} />,
           },
         ]}
       />

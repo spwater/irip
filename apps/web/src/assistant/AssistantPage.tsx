@@ -209,7 +209,6 @@ export function AssistantPage(): JSX.Element {
       setFactContext(context);
       setFactContextLabel(labels.join(', '));
       setFactModalOpen(false);
-      setSelectedFactIds([]);
       message.success(`已加载 ${labels.length} 个样品的实验数据`);
     } catch (err) {
       message.error(`获取数据失败: ${err instanceof Error ? err.message : String(err)}`);
@@ -221,6 +220,7 @@ export function AssistantPage(): JSX.Element {
   const handleClearFactContext = (): void => {
     setFactContext(null);
     setFactContextLabel(null);
+    setSelectedFactIds([]);
   };
 
   // ---- 发送消息 ----
@@ -680,7 +680,7 @@ export function AssistantPage(): JSX.Element {
         title="载入实验数据"
         open={factModalOpen}
         onOk={handleInsertFact}
-        onCancel={() => { setFactModalOpen(false); setSelectedFactIds([]); setFactSearchText(''); }}
+        onCancel={() => { setFactModalOpen(false); setFactSearchText(''); }}
         confirmLoading={insertingFact}
         okText={`载入 ${selectedFactIds.length > 0 ? `(${selectedFactIds.length})` : ''}`}
         cancelText="取消"

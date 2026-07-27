@@ -8,6 +8,8 @@ FROM docker.m.daocloud.io/node:22-slim AS builder
 WORKDIR /build
 
 # 配置国内 npm 镜像 + 启用 corepack
+# COREPACK_NPM_REGISTRY 让 corepack 从国内镜像下载 pnpm 二进制（否则走 registry.npmjs.org 会超时）
+ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
 RUN npm config set registry https://registry.npmmirror.com && \
     corepack enable pnpm
 

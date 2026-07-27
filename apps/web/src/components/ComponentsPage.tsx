@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Col,
@@ -294,7 +294,7 @@ function ComponentFormFields({
  * - 摩登：基于 LLM 的组件（如 llm_extractor）
  * - 古法：基于代码的经典组件（csv_reader 等）
  */
-export function ComponentsPage(): JSX.Element {
+export function ComponentsPage({ prefillObject }: { prefillObject?: string }): JSX.Element {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [modalOpen, setModalOpen] = useState(false);
@@ -307,6 +307,17 @@ export function ComponentsPage(): JSX.Element {
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // ---- 预填：从实验对象页面跳转过来时，自动打开新建弹窗并预填关联实验对象 ----
+  useEffect(() => {
+    if (prefillObject) {
+      form.resetFields();
+      setAdvancedMode(false);
+      setModalOpen(true);
+      form.setFieldsValue({ experimental_object_code: prefillObject, file_engine: 'pymupdf' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillObject]);
 
   // ---- 列表查询 ----
   const { data, isLoading } = useQuery({
@@ -328,6 +339,15 @@ export function ComponentsPage(): JSX.Element {
     value: o.code,
     label: o.display_name,
   }));
+
+  // 当 objectOptions 异步加载完成后，如果弹窗已打开且有预填值，
+  // 重新设置一次 experimental_object_code，确保 Select 在 options 就绪后正确显示 label。
+  useEffect(() => {
+    if (prefillObject && modalOpen && objectOptions.length > 0) {
+      form.setFieldsValue({ experimental_object_code: prefillObject });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [objectOptions, prefillObject, modalOpen]);
 
   // ---- 设备列表查询（用于通过实验对象的 equipment_id 显示关联设备名）----
   const { data: equipmentData } = useQuery({
