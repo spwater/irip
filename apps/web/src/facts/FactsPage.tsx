@@ -201,7 +201,7 @@ export function FactsPage(): JSX.Element {
     {
       title: '名称',
       key: 'name',
-      width: 360,
+      width: 540,
       render: (_: unknown, record: TreeNode) => {
         if (record.isGroup) {
           return (
