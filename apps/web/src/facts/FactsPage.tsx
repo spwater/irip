@@ -215,7 +215,7 @@ export function FactsPage(): JSX.Element {
       },
     },
     {
-      title: '任务来源',
+      title: '所属单位',
       key: 'department_name',
       width: 160,
       render: (_: unknown, record: TreeNode) => {

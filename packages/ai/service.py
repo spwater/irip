@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
+from packages.ai.citation import CitationGenerator, SignedCitation
 from packages.ai.citations import Citation
 from packages.ai.providers import AIProvider, AIRequest, AIResponse
 from packages.ai.tools import ToolRegistry, ToolSpec
@@ -591,10 +592,14 @@ class AIService:
         # 构建工具名称元组（全部白名单 + 候选）
         tool_names: tuple[str, ...] = self._tool_registry.names()
 
+        # 构建工具的 OpenAI JSON schema 定义
+        tool_schemas: tuple[dict[str, Any], ...] = self._build_tool_schemas()
+
         # 构建 AIRequest
         ai_request = AIRequest(
             messages=messages,
             tools=tool_names,
+            tool_schemas=tool_schemas,
             user_context=user_context,
             provider_mode=provider_name,
         )
@@ -632,13 +637,17 @@ class AIService:
         finally:
             _active_requests.pop(conversation_id, None)
 
-        # 执行工具调用（权限检查 + 白名单工具执行）
+        # 执行工具调用（权限检查 + 白名单工具真实执行 + 第二轮 completion）
         executed_tool_calls: list[dict[str, Any]] = []
+        tool_result_messages: list[dict[str, Any]] = []
+        all_citations: list[Any] = []
+
         for tc in response.tool_calls:
             tool_name = str(tc.get("tool", ""))
             tool_args = tc.get("args", {})
             if not isinstance(tool_args, dict):
                 tool_args = {}
+            tool_call_id = str(tc.get("id", "")) or f"call_{tool_name}_{len(executed_tool_calls)}"
 
             # 验证工具在白名单中
             try:
@@ -650,6 +659,15 @@ class AIService:
                         "args": tool_args,
                         "summary": f"拒绝执行：未知工具 '{tool_name}'",
                         "status": "rejected",
+                    }
+                )
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            {"error": f"未知工具: {tool_name}"}, ensure_ascii=False
+                        ),
                     }
                 )
                 continue
@@ -667,6 +685,16 @@ class AIService:
                         "status": "forbidden",
                     }
                 )
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            {"error": f"权限不足: 需要 {spec.required_permission}"},
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
                 continue
 
             # 候选工具不自动执行
@@ -681,27 +709,141 @@ class AIService:
                         "status": "candidate",
                     }
                 )
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            {"message": f"候选工具 {spec.display_name} 需人工审批后执行"},
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
                 continue
 
-            # 白名单工具执行（只读，模拟执行结果摘要）
-            executed_tool_calls.append(
+            # 白名单工具真实执行
+            try:
+                tool_result = await self._execute_tool(
+                    tool_name, tool_args, user, org_id
+                )
+                result_summary = str(tool_result.get("summary", ""))
+                executed_tool_calls.append(
+                    {
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "summary": result_summary or f"已执行 {spec.display_name}",
+                        "status": "executed",
+                        "result": tool_result.get("data"),
+                    }
+                )
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            tool_result.get("data", tool_result),
+                            ensure_ascii=False,
+                            default=str,
+                        ),
+                    }
+                )
+                # 生成结构化 citation（服务端签名，不可伪造）
+                citation_gen = CitationGenerator()
+                signed_citation = citation_gen.generate(
+                    tool_name=tool_name,
+                    query_params=tool_args,
+                    result_summary=result_summary or "工具执行完成",
+                )
+                all_citations.append(signed_citation)
+            except Exception as exc:
+                error_msg = f"工具执行失败: {exc}"
+                executed_tool_calls.append(
+                    {
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "summary": error_msg,
+                        "status": "error",
+                    }
+                )
+                tool_result_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call_id,
+                        "content": json.dumps(
+                            {"error": error_msg}, ensure_ascii=False
+                        ),
+                    }
+                )
+
+        # 如果有工具被执行，进行第二轮 completion 获取最终回答
+        if tool_result_messages:
+            # 构建 assistant 消息（含 tool_calls，OpenAI 格式）
+            assistant_tool_calls = []
+            for tc in response.tool_calls:
+                tc_id = str(tc.get("id", "")) or f"call_{tc.get('tool', 'unknown')}_{len(assistant_tool_calls)}"
+                assistant_tool_calls.append(
+                    {
+                        "id": tc_id,
+                        "type": "function",
+                        "function": {
+                            "name": str(tc.get("tool", "")),
+                            "arguments": json.dumps(
+                                tc.get("args", {}), ensure_ascii=False
+                            ),
+                        },
+                    }
+                )
+
+            # 构建第二轮消息：原始消息 + assistant tool_calls + tool 结果
+            second_messages: list[dict[str, Any]] = list(msg_list)
+            second_messages.append(
                 {
-                    "tool": tool_name,
-                    "args": tool_args,
-                    "summary": tc.get("summary", f"已执行 {spec.display_name}"),
-                    "status": "executed",
+                    "role": "assistant",
+                    "content": response.answer,
+                    "tool_calls": assistant_tool_calls,
                 }
             )
+            second_messages.extend(tool_result_messages)
 
-        # 凭据泄露检查：确保回答中不含密钥
-        safe_answer = self._redact_credentials(response.answer)
+            second_request = AIRequest(
+                messages=tuple(second_messages),
+                tools=tool_names,
+                tool_schemas=tool_schemas,
+                user_context=user_context,
+                provider_mode=provider_name,
+            )
+
+            if hasattr(self._provider, "_thinking_enabled"):
+                self._provider._thinking_enabled = thinking_enabled
+
+            try:
+                second_response: AIResponse = await self._provider.complete(
+                    second_request, cancel_event=cancel_event
+                )
+                final_answer = self._redact_credentials(second_response.answer)
+                final_uncertainty = second_response.uncertainty
+            except Exception:
+                # 第二轮失败时使用第一轮回答 + 工具结果摘要
+                tool_summaries = "\n".join(
+                    f"- {tc['tool']}: {tc.get('summary', '')}"
+                    for tc in executed_tool_calls
+                    if tc.get("status") == "executed"
+                )
+                final_answer = self._redact_credentials(
+                    response.answer
+                    + (f"\n\n工具执行结果：\n{tool_summaries}" if tool_summaries else "")
+                )
+                final_uncertainty = response.uncertainty
+        else:
+            final_answer = self._redact_credentials(response.answer)
+            final_uncertainty = response.uncertainty
 
         # 构建最终响应
         final_response = AIResponse(
-            answer=safe_answer,
+            answer=final_answer,
             tool_calls=tuple(executed_tool_calls),
-            citations=response.citations,
-            uncertainty=response.uncertainty,
+            citations=tuple(all_citations),
+            uncertainty=final_uncertainty,
             provider_mode=response.provider_mode,
         )
 
@@ -750,6 +892,371 @@ class AIService:
                 if isinstance(permissions, list) and action in permissions:
                     return True
         return False
+
+    def _build_tool_schemas(self) -> tuple[dict[str, Any], ...]:
+        """将 ToolRegistry 中的工具规格转为 OpenAI tools JSON schema 格式。
+
+        Returns:
+            tuple[dict, ...]: OpenAI tools 定义元组，每项为
+            ``{"type": "function", "function": {"name", "description", "parameters"}}``。
+        """
+        schemas: list[dict[str, Any]] = []
+        for spec in self._tool_registry.list_tools():
+            schemas.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": spec.name,
+                        "description": spec.description,
+                        "parameters": spec.parameters_schema or {
+                            "type": "object",
+                            "properties": {},
+                        },
+                    },
+                }
+            )
+        return tuple(schemas)
+
+    async def _execute_tool(
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        user: Any,
+        org_id: UUID,
+    ) -> dict[str, Any]:
+        """执行白名单工具的真实查询，返回结果数据。
+
+        根据工具名称分派到对应的服务方法执行真实查询。
+        工具执行均为只读操作，不修改平台数据。
+
+        Args:
+            tool_name: 工具名称。
+            args: 工具参数。
+            user: 当前用户。
+            org_id: 组织 ID。
+
+        Returns:
+            dict: 包含 ``summary``（结果摘要）和 ``data``（结构化结果）的字典。
+        """
+        if tool_name == "search_facts":
+            return await self._handle_search_facts(args, org_id)
+        elif tool_name == "search_standards":
+            return await self._handle_search_standards(args, org_id)
+        elif tool_name == "search_parameters":
+            return await self._handle_search_parameters(args, org_id)
+        elif tool_name == "explain_provenance":
+            return await self._handle_explain_provenance(args, org_id)
+        elif tool_name == "compare_experiments":
+            return await self._handle_compare_experiments(args, org_id)
+        elif tool_name == "run_published_model":
+            return await self._handle_run_model(args, user, org_id)
+        elif tool_name == "draft_report":
+            return await self._handle_draft_report(args, org_id)
+        elif tool_name == "extract_data":
+            return await self._handle_extract_data(args, org_id)
+        else:
+            return {
+                "summary": f"未实现的工具: {tool_name}",
+                "data": {"error": f"Tool not implemented: {tool_name}"},
+            }
+
+    async def _handle_search_facts(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 search_facts 工具：搜索实验事实。"""
+        query = str(args.get("query", ""))
+        fact_type = str(args.get("fact_type", "")) or None
+
+        if self._fact_service is not None:
+            try:
+                results = await self._fact_service.search(
+                    query=query,
+                    fact_type=fact_type,
+                    organization_id=org_id,
+                    limit=20,
+                )
+                items = [
+                    {
+                        "id": str(r.get("id", "")),
+                        "subject_id": str(r.get("subject_id", "")),
+                        "fact_type": str(r.get("fact_type", "")),
+                    }
+                    for r in (results or [])[:20]
+                ]
+                return {
+                    "summary": f"搜索到 {len(items)} 条事实",
+                    "data": {"count": len(items), "results": items},
+                }
+            except Exception as exc:
+                return {
+                    "summary": f"事实搜索失败: {exc}",
+                    "data": {"error": str(exc)},
+                }
+
+        # 无 fact_service 时直接查数据库
+        async with self._factory() as session:
+            stmt = sa.select(
+                sa.text("id, subject_id, fact_type")
+            ).select_from(sa.text("fact"))
+            conditions = [sa.text("organization_id = :org_id")]
+            params: dict[str, Any] = {"org_id": org_id}
+            if query:
+                conditions.append(sa.text("subject_id ILIKE :query"))
+                params["query"] = f"%{query}%"
+            if fact_type:
+                conditions.append(sa.text("fact_type = :fact_type"))
+                params["fact_type"] = fact_type
+            stmt = stmt.where(*conditions).limit(20)
+            result = await session.execute(stmt, params)
+            rows = result.fetchall()
+            items = [
+                {"id": str(r[0]), "subject_id": str(r[1]), "fact_type": str(r[2])}
+                for r in rows
+            ]
+            return {
+                "summary": f"搜索到 {len(items)} 条事实",
+                "data": {"count": len(items), "results": items},
+            }
+
+    async def _handle_search_standards(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 search_standards 工具：搜索标准变量。"""
+        query = str(args.get("query", ""))
+        async with self._factory() as session:
+            stmt = (
+                sa.select(
+                    sa.text("vv.id, v.code, vv.display_name, vv.canonical_unit")
+                )
+                .select_from(sa.text("variable_version vv"))
+                .join(sa.text("variable v"), sa.text("v.id = vv.variable_id"))
+                .where(
+                    sa.text("v.organization_id = :org_id"),
+                    sa.text("vv.status = 'published'"),
+                )
+            )
+            params: dict[str, Any] = {"org_id": org_id}
+            if query:
+                stmt = stmt.where(
+                    sa.text("(v.code ILIKE :q OR vv.display_name ILIKE :q)")
+                )
+                params["q"] = f"%{query}%"
+            stmt = stmt.limit(20)
+            result = await session.execute(stmt, params)
+            rows = result.fetchall()
+            items = [
+                {
+                    "id": str(r[0]),
+                    "code": str(r[1]),
+                    "display_name": str(r[2]),
+                    "unit": str(r[3]) if r[3] else "",
+                }
+                for r in rows
+            ]
+            return {
+                "summary": f"搜索到 {len(items)} 个标准变量",
+                "data": {"count": len(items), "results": items},
+            }
+
+    async def _handle_search_parameters(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 search_parameters 工具：搜索参数。"""
+        variable_code = str(args.get("variable_code", ""))
+        if self._parameter_service is not None:
+            try:
+                results = await self._parameter_service.search_by_variable(
+                    variable_code=variable_code,
+                    organization_id=org_id,
+                )
+                items = [
+                    {
+                        "id": str(r.get("id", "")),
+                        "variable_code": str(r.get("variable_code", "")),
+                        "value": str(r.get("value", "")),
+                        "status": str(r.get("status", "")),
+                    }
+                    for r in (results or [])[:20]
+                ]
+                return {
+                    "summary": f"搜索到 {len(items)} 个参数",
+                    "data": {"count": len(items), "results": items},
+                }
+            except Exception as exc:
+                return {
+                    "summary": f"参数搜索失败: {exc}",
+                    "data": {"error": str(exc)},
+                }
+        return {
+            "summary": "参数服务不可用",
+            "data": {"error": "parameter_service not configured"},
+        }
+
+    async def _handle_explain_provenance(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 explain_provenance 工具：解释溯源链路。"""
+        parameter_id = str(args.get("parameter_id", ""))
+        if self._provenance_service is not None:
+            try:
+                chain = await self._provenance_service.explain(
+                    parameter_id=parameter_id,
+                    organization_id=org_id,
+                )
+                return {
+                    "summary": f"溯源链路包含 {len(chain.get('steps', []))} 个步骤",
+                    "data": chain,
+                }
+            except Exception as exc:
+                return {
+                    "summary": f"溯源查询失败: {exc}",
+                    "data": {"error": str(exc)},
+                }
+        return {
+            "summary": "溯源服务不可用",
+            "data": {"error": "provenance_service not configured"},
+        }
+
+    async def _handle_compare_experiments(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 compare_experiments 工具：对比实验事实。"""
+        fact_ids = args.get("fact_ids", [])
+        if not isinstance(fact_ids, list) or len(fact_ids) < 2:
+            return {
+                "summary": "需要至少 2 个事实 ID 进行对比",
+                "data": {"error": "At least 2 fact_ids required"},
+            }
+
+        if self._fact_service is not None:
+            try:
+                facts = []
+                for fid in fact_ids[:5]:
+                    fact = await self._fact_service.get(
+                        fact_id=UUID(str(fid)),
+                        organization_id=org_id,
+                    )
+                    if fact:
+                        facts.append(fact)
+                return {
+                    "summary": f"对比了 {len(facts)} 个实验事实",
+                    "data": {
+                        "count": len(facts),
+                        "comparisons": [
+                            {
+                                "id": str(f.get("id", "")),
+                                "subject_id": str(f.get("subject_id", "")),
+                            }
+                            for f in facts
+                        ],
+                    },
+                }
+            except Exception as exc:
+                return {
+                    "summary": f"实验对比失败: {exc}",
+                    "data": {"error": str(exc)},
+                }
+        return {
+            "summary": "事实服务不可用",
+            "data": {"error": "fact_service not configured"},
+        }
+
+    async def _handle_run_model(
+        self, args: dict[str, Any], user: Any, org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 run_published_model 工具：运行已发布模型预测。"""
+        model_id = str(args.get("model_id", ""))
+        inputs = args.get("inputs", {})
+        if not isinstance(inputs, dict):
+            inputs = {}
+
+        if self._model_service is not None:
+            try:
+                result = await self._model_service.predict(
+                    model_id=UUID(model_id),
+                    inputs=inputs,
+                )
+                return {
+                    "summary": f"模型预测完成，版本 {result.version}",
+                    "data": {
+                        "model_id": str(result.model_id),
+                        "model_version_id": str(result.model_version_id),
+                        "version": result.version,
+                        "predictions": dict(result.predictions),
+                        "fact_id": str(result.fact_id) if result.fact_id else None,
+                    },
+                }
+            except Exception as exc:
+                return {
+                    "summary": f"模型预测失败: {exc}",
+                    "data": {"error": str(exc)},
+                }
+        return {
+            "summary": "模型服务不可用",
+            "data": {"error": "model_service not configured"},
+        }
+
+    async def _handle_draft_report(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 draft_report 工具：生成报告草稿（只读，不落库）。"""
+        title = str(args.get("title", "未命名报告"))
+        fact_ids = args.get("fact_ids", [])
+        if not isinstance(fact_ids, list):
+            fact_ids = []
+
+        # 查询引用的事实摘要
+        fact_summaries: list[dict[str, str]] = []
+        if fact_ids and self._factory is not None:
+            async with self._factory() as session:
+                for fid in fact_ids[:10]:
+                    try:
+                        result = await session.execute(
+                            sa.select(
+                                sa.text("subject_id, fact_type")
+                            )
+                            .select_from(sa.text("fact"))
+                            .where(
+                                sa.text("id = :fid"),
+                                sa.text("organization_id = :org_id"),
+                            ),
+                            {"fid": UUID(str(fid)), "org_id": org_id},
+                        )
+                        row = result.fetchone()
+                        if row:
+                            fact_summaries.append(
+                                {
+                                    "fact_id": str(fid),
+                                    "subject_id": str(row[0]),
+                                    "fact_type": str(row[1]),
+                                }
+                            )
+                    except Exception:
+                        pass
+
+        return {
+            "summary": f"报告草稿已生成，引用 {len(fact_summaries)} 个事实",
+            "data": {
+                "title": title,
+                "referenced_facts": fact_summaries,
+                "note": "草稿不落库，需用户确认后保存",
+            },
+        }
+
+    async def _handle_extract_data(
+        self, args: dict[str, Any], org_id: UUID
+    ) -> dict[str, Any]:
+        """执行 extract_data 工具：数据提取（标记为需要 ingestion:write 权限）。"""
+        path = str(args.get("path", ""))
+        prompt = str(args.get("prompt", ""))
+        return {
+            "summary": f"数据提取请求已记录（路径: {path[:100]}）",
+            "data": {
+                "path": path[:200],
+                "prompt": prompt[:500],
+                "note": "数据提取需要 ingestion 服务支持，当前返回元数据",
+            },
+        }
 
     def _redact_credentials(self, text: str) -> str:
         """凭据脱敏：移除回答中可能出现的密钥模式。
@@ -816,6 +1323,8 @@ class AIService:
             citations_list: list[dict[str, str]] = []
             for c in response.citations:
                 if isinstance(c, Citation):
+                    citations_list.append(c.to_dict())
+                elif isinstance(c, SignedCitation):
                     citations_list.append(c.to_dict())
                 elif isinstance(c, dict):
                     citations_list.append(c)

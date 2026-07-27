@@ -267,6 +267,8 @@ class ArtifactService:
 
         下载对象内容并重算 SHA-256，与 artifact_blob.sha256 比对。
 
+        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+
         Args:
             artifact_id: 工件 UUID。
 
@@ -278,7 +280,10 @@ class ArtifactService:
         """
         async with session_scope(self._factory) as session:
             artifact: Artifact | None = await session.scalar(
-                sa.select(Artifact).where(Artifact.id == artifact_id)
+                sa.select(Artifact).where(
+                    Artifact.id == artifact_id,
+                    Artifact.organization_id == self._org_id,
+                )
             )
             if artifact is None:
                 raise AppError(
@@ -304,6 +309,8 @@ class ArtifactService:
     async def get_artifact(self, artifact_id: UUID) -> ArtifactRef:
         """获取工件引用（只读）。
 
+        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+
         Args:
             artifact_id: 工件 UUID。
 
@@ -318,6 +325,7 @@ class ArtifactService:
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
+                        Artifact.organization_id == self._org_id,
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -345,6 +353,8 @@ class ArtifactService:
         通过 artifact_id 查找关联的 blob，从 S3 下载内容。
         供模型服务下载模型工件等场景使用。
 
+        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+
         Args:
             artifact_id: 工件 UUID。
 
@@ -359,6 +369,7 @@ class ArtifactService:
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
+                        Artifact.organization_id == self._org_id,
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -390,7 +401,7 @@ class ArtifactService:
         object_key = _build_object_key(sha256)
         return self._s3.presigned_put(object_key, expires)
 
-    def presign_upload_for_key(self, object_key: str, expires: int = 3600) -> str:
+    def presign_upload_for_key(self, object_key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
         """生成预签名上传 URL（基于任意 key）。
 
         用于预签名上传流程：客户端先上传到临时 key，
@@ -399,11 +410,12 @@ class ArtifactService:
         Args:
             object_key: S3 object key。
             expires: URL 有效期（秒）。
+            endpoint_override: 可选，用指定端点生成签名 URL。
 
         Returns:
             str: 预签名 PUT URL。
         """
-        return self._s3.presigned_put(object_key, expires)
+        return self._s3.presigned_put(object_key, expires, endpoint_override)
 
     async def complete_upload(
         self,
@@ -470,13 +482,16 @@ class ArtifactService:
         return await self.put_bytes(data, media_type, filename)
 
     async def presign_download(
-        self, artifact_id: UUID, expires: int = 3600
+        self, artifact_id: UUID, expires: int = 3600, endpoint_override: str | None = None,
     ) -> str:
         """异步生成预签名下载 URL。
+
+        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
 
         Args:
             artifact_id: 工件 UUID。
             expires: URL 有效期（秒）。
+            endpoint_override: 可选，用指定端点生成签名 URL。
 
         Returns:
             str: 预签名 GET URL。
@@ -492,7 +507,10 @@ class ArtifactService:
                         Artifact,
                         Artifact.sha256 == ArtifactBlob.sha256,
                     )
-                    .where(Artifact.id == artifact_id)
+                    .where(
+                        Artifact.id == artifact_id,
+                        Artifact.organization_id == self._org_id,
+                    )
                 )
             ).first()
             if row is None:
@@ -504,6 +522,6 @@ class ArtifactService:
                 )
             object_key: str = row[0]
             url: str = await asyncio.to_thread(
-                self._s3.presigned_get, object_key, expires
+                self._s3.presigned_get, object_key, expires, endpoint_override,
             )
             return url

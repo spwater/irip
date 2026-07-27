@@ -1,5 +1,6 @@
 """IRIP 测试根 conftest：共享数据库 fixtures + T06/T07 fixtures。
 
+F-17: 需要数据库的测试自动标记为 @pytest.mark.integration。
 提供 session-scoped 数据库引擎与异步会话工厂，供需要数据库的
 单元测试和安全测试使用。集成测试目录（tests/integration/）有
 自己的 conftest.py 覆盖这些 fixture（更近的 conftest 优先）。
@@ -43,9 +44,14 @@ def _to_async_url(url: str) -> str:
     return url
 
 
+# F-17: 需要数据库的 fixture 自动标记为 integration
+# 这些 fixture 依赖 IRIP_TEST_DATABASE_URL，属于集成测试范畴
+
 @pytest.fixture(scope="session")
 def sync_engine() -> Iterator[Engine]:
     """提供同步 SQLAlchemy 引擎连接到测试数据库。
+
+    F-17: 标记为 integration —— 需要真实数据库连接。
 
     路径 1（主）：``IRIP_TEST_DATABASE_URL`` 已设置。
     路径 2：未设置时 skip（依赖集成测试的 testcontainers 回退）。
@@ -66,7 +72,10 @@ def sync_engine() -> Iterator[Engine]:
 def async_session_factory(
     sync_engine: Engine,
 ) -> async_sessionmaker[AsyncSession]:
-    """提供异步会话工厂（NullPool，适配 TestClient 跨事件循环场景）。"""
+    """提供异步会话工厂（NullPool，适配 TestClient 跨事件循环场景）。
+
+    F-17: 依赖 sync_engine，自动继承 integration 标记。
+    """
     async_url = _to_async_url(
         sync_engine.url.render_as_string(hide_password=False)
     )

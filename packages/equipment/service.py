@@ -104,6 +104,7 @@ class EquipmentService:
         display_name: str,
         description: str | None,
         sort_order: int,
+        visible_departments: list[str] | None = None,
     ) -> Equipment:
         """创建设备仪器。
 
@@ -117,6 +118,7 @@ class EquipmentService:
             display_name: 中文显示名。
             description: 描述（可选）。
             sort_order: 排序权重。
+            visible_departments: 可见单位 ID 列表（可选，默认空数组）。
 
         Returns:
             Equipment: 新创建的设备实体。
@@ -144,6 +146,7 @@ class EquipmentService:
                 display_name=display_name,
                 description=description,
                 department_id=department_id,
+                visible_departments=visible_departments or [],
                 status=EquipmentStatus.ACTIVE.value,
                 sort_order=sort_order,
                 created_at=now,
@@ -155,6 +158,7 @@ class EquipmentService:
     async def list(
         self,
         department_id: UUID | None = None,
+        visible_dept_id: UUID | None = None,
         status: str | None = None,
         cursor: str | None = None,
         limit: int = DEFAULT_PAGE_SIZE,
@@ -163,6 +167,13 @@ class EquipmentService:
 
         排序：sort_order ASC, created_at ASC, id ASC。
         Keyset 分页：cursor 编码 (sort_order, created_at_iso, id)。
+
+        Args:
+            department_id: 部门 ID 筛选（含后代部门）。
+            visible_dept_id: 可见性部门 ID，用于 OR visible_departments 过滤。
+            status: 状态筛选。
+            cursor: 分页游标。
+            limit: 每页数量。
         """
         effective_limit = min(max(limit, 1), MAX_PAGE_SIZE)
 
@@ -181,6 +192,7 @@ class EquipmentService:
                 session,
                 organization_id=self._org_id,
                 department_id=department_id,
+                visible_dept_id=visible_dept_id,
                 status=status,
                 cursor_sort_order=cursor_sort_order,
                 cursor_created_at=cursor_created_at,
@@ -242,6 +254,7 @@ class EquipmentService:
         department_id: UUID,
         sort_order: int,
         lock_version: int,
+        visible_departments: list[str] | None = None,
     ) -> Equipment:
         """编辑设备（code 不可修改，乐观锁）。
 
@@ -255,6 +268,7 @@ class EquipmentService:
             department_id: 新部门 ID。
             sort_order: 新排序权重。
             lock_version: 客户端持有的乐观锁版本号。
+            visible_departments: 新可见单位 ID 列表（None 表示不修改）。
 
         Returns:
             Equipment: 更新后的实体（含新 lock_version）。
@@ -272,6 +286,7 @@ class EquipmentService:
                 department_id=department_id,
                 sort_order=sort_order,
                 lock_version=lock_version,
+                visible_departments=visible_departments,
             )
             if updated is not None:
                 return updated

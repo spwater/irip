@@ -2,7 +2,7 @@
 
 功能（实施计划 Task 9 第 697-706 行）：
   1. 创建/获取组织（IRIP-DEMO）；
-  2. 确保 7 个内置角色存在（INSERT ON CONFLICT DO NOTHING）；
+  2. 确保 5 个内置角色存在（INSERT ON CONFLICT DO NOTHING）；
   3. 创建管理员用户（admin@irip.local，密码从环境变量读）；
   4. 确保 MinIO bucket 存在。
 
@@ -113,7 +113,7 @@ class RoleRepository:
 
     @staticmethod
     async def ensure_builtin_roles(session: AsyncSession) -> None:
-        """确保 7 个内置角色存在（INSERT ON CONFLICT DO UPDATE）。
+        """确保 5 个内置角色存在（INSERT ON CONFLICT DO UPDATE）。
 
         迁移 0003 已种子角色，此方法保证 bootstrap 独立运行时角色也存在。
         """
@@ -344,7 +344,7 @@ class _RolesPort:
         self._factory = factory
 
     async def ensure_builtin_roles(self) -> None:
-        """确保 7 个内置角色存在。"""
+        """确保 5 个内置角色存在。"""
         async with self._factory() as session:
             async with session.begin():
                 await RoleRepository.ensure_builtin_roles(session)
@@ -392,9 +392,26 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
 
     全部操作幂等，可安全重复运行（实施计划第 697-706 行）。
 
+    F-12: 如果 IRIP_MASTER_KEY 未设置，生成随机 master key 并打印到 stderr
+    供运维人员记录到环境变量中。
+
     Args:
         container: 应用 DI 容器。
     """
+    # F-12: 确保有可用的 master key（envelope encryption）
+    master_key = os.getenv("IRIP_MASTER_KEY", "")
+    if not master_key:
+        from packages.common.crypto import generate_master_key
+
+        generated_key = generate_master_key()
+        logger.warning(
+            "IRIP_MASTER_KEY not set. Generated random master key for envelope encryption.\n"
+            "Please set IRIP_MASTER_KEY=%s in your environment for production use.\n"
+            "WARNING: Data encrypted with this key will not be recoverable after restart "
+            "unless this key is persisted.",
+            generated_key,
+        )
+
     logger.info("Bootstrap: ensuring organization IRIP-DEMO ...")
     organization = await container.organizations.get_or_create(
         code=DEMO_ORG_CODE,

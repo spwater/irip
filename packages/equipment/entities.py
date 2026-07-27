@@ -13,6 +13,7 @@ from enum import StrEnum
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.common.database import Base
@@ -46,6 +47,7 @@ class Equipment(Base):
         display_name: 中文显示名。
         description: 描述（可选）。
         department_id: 所属部门 ID（FK→department.id）。
+        visible_departments: 可见单位 ID 列表（JSONB 数组，跨实验室可见性）。
         status: 状态（active / disabled）。
         sort_order: 排序权重（默认 0）。
         created_at: 创建时间。
@@ -64,6 +66,12 @@ class Equipment(Base):
         GUID,
         sa.ForeignKey("department.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    visible_departments: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=sa.text("'[]'::jsonb"),
     )
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'active'")

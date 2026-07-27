@@ -8,6 +8,7 @@
 - table_index: 每页提取第几个表格（可选，默认 0，即第一个）。
 """
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,64 @@ import pdfplumber
 
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
+
+
+def _read_pdf_tables_sync(
+    path_str: str,
+    page_numbers: list[int] | None,
+    table_index: int,
+) -> tuple[tuple[str, ...], list[dict[str, Any]], list[dict[str, Any]]]:
+    """同步从 PDF 提取表格（在线程池中执行，F-21）。
+
+    Returns:
+        (columns, all_rows, source_locs)
+    """
+    all_rows: list[dict[str, Any]] = []
+    source_locs: list[dict[str, Any]] = []
+    columns: tuple[str, ...] = ()
+
+    with pdfplumber.open(Path(path_str)) as pdf:
+        pages = pdf.pages
+        if page_numbers:
+            pages = [
+                pages[p - 1]
+                for p in page_numbers
+                if 1 <= p <= len(pages)
+            ]
+
+        for page in pages:
+            tables = page.extract_tables()
+            if not tables:
+                continue
+            idx = min(table_index, len(tables) - 1)
+            table = tables[idx]
+            if not table:
+                continue
+
+            # 第一行作为表头
+            header = [
+                str(c).strip() if c else f"col_{i}"
+                for i, c in enumerate(table[0])
+            ]
+            if not columns:
+                columns = tuple(header)
+
+            for row_idx, row in enumerate(table[1:], start=1):
+                if all(c is None or c == "" for c in row):
+                    continue
+                record: dict[str, Any] = {}
+                for col_name, cell in zip(columns, row):
+                    record[col_name] = cell
+                all_rows.append(record)
+                source_locs.append(
+                    {
+                        "file": Path(path_str).name,
+                        "page": page.page_number,
+                        "row": row_idx,
+                    }
+                )
+
+    return columns, all_rows, source_locs
 
 
 class PDFTableReader:
@@ -30,50 +89,10 @@ class PDFTableReader:
         page_numbers: list[int] | None = params.get("page_numbers")
         table_index: int = int(params.get("table_index", 0))
 
-        all_rows: list[dict[str, Any]] = []
-        source_locs: list[dict[str, Any]] = []
-        columns: tuple[str, ...] = ()
-
-        with pdfplumber.open(Path(path_str)) as pdf:
-            pages = pdf.pages
-            if page_numbers:
-                pages = [
-                    pages[p - 1]
-                    for p in page_numbers
-                    if 1 <= p <= len(pages)
-                ]
-
-            for page in pages:
-                tables = page.extract_tables()
-                if not tables:
-                    continue
-                idx = min(table_index, len(tables) - 1)
-                table = tables[idx]
-                if not table:
-                    continue
-
-                # 第一行作为表头
-                header = [
-                    str(c).strip() if c else f"col_{i}"
-                    for i, c in enumerate(table[0])
-                ]
-                if not columns:
-                    columns = tuple(header)
-
-                for row_idx, row in enumerate(table[1:], start=1):
-                    if all(c is None or c == "" for c in row):
-                        continue
-                    record: dict[str, Any] = {}
-                    for col_name, cell in zip(columns, row):
-                        record[col_name] = cell
-                    all_rows.append(record)
-                    source_locs.append(
-                        {
-                            "file": Path(path_str).name,
-                            "page": page.page_number,
-                            "row": row_idx,
-                        }
-                    )
+        # F-21: 同步文件 I/O 放 asyncio.to_thread() 避免阻塞事件循环
+        columns, all_rows, source_locs = await asyncio.to_thread(
+            _read_pdf_tables_sync, path_str, page_numbers, table_index
+        )
 
         if not columns:
             return ComponentResult(

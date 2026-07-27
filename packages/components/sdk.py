@@ -54,7 +54,9 @@ class ComponentContext:
     - job_id: 关联作业 ID（用于溯源）；
     - cancel_event: 取消信号（编排器设置后组件应尽快退出）；
     - secrets: 密钥字典（仅含组件声明的 secret key，值已解密）；
-    - workdir: 组件专属临时工作目录（执行结束后清理）。
+    - workdir: 组件专属临时工作目录（执行结束后清理）；
+    - ai_config_provider: AI 配置提供函数（返回 dict | None），
+      消除 packages→apps 反向依赖（T3-3）。
 
     Attributes:
         organization_id: 当前组织 ID。
@@ -65,6 +67,7 @@ class ComponentContext:
         cancel_event: 取消事件（asyncio.Event）。
         secrets: 密钥字典。
         workdir: 临时工作目录路径。
+        ai_config_provider: AI 配置异步提供函数（可选）。
     """
 
     organization_id: UUID
@@ -75,6 +78,7 @@ class ComponentContext:
     cancel_event: asyncio.Event
     secrets: dict[str, str] = field(default_factory=dict)
     workdir: Path = field(default_factory=Path)
+    ai_config_provider: Any = field(default=None)
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,8 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import should_filter_by_department
+from packages.common.errors import AppError
 from packages.standards.object_graph import ObjectGraphService
 from packages.standards.objects import ObjectType, RelationType
 
@@ -57,6 +59,34 @@ ObjectGraphServiceDep = Annotated[
 ]
 
 
+async def _check_object_ownership(
+    current_user: CurrentUser,
+    obj_department_id: UUID | None,
+    service: ObjectGraphServiceDep,
+) -> None:
+    """检查当前用户是否可以编辑/删除对象（含后代继承）。
+
+    上级单位自动拥有下级单位的编辑权限。
+    可见单位的用户只能看不能改。平台管理员不受限制。
+    """
+    if not should_filter_by_department(current_user):
+        return
+    if obj_department_id is None:
+        return
+    if current_user.department_id is None:
+        raise AppError(code="forbidden", message="只有所属单位的成员才能编辑/删除对象", retryable=False, fields={})
+
+    from apps.api.dependencies.dept_scope import get_visible_department_ids
+    visible_ids = await get_visible_department_ids(current_user, service._factory)  # type: ignore[attr-defined]
+    if obj_department_id not in visible_ids:
+        raise AppError(
+            code="forbidden",
+            message="只有所属单位（或上级单位）的成员才能编辑/删除对象",
+            retryable=False,
+            fields={},
+        )
+
+
 # ---- 请求模型 ----
 
 
@@ -76,6 +106,10 @@ class CreateObjectRequest(BaseModel):
     description: str | None = Field(None, max_length=2000)
     parent_id: UUID | None = Field(None, description="父对象 ID")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
+    department_id: str | None = Field(None, description="所属部门 UUID")
+    visible_departments: list[str] = Field(
+        default_factory=list, description="可见单位 UUID 列表"
+    )
 
 
 class AddRelationRequest(BaseModel):
@@ -110,6 +144,8 @@ class ObjectResponse(BaseModel):
     description: str | None
     parent_id: str | None
     equipment_id: str | None
+    department_id: str | None
+    visible_departments: list[str]
     status: str
     created_at: datetime
     updated_at: datetime
@@ -126,6 +162,8 @@ class ObjectListItem(BaseModel):
     description: str | None
     parent_id: str | None
     equipment_id: str | None
+    department_id: str | None
+    visible_departments: list[str]
     status: str
     created_at: datetime
     updated_at: datetime
@@ -190,6 +228,8 @@ async def create_object(
         description=body.description,
         parent_id=body.parent_id,
         equipment_id=body.equipment_id,
+        department_id=UUID(body.department_id) if body.department_id else None,
+        visible_departments=body.visible_departments,
     )
     return _object_to_response(obj)
 
@@ -216,6 +256,17 @@ async def list_objects(
     Returns:
         ObjectListResponse: 分页列表。
     """
+    # 实验室级数据隔离：非管理员按 department_id + visible_departments 过滤
+    # 可见性规则：department_id == 用户实验室 OR visible_departments 包含用户实验室
+    if should_filter_by_department(current_user):
+        if current_user.department_id is None:
+            return ObjectListResponse(items=[], next_cursor=None)
+        filter_dept_id = current_user.department_id
+        filter_visible_dept_id = current_user.department_id
+    else:
+        filter_dept_id = None
+        filter_visible_dept_id = None
+
     # 多类型过滤：逗号分隔 → list 传给 service 做 IN 查询
     if object_type and "," in object_type:
         types = [t.strip() for t in object_type.split(",") if t.strip()]
@@ -223,6 +274,8 @@ async def list_objects(
             object_type=types,
             cursor=cursor,
             page_size=page_size,
+            department_id=filter_dept_id,
+            visible_dept_id=filter_visible_dept_id,
         )
         return ObjectListResponse(
             items=[_object_to_list_item(obj) for obj in items],
@@ -233,6 +286,8 @@ async def list_objects(
         object_type=object_type,
         cursor=cursor,
         page_size=page_size,
+        department_id=filter_dept_id,
+        visible_dept_id=filter_visible_dept_id,
     )
     return ObjectListResponse(
         items=[_object_to_list_item(obj) for obj in items],
@@ -269,6 +324,10 @@ class UpdateObjectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
+    department_id: str | None = Field(None, description="新所属部门 UUID（None 表示不修改）")
+    visible_departments: list[str] | None = Field(
+        None, description="新可见单位 UUID 列表（None 表示不修改）"
+    )
 
 
 class UpdateObjectStatusRequest(BaseModel):
@@ -298,11 +357,17 @@ async def update_object(
     Raises:
         AppError: code="not_found"，当对象不存在时。
     """
+    # 归属检查：只有所属单位的成员才能编辑
+    existing = await service.get_object(object_id)
+    await _check_object_ownership(current_user, existing.department_id, service)
+
     obj = await service.update_object(
         object_id=object_id,
         display_name=body.display_name,
         description=body.description,
         equipment_id=body.equipment_id,
+        department_id=UUID(body.department_id) if body.department_id else None,
+        visible_departments=body.visible_departments,
     )
     return _object_to_response(obj)
 
@@ -327,6 +392,10 @@ async def update_object_status(
     Returns:
         ObjectResponse: 更新后的对象。
     """
+    # 归属检查：只有所属单位的成员才能操作
+    existing = await service.get_object(object_id)
+    await _check_object_ownership(current_user, existing.department_id, service)
+
     obj = await service.set_object_status(
         object_id=object_id,
         status=body.status,
@@ -348,6 +417,10 @@ async def delete_object(
         AppError: code="not_found"，当对象不存在时。
         AppError: code="conflict"，当存在活跃关系或子对象时。
     """
+    # 归属检查：只有所属单位的成员才能删除
+    existing = await service.get_object(object_id)
+    await _check_object_ownership(current_user, existing.department_id, service)
+
     await service.delete_object(object_id)
 
 
@@ -488,6 +561,8 @@ def _object_to_response(obj: object) -> ObjectResponse:
         description=obj.description,  # type: ignore[attr-defined]
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
+        department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]
+        visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]
@@ -505,6 +580,8 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         description=obj.description,  # type: ignore[attr-defined]
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
+        department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]
+        visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]

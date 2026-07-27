@@ -37,15 +37,19 @@ class S3Repository:
         secret_key: str,
         bucket_name: str = "irip",
         region: str = "us-east-1",
+        external_endpoint_url: str | None = None,
     ) -> None:
         """初始化 S3 客户端。
 
         Args:
-            endpoint_url: S3 兼容端点 URL（如 ``http://localhost:59000``）。
+            endpoint_url: S3 兼容端点 URL（如 ``http://minio:9000``）。
             access_key: 访问密钥。
             secret_key: 秘密密钥。
             bucket_name: 默认 bucket 名称。
             region: 区域名（MinIO 默认 us-east-1）。
+            external_endpoint_url: 外部访问端点 URL（用于生成预签名 URL）。
+                为 None 时预签名 URL 用内部端点生成。非 None 时，预签名
+                URL 用该端点生成，确保签名与浏览器访问的 host 一致。
         """
         self._client: BaseClient = boto3.client(
             "s3",
@@ -56,6 +60,21 @@ class S3Repository:
             region_name=region,
         )
         self._bucket: str = bucket_name
+        self._access_key = access_key
+        self._secret_key = secret_key
+        self._region = region
+        # 预签名专用 client：用外部端点生成 URL，确保签名 host 与浏览器访问一致
+        if external_endpoint_url:
+            self._presign_client: BaseClient = boto3.client(
+                "s3",
+                endpoint_url=external_endpoint_url,
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                config=BotoConfig(signature_version="s3v4"),
+                region_name=region,
+            )
+        else:
+            self._presign_client = self._client
 
     @property
     def bucket(self) -> str:
@@ -145,34 +164,55 @@ class S3Repository:
         except ClientError:
             return False
 
-    def presigned_put(self, key: str, expires: int = 3600) -> str:
+    def _make_presign_client(self, endpoint_override: str | None = None) -> BaseClient:
+        """构造用于生成预签名 URL 的 client。
+
+        无 override 时用 _presign_client（外部端点或内部端点）。
+        有 override 时动态创建临时 client，确保签名 host 与浏览器访问一致。
+        """
+        if not endpoint_override:
+            return self._presign_client
+        return boto3.client(
+            "s3",
+            endpoint_url=endpoint_override,
+            aws_access_key_id=self._access_key,
+            aws_secret_access_key=self._secret_key,
+            config=BotoConfig(signature_version="s3v4"),
+            region_name=self._region,
+        )
+
+    def presigned_put(self, key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
         """生成预签名 PUT URL。
 
         Args:
             key: 对象 key。
             expires: URL 有效期（秒），默认 3600。
+            endpoint_override: 可选，用指定端点生成签名 URL（host 与浏览器一致）。
 
         Returns:
             str: 预签名 PUT URL。
         """
-        url: str = self._client.generate_presigned_url(
+        client = self._make_presign_client(endpoint_override)
+        url: str = client.generate_presigned_url(
             "put_object",
             Params={"Bucket": self._bucket, "Key": key},
             ExpiresIn=expires,
         )
         return url
 
-    def presigned_get(self, key: str, expires: int = 3600) -> str:
+    def presigned_get(self, key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
         """生成预签名 GET URL。
 
         Args:
             key: 对象 key。
             expires: URL 有效期（秒），默认 3600。
+            endpoint_override: 可选，用指定端点生成签名 URL（host 与浏览器一致）。
 
         Returns:
             str: 预签名 GET URL。
         """
-        url: str = self._client.generate_presigned_url(
+        client = self._make_presign_client(endpoint_override)
+        url: str = client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self._bucket, "Key": key},
             ExpiresIn=expires,

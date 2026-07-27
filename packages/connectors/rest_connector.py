@@ -20,6 +20,7 @@ from uuid import UUID
 import httpx
 
 from packages.common.errors import AppError
+from packages.common.safe_http import SafeHTTPClient
 from packages.connectors.contracts import (
     ConnectorSource,
     PreviewTable,
@@ -175,10 +176,15 @@ class RestConnector:
         headers: dict[str, str],
         limit: int,
     ) -> tuple[tuple[str, ...], list[list]]:
-        """发起 HTTP 请求并解析 JSON 数组为 (列名, 行列表)。"""
+        """发起 HTTP 请求并解析 JSON 数组为 (列名, 行列表)。
+
+        安全约定（技术设计文档 F-13）：
+        - 使用 SafeHTTPClient 发起请求（SSRF 防护）；
+        - DNS 解析后校验目标 IP，拒绝私网/保留地址。
+        """
         url = base_url.rstrip("/") + "/" + path.lstrip("/")
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with SafeHTTPClient(timeout=30.0, max_size=10 * 1024 * 1024) as client:
                 if method == "GET":
                     response = await client.get(url, headers=headers)
                 else:
@@ -190,6 +196,13 @@ class RestConnector:
                 code="connector_error",
                 message=f"REST 请求失败：{exc}",
                 retryable=True,
+                fields={},
+            ) from exc
+        except ValueError as exc:
+            raise AppError(
+                code="ssrf_blocked",
+                message=f"REST 请求被 SSRF 防护阻断：{exc}",
+                retryable=False,
                 fields={},
             ) from exc
 

@@ -14,6 +14,7 @@
 
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from packages.common.errors import AppError
 
@@ -38,6 +39,46 @@ class ToolSpec:
     required_permission: str
     candidate: bool = False
     parameters_schema: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ToolDefinition:
+    """工具定义（不可变值对象，安全控制层用）。
+
+    与 ``ToolSpec`` 对应，用于 ``validate_invocation`` 安全验证流程。
+    ``auto_executable`` 对应 ``ToolSpec.candidate`` 的反值。
+
+    Attributes:
+        name: 工具唯一名称。
+        description: 工具描述。
+        required_permission: 调用此工具所需的权限字符串。
+        auto_executable: 是否允许 AI 自动执行。True 表示低风险只读操作，
+            False 表示需用户显式确认。
+    """
+
+    name: str
+    description: str
+    required_permission: str
+    auto_executable: bool = False
+
+
+@dataclass
+class ToolInvocation:
+    """工具调用请求（安全验证用）。
+
+    Attributes:
+        tool_name: 要调用的工具名称。
+        parameters: 调用参数字典（可能含秘密，需脱敏）。
+        user_id: 调用者用户 UUID。
+        user_roles: 调用者角色代码列表（用于权限检查）。
+        confirmed: 用户是否已显式确认此次调用。
+    """
+
+    tool_name: str
+    parameters: dict[str, Any]
+    user_id: UUID
+    user_roles: list[str]
+    confirmed: bool = False
 
 
 #: 8 个白名单工具（只读）。
@@ -274,15 +315,29 @@ class ToolRegistry:
         for spec in tools:
             self.register(spec)
 
-    def register(self, spec: ToolSpec) -> None:
+    def register(self, spec: ToolSpec | ToolDefinition) -> None:
         """注册一个工具规格。
 
+        接受 ``ToolSpec`` 或 ``ToolDefinition``（向后兼容 tool_registry.py）。
+        ``ToolDefinition`` 会被转换为 ``ToolSpec``：``auto_executable`` 的反值
+        映射为 ``candidate``。
+
         Args:
-            spec: 工具规格。
+            spec: 工具规格（ToolSpec 或 ToolDefinition）。
 
         Raises:
             AppError: code="validation_failed"，当工具名重复注册时。
         """
+        # ToolDefinition 向后兼容：转换为 ToolSpec
+        if isinstance(spec, ToolDefinition):
+            spec = ToolSpec(
+                name=spec.name,
+                display_name=spec.name,
+                description=spec.description,
+                required_permission=spec.required_permission,
+                candidate=not spec.auto_executable,
+                parameters_schema={},
+            )
         if spec.name in self._tools:
             raise AppError(
                 code="validation_failed",
@@ -374,3 +429,100 @@ class ToolRegistry:
     def names(self) -> tuple[str, ...]:
         """返回全部工具名称元组。"""
         return tuple(self._tools.keys())
+
+    def to_definitions(self) -> list[ToolDefinition]:
+        """将全部 ToolSpec 转为 ToolDefinition（安全验证用）。
+
+        Returns:
+            list[ToolDefinition]: 工具定义列表。
+        """
+        return [
+            ToolDefinition(
+                name=s.name,
+                description=s.description,
+                required_permission=s.required_permission,
+                auto_executable=not s.candidate,
+            )
+            for s in self._tools.values()
+        ]
+
+    def validate_invocation(self, invocation: ToolInvocation) -> ToolDefinition:
+        """验证工具调用请求（四道安全防线）。
+
+        1. 未知工具拒绝：注册表外的工具名一律拒绝；
+        2. 候选工具确认：``auto_executable=False`` 的工具需用户确认；
+        3. 权限检查：基于用户角色检查所需权限；
+        4. 全部通过 → 返回 ToolDefinition。
+
+        Args:
+            invocation: 工具调用请求。
+
+        Returns:
+            ToolDefinition: 验证通过的工具定义。
+
+        Raises:
+            AppError: code="unknown_tool"，当工具名不在注册表中。
+            AppError: code="confirmation_required"，当工具需确认但未确认。
+            AppError: code="forbidden"，当用户无所需权限。
+        """
+        spec = self._tools.get(invocation.tool_name)
+        if spec is None:
+            raise AppError(
+                code="unknown_tool",
+                message=f"未知工具: {invocation.tool_name}",
+                retryable=False,
+                fields={"tool_name": invocation.tool_name},
+            )
+
+        # 候选工具（非 auto_executable）需用户确认
+        if spec.candidate and not invocation.confirmed:
+            raise AppError(
+                code="confirmation_required",
+                message=(
+                    f"工具 {invocation.tool_name} 需要用户确认后才能执行"
+                ),
+                retryable=False,
+                fields={"tool_name": invocation.tool_name},
+            )
+
+        # 权限检查（基于用户角色）
+        from packages.auth.permissions import has_role_permission
+
+        has_permission: bool = any(
+            has_role_permission(role, spec.required_permission)
+            for role in invocation.user_roles
+        )
+        if not has_permission:
+            raise AppError(
+                code="forbidden",
+                message=(
+                    f"用户无权执行工具 {invocation.tool_name}，"
+                    f"需要权限: {spec.required_permission}"
+                ),
+                retryable=False,
+                fields={"required_permission": spec.required_permission},
+            )
+
+        return ToolDefinition(
+            name=spec.name,
+            description=spec.description,
+            required_permission=spec.required_permission,
+            auto_executable=not spec.candidate,
+        )
+
+    @staticmethod
+    def redact_parameters(parameters: dict[str, Any]) -> dict[str, Any]:
+        """脱敏工具参数中的秘密。
+
+        复用 ``packages.audit.redaction.redact`` 实现，
+        将 password / token / secret / api_key 等字段的值替换为 ``[REDACTED]``。
+
+        Args:
+            parameters: 原始参数字典。
+
+        Returns:
+            dict[str, Any]: 脱敏后的参数字典（新对象，不修改原始字典）。
+        """
+        from packages.audit.redaction import redact
+
+        return redact(parameters)

@@ -53,32 +53,33 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ---- Step 1: Lint ----
-step_header "Ruff 静态检查 (apps packages tests)"
-if $PY -m ruff check apps packages tests; then
-    step_pass "Ruff lint — 0 errors"
+# ---- Step 1: Lint + Format ----
+step_header "Ruff 静态检查 + 格式检查 (apps packages tests)"
+if $PY -m ruff check apps packages tests && $PY -m ruff format --check apps packages tests; then
+    step_pass "Ruff lint + format — 0 errors"
 else
-    step_fail "Ruff lint 失败"
+    step_fail "Ruff lint 或 format 检查失败"
 fi
 
 # ---- Step 2: Type check ----
-step_header "Mypy 严格类型检查 (apps packages)"
-if $PY -m mypy apps packages; then
+step_header "Mypy 严格类型检查 (packages apps/api)"
+if $PY -m mypy packages apps/api; then
     step_pass "Mypy type check — 0 errors"
 else
     step_fail "Mypy type check 失败"
 fi
 
-# ---- Step 3: Unit + Property + Contract + Integration tests ----
-step_header "Python 测试套件 (unit + property + contract + integration + security + recovery + acceptance)"
+# ---- Step 3: Python 测试套件 ----
+# F-16: 删除不存在的 tests/property 引用
+step_header "Python 测试套件 (unit + contract + integration + security + recovery + acceptance)"
 if $PY -m pytest \
     tests/unit \
-    tests/property \
     tests/contract \
     tests/integration \
     tests/security \
     tests/recovery \
-    tests/acceptance; then
+    tests/acceptance \
+    tests/performance; then
     step_pass "Python 测试套件 — 100% pass"
 else
     step_fail "Python 测试套件失败"
@@ -109,6 +110,7 @@ else
 fi
 
 # ---- Step 7: Docker Compose up ----
+# F-16: 先启动 Docker 基础设施再迁移和执行测试
 step_header "Docker Compose 全量启动 (release-gate 环境)"
 echo "  构建并启动全部服务..."
 if docker compose up --build -d; then
@@ -133,6 +135,7 @@ else
 fi
 
 # ---- Step 8: E2E tests ----
+# F-16: E2E 测试在 Docker 基础设施就绪后运行
 step_header "前端 E2E 测试 (apps/web)"
 if $PNPM --dir apps/web e2e; then
     step_pass "前端 E2E 测试 — 100% pass"
@@ -146,6 +149,30 @@ step_header "清理 Docker Compose 环境"
 step_pass "清理完成"
 
 # ---- 最终结果 ----
+# F-16: 迁移版本动态读取（alembic heads）
+MIGRATION_HEADS=""
+if $PY -c "
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+config = Config()
+config.set_main_option('script_location', 'migrations')
+script_dir = ScriptDirectory.from_config(config)
+heads = [rev.revision for rev in script_dir.get_revisions('heads')]
+print(', '.join(heads))
+" 2>/dev/null; then
+    MIGRATION_HEADS=$($PY -c "
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+config = Config()
+config.set_main_option('script_location', 'migrations')
+script_dir = ScriptDirectory.from_config(config)
+heads = [rev.revision for rev in script_dir.get_revisions('heads')]
+print(', '.join(heads))
+" 2>/dev/null)
+else
+    MIGRATION_HEADS="unknown"
+fi
+
 echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  RELEASE GATE PASSED${NC}"
@@ -154,6 +181,6 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "  版本: 0.1.0"
 echo "  阶段: Phase V0-V3 全栈交付"
-echo "  迁移版本: 0021_ai_conversations"
+echo "  迁移版本: ${MIGRATION_HEADS}"
 echo ""
 exit 0

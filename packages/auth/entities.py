@@ -65,6 +65,9 @@ class AppUser(Base):
         server_default=sa.text("'[]'::jsonb"),
         default=list,
     )
+    department_id: Mapped[UUID | None] = mapped_column(
+        GUID, nullable=True, comment="所属实验室 ID（FK→department.id）"
+    )
 
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
         "RefreshSession",

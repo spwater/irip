@@ -12,6 +12,11 @@
   cancel_event（Python）/ SIGTERM（CLI）；
 - CLI Runner 创建临时工作目录，隔离执行环境；
 - CLI Runner 过滤环境变量，仅传递安全变量（不含 secrets 明文）。
+
+安全增强（技术设计文档 F-13，T1-9）：
+- SAFE_CLI_MODE 环境变量开关（默认 false），开启后 CLI 组件在
+  沙箱容器中执行（无网络、只读 FS、非 root、资源限制）；
+- 生产环境开启 SAFE_CLI_MODE=true，开发/测试环境保持 false（现有行为）。
 """
 
 import asyncio
@@ -31,6 +36,26 @@ from packages.components.sdk import (
 
 #: Python 组件默认超时秒数。
 _DEFAULT_PYTHON_TIMEOUT: float = 300.0
+
+#: CLI 组件沙箱模式开关（环境变量 IRIP_SAFE_CLI_MODE）。
+#: - false（默认）：CLI 组件直接在当前进程中执行（开发/测试环境）；
+#: - true：CLI 组件在独立沙箱容器中执行（生产环境，F-13 安全增强）。
+_SAFE_CLI_MODE: bool = os.getenv("IRIP_SAFE_CLI_MODE", "false").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+
+#: 沙箱容器镜像名称。
+_SANDBOX_IMAGE: str = os.getenv(
+    "IRIP_CLI_SANDBOX_IMAGE", "irip-cli-sandbox:latest"
+)
+
+#: 沙箱容器内存上限（字节）。
+_SANDBOX_MEMORY_LIMIT: str = os.getenv("IRIP_CLI_SANDBOX_MEMORY", "512m")
+
+#: 沙箱容器 CPU 核数上限。
+_SANDBOX_CPU_LIMIT: str = os.getenv("IRIP_CLI_SANDBOX_CPUS", "1")
 
 
 class PythonComponentRunner:
@@ -334,17 +359,32 @@ class CLIComponentRunner:
 
             # 4. 执行子进程
             output_path = workdir / "output.json"
-            full_command = command + [
-                str(input_path), str(output_path)
-            ]
+
+            if _SAFE_CLI_MODE:
+                # 沙箱模式：在隔离容器中执行（F-13 安全增强）
+                full_command = self._build_sandbox_command(
+                    command, workdir, input_path, output_path
+                )
+                exec_kwargs: dict[str, Any] = {
+                    "stdout": asyncio.subprocess.PIPE,
+                    "stderr": asyncio.subprocess.PIPE,
+                }
+            else:
+                # 直接模式：在当前进程中执行（默认，开发/测试环境）
+                full_command = command + [
+                    str(input_path), str(output_path)
+                ]
+                exec_kwargs = {
+                    "cwd": str(workdir),
+                    "env": safe_env,
+                    "stdout": asyncio.subprocess.PIPE,
+                    "stderr": asyncio.subprocess.PIPE,
+                }
 
             try:
                 process = await asyncio.create_subprocess_exec(
                     *full_command,
-                    cwd=str(workdir),
-                    env=safe_env,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                    **exec_kwargs,
                 )
             except FileNotFoundError as exc:
                 raise AppError(
@@ -463,6 +503,60 @@ class CLIComponentRunner:
                 metadata=output_data.get("metadata", {}),
                 diagnostics=output_data.get("diagnostics"),
             )
+
+    def _build_sandbox_command(
+        self,
+        command: list[str],
+        workdir: Path,
+        input_path: Path,
+        output_path: Path,
+    ) -> list[str]:
+        """构建沙箱容器执行命令。
+
+        将 CLI 组件命令包装在 ``docker run`` 中，应用安全限制：
+        - ``--network=none``：无网络访问；
+        - ``--read-only``：只读根文件系统；
+        - ``--tmpfs``：工作目录使用 tmpfs（可写）；
+        - ``--user 2000:2000``：非 root 用户；
+        - ``--cap-drop=ALL``：丢弃所有 Linux capabilities；
+        - ``--memory`` / ``--cpus``：资源限制；
+        - ``--rm``：执行完自动清理容器。
+
+        Args:
+            command: CLI 组件命令列表。
+            workdir: 主机临时工作目录。
+            input_path: input.json 路径。
+            output_path: output.json 路径。
+
+        Returns:
+            list[str]: 完整的 docker run 命令列表。
+        """
+        container_workdir = "/tmp/component-work"
+        container_input = f"{container_workdir}/input.json"
+        container_output = f"{container_workdir}/output.json"
+
+        docker_command: list[str] = [
+            "docker", "run", "--rm",
+            # 安全限制
+            "--network=none",
+            "--read-only",
+            "--tmpfs", "/tmp:rw,size=64m,mode=1777",
+            "--user", "2000:2000",
+            "--cap-drop=ALL",
+            "--no-new-privileges",
+            f"--memory={_SANDBOX_MEMORY_LIMIT}",
+            f"--cpus={_SANDBOX_CPU_LIMIT}",
+            # 挂载工作目录（input.json + output.json 通信）
+            "-v", f"{workdir}:{container_workdir}",
+            "-w", container_workdir,
+            # 沙箱镜像
+            _SANDBOX_IMAGE,
+            # 组件命令
+            *command,
+            container_input,
+            container_output,
+        ]
+        return docker_command
 
     def _build_safe_env(
         self,

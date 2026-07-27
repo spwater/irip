@@ -23,7 +23,7 @@ import {
   type JobStatus,
 } from '@/api/client';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /** 状态 → 颜色映射 */
 const STATUS_COLOR: Record<string, string> = {
@@ -218,8 +218,6 @@ export function JobsPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={3}>作业中心</Title>
-
       <Space style={{ marginBottom: 16 }} wrap>
         <Select
           placeholder="状态筛选"

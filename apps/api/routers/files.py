@@ -12,6 +12,7 @@
 """
 
 import os
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, UploadFile
@@ -39,8 +40,8 @@ _BROWSE_ROOT = os.environ.get(
 #: 需 flow:read 权限的当前用户依赖。
 ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
 
-#: 需 flow:read 权限 + 工件服务的上传依赖。
-UploadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
+#: 需 artifact:upload 权限的当前用户依赖（文件上传需独立写权限）。
+UploadUserDep = Annotated[CurrentUser, Depends(require_permission("artifact:upload"))]
 ArtifactServiceDep = Annotated[ArtifactService, Depends(get_artifact_service)]
 
 #: 文件扩展名 → 媒体类型映射（用于从文件名推断 MIME 类型）。
@@ -117,8 +118,9 @@ async def browse_files(
         target = root
     else:
         target = os.path.realpath(os.path.join(root, path))
-        # 安全检查：确保目标在根目录内
-        if not target.startswith(root):
+        # 安全检查：使用 Path.is_relative_to 确保目标在根目录内
+        # 防止符号链接/路径穿越绕过 startswith 检查
+        if not Path(target).is_relative_to(root):
             target = root
 
     if not os.path.isdir(target):
@@ -177,14 +179,14 @@ async def upload_file(
     """上传文件到 MinIO，返回 artifact_id 供后续使用。
 
     流程：
-    1. 读取上传文件内容到内存；
-    2. 校验文件大小（上限 100 MiB）；
+    1. 流式读取上传文件内容（分块读取，避免一次性加载大文件到内存，F-21）；
+    2. 校验文件大小（上限 100 MiB，读取时即时检查）；
     3. 推断媒体类型（优先 Content-Type，其次文件扩展名）；
     4. 通过 ArtifactService.put_bytes 上传到 MinIO（含去重）；
     5. 返回 artifact_id + 原始文件名 + 大小。
 
     Args:
-        current_user: 当前认证用户（需 flow:read 权限）。
+        current_user: 当前认证用户（需 artifact:upload 权限）。
         service: 工件服务（DI 注入）。
         file: 上传的文件对象。
 
@@ -195,22 +197,33 @@ async def upload_file(
         AppError: code="file_too_large"，当文件超过 100 MiB。
         AppError: code="unsupported_media_type"，当媒体类型不在白名单。
     """
-    data: bytes = await file.read()
+    # F-21: 流式分块读取，避免一次性将大文件加载到内存
+    _CHUNK_SIZE: int = 1024 * 1024  # 1 MiB chunks
+    chunks: list[bytes] = []
+    total_size: int = 0
 
-    size: int = len(data)
-    if size > MAX_UPLOAD_SIZE_BYTES:
-        raise AppError(
-            code="file_too_large",
-            message=(
-                f"文件大小 {size} 超过上限 "
-                f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
-            ),
-            retryable=False,
-            fields={
-                "size_bytes": size,
-                "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
-            },
-        )
+    while True:
+        chunk: bytes = await file.read(_CHUNK_SIZE)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_UPLOAD_SIZE_BYTES:
+            raise AppError(
+                code="file_too_large",
+                message=(
+                    f"文件大小超过上限 "
+                    f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
+                ),
+                retryable=False,
+                fields={
+                    "size_bytes": total_size,
+                    "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+                },
+            )
+        chunks.append(chunk)
+
+    data: bytes = b"".join(chunks)
+    size: int = total_size
 
     filename: str = file.filename or "unnamed"
     content_type: str | None = file.content_type

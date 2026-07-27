@@ -58,8 +58,12 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     factory = build_session_factory(async_url)
 
-    # 设置 AI 配置的 session factory，使 LLM 组件能查询数据库获取 AI 配置
-    from apps.api.routers.ai_config import set_session_factory as set_ai_config_session_factory
+    # 设置 AI 配置的 session factory + 提供器，使 LLM 组件能查询数据库获取 AI 配置
+    # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
+    from apps.api.routers.ai_config import (
+        get_active_ai_config,
+        set_session_factory as set_ai_config_session_factory,
+    )
     set_ai_config_session_factory(factory)
 
     organization_id = UUID(str(payload["organization_id"]))
@@ -103,6 +107,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         job_service=job_service,
         clock=SystemClock(),
         artifact_service=art_svc,
+        ai_config_provider=get_active_ai_config,
     )
 
     run_uuid = UUID(run_id)
@@ -247,6 +252,8 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     """
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
+    from packages.common.s3_repository import S3Repository
+    from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
     from packages.components.flow_runtime import FlowRuntimeService, FlowRun
     from packages.components.registry import ComponentRegistryService
@@ -267,8 +274,12 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
 
     factory = build_session_factory(async_url)
 
-    # 设置 AI 配置的 session factory，使 LLM 组件能查询数据库获取 AI 配置
-    from apps.api.routers.ai_config import set_session_factory as set_ai_config_session_factory
+    # 设置 AI 配置的 session factory + 提供器，使 LLM 组件能查询数据库获取 AI 配置
+    # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
+    from apps.api.routers.ai_config import (
+        get_active_ai_config,
+        set_session_factory as set_ai_config_session_factory,
+    )
     set_ai_config_session_factory(factory)
 
     organization_id = UUID(str(payload["organization_id"]))
@@ -312,6 +323,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
         job_service=job_service,
         clock=SystemClock(),
         artifact_service=art_svc,
+        ai_config_provider=get_active_ai_config,
     )
 
     run_uuid = UUID(run_id)

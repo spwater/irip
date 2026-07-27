@@ -256,6 +256,23 @@ export async function apiListDepartments(
   return res.data;
 }
 
+/** 部门名称映射项（仅 id + display_name，不受部门隔离限制） */
+export type DepartmentNameMapItem = {
+  id: string;
+  display_name: string;
+};
+
+/**
+ * 获取全部门 ID→名称映射（不受部门隔离限制）。
+ *
+ * 专用于前端名称展示场景（如设备可见单位列渲染），只返回 id 和
+ * display_name，不含敏感数据。所有有 department:read 权限的用户可调用。
+ */
+export async function apiGetDepartmentNameMap(): Promise<DepartmentNameMapItem[]> {
+  const res = await http.get<DepartmentNameMapItem[]>('/departments/name-map');
+  return res.data;
+}
+
 export async function apiGetDepartment(id: string): Promise<Department> {
   const res = await http.get<Department>(`/departments/${id}`);
   return res.data;
@@ -372,6 +389,8 @@ export type IndustrialObject = {
   status: string;
   parent_id: string | null;
   equipment_id: string | null;
+  department_id: string | null;
+  visible_departments: string[];
   created_at: string;
   updated_at: string;
   lock_version: number;
@@ -713,6 +732,8 @@ export async function apiCreateObject(body: {
   description?: string;
   parent_id?: string;
   equipment_id?: string;
+  department_id?: string;
+  visible_departments?: string[];
 }): Promise<IndustrialObject> {
   const res = await http.post<IndustrialObject>('/objects', body);
   return res.data;
@@ -736,6 +757,8 @@ export async function apiUpdateObject(objectId: string, body: {
   display_name: string;
   description?: string | null;
   equipment_id?: string | null;
+  department_id?: string | null;
+  visible_departments?: string[] | null;
 }): Promise<IndustrialObject> {
   const res = await http.patch<IndustrialObject>(`/objects/${objectId}`, body);
   return res.data;
@@ -1079,6 +1102,7 @@ export type TaskInfo = {
   task_source: string | null;
   operator: string | null;
   project_name: string | null;
+  department_name: string | null;
   data_interface: string | null;
   created_at: string | null;
   experimental_object_codes: string[] | null;
@@ -1299,6 +1323,7 @@ export type Equipment = {
   display_name: string;
   description: string | null;
   department_id: string;
+  visible_departments: string[];
   status: string;
   sort_order: number;
   created_at: string;
@@ -1314,6 +1339,7 @@ export type EquipmentListItem = {
   description: string | null;
   department_id: string;
   department_name: string;
+  visible_departments: string[];
   status: string;
   sort_order: number;
 };
@@ -1356,6 +1382,7 @@ export async function apiCreateEquipment(body: {
   display_name: string;
   description?: string;
   department_id: string;
+  visible_departments?: string[];
   sort_order?: number;
 }): Promise<Equipment> {
   const res = await http.post<Equipment>('/equipment', body);
@@ -1368,6 +1395,7 @@ export async function apiUpdateEquipment(
     display_name: string;
     description?: string;
     department_id?: string;
+    visible_departments?: string[];
     sort_order?: number;
     lock_version: number;
   },
@@ -2139,6 +2167,7 @@ export type UserListItem = {
   display_name: string;
   roles: string[];
   status: string;
+  department_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2146,27 +2175,6 @@ export type UserListItem = {
 /** 用户列表分页响应 */
 export type UserListResponse = {
   items: UserListItem[];
-  next_cursor: string | null;
-  has_more: boolean;
-};
-
-/** 范围授权列表项 */
-export type ScopeGrantListItem = {
-  id: string;
-  user_id: string | null;
-  role_id: string | null;
-  organization_id: string;
-  object_root_id: string | null;
-  department_id: string | null;
-  resource_type: string;
-  action: string;
-  effective_from: string | null;
-  effective_to: string | null;
-};
-
-/** 范围授权列表分页响应 */
-export type ScopeGrantListResponse = {
-  items: ScopeGrantListItem[];
   next_cursor: string | null;
   has_more: boolean;
 };
@@ -2179,26 +2187,9 @@ type UserListApiResponse = {
     display_name: string;
     roles: string[];
     status: string;
+    department_id: string | null;
     created_at: string;
     updated_at: string;
-  }>;
-  next_cursor: string | null;
-  has_more: boolean;
-};
-
-/** 后端 /governance/scope-grants 原始结构 */
-type ScopeGrantListApiResponse = {
-  items: Array<{
-    id: string;
-    user_id: string | null;
-    role_id: string | null;
-    organization_id: string;
-    object_root_id: string | null;
-    department_id: string | null;
-    resource_type: string;
-    action: string;
-    effective_from: string | null;
-    effective_to: string | null;
   }>;
   next_cursor: string | null;
   has_more: boolean;
@@ -2222,12 +2213,43 @@ export async function apiListUsers(params?: {
       display_name: u.display_name,
       roles: u.roles ?? [],
       status: u.status,
+      department_id: u.department_id ?? null,
       created_at: u.created_at,
       updated_at: u.updated_at,
     })),
     next_cursor: res.data.next_cursor,
     has_more: res.data.has_more,
   };
+}
+
+/**
+ * 新建用户
+ */
+export async function apiCreateUser(params: {
+  email: string;
+  display_name: string;
+  password: string;
+  roles: string[];
+  department_id?: string;
+}): Promise<UserListItem> {
+  const res = await http.post<UserListItem>('/governance/users', params);
+  return res.data;
+}
+
+/**
+ * 编辑用户（邮箱不可修改）
+ */
+export async function apiUpdateUser(
+  userId: string,
+  params: {
+    display_name?: string;
+    password?: string;
+    roles?: string[];
+    department_id?: string | null;
+  },
+): Promise<UserListItem> {
+  const res = await http.patch<UserListItem>(`/governance/users/${userId}`, params);
+  return res.data;
 }
 
 /**
@@ -2272,60 +2294,10 @@ export async function apiUpdateUserStatus(
 }
 
 /**
- * 列出范围授权
+ * 删除用户
  */
-export async function apiListScopeGrants(params?: {
-  user_id?: string;
-  resource_type?: string;
-  action?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<ScopeGrantListResponse> {
-  const res = await http.get<ScopeGrantListApiResponse>(
-    '/governance/scope-grants',
-    { params },
-  );
-  return {
-    items: res.data.items.map((g) => ({
-      id: g.id,
-      user_id: g.user_id,
-      role_id: g.role_id,
-      organization_id: g.organization_id,
-      object_root_id: g.object_root_id,
-      department_id: g.department_id,
-      resource_type: g.resource_type,
-      action: g.action,
-      effective_from: g.effective_from,
-      effective_to: g.effective_to,
-    })),
-    next_cursor: res.data.next_cursor,
-    has_more: res.data.has_more,
-  };
-}
-
-/**
- * 创建范围授权
- */
-export async function apiCreateScopeGrant(body: {
-  user_id: string | null;
-  role_id: string | null;
-  organization_id: string;
-  object_root_id: string | null;
-  department_id: string | null;
-  resource_type: string;
-  action: string;
-  effective_from: string | null;
-  effective_to: string | null;
-}): Promise<ScopeGrantListItem> {
-  const res = await http.post<ScopeGrantListItem>('/governance/scope-grants', body);
-  return res.data;
-}
-
-/**
- * 删除范围授权
- */
-export async function apiDeleteScopeGrant(id: string): Promise<void> {
-  await http.delete(`/governance/scope-grants/${id}`);
+export async function apiDeleteUser(userId: string): Promise<void> {
+  await http.delete(`/governance/users/${userId}`);
 }
 
 // ============================================================

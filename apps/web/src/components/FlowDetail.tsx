@@ -524,12 +524,29 @@ export function FlowDetail(): JSX.Element {
     {
       title: '任务来源',
       key: 'department',
-      width: 160,
-      render: (_: unknown, record: FlowSummary) => (
-        record.project_name
-          ? <Text>{record.project_name}</Text>
-          : <Text type="secondary">-</Text>
-      ),
+      width: 300,
+      render: (_: unknown, record: FlowSummary) => {
+        const deptName = record.department_id ? deptMap.get(record.department_id) : null;
+        const projName = record.project_name;
+        if (!deptName && !projName) return <Text type="secondary">-</Text>;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {projName && (
+              <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                {projName}
+              </Tag>
+            )}
+            {projName && deptName && (
+              <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+            )}
+            {deptName && (
+              <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                {deptName}
+              </Tag>
+            )}
+          </div>
+        );
+      },
     },
     {
       title: '数据来源',
@@ -544,7 +561,6 @@ export function FlowDetail(): JSX.Element {
         const objCode = comp?.experimental_object_code;
         const obj = objCode ? objMap.get(objCode) : null;
         const eqName = obj?.equipment_id ? equipMap.get(obj.equipment_id) : null;
-        const deptName = record.department_id ? deptMap.get(record.department_id) : null;
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
@@ -563,14 +579,6 @@ export function FlowDetail(): JSX.Element {
                 <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
                 <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                   {eqName}
-                </Tag>
-              </>
-            )}
-            {deptName && (
-              <>
-                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
-                <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                  {deptName}
                 </Tag>
               </>
             )}
@@ -702,7 +710,7 @@ export function FlowDetail(): JSX.Element {
           归档
         </Button>
         <Select
-          placeholder="执行实验部门筛选"
+          placeholder="所属单位筛选"
           style={{ width: 200 }}
           value={deptFilter ?? '__all__'}
           onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
@@ -937,11 +945,11 @@ export function FlowDetail(): JSX.Element {
         <Form form={createForm} layout="vertical">
           <Form.Item
             name="department_id"
-            label="执行实验部门"
-            rules={[{ required: true, message: '请选择执行实验部门' }]}
+            label="所属单位"
+            rules={[{ required: true, message: '请选择所属单位' }]}
           >
             <Select
-              placeholder="请选择执行实验部门"
+              placeholder="请选择所属单位"
               showSearch
               optionFilterProp="label"
               options={deptOptions}
@@ -1059,9 +1067,9 @@ export function FlowDetail(): JSX.Element {
           >
             <Input placeholder="请输入流程名称" maxLength={200} />
           </Form.Item>
-          <Form.Item name="department_id" label="执行实验部门">
+          <Form.Item name="department_id" label="所属单位">
             <Select
-              placeholder="请选择执行实验部门"
+              placeholder="请选择所属单位"
               showSearch
               optionFilterProp="label"
               allowClear

@@ -1,19 +1,18 @@
 import { useState } from 'react';
-import { Tabs, Typography } from 'antd';
+import { Row, Col, Tabs, Typography } from 'antd';
 import { UsersPage } from '@/governance/UsersPage';
-import { ScopeGrantsPage } from '@/governance/ScopeGrantsPage';
 import { AuditPage } from '@/governance/AuditPage';
 import { SystemHealthPage } from '@/governance/SystemHealthPage';
 import { AIConfigPage } from '@/governance/AIConfigPage';
 import { JobsPage } from '@/jobs/JobsPage';
 
-const { Title, Paragraph } = Typography;
+const { Title } = Typography;
 
 /**
  * 平台治理页面 — Tabs 布局
  */
 export function GovernanceConsole(): JSX.Element {
-  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [activeTab, setActiveTab] = useState<string>('system-config');
 
   return (
     <div>
@@ -24,13 +23,19 @@ export function GovernanceConsole(): JSX.Element {
         destroyInactiveTabPane
         items={[
           {
-            key: 'overview',
-            label: '概览',
+            key: 'system-config',
+            label: '系统配置',
             children: (
-              <Paragraph type="secondary">
-                平台治理提供用户管理、范围授权、审计事件和系统健康监控功能。
-                请从上方选项卡选择需要的管理功能。
-              </Paragraph>
+              <Row gutter={24}>
+                <Col xs={24} lg={12}>
+                  <div style={{ marginTop: -8 }}>
+                    <AIConfigPage />
+                  </div>
+                </Col>
+                <Col xs={24} lg={12}>
+                  <SystemHealthPage />
+                </Col>
+              </Row>
             ),
           },
           {
@@ -39,24 +44,9 @@ export function GovernanceConsole(): JSX.Element {
             children: <UsersPage />,
           },
           {
-            key: 'grants',
-            label: '范围授权',
-            children: <ScopeGrantsPage />,
-          },
-          {
             key: 'audit',
             label: '审计事件',
             children: <AuditPage />,
-          },
-          {
-            key: 'health',
-            label: '系统健康',
-            children: <SystemHealthPage />,
-          },
-          {
-            key: 'ai-config',
-            label: 'AI 配置',
-            children: <AIConfigPage />,
           },
           {
             key: 'jobs',

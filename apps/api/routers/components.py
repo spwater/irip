@@ -19,11 +19,15 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import (
+    get_visible_department_ids,
+    should_filter_by_department,
+)
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
@@ -228,11 +232,11 @@ async def publish_component(
         import sqlalchemy as sa
         from packages.common.database import session_scope
         from packages.standards.objects import IndustrialObject
-        async with session_scope(service._factory) as sess:
+        async with session_scope(service.session_factory) as sess:
             obj = await sess.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.code == exp_code,
-                    IndustrialObject.organization_id == service._org_id,
+                    IndustrialObject.organization_id == service.organization_id,
                 )
             )
             if obj is None:
@@ -283,6 +287,40 @@ async def list_components(
         ComponentListResponse: 组件列表。
     """
     items = await service.list(kind=kind, status=status)
+
+    # 部门级数据隔离：非管理员用户只能看到自己实验室及后代实验室的数据接口。
+    # 数据接口通过 experimental_object_code → industrial_object.code →
+    # industrial_object.department_id 间接关联到所属部门。
+    if should_filter_by_department(current_user):
+        visible_dept_ids = await get_visible_department_ids(
+            current_user, service.session_factory
+        )
+        if visible_dept_ids:
+            # 查出可见部门内的实验对象 code 列表
+            import sqlalchemy as sa
+            from packages.common.database import session_scope
+            from packages.standards.objects import IndustrialObject
+
+            async with session_scope(service.session_factory) as session:
+                visible_codes_result = await session.execute(
+                    sa.select(IndustrialObject.code).where(
+                        IndustrialObject.department_id.in_(visible_dept_ids)
+                    )
+                )
+                visible_codes = {
+                    row[0] for row in visible_codes_result.fetchall()
+                }
+
+            # 过滤 items，只保留 experimental_object_code 在 visible_codes 内的。
+            # experimental_object_code 为 NULL 的组件不在可见范围内，不显示。
+            items = [
+                (comp, ver) for comp, ver in items
+                if ver.experimental_object_code in visible_codes
+            ]
+        else:
+            # 无实验室用户（非管理员且 department_id 为 NULL）：看不到任何数据接口
+            items = []
+
     return ComponentListResponse(
         items=[
             ComponentListItemResponse(
@@ -458,16 +496,12 @@ async def delete_component(
     current_user: ManageUserDep,
     service: ComponentRegistryServiceDep,
 ) -> dict[str, str]:
-    """彻底删除组件及其所有版本。
+    """彻底删除组件 — 已禁用（P0 止血）。
 
-    Args:
-        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录 ID）。
-        current_user: 当前认证用户（需 component:manage 权限）。
-        service: 组件注册表服务。
-
-    Returns:
-        dict: {"status": "deleted"}
+    物理删除端点已禁用，防止组件版本不可变性和溯源链断裂。
+    请使用归档端点 ``PATCH /{component_id}/archive`` 替代。
     """
-    comp, _ = await service.get_version_by_id(component_id)
-    await service.delete_component(comp.id)
-    return {"status": "deleted"}
+    raise HTTPException(
+        status_code=405,
+        detail="物理删除组件已被禁用（P0 止血）。请使用归档端点 PATCH /{component_id}/archive 替代。",
+    )

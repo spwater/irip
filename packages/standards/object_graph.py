@@ -42,7 +42,6 @@ from packages.standards.objects import (
     ObjectRelation,
     RelationType,
 )
-from packages.facts.entities import Fact, FactRevision
 
 
 class ObjectGraphService:
@@ -82,6 +81,8 @@ class ObjectGraphService:
         description: str | None = None,
         parent_id: UUID | None = None,
         equipment_id: UUID | None = None,
+        department_id: UUID | None = None,
+        visible_departments: list[str] | None = None,
     ) -> IndustrialObject:
         """创建工业对象（status=active）。
 
@@ -91,6 +92,9 @@ class ObjectGraphService:
             display_name: 中文显示名。
             description: 描述（可选）。
             parent_id: 父对象 ID（可选，便捷反规范化字段）。
+            equipment_id: 关联设备 ID（可选）。
+            department_id: 所属部门 ID（可选，跨实验室可见性基准）。
+            visible_departments: 可见单位 ID 列表（可选，默认空数组）。
 
         Returns:
             IndustrialObject: 新创建的对象实体。
@@ -142,6 +146,8 @@ class ObjectGraphService:
                 description=description,
                 parent_id=parent_id,
                 equipment_id=equipment_id,
+                department_id=department_id,
+                visible_departments=visible_departments or [],
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -173,6 +179,8 @@ class ObjectGraphService:
         display_name: str,
         description: str | None = None,
         equipment_id: UUID | None = None,
+        department_id: UUID | None = None,
+        visible_departments: list[str] | None = None,
     ) -> IndustrialObject:
         """编辑工业对象（code 不可修改）。
 
@@ -180,6 +188,9 @@ class ObjectGraphService:
             object_id: 对象 UUID。
             display_name: 新显示名。
             description: 新描述。
+            equipment_id: 新关联设备 ID。
+            department_id: 新所属部门 ID（None 表示不修改）。
+            visible_departments: 新可见单位 ID 列表（None 表示不修改）。
 
         Returns:
             IndustrialObject: 更新后的对象实体。
@@ -192,6 +203,10 @@ class ObjectGraphService:
             obj.display_name = display_name
             obj.description = description
             obj.equipment_id = equipment_id
+            if department_id is not None:
+                obj.department_id = department_id
+            if visible_departments is not None:
+                obj.visible_departments = visible_departments
             obj.updated_at = datetime.now(UTC)
             obj.lock_version += 1
             await session.flush()
@@ -223,7 +238,10 @@ class ObjectGraphService:
             return obj
 
     async def delete_object(self, object_id: UUID) -> None:
-        """删除工业对象（物理删除）。
+        """归档工业对象（tombstone，不物理删除）。
+
+        技术设计文档 F-03 §8.3：删除对象时不级联删除事实和修订
+        （不可变表，不允许 DELETE），改为标记对象 status='archived'。
 
         前置条件：对象没有活跃的关系（作为 source 或 target）。
 
@@ -271,36 +289,11 @@ class ObjectGraphService:
                     fields={"object_id": str(object_id)},
                 )
 
-            # 级联删除关联的 fact（含 fact_revision → raw_observation / fact_artifact）
-            facts = await session.execute(
-                sa.select(Fact).where(Fact.object_id == object_id)
-            )
-            for fact in facts.scalars():
-                # 删除 fact_revision 下的 raw_observation 和 fact_artifact
-                revisions = await session.execute(
-                    sa.select(FactRevision).where(FactRevision.fact_id == fact.id)
-                )
-                for rev in revisions.scalars():
-                    await session.execute(
-                        sa.text("DELETE FROM normalized_observation WHERE fact_revision_id = :rid"),
-                        {"rid": rev.id},
-                    )
-                    await session.execute(
-                        sa.text("DELETE FROM raw_observation WHERE fact_revision_id = :rid"),
-                        {"rid": rev.id},
-                    )
-                    await session.execute(
-                        sa.text("DELETE FROM fact_artifact WHERE fact_revision_id = :rid"),
-                        {"rid": rev.id},
-                    )
-                    await session.execute(
-                        sa.text("DELETE FROM fact_revision_link WHERE from_revision_id = :rid OR to_revision_id = :rid"),
-                        {"rid": rev.id},
-                    )
-                    await session.delete(rev)
-                await session.delete(fact)
-
-            await session.delete(obj)
+            # 不级联删除事实和修订（不可变表，不允许 DELETE）
+            # 仅标记对象为 archived（tombstone 模式）
+            obj.status = "archived"
+            obj.updated_at = datetime.now(UTC)
+            obj.lock_version += 1
             await session.flush()
 
     async def get_object_by_code(
@@ -332,6 +325,8 @@ class ObjectGraphService:
         object_type: str | list[str] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
+        department_id: UUID | None = None,
+        visible_dept_id: UUID | None = None,
     ) -> tuple[list[IndustrialObject], str | None]:
         """分页查询工业对象列表。
 
@@ -341,6 +336,9 @@ class ObjectGraphService:
             object_type: 可选类型过滤，str 单类型或 list[str] 多类型（IN 查询），None 表示全部。
             cursor: 分页游标（base64url 字符串），None 表示第一页。
             page_size: 每页数量（默认 20，最大 100）。
+            department_id: 部门 ID 筛选（精确匹配 industrial_object.department_id）。
+            visible_dept_id: 可见性部门 ID，用于 OR visible_departments @> [dept_id] 过滤。
+                当 department_id 和 visible_dept_id 同时存在时，取两者的 OR。
 
         Returns:
             tuple[list[IndustrialObject], str | None]: (对象列表, 下一页游标)。
@@ -363,6 +361,24 @@ class ObjectGraphService:
                 query = query.where(IndustrialObject.object_type.in_(object_type))
             else:
                 query = query.where(IndustrialObject.object_type == object_type)
+
+        # 部门过滤 + 可见性过滤
+        # 可见性规则：department_id == dept_id OR visible_departments 包含 visible_dept_id
+        if department_id is not None and visible_dept_id is not None:
+            query = query.where(
+                sa.or_(
+                    IndustrialObject.department_id == department_id,
+                    IndustrialObject.visible_departments.contains(
+                        [str(visible_dept_id)]
+                    ),
+                )
+            )
+        elif department_id is not None:
+            query = query.where(IndustrialObject.department_id == department_id)
+        elif visible_dept_id is not None:
+            query = query.where(
+                IndustrialObject.visible_departments.contains([str(visible_dept_id)])
+            )
 
         if cursor is not None:
             cursor_created_at, cursor_id = _decode_list_cursor(cursor)

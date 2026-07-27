@@ -22,7 +22,7 @@ import {
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { RangePicker } = DatePicker;
 
 /**
@@ -128,7 +128,6 @@ export function AuditPage(): JSX.Element {
   if (!canRead) {
     return (
       <div>
-        <Title level={3}>审计事件</Title>
         <Text type="danger">您没有审计读取权限。</Text>
       </div>
     );
@@ -213,8 +212,6 @@ export function AuditPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={3}>审计事件</Title>
-
       {/* 筛选区 */}
       <Space style={{ marginBottom: 16 }} wrap direction="vertical">
         <Space wrap>

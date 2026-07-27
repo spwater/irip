@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Button,
   Form,
+  Input,
   message,
   Modal,
   Popconfirm,
@@ -14,26 +15,28 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
-  apiAssignRoles,
+  apiCreateUser,
+  apiDeleteUser,
+  apiListDepartments,
   apiListUsers,
   apiRemoveRole,
+  apiUpdateUser,
   apiUpdateUserStatus,
   extractApiError,
+  type DepartmentListItem,
   type UserListItem,
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /** 内置角色选项 */
 const ROLE_OPTIONS = [
   { value: 'platform_administrator', label: '平台管理员' },
-  { value: 'standard_owner', label: '标准负责人' },
-  { value: 'data_steward', label: '数据管家' },
-  { value: 'researcher', label: '研究员' },
-  { value: 'model_engineer', label: '模型工程师' },
-  { value: 'reviewer', label: '审核员' },
-  { value: 'read_only_user', label: '只读用户' },
+  { value: 'platform_auditor', label: '平台监督员（只读）' },
+  { value: 'lab_director', label: '实验室负责人' },
+  { value: 'lab_member', label: '实验室成员' },
+  { value: 'lab_viewer', label: '实验室成员（只读）' },
 ];
 
 /**
@@ -49,7 +52,9 @@ export function UsersPage(): JSX.Element {
   const user = useAuthStore((s) => s.user);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [assignTarget, setAssignTarget] = useState<UserListItem | null>(null);
+  const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form] = Form.useForm();
+  const [createForm] = Form.useForm();
 
   // 仅 platform_administrator 可访问
   const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
@@ -61,17 +66,54 @@ export function UsersPage(): JSX.Element {
     enabled: isAdmin,
   });
 
+  // ---- 数据查询：实验室列表（用于新建账号时选择 + 表格列展示名称）----
+  const { data: deptData } = useQuery({
+    queryKey: ['departments', 'all'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+    enabled: isAdmin,
+  });
+
+  const departments: DepartmentListItem[] = deptData?.items ?? [];
+
+  /** 根据 department_id 查找实验室显示名 */
+  const getDeptName = (deptId: string | null): string | null => {
+    if (!deptId) return null;
+    const dept = departments.find((d) => d.id === deptId);
+    return dept?.display_name ?? null;
+  };
+
   const items: UserListItem[] = data?.items ?? [];
 
-  // ---- 角色分配 Mutation ----
-  const assignMutation = useMutation({
-    mutationFn: (params: { userId: string; roles: string[] }) =>
-      apiAssignRoles(params.userId, params.roles),
+  // ---- 编辑用户 Mutation ----
+  // ---- 新建用户 Mutation ----
+  const createMutation = useMutation({
+    mutationFn: (params: { email: string; display_name: string; password: string; roles: string[]; department_id?: string }) =>
+      apiCreateUser(params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['governance', 'users'] });
+      setCreateModalOpen(false);
+      createForm.resetFields();
+      message.success('用户创建成功');
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
+  // ---- 编辑用户 Mutation ----
+  const updateMutation = useMutation({
+    mutationFn: (params: { userId: string; display_name?: string; password?: string; roles?: string[]; department_id?: string | null }) =>
+      apiUpdateUser(params.userId, {
+        display_name: params.display_name,
+        password: params.password,
+        roles: params.roles,
+        department_id: params.department_id,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['governance', 'users'] });
       setAssignTarget(null);
       form.resetFields();
-      message.success('角色分配成功');
+      message.success('用户信息更新成功');
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -104,22 +146,55 @@ export function UsersPage(): JSX.Element {
     },
   });
 
+  // ---- 删除用户 Mutation ----
+  const deleteMutation = useMutation({
+    mutationFn: (userId: string) => apiDeleteUser(userId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['governance', 'users'] });
+      message.success('用户已删除');
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
   // ---- 事件处理 ----
 
   const handleAssignOpen = (record: UserListItem): void => {
     setAssignTarget(record);
     form.setFieldsValue({
+      display_name: record.display_name,
+      password: undefined,
       roles: record.roles ?? [],
+      department_id: record.department_id ?? undefined,
     });
+  };
+
+  const handleCreateSubmit = async (): Promise<void> => {
+    try {
+      const values = await createForm.validateFields();
+      createMutation.mutate({
+        email: values.email,
+        display_name: values.display_name,
+        password: values.password,
+        roles: values.roles as string[],
+        department_id: values.department_id || undefined,
+      });
+    } catch {
+      // 表单校验失败
+    }
   };
 
   const handleAssignSubmit = async (): Promise<void> => {
     if (!assignTarget) return;
     try {
       const values = await form.validateFields();
-      assignMutation.mutate({
+      updateMutation.mutate({
         userId: assignTarget.id,
+        display_name: values.display_name,
+        password: values.password || undefined,
         roles: values.roles as string[],
+        department_id: values.department_id || null,
       });
     } catch {
       // 表单校验失败
@@ -139,7 +214,6 @@ export function UsersPage(): JSX.Element {
   if (!isAdmin) {
     return (
       <div>
-        <Title level={3}>用户管理</Title>
         <Text type="danger">仅平台管理员可访问此页面。</Text>
       </div>
     );
@@ -147,13 +221,6 @@ export function UsersPage(): JSX.Element {
 
   // ---- 表格列定义 ----
   const columns: ColumnsType<UserListItem> = [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 280,
-      ellipsis: true,
-    },
     {
       title: '邮箱',
       dataIndex: 'email',
@@ -211,9 +278,23 @@ export function UsersPage(): JSX.Element {
         ),
     },
     {
+      title: '实验室',
+      dataIndex: 'department_id',
+      key: 'department_id',
+      width: 160,
+      render: (deptId: string | null) => {
+        const name = getDeptName(deptId);
+        return name ? (
+          <Tag color="cyan">{name}</Tag>
+        ) : (
+          <Text type="secondary">-</Text>
+        );
+      },
+    },
+    {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 240,
       render: (_: unknown, record: UserListItem) => (
         <Space size="small">
           <Button
@@ -221,7 +302,7 @@ export function UsersPage(): JSX.Element {
             size="small"
             onClick={() => handleAssignOpen(record)}
           >
-            分配角色
+            编辑角色
           </Button>
           <Popconfirm
             title={
@@ -241,6 +322,21 @@ export function UsersPage(): JSX.Element {
               {record.status === 'active' ? '禁用' : '启用'}
             </Button>
           </Popconfirm>
+          <Popconfirm
+            title="确定删除该用户？此操作不可恢复！"
+            onConfirm={() => deleteMutation.mutate(record.id)}
+            okText="确定"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+            >
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
       ),
     },
@@ -248,8 +344,7 @@ export function UsersPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={3}>用户管理</Title>
-      <Space style={{ marginBottom: 16 }} wrap>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Select
           placeholder="状态筛选"
           style={{ width: 140 }}
@@ -261,7 +356,10 @@ export function UsersPage(): JSX.Element {
             { value: 'disabled', label: '禁用' },
           ]}
         />
-      </Space>
+        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+          新建账号
+        </Button>
+      </div>
 
       <Table<UserListItem>
         columns={columns}
@@ -272,20 +370,37 @@ export function UsersPage(): JSX.Element {
         size="middle"
       />
 
-      {/* 角色分配 Modal */}
+      {/* 编辑角色 Modal */}
       <Modal
-        title={assignTarget ? `分配角色 — ${assignTarget.display_name}` : '分配角色'}
+        title={assignTarget ? `编辑角色 — ${assignTarget.display_name}` : '编辑角色'}
         open={!!assignTarget}
         onOk={handleAssignSubmit}
         onCancel={() => {
           setAssignTarget(null);
           form.resetFields();
         }}
-        confirmLoading={assignMutation.isPending}
+        confirmLoading={updateMutation.isPending}
         okText="保存"
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
+          <Form.Item label="邮箱">
+            <Input value={assignTarget?.email ?? ''} disabled />
+          </Form.Item>
+          <Form.Item
+            name="display_name"
+            label="显示名"
+            rules={[{ required: true, message: '请输入显示名' }]}
+          >
+            <Input placeholder="姓名" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="新密码"
+            extra="留空则不修改密码"
+          >
+            <Input.Password placeholder="输入新密码（可选）" />
+          </Form.Item>
           <Form.Item
             name="roles"
             label="角色"
@@ -293,16 +408,103 @@ export function UsersPage(): JSX.Element {
           >
             <Select
               mode="multiple"
-              placeholder="选择要分配的角色"
+              placeholder="选择角色（可多选）"
               style={{ width: '100%' }}
               options={ROLE_OPTIONS}
               optionFilterProp="label"
               showSearch
             />
           </Form.Item>
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            新选中的角色将合并到用户已有角色列表中，不会移除已有角色。
-          </Text>
+          <Form.Item
+            name="department_id"
+            label="所属实验室"
+          >
+            <Select
+              placeholder="选择实验室（可选）"
+              style={{ width: '100%' }}
+              allowClear
+              options={departments.map((d) => ({
+                value: d.id,
+                label: d.display_name,
+              }))}
+              optionFilterProp="label"
+              showSearch
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 新建账号 Modal */}
+      <Modal
+        title="新建账号"
+        open={createModalOpen}
+        onOk={handleCreateSubmit}
+        onCancel={() => {
+          setCreateModalOpen(false);
+          createForm.resetFields();
+        }}
+        confirmLoading={createMutation.isPending}
+        okText="创建"
+        cancelText="取消"
+      >
+        <Form form={createForm} layout="vertical">
+          <Form.Item
+            name="email"
+            label="邮箱"
+            rules={[
+              { required: true, message: '请输入邮箱' },
+              { type: 'email', message: '请输入有效邮箱' },
+            ]}
+          >
+            <Input placeholder="user@irip.local" />
+          </Form.Item>
+          <Form.Item
+            name="display_name"
+            label="显示名"
+            rules={[{ required: true, message: '请输入显示名' }]}
+          >
+            <Input placeholder="姓名" />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="初始密码"
+            rules={[
+              { required: true, message: '请输入初始密码' },
+              { min: 6, message: '密码至少 6 位' },
+            ]}
+          >
+            <Input.Password placeholder="至少 6 位" />
+          </Form.Item>
+          <Form.Item
+            name="roles"
+            label="角色"
+            rules={[{ required: true, message: '请至少选择一个角色' }]}
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择角色（可多选）"
+              style={{ width: '100%' }}
+              options={ROLE_OPTIONS}
+              optionFilterProp="label"
+              showSearch
+            />
+          </Form.Item>
+          <Form.Item
+            name="department_id"
+            label="所属实验室"
+          >
+            <Select
+              placeholder="选择实验室（可选）"
+              style={{ width: '100%' }}
+              allowClear
+              options={departments.map((d) => ({
+                value: d.id,
+                label: d.display_name,
+              }))}
+              optionFilterProp="label"
+              showSearch
+            />
+          </Form.Item>
         </Form>
       </Modal>
     </div>

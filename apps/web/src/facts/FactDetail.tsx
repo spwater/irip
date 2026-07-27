@@ -117,6 +117,11 @@ export function FactDetail(): JSX.Element {
               <Descriptions.Item label="项目名称">
                 {taskInfo?.project_name ?? '-'}
               </Descriptions.Item>
+              <Descriptions.Item label="所属单位">
+                {taskInfo?.department_name
+                  ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{taskInfo.department_name}</Tag>
+                  : '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="当前数据ID">
                 <Text code>{fact.subject_id}</Text>
               </Descriptions.Item>
@@ -140,14 +145,6 @@ export function FactDetail(): JSX.Element {
                             <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
                             <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                               {ds.equipment_name}
-                            </Tag>
-                          </>
-                        )}
-                        {ds.department_name && (
-                          <>
-                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
-                            <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                              {ds.department_name}
                             </Tag>
                           </>
                         )}

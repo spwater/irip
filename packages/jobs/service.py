@@ -149,8 +149,13 @@ class JobService:
 
         流程：
         1. 查询作业 → 不存在抛 not_found；
-        2. 若已终态 → 抛 conflict；
-        3. 同事务 UPDATE status=cancel_requested + INSERT outbox_event。
+        2. **验证作业 organization_id == 当前组织**（租户隔离，不匹配抛 not_found）；
+        3. 若已终态 → 抛 conflict；
+        4. 同事务 UPDATE status=cancel_requested + INSERT outbox_event。
+
+        安全约定（技术设计文档 F-02/F-09）：
+        - 跨组织作业对调用者不可见（返回 not_found，不泄露存在性）；
+        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
 
         Args:
             job_id: 作业 UUID。
@@ -160,12 +165,21 @@ class JobService:
             JobRef: 作业引用。
 
         Raises:
-            AppError: code="not_found"，当作业不存在时。
+            AppError: code="not_found"，当作业不存在或不属于当前组织时。
             AppError: code="conflict"，当作业已终态时。
         """
         async with session_scope(self._factory) as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"作业不存在: {job_id}",
+                    retryable=False,
+                    fields={"job_id": str(job_id)},
+                )
+
+            # 租户隔离检查：跨组织作业返回 not_found
+            if job.organization_id != self._org_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -215,6 +229,10 @@ class JobService:
     async def get(self, job_id: UUID) -> JobRef:
         """获取作业引用。
 
+        安全约定（技术设计文档 F-02/F-09）：
+        - 跨组织作业返回 not_found（不泄露存在性）；
+        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
+
         Args:
             job_id: 作业 UUID。
 
@@ -222,11 +240,20 @@ class JobService:
             JobRef: 作业引用（含 stage/progress/retryable）。
 
         Raises:
-            AppError: code="not_found"，当作业不存在时。
+            AppError: code="not_found"，当作业不存在或不属于当前组织时。
         """
         async with session_scope(self._factory) as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"作业不存在: {job_id}",
+                    retryable=False,
+                    fields={"job_id": str(job_id)},
+                )
+
+            # 租户隔离检查：跨组织作业返回 not_found
+            if job.organization_id != self._org_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -333,6 +360,10 @@ class JobService:
         与 ``get()`` 不同，此方法返回完整的 Job ORM 对象，
         用于作业详情页展示输入载荷、执行结果和错误日志。
 
+        安全约定（技术设计文档 F-02/F-09）：
+        - 跨组织作业返回 not_found（不泄露存在性）；
+        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
+
         Args:
             job_id: 作业 UUID。
 
@@ -340,7 +371,7 @@ class JobService:
             Job: 作业 ORM 实体。
 
         Raises:
-            AppError: code="not_found"，当作业不存在时。
+            AppError: code="not_found"，当作业不存在或不属于当前组织时。
         """
         async with self._factory() as session:
             job: Job | None = await JobRepository.get(session, job_id)
@@ -351,4 +382,14 @@ class JobService:
                     retryable=False,
                     fields={"job_id": str(job_id)},
                 )
+
+            # 租户隔离检查：跨组织作业返回 not_found
+            if job.organization_id != self._org_id:
+                raise AppError(
+                    code="not_found",
+                    message=f"作业不存在: {job_id}",
+                    retryable=False,
+                    fields={"job_id": str(job_id)},
+                )
+
             return job

@@ -183,3 +183,64 @@ bash scripts/release-gate.sh
 | QA | — | 2026-07-22 | ⏳ 待签核 |
 
 > 全部签核通过后，版本 0.1.0 正式发布。
+
+---
+
+## 7. 能力标记（F-22: 文档漂移治理）
+
+> 能力标记规范：Proposed（提议）/ Partial（部分实现）/ Implemented（已实现）/ Verified（已验证）/ Deprecated（已废弃）
+> 统计数据由 `scripts/generate-stats.py` 自动生成，验收报告由 CI 针对 commit SHA 生成。
+
+### 7.1 核心能力矩阵
+
+| 能力领域 | 能力项 | 状态 | 备注 |
+|---------|--------|------|------|
+| 认证 | 用户认证（Argon2id + JWT） | Verified | 整改后 fail-closed + token version |
+| 认证 | 刷新令牌家族化旋转 | Verified | 重放检测已验证 |
+| 授权 | RBAC 7 角色 + ScopeGrant | Verified | 整改后对象级授权已验证 |
+| 租户隔离 | 路由不访问服务私有属性 | Implemented | F-20/T3-1: 公开属性替代私有访问 |
+| 租户隔离 | Repository 强制 (org_id, id) 复合键 | Verified | F-02/T1-2: 已验证 |
+| 租户隔离 | PostgreSQL RLS | Implemented | F-02: RLS policy 已创建 |
+| 不可变性 | 不可变表触发器 | Implemented | F-03: BEFORE UPDATE/DELETE 触发器 |
+| 不可变性 | 事实删除改为 tombstone | Implemented | F-03: status='archived' |
+| 异步作业 | Outbox→Dispatcher→Celery 闭环 | Verified | F-04: 已验证闭环 |
+| 密钥安全 | envelope encryption | Implemented | F-12: AES-GCM 信封加密 |
+| 密钥安全 | 启动拒绝默认值 | Implemented | F-12: ${VAR:?required} |
+| 备份 | fail-closed 全量校验 | Verified | F-06: 已验证 |
+| 架构 | Composition Root 按领域拆分 | Implemented | F-20/T3-2: composition/ provider 模块 |
+| 架构 | 消除领域循环依赖 | Implemented | F-20/T3-3: 延迟导入 + 接口抽象 |
+| 异步 I/O | 阻塞 I/O 放 asyncio.to_thread | Implemented | F-21/T3-7: CSV/JSON/Excel/PDF 读取器 |
+| 异步 I/O | 流式文件上传 | Implemented | F-21/T3-7: 分块读取替代一次性加载 |
+| 前端 | API client 按领域拆分 | Implemented | F-23/T3-4: auth/jobs/facts/flows 等 8 模块 |
+| 前端 | legacy.tsx 清除 | Implemented | F-23/T3-4: 已删除 |
+| 文档 | 源码统计自动生成 | Implemented | F-22/T3-5: scripts/generate-stats.py |
+| 文档 | 能力标记规范化 | Implemented | F-22/T3-5: 本节 |
+| 供应链 | 依赖锁定 | Partial | F-18/T3-6: requirements.lock 创建，uv.lock 待生成 |
+| 供应链 | GitHub Actions SHA pin | Implemented | F-18/T3-6: checkout/setup-python/upload-artifact |
+| 供应链 | Dockerfile --frozen-lockfile | Implemented | F-18/T3-6: web.Dockerfile 已修复 |
+| 供应链 | SBOM 生成 | Implemented | F-18/T3-6: CI sbom job (cyclonedx) |
+| 质量 | Ruff lint + format check 统一 | Implemented | F-24/T3-8: Makefile/CI/release-gate 一致 |
+| 质量 | Ruff F821/F/E 清零 | Implemented | F-14/T2-6: 已清零 |
+| 质量 | AppError 封闭 Enum | Implemented | F-14/T2-6: ErrorCode 枚举 |
+| AI | AI 工具白名单 + 只读 | Verified | F-10: 7 个只读工具已验证 |
+| AI | 引用可溯源 | Verified | F-10: 结构化 citation 已验证 |
+| 监控 | Prometheus 指标暴露 | Implemented | F-19: /api/v1/metrics 端点 |
+| 监控 | 结构化日志 + Correlation ID | Implemented | F-19: structlog + CorrelationIdMiddleware |
+| 可视化 | 流程可视化编辑器 | Proposed | 已知限制 #2 |
+| 安全 | AI 工具速率限制 | Proposed | 已知限制 #4 |
+| 运维 | Redis 纳入备份 | Proposed | 已知限制 #6 |
+| 运维 | Outbox dispatcher 多实例 | Proposed | 已知限制 #8 |
+| 运维 | 组件容器沙箱 | Proposed | 已知限制 #9 |
+
+### 7.2 自动统计数据
+
+> 以下数据由 `scripts/generate-stats.py` 从源码自动生成。
+> 运行 `python scripts/generate-stats.py` 获取最新统计。
+
+| 指标 | 值 | 来源 |
+|------|-----|------|
+| 内置组件数 | 由 generate-stats.py 自动统计 | `packages/components/builtin/` |
+| AI 工具数 | 由 generate-stats.py 自动统计 | `packages/ai/tools.py` |
+| API 路由数 | 由 generate-stats.py 自动统计 | `apps/api/routers/` |
+| 迁移 head | 由 generate-stats.py 自动统计 | `migrations/` |
+

@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.jobs.entities import JobRef, JobStatus, TERMINAL_STATUSES
@@ -31,7 +32,20 @@ from packages.jobs.service import JobService
 #: 路由实例。
 jobs_router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
-CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+#: 需 job:read 权限的当前用户依赖。
+ReadUserDep = Annotated[
+    CurrentUser, Depends(require_permission("job:read"))
+]
+
+#: 需 job:submit 权限的当前用户依赖。
+SubmitUserDep = Annotated[
+    CurrentUser, Depends(require_permission("job:submit"))
+]
+
+#: 需 job:cancel 权限的当前用户依赖。
+CancelUserDep = Annotated[
+    CurrentUser, Depends(require_permission("job:cancel"))
+]
 
 
 def get_job_service() -> JobService:
@@ -121,7 +135,7 @@ class JobDetailResponse(BaseModel):
 @jobs_router.post("", response_model=JobResponse, status_code=202)
 async def create_job(
     body: CreateJobRequest,
-    current_user: CurrentUserDep,
+    current_user: SubmitUserDep,
     service: JobServiceDep,
 ) -> JobResponse:
     """提交作业。
@@ -154,7 +168,7 @@ async def create_job(
 
 @jobs_router.get("", response_model=JobListResponse)
 async def list_jobs(
-    current_user: CurrentUserDep,
+    current_user: ReadUserDep,
     service: JobServiceDep,
     status: str | None = Query(None, description="状态筛选"),
     kind: str | None = Query(None, description="类型筛选"),
@@ -202,7 +216,7 @@ async def list_jobs(
 @jobs_router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
     job_id: UUID,
-    current_user: CurrentUserDep,
+    current_user: ReadUserDep,
     service: JobServiceDep,
 ) -> JobResponse:
     """查询作业状态。
@@ -232,7 +246,7 @@ async def get_job(
 @jobs_router.post("/{job_id}/cancel", response_model=CancelResponse)
 async def cancel_job(
     job_id: UUID,
-    current_user: CurrentUserDep,
+    current_user: CancelUserDep,
     service: JobServiceDep,
 ) -> CancelResponse:
     """请求取消作业。
@@ -260,7 +274,7 @@ async def cancel_job(
 @jobs_router.get("/{job_id}/detail", response_model=JobDetailResponse)
 async def get_job_detail(
     job_id: UUID,
-    current_user: CurrentUserDep,
+    current_user: ReadUserDep,
     service: JobServiceDep,
 ) -> JobDetailResponse:
     """查询作业详情（含 payload、result、last_error）。
@@ -301,7 +315,7 @@ async def get_job_detail(
 @jobs_router.post("/{job_id}/retry", response_model=JobResponse, status_code=202)
 async def retry_job(
     job_id: UUID,
-    current_user: CurrentUserDep,
+    current_user: SubmitUserDep,
     service: JobServiceDep,
 ) -> JobResponse:
     """重试已失败的作业。
@@ -352,7 +366,7 @@ async def retry_job(
 @jobs_router.get("/{job_id}/events")
 async def job_events(
     job_id: UUID,
-    current_user: CurrentUserDep,
+    current_user: ReadUserDep,
     service: JobServiceDep,
 ) -> StreamingResponse:
     """SSE 事件流：推送作业状态变更。

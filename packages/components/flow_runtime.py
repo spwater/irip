@@ -57,6 +57,26 @@ from packages.components.registry import (
 from packages.components.sdk import ComponentContext, ComponentResult
 from packages.components.sdk import ComponentRunner
 
+#: 受保护参数白名单：外部运行 inputs 禁止覆盖这些文件路径类参数（F-13 安全约束）。
+#: 防止通过流程 inputs 注入任意文件路径，绕过节点参数的安全校验。
+PROTECTED_PARAMS: frozenset[str] = frozenset({
+    "path",
+    "file_path",
+    "input_path",
+    "output_path",
+    "file",
+    "filename",
+    "source_path",
+    "dest_path",
+    "input_file",
+    "output_file",
+    "data_path",
+    "template_path",
+    "config_path",
+    "script_path",
+    "executable_path",
+})
+
 
 # ---- ORM 实体 ----
 
@@ -546,6 +566,7 @@ class FlowRuntimeService:
         job_service: Any,
         clock: Clock | None = None,
         artifact_service: Any = None,
+        ai_config_provider: Any = None,
     ) -> None:
         """初始化流程运行时服务。
 
@@ -557,6 +578,8 @@ class FlowRuntimeService:
             job_service: 作业服务（创建异步作业触发执行）。
             clock: 时钟（可选，默认 SystemClock）。
             artifact_service: 工件服务（可选，注入到 ComponentContext）。
+            ai_config_provider: AI 配置异步提供函数（可选，注入到 ComponentContext，
+                消除 packages→apps 反向依赖 T3-3）。
         """
         self._factory = session_factory
         self._org_id = organization_id
@@ -565,7 +588,20 @@ class FlowRuntimeService:
         self._job_service = job_service
         self._clock: Clock = clock if clock is not None else SystemClock()
         self._artifact_service = artifact_service
+        self._ai_config_provider: Any = ai_config_provider
         self._cancel_events: dict[UUID, asyncio.Event] = {}
+
+    # ---- 公开只读属性（替代路由直接访问私有属性） ----
+
+    @property
+    def organization_id(self) -> UUID:
+        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
+        return self._org_id
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问，替代 ``service._factory``）。"""
+        return self._factory
 
     # ---- 定义管理 ----
 
@@ -1052,17 +1088,9 @@ class FlowRuntimeService:
             session.add(run)
             await session.flush()
 
-            # 发送 Celery task 触发异步执行
-            from apps.worker.celery_app import celery_app
-            celery_app.send_task(
-                "irip.flow.execute",
-                args=[str(job_ref.job_id), {
-                    "run_id": str(run_id),
-                    "flow_version_id": str(flow_version_id),
-                    "organization_id": str(self._org_id),
-                }],
-                queue="irip-jobs",
-            )
+            # F-04 §8.5：不再直接 send_task，统一走 Outbox→Dispatcher→Celery 链路
+            # job_service.accept() 已在同事务中 INSERT outbox_event，
+            # OutboxDispatcher 会定期拉取并通过 celery_app.send_task 发送。
 
             return run
 
@@ -1162,8 +1190,9 @@ class FlowRuntimeService:
                     binding, node_outputs, input_snapshot
                 )
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
+            # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
             for key, val in input_snapshot.items():
-                if val and key not in inputs:
+                if val and key not in inputs and key not in PROTECTED_PARAMS:
                     inputs[key] = val
 
             # 执行节点
@@ -1261,6 +1290,7 @@ class FlowRuntimeService:
                 job_id=job_id or new_id(),
                 cancel_event=cancel_event,
                 workdir=Path("/tmp/irip-flow"),
+                ai_config_provider=self._ai_config_provider,
             )
 
             # 合并节点参数与解析后的输入（输入端口数据注入 params）
@@ -1453,8 +1483,9 @@ class FlowRuntimeService:
                     binding, node_outputs, input_snapshot
                 )
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
+            # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
             for key, val in input_snapshot.items():
-                if val and key not in inputs:
+                if val and key not in inputs and key not in PROTECTED_PARAMS:
                     inputs[key] = val
 
             # 执行节点

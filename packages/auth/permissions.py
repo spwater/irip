@@ -1,14 +1,17 @@
-"""RBAC 权限定义：7 个内置角色与权限矩阵。
+"""RBAC 权限定义：5 个内置角色与权限矩阵。
 
-定义平台级角色（docs/arch-v0.md §3.1 第 258-264 行）：
-- RoleCode 枚举：7 个角色代码常量；
+定义平台级角色：
+- RoleCode 枚举：5 个角色代码常量；
 - Permission 常量：所有权限字符串；
 - BUILTIN_ROLES：code → {display_name, permissions} 映射；
 - Role ORM 模型：对应 role 表（id UUID PK, code TEXT UNIQUE, display_name, permissions JSONB）。
 
 权限矩阵设计原则：
   platform_administrator 拥有全部权限（含 user:manage, role:assign）；
-  其余角色按职能分配最小必要权限集，后续任务可扩展。
+  platform_auditor 拥有平台级只读权限；
+  lab_director 拥有实验室管理 + 全部实验操作权限；
+  lab_member 拥有实验操作权限（不含管理）；
+  lab_viewer 拥有实验资源只读权限。
 """
 
 from enum import StrEnum
@@ -24,15 +27,13 @@ from packages.common.ids import new_id
 
 
 class RoleCode(StrEnum):
-    """内置角色代码枚举（7 个）。"""
+    """内置角色代码枚举（5 个）。"""
 
     PLATFORM_ADMINISTRATOR = "platform_administrator"
-    STANDARD_OWNER = "standard_owner"
-    DATA_STEWARD = "data_steward"
-    RESEARCHER = "researcher"
-    MODEL_ENGINEER = "model_engineer"
-    REVIEWER = "reviewer"
-    READ_ONLY_USER = "read_only_user"
+    PLATFORM_AUDITOR = "platform_auditor"
+    LAB_DIRECTOR = "lab_director"
+    LAB_MEMBER = "lab_member"
+    LAB_VIEWER = "lab_viewer"
 
 
 class Permission:
@@ -176,31 +177,52 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
         "display_name": "平台管理员",
         "permissions": list(_ALL_PERMISSIONS),
     },
-    RoleCode.STANDARD_OWNER.value: {
-        "display_name": "标准负责人",
+    RoleCode.PLATFORM_AUDITOR.value: {
+        "display_name": "平台监督员",
+        "permissions": [
+            Permission.STANDARD_READ,
+            Permission.FACT_READ,
+            Permission.ARTIFACT_READ,
+            Permission.JOB_READ,
+            Permission.MODEL_READ,
+            Permission.PARAMETER_READ,
+            Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_READ,
+            Permission.INGESTION_READ,
+            Permission.PROVENANCE_READ,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_READ,
+            Permission.AUDIT_READ,
+            Permission.SYSTEM_HEALTH,
+        ],
+    },
+    RoleCode.LAB_DIRECTOR.value: {
+        "display_name": "实验室负责人",
         "permissions": [
             Permission.STANDARD_READ,
             Permission.STANDARD_WRITE,
             Permission.STANDARD_PUBLISH,
-            Permission.DEPARTMENT_READ,
-            Permission.EQUIPMENT_MANAGE,
-            Permission.EQUIPMENT_READ,
-            Permission.COMPONENT_MANAGE,
-            Permission.COMPONENT_READ,
-            Permission.FLOW_MANAGE,
-            Permission.FLOW_READ,
-            Permission.ASSISTANT_USE,
-        ],
-    },
-    RoleCode.DATA_STEWARD.value: {
-        "display_name": "数据管家",
-        "permissions": [
             Permission.FACT_READ,
             Permission.FACT_WRITE,
             Permission.ARTIFACT_READ,
             Permission.ARTIFACT_UPLOAD,
             Permission.ARTIFACT_DOWNLOAD,
+            Permission.JOB_READ,
+            Permission.JOB_SUBMIT,
+            Permission.JOB_CANCEL,
+            Permission.MODEL_READ,
+            Permission.MODEL_MANAGE,
+            Permission.MODEL_WRITE,
+            Permission.MODEL_PUBLISH,
+            Permission.MODEL_PREDICT,
+            Permission.PARAMETER_READ,
+            Permission.PARAMETER_WRITE,
+            Permission.PARAMETER_REVIEW,
+            Permission.PARAMETER_APPROVE,
+            Permission.PARAMETER_PUBLISH,
+            Permission.DEPARTMENT_MANAGE,
             Permission.DEPARTMENT_READ,
+            Permission.EQUIPMENT_MANAGE,
             Permission.EQUIPMENT_READ,
             Permission.INGESTION_READ,
             Permission.INGESTION_WRITE,
@@ -208,44 +230,6 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_READ,
             Permission.PROVENANCE_WRITE,
             Permission.PROVENANCE_PUBLISH,
-            Permission.PARAMETER_READ,
-            Permission.PARAMETER_WRITE,
-            Permission.COMPONENT_READ,
-            Permission.FLOW_EXECUTE,
-            Permission.FLOW_READ,
-            Permission.ASSISTANT_USE,
-        ],
-    },
-    RoleCode.RESEARCHER.value: {
-        "display_name": "研究员",
-        "permissions": [
-            Permission.FACT_READ,
-            Permission.ARTIFACT_READ,
-            Permission.ARTIFACT_DOWNLOAD,
-            Permission.JOB_READ,
-            Permission.JOB_SUBMIT,
-            Permission.DEPARTMENT_READ,
-            Permission.EQUIPMENT_READ,
-            Permission.PROVENANCE_READ,
-            Permission.PROVENANCE_WRITE,
-            Permission.PARAMETER_READ,
-            Permission.PARAMETER_WRITE,
-            Permission.COMPONENT_READ,
-            Permission.FLOW_EXECUTE,
-            Permission.FLOW_READ,
-            Permission.ASSISTANT_USE,
-        ],
-    },
-    RoleCode.MODEL_ENGINEER.value: {
-        "display_name": "模型工程师",
-        "permissions": [
-            Permission.MODEL_READ,
-            Permission.MODEL_MANAGE,
-            Permission.MODEL_WRITE,
-            Permission.MODEL_PUBLISH,
-            Permission.MODEL_PREDICT,
-            Permission.DEPARTMENT_READ,
-            Permission.EQUIPMENT_READ,
             Permission.COMPONENT_MANAGE,
             Permission.COMPONENT_READ,
             Permission.FLOW_MANAGE,
@@ -254,26 +238,46 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.ASSISTANT_USE,
         ],
     },
-    RoleCode.REVIEWER.value: {
-        "display_name": "审核员",
+    RoleCode.LAB_MEMBER.value: {
+        "display_name": "实验室成员",
         "permissions": [
+            Permission.FACT_READ,
+            Permission.FACT_WRITE,
+            Permission.ARTIFACT_READ,
+            Permission.ARTIFACT_UPLOAD,
+            Permission.ARTIFACT_DOWNLOAD,
+            Permission.JOB_READ,
+            Permission.JOB_SUBMIT,
+            Permission.JOB_CANCEL,
+            Permission.MODEL_READ,
+            Permission.MODEL_PREDICT,
             Permission.PARAMETER_READ,
-            Permission.PARAMETER_REVIEW,
-            Permission.PARAMETER_APPROVE,
-            Permission.PARAMETER_PUBLISH,
+            Permission.PARAMETER_WRITE,
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_READ,
+            Permission.INGESTION_READ,
+            Permission.INGESTION_WRITE,
+            Permission.PROVENANCE_READ,
+            Permission.PROVENANCE_WRITE,
+            Permission.COMPONENT_READ,
+            Permission.FLOW_EXECUTE,
+            Permission.FLOW_READ,
             Permission.ASSISTANT_USE,
         ],
     },
-    RoleCode.READ_ONLY_USER.value: {
-        "display_name": "只读用户",
+    RoleCode.LAB_VIEWER.value: {
+        "display_name": "实验室成员（只读）",
         "permissions": [
-            Permission.FACT_READ,
             Permission.STANDARD_READ,
+            Permission.FACT_READ,
+            Permission.ARTIFACT_READ,
+            Permission.JOB_READ,
+            Permission.MODEL_READ,
             Permission.PARAMETER_READ,
             Permission.DEPARTMENT_READ,
             Permission.EQUIPMENT_READ,
+            Permission.INGESTION_READ,
+            Permission.PROVENANCE_READ,
             Permission.COMPONENT_READ,
             Permission.FLOW_READ,
             Permission.ASSISTANT_USE,
@@ -285,7 +289,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
 class Role(Base):
     """角色实体（对应 role 表）。
 
-    内置 7 个角色，由迁移种子数据插入。permissions 字段为 JSONB 数组，
+    内置 5 个角色，由迁移种子数据插入。permissions 字段为 JSONB 数组，
     存储该角色拥有的权限字符串列表（如 ``["fact:read", "fact:write"]``）。
 
     Attributes:
@@ -312,7 +316,7 @@ def get_role_permissions(role_code: str) -> list[str]:
     """获取内置角色的权限列表。
 
     Args:
-        role_code: 角色代码（如 ``"researcher"``）。
+        role_code: 角色代码（如 ``"lab_member"``）。
 
     Returns:
         list[str]: 权限字符串列表。未知角色返回空列表。

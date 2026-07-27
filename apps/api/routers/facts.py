@@ -15,11 +15,15 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import should_filter_by_department
+from packages.common.artifacts import ArtifactService
+from packages.common.errors import AppError
 from packages.facts.observations import (
     FactRevisionRef,
     NormalizedObservation,
@@ -238,7 +242,7 @@ async def create_fact(
     command = CreateFactCommand(
         fact_type=body.fact_type,
         template_version_id=body.template_version_id,
-        organization_id=service._org_id,
+        organization_id=service.organization_id,
         object_id=body.object_id,
         subject_id=body.subject_id,
         started_at=body.started_at,
@@ -300,12 +304,57 @@ async def list_facts(
     # 直接从 fact_revision 表读快照字段（零 JOIN）
     items = [_ref_to_response(r) for r in refs]
     group_counts: dict[str, int] = {}
+
+    # 实验室级数据隔离：非管理员且无实验室 → 返回空列表
+    if should_filter_by_department(current_user) and current_user.department_id is None:
+        return FactListResponse(items=[], next_cursor=None, group_counts={})
+
     if items:
         import sqlalchemy as sa
         from sqlalchemy import func
         from packages.facts.entities import FactRevision
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
-        async with service._factory() as session:
+        async with service.session_factory() as session:
+            # 实验室级数据隔离：通过 flow_run_id 链路过滤事实
+            # FactRevision.flow_run_id → FlowRun → FlowDefinitionVersionORM
+            # → FlowDefinition.department_id
+            if should_filter_by_department(current_user):
+                from packages.components.flow_runtime import (
+                    FlowDefinition,
+                    FlowDefinitionVersionORM,
+                    FlowRun,
+                )
+                dept_stmt = (
+                    sa.select(FactRevision.id)
+                    .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+                    .join(
+                        FlowDefinitionVersionORM,
+                        FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
+                    )
+                    .join(
+                        FlowDefinition,
+                        FlowDefinitionVersionORM.flow_definition_id
+                        == FlowDefinition.id,
+                    )
+                    .where(
+                        FactRevision.id.in_(revision_ids),
+                        FlowDefinition.department_id == current_user.department_id,
+                    )
+                )
+                dept_result = await session.execute(dept_stmt)
+                allowed_ids = {str(row[0]) for row in dept_result}
+                items = [
+                    item for item in items if item.revision_id in allowed_ids
+                ]
+                revision_ids = [
+                    __import__('uuid').UUID(item.revision_id)
+                    for item in items
+                ]
+                if not items:
+                    return FactListResponse(
+                        items=[], next_cursor=None, group_counts={}
+                    )
+
             snap_stmt = (
                 sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
@@ -323,11 +372,34 @@ async def list_facts(
                     item.operator = snap[3]
 
             # 查每个 task_code 的总数（不受分页限制）
-            count_stmt = (
-                sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
-                .where(FactRevision.task_code.isnot(None))
-                .group_by(FactRevision.task_code)
-            )
+            if should_filter_by_department(current_user):
+                count_stmt = (
+                    sa.select(
+                        FactRevision.task_code,
+                        func.count(func.distinct(FactRevision.fact_id)),
+                    )
+                    .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+                    .join(
+                        FlowDefinitionVersionORM,
+                        FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
+                    )
+                    .join(
+                        FlowDefinition,
+                        FlowDefinitionVersionORM.flow_definition_id
+                        == FlowDefinition.id,
+                    )
+                    .where(
+                        FactRevision.task_code.isnot(None),
+                        FlowDefinition.department_id == current_user.department_id,
+                    )
+                    .group_by(FactRevision.task_code)
+                )
+            else:
+                count_stmt = (
+                    sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
+                    .where(FactRevision.task_code.isnot(None))
+                    .group_by(FactRevision.task_code)
+                )
             count_result = await session.execute(count_stmt)
             group_counts = {str(row[0]): row[1] for row in count_result}
 
@@ -340,8 +412,8 @@ async def list_facts(
             s3_repo = _build_s3_repo()
             artifact_svc = ArtifactService(
                 s3_repo=s3_repo,
-                session_factory=service._factory,
-                organization_id=service._org_id,
+                session_factory=service.session_factory,
+                organization_id=service.organization_id,
                 uploaded_by=current_user.user_id,
             )
             for item in items:
@@ -409,7 +481,7 @@ async def search_facts(
         import sqlalchemy as sa
         from packages.facts.entities import FactRevision
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
-        async with service._factory() as session:
+        async with service.session_factory() as session:
             snap_stmt = (
                 sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
@@ -488,7 +560,7 @@ async def search_facts_by_data(
             retryable=False,
         )
 
-    async with service._factory() as session:
+    async with service.session_factory() as session:
         # 查匹配的 fact_revision_id（去重）
         stmt = (
             sa.select(FactDataIndex.fact_revision_id)
@@ -556,8 +628,8 @@ async def search_facts_by_data(
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
-            session_factory=service._factory,
-            organization_id=service._org_id,
+            session_factory=service.session_factory,
+            organization_id=service.organization_id,
             uploaded_by=current_user.user_id,
         )
         for item in items:
@@ -624,7 +696,7 @@ async def search_facts(
         from sqlalchemy import func
         from packages.facts.entities import FactRevision
         revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
-        async with service._factory() as session:
+        async with service.session_factory() as session:
             snap_stmt = (
                 sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
                 .where(FactRevision.id.in_(revision_ids))
@@ -659,8 +731,8 @@ async def search_facts(
             s3_repo = _build_s3_repo()
             artifact_svc = ArtifactService(
                 s3_repo=s3_repo,
-                session_factory=service._factory,
-                organization_id=service._org_id,
+                session_factory=service.session_factory,
+                organization_id=service.organization_id,
                 uploaded_by=current_user.user_id,
             )
             for item in items:
@@ -776,7 +848,7 @@ async def get_fact_data(
     fact = await service.get(fact_id)
     revision_id = fact.revision_id
 
-    async with service._factory() as session:
+    async with service.session_factory() as session:
         # 查 fact_artifact + artifact，找 JSON 类型的（提取数据）
         from packages.common.artifacts import Artifact
         result = await session.execute(
@@ -797,8 +869,8 @@ async def get_fact_data(
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
-            session_factory=service._factory,
-            organization_id=service._org_id,
+            session_factory=service.session_factory,
+            organization_id=service.organization_id,
             uploaded_by=current_user.user_id,
         )
         data_bytes = await artifact_svc.get_bytes(fa.artifact_id)
@@ -835,6 +907,14 @@ async def get_fact_data(
                                 comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
                                 task_info["project_name"] = fd.project_name
                                 task_info["created_at"] = fd.created_at.isoformat() if fd.created_at else None
+                                # 查所属单位名称
+                                if fd.department_id:
+                                    from packages.departments.entities import Department
+                                    dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
+                                    dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
+                                    task_info["department_name"] = dept_record.display_name if dept_record else None
+                                else:
+                                    task_info["department_name"] = None
                                 # 查每个组件的实验对象→设备→部门链路
                                 data_source_list = []
                                 for comp_name in comp_names:
@@ -916,6 +996,7 @@ async def get_fact_data(
                                     "task_name": fd.display_name,
                                     "task_source": dept_name,
                                     "project_name": fd.project_name,
+                                    "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
                                     "created_at": fd.created_at.isoformat() if fd.created_at else None,
                                 }
@@ -976,48 +1057,68 @@ async def get_fact_data(
         return result_data
 
 
+@facts_router.post("/{fact_id}/archive", status_code=204)
+async def archive_fact(
+    fact_id: UUID,
+    current_user: WriteUserDep,
+    service: FactServiceDep,
+) -> None:
+    """归档实验事实（tombstone，替代物理删除）。
+
+    技术设计文档 F-03 §8.3：不可变表通过 tombstone 模式实现逻辑删除，
+    将 Fact.status 设为 'archived'，不物理删除任何修订或证据记录。
+
+    安全约定：
+    - 事实修订（fact_revision）为不可变表，不允许 UPDATE/DELETE；
+    - 仅更新 Fact 主表的 status 字段（tombstone）；
+    - 归档后事实在列表查询中不可见（status != 'archived' 过滤）。
+
+    Args:
+        fact_id: 事实 UUID。
+        current_user: 当前认证用户（需 fact:write 权限）。
+        service: 事实服务。
+
+    Raises:
+        AppError: code="not_found"，当事实不存在时。
+    """
+    import sqlalchemy as sa
+    from packages.common.database import session_scope
+    from packages.facts.entities import Fact
+
+    async with session_scope(service.session_factory) as session:
+        result = await session.execute(
+            sa.select(Fact).where(
+                Fact.organization_id == service.organization_id,
+                Fact.id == fact_id,
+            )
+        )
+        fact = result.scalar_one_or_none()
+        if fact is None:
+            raise AppError(
+                code="not_found",
+                message=f"事实不存在: {fact_id}",
+                retryable=False,
+                fields={"fact_id": str(fact_id)},
+            )
+        fact.status = "archived"
+        await session.flush()
+
+
 @facts_router.delete("/{fact_id}", status_code=204)
 async def delete_fact(
     fact_id: UUID,
     current_user: WriteUserDep,
     service: FactServiceDep,
 ) -> None:
-    """删除实验事实（级联删除所有关联数据）。
+    """删除实验事实 — 已改为归档（tombstone）。
 
-    级联删除：fact_revision_link → normalized_observation → raw_observation
-    → fact_artifact → fact_revision → fact
+    技术设计文档 F-03：物理删除已禁用，改为设置 status='archived'（tombstone）。
+    请使用 POST /{fact_id}/archive 端点进行归档。
     """
-    import sqlalchemy as sa
-    from packages.facts.entities import Fact, FactRevision
-
-    async with service._factory() as session:
-        # 查所有 revision
-        revisions = await session.execute(
-            sa.select(FactRevision).where(FactRevision.fact_id == fact_id)
-        )
-        for rev in revisions.scalars():
-            await session.execute(
-                sa.text("DELETE FROM fact_revision_link WHERE from_revision_id = :rid OR to_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM normalized_observation WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM raw_observation WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM fact_artifact WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.delete(rev)
-
-        fact = await session.get(Fact, fact_id)
-        if fact:
-            await session.delete(fact)
-        await session.commit()
+    raise HTTPException(
+        status_code=405,
+        detail="物理删除事实已被禁用。请使用 POST /api/v1/facts/{id}/archive 归档端点替代。",
+    )
 
 
 @facts_router.delete("/by-task/{task_code}", status_code=204)
@@ -1026,46 +1127,14 @@ async def delete_facts_by_task(
     current_user: WriteUserDep,
     service: FactServiceDep,
 ) -> None:
-    """按任务编码批量删除所有关联事实。
+    """按任务编码批量删除事实 — 已禁用（P0 止血）。
 
-    通过 fact_revision.task_code 查找所有关联的 fact，级联删除。
+    批量物理删除端点已禁用，防止不可逆的数据丢失和证据链断裂。
     """
-    import sqlalchemy as sa
-    from packages.facts.entities import Fact, FactRevision
-
-    async with service._factory() as session:
-        # 查所有该 task_code 的 revision
-        revisions = await session.execute(
-            sa.select(FactRevision).where(FactRevision.task_code == task_code)
-        )
-        deleted_fact_ids: set[UUID] = set()
-        for rev in revisions.scalars():
-            await session.execute(
-                sa.text("DELETE FROM fact_revision_link WHERE from_revision_id = :rid OR to_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM normalized_observation WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM raw_observation WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.execute(
-                sa.text("DELETE FROM fact_artifact WHERE fact_revision_id = :rid"),
-                {"rid": rev.id},
-            )
-            await session.delete(rev)
-            deleted_fact_ids.add(rev.fact_id)
-
-        # 删除 fact 主记录
-        for fid in deleted_fact_ids:
-            fact = await session.get(Fact, fid)
-            if fact:
-                await session.delete(fact)
-
-        await session.commit()
+    raise HTTPException(
+        status_code=405,
+        detail="按任务编码批量物理删除事实已被禁用（P0 止血）。",
+    )
 
 
 @facts_router.post(

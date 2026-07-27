@@ -9,12 +9,42 @@
 - has_header: 是否包含表头（可选，默认 True）。
 """
 
+import asyncio
 import csv
 from pathlib import Path
 from typing import Any
 
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
+
+
+def _read_csv_sync(
+    path_str: str,
+    delimiter: str | None,
+    encoding: str,
+) -> list[list[str]]:
+    """同步读取 CSV 文件并返回所有行（在线程池中执行，F-21）。"""
+    with open(
+        Path(path_str), newline="", encoding=encoding
+    ) as f:
+        if delimiter:
+            reader = csv.reader(f, delimiter=delimiter)
+        else:
+            # 自动检测分隔符
+            sample = f.readline()
+            f.seek(0)
+            if not sample.strip():
+                reader = csv.reader(f, delimiter=",")
+            else:
+                try:
+                    detected = csv.Sniffer().sniff(
+                        sample, delimiters=",\t;|"
+                    )
+                    reader = csv.reader(f, delimiter=detected.delimiter)
+                except csv.Error:
+                    reader = csv.reader(f, delimiter=",")
+
+        return list(reader)
 
 
 class CSVReader:
@@ -31,27 +61,10 @@ class CSVReader:
         encoding: str = params.get("encoding", "utf-8")
         has_header: bool = params.get("has_header", True)
 
-        with open(
-            Path(path_str), newline="", encoding=encoding
-        ) as f:
-            if delimiter:
-                reader = csv.reader(f, delimiter=delimiter)
-            else:
-                # 自动检测分隔符
-                sample = f.readline()
-                f.seek(0)
-                if not sample.strip():
-                    reader = csv.reader(f, delimiter=",")
-                else:
-                    try:
-                        detected = csv.Sniffer().sniff(
-                            sample, delimiters=",\t;|"
-                        )
-                        reader = csv.reader(f, delimiter=detected.delimiter)
-                    except csv.Error:
-                        reader = csv.reader(f, delimiter=",")
-
-            all_rows = list(reader)
+        # F-21: 同步文件 I/O 放 asyncio.to_thread() 避免阻塞事件循环
+        all_rows = await asyncio.to_thread(
+            _read_csv_sync, path_str, delimiter, encoding
+        )
 
         if not all_rows:
             return ComponentResult(

@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateEquipment,
+  apiGetDepartmentNameMap,
   apiGetEquipment,
   apiDeleteEquipment,
   apiListDepartments,
@@ -61,7 +62,7 @@ export function EquipmentPage({
     if (presetDeptId) {
       setEditingItem(null);
       form.resetFields();
-      form.setFieldsValue({ department_id: presetDeptId });
+      form.setFieldsValue({ department_id: presetDeptId, visible_departments: [] });
       setModalOpen(true);
       onPresetDeptIdConsumed?.();
     }
@@ -86,6 +87,17 @@ export function EquipmentPage({
     value: d.id,
     label: d.display_name,
   }));
+
+  // ---- 数据查询：全部门名称映射（不受部门隔离限制，用于可见单位名称展示）----
+  const { data: deptNameMapData } = useQuery({
+    queryKey: ['department-name-map'],
+    queryFn: apiGetDepartmentNameMap,
+  });
+
+  // 部门 ID → 名称映射（完整，不受隔离限制），用于列表中展示可见单位名称
+  const deptMap = new Map(
+    (deptNameMapData ?? []).map((d) => [d.id, d.display_name] as const),
+  );
 
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
@@ -112,6 +124,7 @@ export function EquipmentPage({
         display_name: string;
         description?: string;
         department_id?: string;
+        visible_departments?: string[];
         sort_order?: number;
         lock_version: number;
       };
@@ -166,7 +179,7 @@ export function EquipmentPage({
   const handleCreate = (): void => {
     setEditingItem(null);
     form.resetFields();
-    form.setFieldsValue({ sort_order: 0 });
+    form.setFieldsValue({ sort_order: 0, visible_departments: [] });
     setModalOpen(true);
   };
 
@@ -178,6 +191,7 @@ export function EquipmentPage({
       display_name: record.display_name,
       description: detail.description ?? '',
       department_id: record.department_id,
+      visible_departments: detail.visible_departments ?? [],
       sort_order: record.sort_order,
     });
     setModalOpen(true);
@@ -194,6 +208,7 @@ export function EquipmentPage({
             display_name: values.display_name,
             description: values.description ?? detail.description ?? null,
             department_id: values.department_id,
+            visible_departments: values.visible_departments ?? [],
             sort_order: values.sort_order ?? 0,
             lock_version: detail.lock_version,
           },
@@ -203,6 +218,7 @@ export function EquipmentPage({
           display_name: values.display_name,
           description: values.description ?? null,
           department_id: values.department_id,
+          visible_departments: values.visible_departments ?? [],
           sort_order: values.sort_order ?? 0,
         });
       }
@@ -242,11 +258,38 @@ export function EquipmentPage({
       ),
     },
     {
-      title: '所属机构',
+      title: '所属单位',
       dataIndex: 'department_name',
       key: 'department_name',
       width: 160,
-      render: (name: string) => name || '-',
+      render: (name: string) =>
+        name ? (
+          <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+            {name}
+          </Tag>
+        ) : (
+          <Text type="secondary">-</Text>
+        ),
+    },
+    {
+      title: '可见单位',
+      key: 'visible_departments',
+      width: 220,
+      render: (_: unknown, record: EquipmentListItem) => {
+        const ids = record.visible_departments ?? [];
+        if (!ids.length) {
+          return <Text type="secondary">-</Text>;
+        }
+        return (
+          <Space size={4} wrap>
+            {ids.map((id) => (
+              <Tag key={id} color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                {deptMap.get(id) ?? id.slice(0, 8)}
+              </Tag>
+            ))}
+          </Space>
+        );
+      },
     },
     {
       title: '状态',
@@ -393,6 +436,20 @@ export function EquipmentPage({
               options={deptOptions}
               showSearch
               optionFilterProp="label"
+            />
+          </Form.Item>
+          <Form.Item
+            name="visible_departments"
+            label="可见单位"
+            tooltip="选择除所属机构外，哪些实验室也可以看到该设备。所属机构默认可见，无需重复选择。"
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择可见单位（可多选）"
+              options={deptOptions}
+              showSearch
+              optionFilterProp="label"
+              allowClear
             />
           </Form.Item>
           <Form.Item

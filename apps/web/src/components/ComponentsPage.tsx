@@ -29,6 +29,7 @@ import {
   apiGetComponent,
   apiListComponentVersions,
   apiListComponents,
+  apiListDepartments,
   apiListEquipment,
   apiListObjects,
   apiPublishComponent,
@@ -297,6 +298,7 @@ function ComponentFormFields({
 export function ComponentsPage({ prefillObject }: { prefillObject?: string }): JSX.Element {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
+  const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editOriginalName, setEditOriginalName] = useState<string | undefined>(undefined);
@@ -325,7 +327,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
     queryFn: () => apiListComponents(),
   });
 
-  // ---- 实验对象列表查询（用于显示"实验对象"列）----
+  // ---- 实验对象列表查询（用于显示"实验对象"列 + 单位筛选）----
   const { data: objectData } = useQuery({
     queryKey: ['objects-for-component'],
     queryFn: () => apiListObjects({ page_size: 100 }),
@@ -339,6 +341,23 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
     value: o.code,
     label: o.display_name,
   }));
+
+  // ---- 实验室列表查询（用于单位筛选）----
+  const { data: deptData } = useQuery({
+    queryKey: ['departments-for-component-filter'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+  });
+  const deptMap = new Map<string, string>(
+    (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
+  );
+  const deptOptions = (deptData?.items ?? []).map((d) => ({
+    value: d.id,
+    label: d.display_name,
+  }));
+  // experimental_object_code → department_id 映射（通过 objectMap）
+  const objectCodeToDeptId = new Map<string, string | null>(
+    (objectData?.items ?? []).map((o) => [o.code, o.department_id ?? null]),
+  );
 
   // 当 objectOptions 异步加载完成后，如果弹窗已打开且有预填值，
   // 重新设置一次 experimental_object_code，确保 Select 在 options 就绪后正确显示 label。
@@ -381,7 +400,15 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   // 按摩登/归档分组（engine=llm → 摩登，其余归入归档）
   const modernItems = allItems.filter((i) => i.engine === 'llm' && i.status !== 'deprecated');
   const archivedItems = allItems.filter((i) => i.status === 'deprecated');
-  const currentItems = activeTab === 'modern' ? modernItems : archivedItems;
+  let currentItems = activeTab === 'modern' ? modernItems : archivedItems;
+
+  // 按单位筛选（通过 experimental_object_code → department_id 关联）
+  if (deptFilter) {
+    currentItems = currentItems.filter((i) => {
+      const deptId = i.experimental_object_code ? objectCodeToDeptId.get(i.experimental_object_code) : null;
+      return deptId === deptFilter;
+    });
+  }
 
   // ---- 详情查询 ----
   const { data: detail, isLoading: detailLoading } = useQuery({
@@ -655,6 +682,18 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       },
     },
     {
+      title: '所属单位',
+      key: 'department',
+      width: 140,
+      render: (_: unknown, record: ComponentSummary) => {
+        const deptId = record.experimental_object_code
+          ? objectCodeToDeptId.get(record.experimental_object_code)
+          : null;
+        const name = deptId ? deptMap.get(deptId) : null;
+        return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
@@ -755,6 +794,16 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         <Button type="primary" onClick={handleOpenModal}>
           新建接口
         </Button>
+        <Select
+          placeholder="按单位筛选"
+          style={{ width: 180 }}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          value={deptFilter}
+          onChange={(val: string | undefined) => setDeptFilter(val)}
+          options={deptOptions}
+        />
         <Button
           type={activeTab === 'modern' ? 'primary' : 'default'}
           onClick={() => setActiveTab('modern')}

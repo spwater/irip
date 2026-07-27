@@ -8,12 +8,19 @@
 - record_key: 若顶层为对象且需提取某键作为记录数组（可选）。
 """
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
 
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
+
+
+def _read_json_sync(path_str: str) -> Any:
+    """同步读取并解析 JSON 文件（在线程池中执行，F-21）。"""
+    with open(Path(path_str), encoding="utf-8") as f:
+        return json.load(f)
 
 
 class JSONReader:
@@ -28,8 +35,8 @@ class JSONReader:
         path_str: str = params["path"]
         json_path: str | None = params.get("json_path")
 
-        with open(Path(path_str), encoding="utf-8") as f:
-            data: Any = json.load(f)
+        # F-21: 同步文件 I/O 放 asyncio.to_thread() 避免阻塞事件循环
+        data: Any = await asyncio.to_thread(_read_json_sync, path_str)
 
         # 沿 json_path 点号路径定位
         if json_path:

@@ -1,0 +1,128 @@
+classDiagram
+    class Principal {
+        +UUID user_id
+        +UUID organization_id
+        +str email
+        +list~str~ roles
+        +QueryScope scope
+        +bool is_active
+        +from_current_user(user, org_id) Principal
+    }
+
+    class TenantId {
+        +UUID value
+        +from_principal(principal) TenantId
+    }
+
+    class QueryScope {
+        +UUID organization_id
+        +UUID department_id
+        +UUID object_root_id
+        +str resource_type
+        +apply~T~(query) Query
+    }
+
+    class ErrorCode {
+        <<enum>>
+        +INVALID_CREDENTIALS
+        +TOKEN_EXPIRED
+        +FORBIDDEN
+        +NOT_FOUND
+        +CONFLICT
+        +FILE_TOO_LARGE
+        +SSRF_BLOCKED
+        +COMPONENT_TIMEOUT
+        +AI_PROVIDER_ERROR
+        +UNKNOWN_JOB_KIND
+        +str code
+        +int http_status
+    }
+
+    class AppError {
+        +ErrorCode code_enum
+        +str message
+        +bool retryable
+        +dict fields
+        +to_dict() dict
+    }
+
+    class SafeHttpClient {
+        +set~str~ allowlist
+        +int max_response_size
+        +int timeout_seconds
+        +get(url) Response
+        +_validate_ip(ip) void
+        +_is_private(ip) bool
+    }
+
+    class EnvelopeCrypto {
+        +bytes master_key
+        +encrypt(plaintext) tuple~str, str~
+        +decrypt(ciphertext, key_version) str
+    }
+
+    class AuditMiddleware {
+        +record(actor, org, action, resource, result) void
+        +get_coverage() list~str~
+    }
+
+    class OutboxDispatcherService {
+        +async_sessionmaker factory
+        +Celery celery_app
+        +dispatch(batch_size) int
+        +_send_to_celery(event) bool
+    }
+
+    class JobHandlerRegistry {
+        +dict~str, JobHandler~ handlers
+        +register(kind, handler) void
+        +get(kind) JobHandler
+    }
+
+    class JobService {
+        +async_sessionmaker factory
+        +UUID organization_id
+        +UUID created_by
+        +accept(kind, payload, idempotency_key) JobRef
+        +request_cancel(job_id, principal) JobRef
+        +get(job_id, org_id) JobRef
+        +get_raw(job_id, org_id) Job
+        +list(scope, status, kind, cursor, limit) tuple
+    }
+
+    class JobExecutor {
+        +WorkerLeaseManager lease_manager
+        +async_sessionmaker factory
+        +dict handlers
+        +execute(job_id, owner) JobResult
+        +register_handler(kind, handler) void
+    }
+
+    class JobRepository {
+        +insert(session, job) Job
+        +get(session, org_id, job_id) Job
+        +get_by_idempotency(session, org_id, key) Job
+        +update_status(session, job_id, status, result, lock_version) bool
+        +acquire_lease(session, job_id, owner, expires_at) bool
+        +reap_expired_leases(session, now) list
+    }
+
+    class FactService {
+        +async_sessionmaker factory
+        +UUID organization_id
+        +UUID actor_id
+        +create_fact(principal, template, observations) Fact
+        +add_revision(principal, fact_id, observations) FactRevision
+        +archive(principal, fact_id) None
+        +search(scope, conditions) FactListResponse
+    }
+
+    Principal --> QueryScope
+    Principal --> TenantId
+    AppError --> ErrorCode
+    AuditMiddleware --> Principal
+    OutboxDispatcherService --> JobHandlerRegistry
+    JobService --> JobRepository
+    JobExecutor --> JobHandlerRegistry
+    JobExecutor --> JobRepository
+    FactService --> Principal

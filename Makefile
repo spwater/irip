@@ -8,7 +8,7 @@ RUFF := .venv/bin/python -m ruff
 MYPY := .venv/bin/python -m mypy
 PNPM := pnpm
 
-.PHONY: help lint typecheck test-unit test-integration web-test web-build install-dev
+.PHONY: help lint format-check typecheck test-unit test-integration web-test web-build install-dev
 
 help: ## 显示可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -16,11 +16,15 @@ help: ## 显示可用目标
 install-dev: ## 安装 Python dev 依赖（清华源）
 	$(PY) -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e ".[dev]"
 
-lint: ## ruff 静态检查（apps packages tests）
+lint: ## ruff 静态检查 + 格式检查（apps packages tests）— 范围与 CI/release-gate 一致（F-24）
 	$(RUFF) check apps packages tests
+	$(RUFF) format --check apps packages tests
 
-typecheck: ## mypy 严格类型检查（common 内核）
-	$(MYPY) packages/common
+format-check: ## ruff format 检查（单独运行，F-24）
+	$(RUFF) format --check apps packages tests
+
+typecheck: ## mypy 严格类型检查（与 CI 一致：packages + apps/api）
+	$(MYPY) packages apps/api
 
 test-unit: ## 单元测试（不含集成）
 	$(PYTEST) tests/unit -v

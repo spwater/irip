@@ -2,13 +2,14 @@
 
 端点（docs/arch-v0.md §8.3 V0 验收标准 + 实施计划 Task 9）：
   GET /api/v1/health/live  — 存活检查（always 200，不检查依赖）
-  GET /api/v1/health/ready — 就绪检查（DB + Redis + MinIO + Outbox）
+  GET /api/v1/health/ready — 就绪检查（DB + Redis + MinIO + Outbox + Worker heartbeat）
 
 就绪检查各项：
   1. DB 迁移 head 匹配（SELECT version FROM alembic_version）
   2. Redis ping
   3. MinIO bucket 可访问
   4. Outbox dispatcher 心跳（无超过 N 秒未投递的事件）
+  5. Worker heartbeat（最近 N 秒内有心跳记录）
 
 全部通过返回 200；任一失败返回 503 + 详细状态。
 """
@@ -26,11 +27,33 @@ from packages.common.s3_repository import S3Repository
 #: 路由实例。
 health_router = APIRouter(prefix="/api/v1/health", tags=["health"])
 
-#: 期望的 Alembic 迁移 head 版本（0024 = AI 对话置顶/归档 + AI 配置思考模式）。
-EXPECTED_MIGRATION_HEAD: str = "0024"
-
 #: Outbox 心跳阈值：超过此秒数仍未投递的事件视为 dispatcher 不健康。
 OUTBOX_HEARTBEAT_MAX_AGE_SECONDS: int = 120
+
+#: Worker 心跳阈值：超过此秒数无心跳记录视为 Worker 不健康（F-19）。
+WORKER_HEARTBEAT_MAX_AGE_SECONDS: int = 60
+
+
+def _get_expected_heads() -> set[str]:
+    """从 Alembic ScriptDirectory 动态读取代码期望的迁移 head 集合。
+
+    替代原先硬编码的 ``EXPECTED_MIGRATION_HEAD = "0024"``，避免迁移新增后
+    readiness 检查误报 head 不一致。
+
+    Returns:
+        set[str]: 期望的迁移 head revision 集合（通常只有 1 个）。
+    """
+    from pathlib import Path
+
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    config = Config()
+    # 以本文件所在位置推断项目根目录下的 migrations 目录
+    migrations_path = Path(__file__).resolve().parents[3] / "migrations"
+    config.set_main_option("script_location", str(migrations_path))
+    script_dir = ScriptDirectory.from_config(config)
+    return {rev.revision for rev in script_dir.get_revisions("heads")}
 
 
 # ---- 依赖占位（由应用启动或测试覆盖）----
@@ -85,7 +108,7 @@ async def readiness(
     """就绪探针：检查 DB、Redis、MinIO、Outbox 全部依赖。
 
     检查项：
-      1. DB 迁移版本匹配 EXPECTED_MIGRATION_HEAD；
+      1. DB 迁移版本匹配从 Alembic ScriptDirectory 动态读取的 head 集合；
       2. Redis ping 成功；
       3. MinIO bucket 可访问；
       4. Outbox 无超过 OUTBOX_HEARTBEAT_MAX_AGE_SECONDS 秒的未投递事件。
@@ -99,15 +122,16 @@ async def readiness(
 
     # ---- 1. DB 迁移 head ----
     try:
+        expected_heads = _get_expected_heads()
         async with session_factory() as session:
             result = await session.execute(
                 sa.text("SELECT version_num FROM alembic_version")
             )
             version: str | None = result.scalar()
-            if version != EXPECTED_MIGRATION_HEAD:
+            if version not in expected_heads:
                 checks["database"] = {
                     "status": "error",
-                    "expected": EXPECTED_MIGRATION_HEAD,
+                    "expected": sorted(expected_heads),
                     "actual": version,
                 }
                 all_ok = False
@@ -160,6 +184,42 @@ async def readiness(
                 checks["outbox"] = {"status": "ok"}
     except Exception as exc:
         checks["outbox"] = {"status": "error", "error": str(exc)}
+        all_ok = False
+
+    # ---- 5. Worker heartbeat（F-19，通过 Redis 共享） ----
+    try:
+        import time
+
+        import redis
+
+        redis_url = os.getenv("IRIP_REDIS_URL", "redis://redis:6379/0")
+        r = redis.from_url(redis_url)
+        raw = r.get("irip:worker:heartbeat")
+
+        if raw is not None:
+            latest_heartbeat: float = float(raw)
+            age_seconds: float = time.time() - latest_heartbeat
+            if age_seconds > WORKER_HEARTBEAT_MAX_AGE_SECONDS:
+                checks["worker"] = {
+                    "status": "error",
+                    "last_heartbeat_age_seconds": round(age_seconds, 1),
+                    "threshold_seconds": WORKER_HEARTBEAT_MAX_AGE_SECONDS,
+                }
+                all_ok = False
+            else:
+                checks["worker"] = {
+                    "status": "ok",
+                    "last_heartbeat_age_seconds": round(age_seconds, 1),
+                }
+        else:
+            # 无心跳记录：Worker 可能尚未启动或 Beat 未调度
+            checks["worker"] = {
+                "status": "error",
+                "error": "no worker heartbeat recorded",
+            }
+            all_ok = False
+    except Exception as exc:
+        checks["worker"] = {"status": "error", "error": str(exc)}
         all_ok = False
 
     status_code = 200 if all_ok else 503

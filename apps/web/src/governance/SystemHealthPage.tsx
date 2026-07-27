@@ -67,10 +67,10 @@ export function SystemHealthPage(): JSX.Element {
   });
 
   // ---- 权限检查 ----
-  if (!canView) {
+    if (!canView) {
     return (
       <div>
-        <Title level={3}>系统健康</Title>
+        <Title level={5}>系统健康</Title>
         <Text type="danger">您没有系统健康监控权限。</Text>
       </div>
     );
@@ -126,16 +126,17 @@ export function SystemHealthPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={3}>系统健康</Title>
-
-      <Space style={{ marginBottom: 16 }}>
-        <Button onClick={() => refetch()} loading={isFetching}>
-          刷新
-        </Button>
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          每 30 秒自动刷新
-        </Text>
-      </Space>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={5} style={{ margin: 0, paddingTop: '1em' }}>系统健康</Title>
+        <Space>
+          <Button onClick={() => refetch()} loading={isFetching}>
+            刷新
+          </Button>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            每 30 秒自动刷新
+          </Text>
+        </Space>
+      </div>
 
       {/* 整体状态 */}
       {status !== 'ok' && (

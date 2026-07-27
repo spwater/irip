@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import should_filter_by_department
+from packages.common.errors import AppError
 from packages.equipment.service import EquipmentService
 
 #: 路由实例。
@@ -63,6 +65,9 @@ class CreateEquipmentBody(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     department_id: str = Field(..., description="所属部门 UUID")
+    visible_departments: list[str] = Field(
+        default_factory=list, description="可见单位 UUID 列表"
+    )
     sort_order: int = Field(0, ge=0)
 
 
@@ -72,6 +77,9 @@ class UpdateEquipmentBody(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     department_id: str | None = Field(None, description="新部门 UUID（可选）")
+    visible_departments: list[str] | None = Field(
+        None, description="新可见单位 UUID 列表（None 表示不修改）"
+    )
     sort_order: int | None = Field(None, ge=0)
     lock_version: int = Field(..., ge=0)
 
@@ -95,6 +103,7 @@ class EquipmentResponse(BaseModel):
     display_name: str
     description: str | None
     department_id: str
+    visible_departments: list[str]
     status: str
     sort_order: int
     created_at: datetime
@@ -111,6 +120,7 @@ class EquipmentListItem(BaseModel):
     description: str | None
     department_id: str
     department_name: str
+    visible_departments: list[str]
     status: str
     sort_order: int
 
@@ -134,12 +144,44 @@ def _to_response(equip: object) -> EquipmentResponse:
         display_name=equip.display_name,  # type: ignore[attr-defined]
         description=equip.description,  # type: ignore[attr-defined]
         department_id=str(equip.department_id),  # type: ignore[attr-defined]
+        visible_departments=list(getattr(equip, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=equip.status,  # type: ignore[attr-defined]
         sort_order=equip.sort_order,  # type: ignore[attr-defined]
         created_at=equip.created_at,  # type: ignore[attr-defined]
         updated_at=equip.updated_at,  # type: ignore[attr-defined]
         lock_version=equip.lock_version,  # type: ignore[attr-defined]
     )
+
+
+async def _check_ownership(
+    current_user: CurrentUser,
+    equipment_department_id: UUID | None,
+    service: EquipmentServiceDep,
+) -> None:
+    """检查当前用户是否可以编辑/删除设备（含后代继承）。
+
+    上级单位自动拥有下级单位的编辑权限。
+    可见单位（visible_departments）的用户只能看不能改。
+    平台管理员不受限制。
+    """
+    if not should_filter_by_department(current_user):
+        return  # 平台管理员/监督员不受限制
+    if equipment_department_id is None:
+        return  # 设备无所属单位，允许操作
+    if current_user.department_id is None:
+        raise AppError(code="forbidden", message="只有所属单位的成员才能编辑/删除设备", retryable=False, fields={})
+
+    # 获取用户实验室及其所有后代实验室 ID
+    from apps.api.dependencies.dept_scope import get_visible_department_ids
+    factory = service._factory  # type: ignore[attr-defined]
+    visible_ids = await get_visible_department_ids(current_user, factory)
+    if equipment_department_id not in visible_ids:
+        raise AppError(
+            code="forbidden",
+            message="只有所属单位（或上级单位）的成员才能编辑/删除设备",
+            retryable=False,
+            fields={},
+        )
 
 
 # ---- 端点 ----
@@ -173,6 +215,7 @@ async def create_equipment(
         display_name=body.display_name,
         description=body.description,
         sort_order=body.sort_order,
+        visible_departments=body.visible_departments,
     )
     return _to_response(equipment)
 
@@ -199,9 +242,19 @@ async def list_equipment(
     Returns:
         EquipmentListResponse: 分页列表。
     """
-    dept_id = UUID(department_id) if department_id is not None else None
+    # 实验室级数据隔离：非管理员强制使用自己的 department_id
+    # 可见性规则：department_id == 用户实验室 OR visible_departments 包含用户实验室
+    if should_filter_by_department(current_user):
+        if current_user.department_id is None:
+            return EquipmentListResponse(items=[], next_cursor=None, has_more=False)
+        dept_id = current_user.department_id
+        visible_dept_id = current_user.department_id
+    else:
+        dept_id = UUID(department_id) if department_id is not None else None
+        visible_dept_id = None
     result = await service.list(
         department_id=dept_id,
+        visible_dept_id=visible_dept_id,
         status=status,
         cursor=cursor,
         limit=limit,
@@ -214,6 +267,7 @@ async def list_equipment(
             description=equip.description,
             department_id=str(equip.department_id),
             department_name=dept_name,
+            visible_departments=list(getattr(equip, "visible_departments", []) or []),
             status=equip.status,
             sort_order=equip.sort_order,
         )
@@ -276,8 +330,11 @@ async def update_equipment(
     if body.department_id is not None:
         department_id = UUID(body.department_id)
     else:
-        equipment, _ = await service.get(equipment_id)
+        equipment = await service.get(equipment_id)
         department_id = equipment.department_id
+
+    # 归属检查：只有所属单位的成员才能编辑
+    await _check_ownership(current_user, department_id, service)
 
     sort_order = body.sort_order if body.sort_order is not None else 0
 
@@ -288,6 +345,7 @@ async def update_equipment(
         department_id=department_id,
         sort_order=sort_order,
         lock_version=body.lock_version,
+        visible_departments=body.visible_departments,
     )
     return _to_response(equipment)
 
@@ -316,6 +374,10 @@ async def update_equipment_status(
         AppError: code="not_found"，当设备不存在时。
         AppError: code="conflict"，当 lock_version 不匹配时。
     """
+    # 归属检查：只有所属单位的成员才能操作
+    equip = await service.get(equipment_id)
+    await _check_ownership(current_user, equip.department_id, service)
+
     equipment = await service.set_status(
         equipment_id=equipment_id,
         status=body.status,
@@ -340,4 +402,8 @@ async def delete_equipment(
     Raises:
         AppError: code="not_found"，当设备不存在时。
     """
+    # 归属检查：只有所属单位的成员才能删除
+    equip = await service.get(equipment_id)
+    await _check_ownership(current_user, equip.department_id, service)
+
     await service.delete(equipment_id)

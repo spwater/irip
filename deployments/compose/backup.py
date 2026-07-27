@@ -278,21 +278,28 @@ class BackupService:
             raise RuntimeError(f"pg_dump produced empty output: {output_path}")
 
     def _export_minio_objects(self, objects_dir: Path) -> int:
-        """导出 MinIO bucket 中的全部对象到本地目录。
+        """导出 MinIO bucket 中的全部对象到本地目录（fail-closed）。
 
-        使用 ``S3Repository`` 列举对象，逐个下载到 ``objects/<key>`` 路径。
-        同时收集元数据，写入 ``objects.json``。
+        技术设计文档 F-06：列表/下载失败时 raise 而非 warning。
+        manifest 记录期望对象数、完成数、失败清单。
+        失败清单非空时 raise，确保备份完整性。
 
         Args:
             objects_dir: 对象输出目录。
 
         Returns:
             int: 导出的对象总数。
+
+        Raises:
+            RuntimeError: 列举或下载失败时。
         """
         from deployments.compose.backup_manifest import compute_objects_metadata
 
         object_keys: list[str] = self._list_minio_objects()
-        count: int = 0
+        expected_count: int = len(object_keys)
+        completed_count: int = 0
+        failed_keys: list[str] = []
+
         for key in object_keys:
             if not key:
                 continue
@@ -301,21 +308,41 @@ class BackupService:
             try:
                 data: bytes = self._s3.get_object(key)
                 local_path.write_bytes(data)
-                count += 1
+                completed_count += 1
             except Exception as exc:
-                logger.warning("Failed to export object %s: %s", key, exc)
+                # F-06: fail-closed — 记录失败并最终 raise
+                failed_keys.append(key)
+                logger.error("Failed to export object %s: %s", key, exc)
 
         # 写入对象元数据
         metadata: list[dict[str, Any]] = compute_objects_metadata(objects_dir)
         write_objects_metadata(objects_dir, metadata)
-        logger.info("Exported %d MinIO objects", count)
-        return count
+
+        # F-06: 失败清单非空时 raise，确保备份完整性
+        if failed_keys:
+            raise RuntimeError(
+                f"MinIO 对象导出失败: 期望 {expected_count} 个, "
+                f"完成 {completed_count} 个, "
+                f"失败 {len(failed_keys)} 个: {failed_keys[:10]}"
+            )
+
+        logger.info(
+            "Exported %d MinIO objects (expected=%d, completed=%d, failed=0)",
+            completed_count, expected_count, completed_count,
+        )
+        return completed_count
 
     def _list_minio_objects(self) -> list[str]:
-        """列举 MinIO bucket 中的全部对象 key。
+        """列举 MinIO bucket 中的全部对象 key（fail-closed）。
+
+        技术设计文档 F-06：列举失败时 raise 而非 warning，
+        确保备份不会遗漏对象。
 
         Returns:
             list[str]: 对象 key 列表。
+
+        Raises:
+            RuntimeError: 列举失败时。
         """
         from botocore.exceptions import ClientError
 
@@ -338,7 +365,10 @@ class BackupService:
                     break
                 continuation_token = response.get("NextContinuationToken")
         except ClientError as exc:
-            logger.warning("Failed to list MinIO objects: %s", exc)
+            # F-06: fail-closed — 列举失败直接 raise
+            raise RuntimeError(
+                f"Failed to list MinIO objects: {exc}"
+            ) from exc
         return keys
 
     async def _query_migration_version(self) -> str:

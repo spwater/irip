@@ -15,14 +15,18 @@ RUN npm config set registry https://registry.npmmirror.com && \
 
 # 先复制依赖清单，利用 Docker 层缓存
 COPY apps/web/package.json apps/web/pnpm-lock.yaml apps/web/.npmrc ./
-# pnpm 11 的 ERR_PNPM_IGNORED_BUILDS 不影响包安装，仅退出码为 1
-# 用 || true 容忍退出码，再手动 rebuild esbuild 使其 native binary 可用
-RUN pnpm install --no-frozen-lockfile || true && \
+# pnpm 11.15.1 严格模式会阻止 esbuild 构建脚本，用 --ignore-scripts 跳过再单独 rebuild
+# BuildKit 缓存挂载：pnpm store 跨构建持久化，npm 包不用每次重新下载
+RUN --mount=type=cache,target=/build/.pnpm-store \
+    pnpm config set store-dir /build/.pnpm-store && \
+    pnpm install --frozen-lockfile --ignore-scripts && \
     pnpm rebuild esbuild
 
 # 复制源码并构建
 COPY apps/web/ ./
-RUN npx tsc --noEmit && npx vite build
+# BuildKit 缓存挂载：Vite 构建缓存跨构建持久化，TS 增量编译更快
+RUN --mount=type=cache,target=/build/node_modules/.vite \
+    npx tsc --noEmit && npx vite build
 
 # ---- Stage 2: Serve ----
 FROM docker.m.daocloud.io/nginx:alpine

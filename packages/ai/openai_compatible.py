@@ -191,17 +191,33 @@ class OpenAICompatibleProvider:
             {"role": "system", "content": system_content}
         ]
         # 加入历史消息和当前问题（不含 system role）
-        messages.extend(
-            {"role": m.get("role", "user"), "content": str(m.get("content", ""))}
-            for m in request.messages
-            if m.get("role") != "system"
-        )
+        # 第二轮 completion 时，messages 中可能包含 assistant 的 tool_calls
+        # 和 tool 角色的结果消息，需要完整透传
+        for m in request.messages:
+            role = m.get("role", "user")
+            if role == "system":
+                continue
+            msg: dict[str, Any] = {
+                "role": role,
+                "content": str(m.get("content", "")),
+            }
+            # 透传 assistant 的 tool_calls（第二轮 completion 需要）
+            if role == "assistant" and "tool_calls" in m:
+                msg["tool_calls"] = m["tool_calls"]
+            # 透传 tool 消息的 tool_call_id（工具结果回传）
+            if role == "tool" and "tool_call_id" in m:
+                msg["tool_call_id"] = m["tool_call_id"]
+            messages.append(msg)
 
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
             "max_tokens": 8192,
         }
+        # 工具调用：将 tool_schemas 转为 OpenAI tools 格式
+        if request.tool_schemas:
+            payload["tools"] = list(request.tool_schemas)
+            payload["tool_choice"] = "auto"
         # 思考模式：Qwen3 vLLM 通过 chat_template_kwargs 控制思考开关
         # 顶层 enable_thinking 参数无效，只有 chat_template_kwargs 生效
         payload["chat_template_kwargs"] = {"enable_thinking": self._thinking_enabled}
@@ -243,6 +259,7 @@ class OpenAICompatibleProvider:
                 args = {}
             tool_calls.append(
                 {
+                    "id": str(tc.get("id") or ""),
                     "tool": str(func.get("name") or ""),
                     "args": args if isinstance(args, dict) else {},
                     "summary": f"调用工具 {func.get('name', 'unknown')}",

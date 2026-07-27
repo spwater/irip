@@ -32,6 +32,7 @@ class AIRequest:
     tools: tuple[str, ...]
     user_context: dict[str, Any] = field(default_factory=dict)
     provider_mode: str = "offline"
+    tool_schemas: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

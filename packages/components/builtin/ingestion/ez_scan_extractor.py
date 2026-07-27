@@ -24,7 +24,6 @@ from uuid import UUID
 
 import httpx
 
-from apps.api.routers.ai_config import get_active_ai_config
 from packages.common.errors import AppError
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
@@ -86,8 +85,14 @@ class EZScanExtractor:
                 metadata={"row_count": 0, "header": {}, "all_rows": []},
             )
 
-        # 5. 获取 AI 配置
-        config: dict[str, Any] | None = await get_active_ai_config()
+        # 5. 获取 AI 配置（通过 context 注入，消除 packages→apps 反向依赖 T3-3）
+        if context.ai_config_provider is None:
+            raise AppError(
+                code="ai_not_configured",
+                message="AI 配置提供器未注入，无法获取大模型配置",
+                retryable=False,
+            )
+        config: dict[str, Any] | None = await context.ai_config_provider()
         if config is None:
             raise AppError(
                 code="ai_not_configured",

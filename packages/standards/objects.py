@@ -18,6 +18,7 @@ from enum import StrEnum
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.common.database import Base
@@ -93,6 +94,8 @@ class IndustrialObject(Base):
         display_name: 中文显示名。
         description: 描述（可选）。
         parent_id: 父对象 ID（便捷反规范化，对应 contains 关系的源对象）。
+        department_id: 所属部门 ID（nullable，跨实验室可见性基准）。
+        visible_departments: 可见单位 ID 列表（JSONB 数组，跨实验室可见性）。
         status: 状态（默认 active）。
         created_at: 创建时间。
         updated_at: 更新时间。
@@ -109,6 +112,13 @@ class IndustrialObject(Base):
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    visible_departments: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=sa.text("'[]'::jsonb"),
+    )
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'active'")
     )

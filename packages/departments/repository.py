@@ -19,7 +19,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.departments.entities import AppUserDepartment, Department
-from packages.equipment.entities import Equipment
 
 
 class DepartmentRepository:
@@ -97,9 +96,11 @@ class DepartmentRepository:
     ) -> list[tuple[Department, int, int, int]]:
         """分页查询实验室列表（含成员数、子部门数、仪器数聚合）。
 
-        通过 LEFT JOIN app_user_department + GROUP BY + COUNT 一次查询返回
-        每个实验室及其成员数，同时用相关标量子查询计算子部门数和仪器数，
-        避免 N+1。
+        主查询返回当页部门列表及直接子部门数（children_count，相关标量子
+        查询，仅统计直接子部门，不递归）。成员数（member_count）与设备数
+        （equipment_count）采用 PostgreSQL 递归 CTE 递归累加该部门自身及
+        所有后代部门，对当页每个部门单独执行递归统计（部门数量少，N+1
+        性能可接受）。
 
         排序：sort_order ASC, created_at ASC, id ASC。
         Keyset 分页：cursor 编码 (sort_order, created_at, id)。
@@ -117,10 +118,6 @@ class DepartmentRepository:
             list[tuple[Department, int, int, int]]: (Department, member_count,
             children_count, equipment_count) 列表。
         """
-        member_count = sa.func.count(AppUserDepartment.department_id).label(
-            "member_count"
-        )
-
         # 子部门数：相关标量子查询，统计 parent_id = department.id 的子部门数量
         child_dept = Department.__table__.alias("child")
         children_count = (
@@ -132,25 +129,14 @@ class DepartmentRepository:
             .label("children_count")
         )
 
-        # 仪器数：相关标量子查询，统计 department_id = department.id 的设备数量
-        equipment_count = (
-            sa.select(sa.func.count())
-            .select_from(Equipment.__table__)
-            .where(Equipment.__table__.c.department_id == Department.__table__.c.id)
-            .correlate(Department.__table__)
-            .scalar_subquery()
-            .label("equipment_count")
-        )
-
+        # 成员数与设备数：递归累加该部门自身 + 所有后代部门（通过 parent_id
+        # 逐层向下递归）。采用 PostgreSQL WITH RECURSIVE CTE，先取出当页部门
+        # 列表，再对每个部门单独执行递归统计（部门数量通常很少，N+1 性能可
+        # 接受），避免在 ORM 层表达关联递归 CTE 的复杂性，保证正确性与可维护性。
         query = (
-            sa.select(Department, member_count, children_count, equipment_count)
+            sa.select(Department, children_count)
             .select_from(Department)
-            .outerjoin(
-                AppUserDepartment,
-                AppUserDepartment.department_id == Department.id,
-            )
             .where(Department.organization_id == organization_id)
-            .group_by(Department.id)
             .order_by(
                 Department.sort_order.asc(),
                 Department.created_at.asc(),
@@ -185,9 +171,40 @@ class DepartmentRepository:
 
         result = await session.execute(query)
         rows = result.all()
-        return [
-            (row[0], int(row[1]), int(row[2]), int(row[3])) for row in rows
-        ]
+
+        # 递归 CTE：收集部门自身 + 所有后代部门 ID，再分别统计成员数与设备数。
+        # 锚点包含部门自身（id = :dept_id），递归部分沿 parent_id 向下展开全部后代。
+        # 使用绑定参数 :dept_id 避免关联子查询/CTE 的作用域歧义问题。
+        recursive_sql = sa.text(
+            """
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM department WHERE id = :dept_id
+                UNION ALL
+                SELECT child.id FROM department child
+                JOIN descendants ON child.parent_id = descendants.id
+            )
+            SELECT
+                (SELECT count(*) FROM app_user_department aud
+                 WHERE aud.department_id IN (SELECT id FROM descendants))
+                    AS member_count,
+                (SELECT count(*) FROM equipment e
+                 WHERE e.department_id IN (SELECT id FROM descendants))
+                    AS equipment_count
+            """
+        )
+
+        output: list[tuple[Department, int, int, int]] = []
+        for row in rows:
+            dept = row[0]
+            children = int(row[1])
+            count_result = await session.execute(
+                recursive_sql, {"dept_id": dept.id}
+            )
+            count_row = count_result.one()
+            output.append(
+                (dept, int(count_row[0]), children, int(count_row[1]))
+            )
+        return output
 
     @staticmethod
     async def update(

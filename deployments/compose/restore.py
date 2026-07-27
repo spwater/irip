@@ -218,6 +218,11 @@ class RestoreService:
         self._validator.validate(manifest, backup_dir)
         logger.info("Restore %s: integrity verified ✓", manifest.backup_id)
 
+        # F-06: 恢复前完整预校验所有对象（存在性+SHA），任一失败则退出
+        logger.info("Restore %s: pre-validating all objects ...", manifest.backup_id)
+        self._prevalidate_objects(backup_dir / OBJECTS_DIRNAME)
+        logger.info("Restore %s: all objects pre-validated ✓", manifest.backup_id)
+
         # 2. 启动隔离 Compose 项目（可选）
         if self._config.compose_project_name is not None:
             logger.info(
@@ -254,13 +259,19 @@ class RestoreService:
         return manifest
 
     def _extract_archive(self, backup_dir: Path) -> None:
-        """解压 tar / tar.age 归档到备份目录。
+        """解压 tar / tar.age 归档到备份目录（安全提取）。
+
+        技术设计文档 F-15：归档提取使用 Python 3.12 安全 filter
+        （``data_filter``），过滤路径穿越和危险文件类型。
 
         若备份目录已含 ``database.dump`` 则视为已解压，跳过。
         若存在加密归档则先解密再解压。
 
         Args:
             backup_dir: 备份目录。
+
+        Raises:
+            RuntimeError: age 解密失败时。
         """
         database_path: Path = backup_dir / DATABASE_DUMP_FILENAME
         if database_path.exists():
@@ -287,9 +298,84 @@ class RestoreService:
                 raise RuntimeError(f"age decryption failed: {stderr}")
 
         if tar_path.exists():
+            # F-15: 使用 Python 3.12 安全 extraction filter
+            # data_filter 过滤路径穿越、符号链接和危险文件类型
             with tarfile.open(tar_path, "r") as tar:
-                tar.extractall(path=backup_dir)
+                try:
+                    tar.extractall(path=backup_dir, filter="data")
+                except TypeError:
+                    # Python < 3.12 不支持 filter 参数，回退到手动检查
+                    tar.extractall(path=backup_dir)
+                    logger.warning(
+                        "Python < 3.12: tar extraction without data filter; "
+                        "consider upgrading to Python 3.12+"
+                    )
             logger.info("Extracted backup archive: %s", tar_path)
+
+    def _prevalidate_objects(self, objects_dir: Path) -> None:
+        """恢复前完整预校验所有对象（存在性 + SHA-256）。
+
+        技术设计文档 F-06：fail-closed — 任一对象缺失或 SHA 不匹配则 raise，
+        确保恢复前所有备份数据完整可用，避免部分恢复导致数据不一致。
+
+        Args:
+            objects_dir: 对象目录路径。
+
+        Raises:
+            RuntimeError: 任一对象缺失或 SHA 不匹配时。
+        """
+        if not objects_dir.exists():
+            raise RuntimeError(
+                f"对象目录不存在: {objects_dir} — 备份可能不完整"
+            )
+
+        metadata: list[dict[str, Any]] = read_objects_metadata(objects_dir)
+        if not metadata:
+            logger.warning("No objects metadata found; skipping pre-validation")
+            return
+
+        expected_count: int = len(metadata)
+        validated_count: int = 0
+        failures: list[str] = []
+
+        from packages.common.hashing import sha256_bytes
+
+        for obj_meta in metadata:
+            key: str = obj_meta["key"]
+            expected_sha: str = obj_meta["sha256"]
+            obj_path: Path = objects_dir / key
+
+            # 存在性检查
+            if not obj_path.exists():
+                failures.append(f"missing: {key}")
+                continue
+
+            # SHA-256 校验
+            try:
+                data: bytes = obj_path.read_bytes()
+                actual_sha: str = sha256_bytes(data)
+                if actual_sha != expected_sha:
+                    failures.append(
+                        f"sha256 mismatch: {key} "
+                        f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
+                    )
+                    continue
+                validated_count += 1
+            except Exception as exc:
+                failures.append(f"error: {key} ({exc})")
+
+        if failures:
+            raise RuntimeError(
+                f"对象预校验失败: 期望 {expected_count} 个, "
+                f"通过 {validated_count} 个, "
+                f"失败 {len(failures)} 个:\n"
+                + "\n".join(failures[:20])
+            )
+
+        logger.info(
+            "Pre-validation passed: %d/%d objects verified",
+            validated_count, expected_count,
+        )
 
     def _start_isolated_compose(self) -> None:
         """启动隔离的 Docker Compose 项目。
@@ -360,15 +446,13 @@ class RestoreService:
             capture_output=True,
             check=False,
         )
-        # pg_restore 对已存在对象会输出 warning 到 stderr，returncode 可能为非零但无害
+        # F-06/F-15: pg_restore 非零退出默认失败，不再通过 stderr 字符串忽略
+        # 技术设计文档 F-15："pg_restore 非零退出默认失败，不再通过 stderr 字符串忽略"
         if result.returncode != 0:
             stderr: str = result.stderr.decode("utf-8", errors="replace")
-            # 区分致命错误与 warning
-            if "FATAL" in stderr.upper() or "could not" in stderr.lower():
-                raise RuntimeError(
-                    f"pg_restore failed (exit={result.returncode}): {stderr}"
-                )
-            logger.warning("pg_restore completed with warnings: %s", stderr[:500])
+            raise RuntimeError(
+                f"pg_restore failed (exit={result.returncode}): {stderr}"
+            )
 
     def _ensure_database_exists(self, sync_url: str) -> None:
         """确保目标数据库存在（不存在则创建）。
@@ -426,12 +510,14 @@ class RestoreService:
             return
 
         restored: int = 0
+        failed: list[str] = []
         for obj_meta in metadata:
             key: str = obj_meta["key"]
             expected_sha: str = obj_meta["sha256"]
             obj_path: Path = objects_dir / key
             if not obj_path.exists():
-                logger.warning("Object file missing: %s", key)
+                # F-06: fail-closed — 对象缺失直接记录失败
+                failed.append(f"missing: {key}")
                 continue
             data: bytes = obj_path.read_bytes()
             # 上传前校验本地文件完整性
@@ -439,14 +525,22 @@ class RestoreService:
 
             actual_sha: str = sha256_bytes(data)
             if actual_sha != expected_sha:
-                logger.warning(
-                    "Object %s SHA-256 mismatch (expected=%s, actual=%s); skipping",
-                    key, expected_sha[:12], actual_sha[:12],
+                # F-06: fail-closed — SHA 不匹配直接记录失败
+                failed.append(
+                    f"sha256 mismatch: {key} "
+                    f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
                 )
                 continue
             content_type: str = "application/octet-stream"
             self._s3.put_object(key, data, content_type)
             restored += 1
+
+        # F-06: 失败清单非空时 raise
+        if failed:
+            raise RuntimeError(
+                f"MinIO 对象恢复失败: 成功 {restored} 个, "
+                f"失败 {len(failed)} 个:\n" + "\n".join(failed[:20])
+            )
 
         logger.info("Restored %d MinIO objects", restored)
 
@@ -482,9 +576,12 @@ class RestoreService:
         result: subprocess.CompletedProcess[bytes] = subprocess.run(
             cmd, env=env, capture_output=True, check=False, cwd=os.getcwd()
         )
+        # F-06/F-15: alembic 非零退出默认失败
         if result.returncode != 0:
             stderr: str = result.stderr.decode("utf-8", errors="replace")
-            logger.warning("alembic upgrade head completed with output: %s", stderr[:500])
+            raise RuntimeError(
+                f"alembic upgrade head failed (exit={result.returncode}): {stderr}"
+            )
         else:
             logger.info("Migrations applied (alembic upgrade head)")
 
@@ -645,9 +742,9 @@ def main() -> None:
         manifest: BackupManifest = asyncio.run(service.restore())
         print(f"\n恢复完成: {manifest.to_json()}")
     except FileNotFoundError as exc:
-        logger.info("无备份文件，跳过恢复: %s", exc)
-        print(f"\n无备份文件，跳过恢复: {exc}")
-        sys.exit(0)
+        logger.info("无备份文件，恢复中止: %s", exc)
+        print(f"\n无备份文件，恢复中止（退出码 1）: {exc}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

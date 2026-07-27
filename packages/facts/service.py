@@ -142,6 +142,18 @@ class FactService:
         self._org_id = organization_id
         self._actor_id = actor_id
 
+    # ---- 公开只读属性（替代路由直接访问私有属性） ----
+
+    @property
+    def organization_id(self) -> UUID:
+        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
+        return self._org_id
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问，替代 ``service._factory``）。"""
+        return self._factory
+
     async def create(self, command: CreateFactCommand) -> FactRevisionRef:
         """创建事实（revision 1）。
 

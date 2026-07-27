@@ -19,7 +19,6 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.departments.entities import Department
 from packages.equipment.entities import Equipment
 
 
@@ -91,6 +90,7 @@ class EquipmentRepository:
         session: AsyncSession,
         organization_id: UUID,
         department_id: UUID | None = None,
+        visible_dept_id: UUID | None = None,
         status: str | None = None,
         cursor_sort_order: int | None = None,
         cursor_created_at: datetime | None = None,
@@ -101,7 +101,22 @@ class EquipmentRepository:
 
         排序：sort_order ASC, created_at ASC, id ASC。
         Keyset 分页：cursor 编码 (sort_order, created_at, id)。
+
+        Args:
+            session: 异步会话。
+            organization_id: 组织 ID。
+            department_id: 部门 ID 筛选（含后代部门），None 表示不按部门过滤。
+            visible_dept_id: 可见性部门 ID，用于 OR visible_departments @> [dept_id] 过滤。
+                当 department_id 和 visible_dept_id 同时存在时，取两者的 OR。
+            status: 状态筛选。
+            cursor_sort_order: 游标排序权重。
+            cursor_created_at: 游标创建时间。
+            cursor_id: 游标 ID。
+            limit: 查询上限。
         """
+        # 延迟导入避免 equipment ↔ departments 循环依赖（F-20）
+        from packages.departments.entities import Department
+
         query = (
             sa.select(Equipment, Department.display_name)
             .select_from(Equipment)
@@ -118,12 +133,29 @@ class EquipmentRepository:
             .limit(limit)
         )
 
-        if department_id is not None:
+        # 部门过滤 + 可见性过滤
+        # 可见性规则：department_id（含后代） OR visible_departments 包含 visible_dept_id
+        if department_id is not None and visible_dept_id is not None:
+            dept_ids = await _get_descendant_dept_ids(session, department_id)
+            dept_condition = (
+                Equipment.department_id.in_(dept_ids)
+                if dept_ids
+                else Equipment.department_id == department_id
+            )
+            visible_condition = Equipment.visible_departments.contains(
+                [str(visible_dept_id)]
+            )
+            query = query.where(sa.or_(dept_condition, visible_condition))
+        elif department_id is not None:
             dept_ids = await _get_descendant_dept_ids(session, department_id)
             if dept_ids:
                 query = query.where(Equipment.department_id.in_(dept_ids))
             else:
                 query = query.where(Equipment.department_id == department_id)
+        elif visible_dept_id is not None:
+            query = query.where(
+                Equipment.visible_departments.contains([str(visible_dept_id)])
+            )
 
         if status is not None:
             query = query.where(Equipment.status == status)
@@ -164,18 +196,22 @@ class EquipmentRepository:
         department_id: UUID,
         sort_order: int,
         lock_version: int,
+        visible_departments: list[str] | None = None,
     ) -> Equipment | None:
         """UPDATE 设备（乐观锁，不含 code 列）。"""
+        values: dict[str, object] = {
+            "display_name": display_name,
+            "description": description,
+            "department_id": department_id,
+            "sort_order": sort_order,
+            "updated_at": sa.func.now(),
+            "lock_version": Equipment.lock_version + 1,
+        }
+        if visible_departments is not None:
+            values["visible_departments"] = visible_departments
         result = await session.execute(
             sa.update(Equipment)
-            .values(
-                display_name=display_name,
-                description=description,
-                department_id=department_id,
-                sort_order=sort_order,
-                updated_at=sa.func.now(),
-                lock_version=Equipment.lock_version + 1,
-            )
+            .values(**values)
             .where(
                 Equipment.id == equipment_id,
                 Equipment.lock_version == lock_version,

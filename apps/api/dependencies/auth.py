@@ -2,6 +2,7 @@
 
 提供 FastAPI Depends 依赖：
 - get_token_secret: 从环境变量获取 JWT 密钥；
+- get_auth_session_factory: 获取数据库会话工厂（DI 覆盖）；
 - get_current_user: 从 Authorization header 解析 JWT，返回 CurrentUser。
 
 所有需要认证的 /api/v1/* 端点通过 Depends(get_current_user) 注入当前用户
@@ -14,25 +15,30 @@ from typing import Annotated
 from uuid import UUID
 
 import jwt
+import sqlalchemy as sa
 from fastapi import Depends, Header
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.auth.entities import AppUser
 from packages.auth.tokens import decode_access_token
 from packages.common.errors import AppError
 
 
 @dataclass(frozen=True)
 class CurrentUser:
-    """当前认证用户（从 JWT 解析）。
+    """当前认证用户（从 JWT 解析 + 数据库补充）。
 
     Attributes:
         user_id: 用户 UUID。
         email: 用户邮箱。
         roles: 用户角色列表。
+        department_id: 所属实验室 ID（NULL 表示未分配实验室）。
     """
 
     user_id: UUID
     email: str
     roles: list[str]
+    department_id: UUID | None = None
 
 
 def get_token_secret() -> str:
@@ -46,13 +52,30 @@ def get_token_secret() -> str:
     return os.getenv("IRIP_JWT_SECRET", "irip-dev-secret-2026")
 
 
-def get_current_user(
+def get_auth_session_factory() -> async_sessionmaker[AsyncSession]:
+    """获取数据库会话工厂（由 DI 容器或测试覆盖提供）。
+
+    生产环境通过 ``dependency_overrides`` 注入 lifespan 中创建的会话工厂，
+    供 get_current_user 查询用户的 department_id。
+    """
+    raise NotImplementedError(
+        "get_auth_session_factory must be overridden via dependency_overrides"
+    )
+
+
+async def get_current_user(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     token_secret: Annotated[str, Depends(get_token_secret)] = "",
+    session_factory: Annotated[
+        async_sessionmaker[AsyncSession], Depends(get_auth_session_factory)
+    ] = None,  # type: ignore[assignment]
 ) -> CurrentUser:
     """从 Authorization header 解析 JWT，返回当前用户。
 
     期望格式：``Authorization: Bearer <jwt>``
+
+    解析 JWT 后，从数据库查询用户的 department_id 并填入 CurrentUser，
+    用于后续的实验室级数据隔离过滤。
 
     Raises:
         AppError: code="invalid_credentials"，当缺少或无效令牌时。
@@ -87,8 +110,21 @@ def get_current_user(
     roles_raw: object = payload.get("roles", [])
     roles: list[str] = roles_raw if isinstance(roles_raw, list) else []
 
+    user_id = UUID(str(sub))
+
+    # 从数据库查询用户的 department_id（用于实验室级数据隔离）
+    department_id: UUID | None = None
+    if session_factory is not None:
+        async with session_factory() as session:
+            user: AppUser | None = await session.scalar(
+                sa.select(AppUser).where(AppUser.id == user_id)
+            )
+            if user is not None:
+                department_id = user.department_id
+
     return CurrentUser(
-        user_id=UUID(str(sub)),
+        user_id=user_id,
         email=str(payload.get("email", "")),
         roles=roles,
+        department_id=department_id,
     )

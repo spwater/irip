@@ -72,13 +72,16 @@ export function AppShell(): JSX.Element | null {
         <Header
           style={{
             display: 'flex',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             alignItems: 'center',
             background: '#fff',
             padding: '0 24px',
             borderBottom: '1px solid #f0f0f0',
           }}
         >
+          <Text style={{ fontSize: 22, fontWeight: 700, color: '#1677ff', letterSpacing: 0.5 }}>
+            工业研究智能平台 Industrial Research Intelligence Platform
+          </Text>
           <Space size="middle">
             <JobDrawerButton />
             <Space size="small">

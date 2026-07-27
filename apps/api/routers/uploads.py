@@ -14,10 +14,11 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.dependencies.authorization import require_permission
 from packages.common.artifacts import (
     ALLOWED_MEDIA_TYPES,
     MAX_UPLOAD_SIZE_BYTES,
@@ -30,7 +31,15 @@ from packages.common.ids import new_id
 uploads_router = APIRouter(prefix="/api/v1", tags=["artifacts"])
 artifacts_router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
 
-CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+#: 需 artifact:upload 权限的当前用户依赖。
+UploadUserDep = Annotated[
+    CurrentUser, Depends(require_permission("artifact:upload"))
+]
+
+#: 需 artifact:download 权限的当前用户依赖。
+DownloadUserDep = Annotated[
+    CurrentUser, Depends(require_permission("artifact:download"))
+]
 
 
 def get_artifact_service() -> ArtifactService:
@@ -93,7 +102,8 @@ class DownloadResponse(BaseModel):
 @uploads_router.post("/uploads", response_model=PresignUploadResponse)
 async def presign_upload(
     body: PresignUploadRequest,
-    current_user: CurrentUserDep,
+    request: Request,
+    current_user: UploadUserDep,
     service: ArtifactServiceDep,
 ) -> PresignUploadResponse:
     """请求预签名上传 URL。
@@ -103,6 +113,7 @@ async def presign_upload(
 
     Args:
         body: 上传请求体。
+        request: FastAPI 请求对象（用于提取 Host）。
         current_user: 当前认证用户。
         service: 工件服务。
 
@@ -134,9 +145,17 @@ async def presign_upload(
             },
         )
 
+    # 从请求 Host header 构建外部端点
+    host = request.headers.get("host", "localhost:9000")
+    if ":" in host:
+        host_base = host.rsplit(":", 1)[0]
+    else:
+        host_base = host
+    minio_external = f"http://{host_base}:9000"
+
     artifact_id = new_id()
     object_key = f"uploads/{artifact_id}"
-    upload_url = service.presign_upload_for_key(object_key)
+    upload_url = service.presign_upload_for_key(object_key, endpoint_override=minio_external)
 
     return PresignUploadResponse(
         artifact_id=str(artifact_id),
@@ -152,7 +171,7 @@ async def presign_upload(
 async def complete_upload(
     artifact_id: UUID,
     body: CompleteUploadRequest,
-    current_user: CurrentUserDep,
+    current_user: UploadUserDep,
     service: ArtifactServiceDep,
 ) -> CompleteUploadResponse:
     """完成上传，校验 S3 对象并创建工件记录。
@@ -195,13 +214,19 @@ async def complete_upload(
 )
 async def download_artifact(
     artifact_id: UUID,
-    current_user: CurrentUserDep,
+    request: Request,
+    current_user: DownloadUserDep,
     service: ArtifactServiceDep,
 ) -> DownloadResponse:
     """获取工件预签名下载 URL。
 
+    从请求的 Host header 动态推导 MinIO 外部访问地址，
+    使预签名 URL 的 host 与浏览器访问的 host 一致，
+    无需硬编码部署 IP。
+
     Args:
         artifact_id: 工件 UUID。
+        request: FastAPI 请求对象（用于提取 Host）。
         current_user: 当前认证用户。
         service: 工件服务。
 
@@ -211,5 +236,13 @@ async def download_artifact(
     Raises:
         AppError: code="not_found"，当工件不存在时。
     """
-    url = await service.presign_download(artifact_id)
+    # 从请求 Host header 构建外部端点（替换端口为 MinIO 的 9000）
+    host = request.headers.get("host", "localhost:9000")
+    # API 端口是 8000，MinIO 端口是 9000，替换端口部分
+    if ":" in host:
+        host_base = host.rsplit(":", 1)[0]
+    else:
+        host_base = host
+    minio_external = f"http://{host_base}:9000"
+    url = await service.presign_download(artifact_id, endpoint_override=minio_external)
     return DownloadResponse(download_url=url)

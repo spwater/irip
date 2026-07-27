@@ -1,0 +1,81 @@
+"""流程与组件相关依赖覆盖 provider（F-20）。
+
+注册：
+- ComponentRegistryService（组件注册表服务）；
+- FlowRuntimeService（流程运行时服务，含组件注册表 + 执行器 + 作业服务）。
+"""
+
+from typing import Annotated
+
+from fastapi import Depends
+
+from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.routers.components import get_component_registry_service
+from apps.api.routers.flows import get_flow_service
+
+# 模块级组件执行器单例（避免每次请求重复注册 29 个内置组件）。
+_flow_runner: object | None = None
+
+
+def register(ctx: CompositionContext) -> None:
+    """注册流程与组件相关依赖覆盖。
+
+    Args:
+        ctx: 组合根共享上下文。
+    """
+    from apps.api.routers.ai_config import get_active_ai_config
+    from packages.common.artifacts import ArtifactService
+    from packages.components.builtin import register_builtin_components
+    from packages.components.flow_runtime import FlowRuntimeService
+    from packages.components.registry import ComponentRegistryService
+    from packages.components.runner import PythonComponentRunner
+    from packages.jobs.service import JobService
+
+    async def _get_component_registry_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ComponentRegistryService:
+        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        return ComponentRegistryService(
+            session_factory=ctx.session_factory,
+            organization_id=org_id,
+        )
+
+    ctx.app.dependency_overrides[get_component_registry_service] = (
+        _get_component_registry_service_dep
+    )
+
+    async def _get_flow_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> FlowRuntimeService:
+        global _flow_runner
+        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        registry = ComponentRegistryService(
+            session_factory=ctx.session_factory,
+            organization_id=org_id,
+        )
+        if _flow_runner is None:
+            _flow_runner = PythonComponentRunner()
+            register_builtin_components(_flow_runner)
+        job_svc = JobService(
+            session_factory=ctx.session_factory,
+            organization_id=org_id,
+            created_by=current_user.user_id,
+        )
+        art_svc = ArtifactService(
+            s3_repo=ctx.s3_repo,
+            session_factory=ctx.session_factory,
+            organization_id=org_id,
+            uploaded_by=current_user.user_id,
+        )
+        return FlowRuntimeService(
+            session_factory=ctx.session_factory,
+            organization_id=org_id,
+            registry=registry,
+            runner=_flow_runner,
+            job_service=job_svc,
+            artifact_service=art_svc,
+            ai_config_provider=get_active_ai_config,
+        )
+
+    ctx.app.dependency_overrides[get_flow_service] = _get_flow_service_dep

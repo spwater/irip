@@ -21,6 +21,7 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateObject,
   apiDeleteObject,
+  apiGetDepartmentNameMap,
   apiGetObject,
   apiListDepartments,
   apiListEquipment,
@@ -133,8 +134,14 @@ export function ExperimentalObjectPage({
     queryKey: ['departments-for-object-equipment'],
     queryFn: () => apiListDepartments({ limit: 100 }),
   });
+
+  // 全部门名称映射（不受部门隔离限制），用于所属单位/可见单位列名称展示
+  const { data: deptNameMapData } = useQuery({
+    queryKey: ['department-name-map'],
+    queryFn: apiGetDepartmentNameMap,
+  });
   const deptMap = new Map(
-    (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
+    (deptNameMapData ?? []).map((d) => [d.id, d.display_name]),
   );
 
   // ---- 筛选逻辑 ----
@@ -156,6 +163,16 @@ export function ExperimentalObjectPage({
     .filter((d) => (equipmentData?.items ?? []).some((e) => e.department_id === d.id))
     .map((d) => ({ value: d.id, label: d.display_name }));
 
+  // 全部部门选项（用于所属单位 + 可见单位选择）
+  const allDeptOptions = (deptData?.items ?? []).map((d) => ({
+    value: d.id,
+    label: d.display_name,
+  }));
+
+  // 监听表单中的 department_id，排除已选所属单位后作为可见单位选项
+  const watchedDeptId = Form.useWatch('department_id', form);
+  const visibleDeptOptions = allDeptOptions.filter((d) => d.value !== watchedDeptId);
+
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
     mutationFn: apiCreateObject,
@@ -174,7 +191,13 @@ export function ExperimentalObjectPage({
   const updateMutation = useMutation({
     mutationFn: (params: {
       id: string;
-      body: { display_name: string; description?: string | null; equipment_id?: string | null };
+      body: {
+        display_name: string;
+        description?: string | null;
+        equipment_id?: string | null;
+        department_id?: string | null;
+        visible_departments?: string[] | null;
+      };
     }) => apiUpdateObject(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
@@ -222,6 +245,7 @@ export function ExperimentalObjectPage({
   const handleCreate = (): void => {
     setEditingItem(null);
     form.resetFields();
+    form.setFieldsValue({ visible_departments: [] });
     setModalOpen(true);
   };
 
@@ -304,6 +328,8 @@ export function ExperimentalObjectPage({
       object_type: record.object_type,
       description: detail.description ?? '',
       equipment_id: detail.equipment_id ?? undefined,
+      department_id: detail.department_id ?? undefined,
+      visible_departments: detail.visible_departments ?? [],
     });
     setModalOpen(true);
   };
@@ -318,6 +344,8 @@ export function ExperimentalObjectPage({
             display_name: values.display_name,
             description: values.description ?? null,
             equipment_id: values.equipment_id || null,
+            department_id: values.department_id,
+            visible_departments: values.visible_departments ?? [],
           },
         });
       } else {
@@ -326,6 +354,8 @@ export function ExperimentalObjectPage({
           object_type: values.object_type,
           description: values.description,
           equipment_id: values.equipment_id || undefined,
+          department_id: values.department_id,
+          visible_departments: values.visible_departments ?? [],
         });
       }
     } catch {
@@ -352,7 +382,7 @@ export function ExperimentalObjectPage({
     {
       title: '名称',
       key: 'name',
-      width: 200,
+      width: 500,
       render: (_: unknown, record: IndustrialObject) => (
         <Tooltip title={record.description || undefined} placement="topLeft">
           <Space size={6}>
@@ -375,26 +405,40 @@ export function ExperimentalObjectPage({
       title: '关联设备',
       dataIndex: 'equipment_id',
       key: 'equipment_id',
-      width: 320,
+      width: 150,
       render: (eid: string | null) => {
         if (!eid) return <Text type="secondary">-</Text>;
         const eq = equipmentMap.get(eid);
         if (!eq) return <Text type="secondary">-</Text>;
-        const deptName = eq.department_id ? deptMap.get(eq.department_id) : null;
+        return <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eq.display_name}</Tag>;
+      },
+    },
+    {
+      title: '所属单位',
+      dataIndex: 'department_id',
+      key: 'department_id',
+      width: 140,
+      render: (deptId: string | null) => {
+        const name = deptId ? deptMap.get(deptId) : null;
+        return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
+      title: '可见单位',
+      dataIndex: 'visible_departments',
+      key: 'visible_departments',
+      width: 200,
+      render: (deptIds: string[] | null) => {
+        if (!deptIds || deptIds.length === 0) {
+          return <Text type="secondary">-</Text>;
+        }
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
-              {eq.display_name}
-            </Tag>
-            {deptName && (
-              <>
-                <span style={{ color: '#999', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
-                <Tag color="geekblue" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
-                  {deptName}
-                </Tag>
-              </>
-            )}
-          </div>
+          <Space size="small" wrap>
+            {deptIds.map((id) => {
+              const name = deptMap.get(id);
+              return name ? <Tag key={id} color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : null;
+            })}
+          </Space>
         );
       },
     },
@@ -590,6 +634,28 @@ export function ExperimentalObjectPage({
               showSearch
               optionFilterProp="label"
               options={equipmentOptions}
+            />
+          </Form.Item>
+          <Form.Item name="department_id" label="所属单位" rules={[{ required: true, message: '请选择所属单位' }]}>
+            <Select
+              placeholder="选择所属单位"
+              showSearch
+              optionFilterProp="label"
+              options={allDeptOptions}
+            />
+          </Form.Item>
+          <Form.Item
+            name="visible_departments"
+            label="可见单位"
+            tooltip="选择除所属单位外，哪些实验室也可以看到该实验对象。所属单位默认可见，无需重复选择。"
+          >
+            <Select
+              mode="multiple"
+              placeholder="选择可见单位（可多选，所属单位无需选择）"
+              options={visibleDeptOptions}
+              showSearch
+              optionFilterProp="label"
+              allowClear
             />
           </Form.Item>
         </Form>

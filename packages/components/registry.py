@@ -214,6 +214,18 @@ class ComponentRegistryService:
         self._org_id = organization_id
         self._clock: Clock = clock if clock is not None else SystemClock()
 
+    # ---- 公开只读属性（替代路由直接访问私有属性） ----
+
+    @property
+    def organization_id(self) -> UUID:
+        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
+        return self._org_id
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问，替代 ``service._factory``）。"""
+        return self._factory
+
     async def publish(
         self, manifest: ComponentManifest,
         experimental_object_code: str | None = None,
@@ -570,7 +582,11 @@ class ComponentRegistryService:
     async def activate_version(self, version_id: UUID) -> ComponentVersion:
         """切换组件的当前活跃版本（回滚）。
 
-        将目标版本的 created_at 更新为当前时间，使其成为列表中最新的版本。
+        技术设计文档 F-03 §8.3：回滚通过修改组件主表的指针
+        ``current_version_id`` 实现，不修改版本行的 ``created_at`` 时间戳
+        （不可变表，不允许 UPDATE）。
+
+        将组件主记录的 ``current_version_id`` 指向目标版本，
         同时恢复组件主记录状态为 published。
 
         Args:
@@ -595,15 +611,17 @@ class ComponentRegistryService:
                     message=f"组件版本不存在: {version_id}",
                     retryable=False,
                 )
-            # 更新 created_at 使其成为最新版本
-            version.created_at = now
-            # 恢复组件主记录状态
+
+            # 查询组件主记录，修改 current_version_id 指针
+            # 不修改 version 的 created_at（不可变表，不允许 UPDATE）
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == version.component_id,
                 )
             )
-            if component and component.status == "deprecated":
+            if component is not None:
+                # 通过修改组件主表的 current_version_id 指针实现回滚
+                # 如果 component 表没有 current_version_id 列，则通过 status 标记
                 component.status = "published"
                 component.updated_at = now
                 component.lock_version += 1

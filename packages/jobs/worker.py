@@ -173,7 +173,7 @@ class JobExecutor:
         Args:
             lease_manager: 租约管理器。
             session_factory: 异步会话工厂。
-            handlers: 作业类型 → 处理器映射（None 时使用默认 echo handler）。
+            handlers: 作业类型 → 处理器映射（None 时使用空映射，未知 kind 将失败）。
         """
         self._lease_manager = lease_manager
         self._factory = session_factory
@@ -240,58 +240,69 @@ class JobExecutor:
             # Step 3: 执行处理器
             handler = self._handlers.get(kind)
             if handler is None:
-                # 默认 echo handler
-                result_data: dict[str, Any] = (
-                    payload if payload is not None else {}
+                # 未知作业类型直接失败（F-04 §8.5：禁止 echo fallback）
+                error = AppError(
+                    code="unknown_job_kind",
+                    message=f"未注册的作业类型: {kind}",
+                    retryable=False,
+                    fields={"kind": kind},
                 )
-            else:
-                try:
-                    result_data = await handler(job)
-                except AppError as exc:
-                    # 不可重试的错误
-                    await self._commit_failure(
+                await self._commit_failure(
+                    job_id, lock_version, error, attempt, max_attempts
+                )
+                return JobResult(
+                    job_id=job_id,
+                    status=JobStatus.FAILED,
+                    last_error=error.to_dict(),
+                )
+
+            try:
+                result_data = await handler(job)
+            except AppError as exc:
+                # 不可重试的错误
+                await self._commit_failure(
+                    job_id, lock_version, exc, attempt, max_attempts
+                )
+                return JobResult(
+                    job_id=job_id,
+                    status=JobStatus.FAILED,
+                    last_error=exc.to_dict(),
+                )
+            except Exception as exc:
+                # 可重试的错误
+                should_retry = attempt + 1 < max_attempts
+                if should_retry:
+                    await self._commit_retry(
                         job_id, lock_version, exc, attempt, max_attempts
                     )
                     return JobResult(
                         job_id=job_id,
-                        status=JobStatus.FAILED,
-                        last_error=exc.to_dict(),
+                        status=JobStatus.RETRY_WAIT,
+                        last_error={
+                            "code": "transient_error",
+                            "message": str(exc),
+                        },
                     )
-                except Exception as exc:
-                    # 可重试的错误
-                    should_retry = attempt + 1 < max_attempts
-                    if should_retry:
-                        await self._commit_retry(
-                            job_id, lock_version, exc, attempt, max_attempts
-                        )
-                        return JobResult(
-                            job_id=job_id,
-                            status=JobStatus.RETRY_WAIT,
-                            last_error={
-                                "code": "transient_error",
-                                "message": str(exc),
-                            },
-                        )
-                    else:
-                        await self._commit_failure(
-                            job_id,
-                            lock_version,
-                            AppError(
-                                code="max_retries_exceeded",
-                                message=f"已达最大重试次数: {max_attempts}",
-                                retryable=False,
-                            ),
-                            attempt,
-                            max_attempts,
-                        )
-                        return JobResult(
-                            job_id=job_id,
-                            status=JobStatus.FAILED,
-                            last_error={
-                                "code": "max_retries_exceeded",
-                                "message": str(exc),
-                            },
-                        )
+                else:
+                    await self._commit_failure(
+                        job_id,
+                        lock_version,
+                        AppError(
+                            code="max_retries_exceeded",
+                            message=f"已达最大重试次数: {max_attempts}",
+                            retryable=False,
+                        ),
+                        attempt,
+                        max_attempts,
+                    )
+                    return JobResult(
+                        job_id=job_id,
+                        status=JobStatus.FAILED,
+                        last_error={
+                            "code": "max_retries_exceeded",
+                            "message": str(exc),
+                        },
+                    )
 
             # Step 4: 乐观锁提交结果
             committed = await self._commit_success(

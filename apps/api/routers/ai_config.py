@@ -22,9 +22,12 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.common.crypto import EnvelopeCrypto
 from packages.common.database import session_scope
+from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.clock import SystemClock
+from packages.common.safe_http import SafeHTTPClient, validate_url_host
 
 #: 路由实例。
 ai_config_router = APIRouter(prefix="/api/v1/ai-config", tags=["ai-config"])
@@ -142,9 +145,36 @@ async def update_ai_config(
     body: AIConfigUpdateRequest,
     current_user: ManageUserDep,
 ) -> AIConfigResponse:
-    """更新 AI 大模型配置。"""
+    """更新 AI 大模型配置。
+
+    安全约定（技术设计文档 F-13）：
+    - base_url 提交时校验目标地址（SSRF 防护），不允许内网地址。
+    """
+    # SSRF 防护：校验 base_url 不指向内网地址
+    try:
+        parsed = httpx.URL(body.base_url)
+        if parsed.scheme not in ("http", "https"):
+            raise AppError(
+                code="ssrf_blocked",
+                message=f"AI base_url 协议不允许: {parsed.scheme}（仅支持 http/https）",
+                retryable=False,
+                fields={"base_url": body.base_url},
+            )
+        validate_url_host(str(parsed.host), parsed.port)
+    except ValueError as exc:
+        raise AppError(
+            code="ssrf_blocked",
+            message=f"AI base_url 安全校验失败: {exc}",
+            retryable=False,
+            fields={"base_url": body.base_url},
+        ) from exc
+
     clock = SystemClock()
     now = clock.now()
+
+    # F-12: API key 加密存储（envelope encryption）
+    crypto = EnvelopeCrypto.from_env()
+    encrypted_api_key = crypto.encrypt(body.api_key)
 
     async with session_scope(
         _get_session_factory()
@@ -155,7 +185,7 @@ async def update_ai_config(
                 _ai_config_table.insert().values(
                     id=1,
                     base_url=body.base_url,
-                    api_key=body.api_key,
+                    api_key=encrypted_api_key,
                     model_name=body.model_name,
                     enabled=body.enabled,
                     updated_at=now,
@@ -168,7 +198,7 @@ async def update_ai_config(
                 .where(_ai_config_table.c.id == 1)
                 .values(
                     base_url=body.base_url,
-                    api_key=body.api_key,
+                    api_key=encrypted_api_key,
                     model_name=body.model_name,
                     enabled=body.enabled,
                     updated_at=now,
@@ -190,9 +220,29 @@ async def test_ai_connection(
     body: AITestRequest,
     current_user: ManageUserDep,
 ) -> AITestResponse:
-    """测试 AI 连接（发送一条简单消息验证配置）。"""
+    """测试 AI 连接（发送一条简单消息验证配置）。
+
+    安全约定（技术设计文档 F-13）：
+    - 使用 SafeHTTPClient 发起请求（SSRF 防护）；
+    - 测试前校验 base_url 不指向内网地址。
+    """
+    # SSRF 防护：校验 base_url 不指向内网地址
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        parsed = httpx.URL(body.base_url)
+        if parsed.scheme not in ("http", "https"):
+            return AITestResponse(
+                success=False,
+                message=f"协议不允许: {parsed.scheme}（仅支持 http/https）",
+            )
+        validate_url_host(str(parsed.host), parsed.port)
+    except ValueError as exc:
+        return AITestResponse(
+            success=False,
+            message=f"SSRF 防护阻断: {exc}",
+        )
+
+    try:
+        async with SafeHTTPClient(timeout=15.0, max_size=1024 * 1024) as client:
             resp = await client.post(
                 body.base_url.rstrip("/") + "/chat/completions",
                 headers={
@@ -223,6 +273,8 @@ async def test_ai_connection(
             )
     except httpx.TimeoutException:
         return AITestResponse(success=False, message="连接超时")
+    except ValueError as exc:
+        return AITestResponse(success=False, message=f"安全校验失败: {str(exc)[:200]}")
     except Exception as exc:
         return AITestResponse(success=False, message=f"连接失败: {str(exc)[:200]}")
 
@@ -233,6 +285,8 @@ async def test_ai_connection(
 async def get_active_ai_config() -> dict[str, str] | None:
     """读取已启用的大模型配置（供 AIService 使用）。
 
+    F-12: 读取时解密 API key（envelope encryption）。
+
     Returns:
         dict | None: 包含 base_url/api_key/model_name 的字典，未配置或未启用时返回 None。
     """
@@ -240,9 +294,16 @@ async def get_active_ai_config() -> dict[str, str] | None:
         row = await _get_config_row(session)
         if row is None or not row["enabled"]:
             return None
+        # F-12: 解密 API key
+        crypto = EnvelopeCrypto.from_env()
+        try:
+            decrypted_key = crypto.decrypt(row["api_key"])
+        except ValueError:
+            # 兼容旧版明文存储（迁移期间）
+            decrypted_key = row["api_key"]
         return {
             "base_url": row["base_url"],
-            "api_key": row["api_key"],
+            "api_key": decrypted_key,
             "model_name": row["model_name"],
         }
 

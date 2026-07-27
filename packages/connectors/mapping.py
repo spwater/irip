@@ -62,8 +62,8 @@ _SCHEMA_PATH: Path = (
 class SecretStore:
     """密钥存储：按 secret_id 解析凭据（组织隔离）。
 
-    从 secret 表读取，MVP 阶段 value 为明文（TODO 加密）。
-    绝不返回凭据给 API 层，仅由连接器内部使用。
+    F-12: 使用 envelope encryption 加密存储密钥值。
+    写入时加密，读取时解密，绝不返回凭据给 API 层，仅由连接器内部使用。
 
     Attributes:
         _factory: 异步会话工厂。
@@ -85,7 +85,9 @@ class SecretStore:
         self._org_id = organization_id
 
     async def get(self, secret_id: UUID) -> str:
-        """按 ID 解析密钥值。
+        """按 ID 解析密钥值（读取时解密）。
+
+        F-12: 使用 envelope encryption 解密存储的密钥。
 
         Args:
             secret_id: 密钥 UUID。
@@ -111,7 +113,15 @@ class SecretStore:
                 retryable=False,
                 fields={"secret_id": str(secret_id)},
             )
-        return secret.value
+        # F-12: 解密密钥值
+        from packages.common.crypto import EnvelopeCrypto
+
+        crypto = EnvelopeCrypto.from_env()
+        try:
+            return crypto.decrypt(secret.value)
+        except ValueError:
+            # 兼容旧版明文存储（迁移期间）
+            return secret.value
 
 
 # ---- 辅助：规则序列化 ----

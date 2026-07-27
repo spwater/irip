@@ -162,9 +162,11 @@ class OutboxDispatcher:
         return delivered_count
 
     async def _send_to_broker(self, event: OutboxEvent) -> bool:
-        """发送事件到消息代理（Redis/Celery）。
+        """发送事件到 Celery broker。
 
-        若 redis_url 已配置，则通过 Redis 发送；否则模拟发送（记录日志）。
+        技术设计文档 F-04 §8.5：统一通过 ``celery_app.send_task`` 发送，
+        不再使用 Redis LPUSH。所有异步任务只通过 Outbox→Dispatcher→Celery
+        一条通道。
 
         Args:
             event: 待发送的 outbox 事件。
@@ -172,24 +174,20 @@ class OutboxDispatcher:
         Returns:
             bool: 发送成功返回 True。
         """
-        if self._redis_url is None:
+        try:
+            from apps.worker.celery_app import celery_app
+
+            celery_app.send_task(
+                "jobs.execute",
+                args=[str(event.aggregate_id)],
+                queue="irip-jobs",
+            )
             logger.info(
-                "Simulated dispatch: event_type=%s, aggregate_id=%s",
+                "Dispatched event %s (type=%s, aggregate_id=%s)",
+                event.id,
                 event.event_type,
                 event.aggregate_id,
             )
-            return True
-
-        # 实际 Redis 发送（使用 redis.asyncio）
-        import redis.asyncio as aioredis
-
-        try:
-            client = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
-            await client.lpush(
-                "irip:jobs:queue",
-                f"{event.aggregate_id}",
-            )
-            await client.aclose()
             return True
         except Exception:
             logger.exception(

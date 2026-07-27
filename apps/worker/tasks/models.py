@@ -80,6 +80,8 @@ def _build_model_service(
 ) -> Any:
     """构建模型服务实例。
 
+    注入 FactService 使模型预测结果写入溯源事实链（F-11）。
+
     Args:
         factory: 异步会话工厂。
         organization_id: 组织 ID。
@@ -88,16 +90,22 @@ def _build_model_service(
     Returns:
         ModelService: 模型服务实例。
     """
+    from packages.facts.service import FactService
     from packages.models.service import ModelService
 
     artifact_service = _build_artifact_service(
         factory, organization_id, user_id
     )
+    fact_service = FactService(
+        session_factory=factory,
+        organization_id=organization_id,
+        actor_id=user_id,
+    )
     return ModelService(
         session_factory=factory,
         organization_id=organization_id,
         artifact_service=artifact_service,
-        fact_service=None,
+        fact_service=fact_service,
     )
 
 

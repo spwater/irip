@@ -1,0 +1,48 @@
+sequenceDiagram
+    participant API as API Router
+    participant JS as JobService
+    participant DB as PostgreSQL
+    participant OB as OutboxDispatcher
+    participant Beat as Celery Beat
+    participant Cel as Celery Broker
+    participant W as Celery Worker
+    participant JE as JobExecutor
+    participant H as JobHandler
+    participant Reg as HandlerRegistry
+
+    Note over API,Reg: 作业提交与执行闭环
+
+    API->>JS: POST /jobs (kind, payload)
+    JS->>DB: BEGIN TX
+    JS->>DB: INSERT job (status=accepted)
+    JS->>DB: INSERT outbox_event (job.accepted)
+    JS->>DB: COMMIT TX
+    JS-->>API: 202 JobRef
+
+    Note over Beat,OB: Beat 定时触发 Dispatcher
+
+    Beat->>OB: dispatch(batch_size=100)
+    OB->>DB: SELECT ... FOR UPDATE SKIP LOCKED WHERE delivered_at IS NULL
+    DB-->>OB: events[]
+    loop 每个事件
+        OB->>Cel: send_task("jobs.execute", args=[job_id])
+        OB->>DB: UPDATE outbox_event SET delivered_at=now()
+    end
+
+    Cel->>W: deliver task (job_id)
+    W->>JE: execute(job_id, owner)
+    JE->>DB: acquire_lease (条件 UPDATE)
+    JE->>DB: SELECT job by (org_id, job_id)
+    JE->>Reg: get_handler(job.kind)
+
+    alt handler 存在
+        JE->>H: execute(job)
+        H-->>JE: result_data
+        JE->>DB: UPDATE job SET status=succeeded (乐观锁)
+    else handler 不存在
+        JE->>DB: UPDATE job SET status=failed
+        JE-->>W: JobResult(failed)
+    end
+
+    JE->>DB: release_lease
+    W-->>Cel: ACK

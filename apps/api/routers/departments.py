@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.departments import get_department_service
+from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.departments.service import DepartmentService
 
 #: 路由实例。
@@ -120,6 +121,16 @@ class DepartmentListResponse(BaseModel):
     has_more: bool
 
 
+class DepartmentNameMapItem(BaseModel):
+    """部门名称映射项（仅含 id 和 display_name，不含敏感数据）。
+
+    用于前端名称展示，不受部门级数据隔离限制。
+    """
+
+    id: str
+    display_name: str
+
+
 # ---- 辅助函数 ----
 
 
@@ -197,6 +208,40 @@ async def list_departments(
         DepartmentListResponse: 分页列表。
     """
     result = await service.list(status=status, cursor=cursor, limit=limit)
+
+    # 实验室级数据隔离：非管理员只返回自己所在的实验室（及其子实验室）
+    if should_filter_by_department(current_user):
+        if current_user.department_id is None:
+            return DepartmentListResponse(items=[], next_cursor=None, has_more=False)
+
+        # 查询用户实验室及其所有子实验室 ID（递归遍历 parent_id 层次）
+        import sqlalchemy as sa
+        from packages.departments.entities import Department
+
+        allowed_ids: set[UUID] = {current_user.department_id}
+        pending_ids: list[UUID] = [current_user.department_id]
+        async with service._factory() as session:  # noqa: SLF001
+            while pending_ids:
+                children_stmt = (
+                    sa.select(Department.id)
+                    .where(Department.parent_id.in_(pending_ids))
+                )
+                children_result = await session.execute(children_stmt)
+                children_ids = {row[0] for row in children_result}
+                new_ids = children_ids - allowed_ids
+                allowed_ids.update(new_ids)
+                pending_ids = list(new_ids)
+
+        # 过滤结果：只保留用户实验室及其子实验室
+        filtered_items = [
+            (dept, member_count, children_count, equipment_count)
+            for dept, member_count, children_count, equipment_count in result.items
+            if dept.id in allowed_ids
+        ]
+        result_items = filtered_items
+    else:
+        result_items = result.items
+
     items = [
         DepartmentListItem(
             id=str(dept.id),
@@ -210,13 +255,47 @@ async def list_departments(
             children_count=children_count,
             equipment_count=equipment_count,
         )
-        for dept, member_count, children_count, equipment_count in result.items
+        for dept, member_count, children_count, equipment_count in result_items
     ]
     return DepartmentListResponse(
         items=items,
         next_cursor=result.next_cursor,
         has_more=result.has_more,
     )
+
+
+@departments_router.get("/name-map", response_model=list[DepartmentNameMapItem])
+async def get_department_name_map(
+    current_user: ReadUserDep,
+    service: DepartmentServiceDep,
+) -> list[DepartmentNameMapItem]:
+    """获取全部门 ID→名称映射（不受部门隔离限制）。
+
+    专用于前端名称展示场景（如设备可见单位列渲染），只返回 id 和
+    display_name 两个字段，不含成员数、描述等敏感信息。所有拥有
+    department:read 权限的用户均可查看全部门名称。
+
+    Args:
+        current_user: 当前认证用户（需 department:read 权限）。
+        service: 实验室服务（复用其 session factory）。
+
+    Returns:
+        list[DepartmentNameMapItem]: 全部门 id→display_name 映射列表。
+    """
+    import sqlalchemy as sa
+    from packages.departments.entities import Department
+
+    async with service._factory() as session:  # noqa: SLF001
+        stmt = sa.select(Department.id, Department.display_name).order_by(
+            Department.sort_order, Department.display_name
+        )
+        result = await session.execute(stmt)
+        rows = result.all()
+
+    return [
+        DepartmentNameMapItem(id=str(row[0]), display_name=row[1])
+        for row in rows
+    ]
 
 
 @departments_router.get("/{department_id}", response_model=DepartmentResponse)

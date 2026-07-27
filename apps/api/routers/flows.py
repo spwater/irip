@@ -30,17 +30,20 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import should_filter_by_department
+from packages.common.errors import AppError
 from packages.components.flow_runtime import (
     FlowDefinition,
     FlowDefinitionVersionORM,
     FlowNodeExecution,
     FlowRun,
     FlowRuntimeService,
+    PROTECTED_PARAMS,
 )
 from packages.components.flows import (
     FlowEdge,
@@ -443,6 +446,17 @@ async def list_flows(
         FlowListResponse: 流程列表。
     """
     items = await service.list_definitions(status=status)
+
+    # 实验室级数据隔离：非管理员只看自己实验室的流程
+    if should_filter_by_department(current_user):
+        if current_user.department_id is None:
+            return FlowListResponse(items=[])
+        items = [
+            (definition, version)
+            for definition, version in items
+            if definition.department_id == current_user.department_id
+        ]
+
     return FlowListResponse(
         items=[
             _definition_to_response(definition, version)
@@ -529,17 +543,15 @@ async def delete_flow(
     current_user: ManageUserDep,
     service: FlowServiceDep,
 ) -> None:
-    """删除流程定义及其所有版本和运行记录。
+    """删除流程定义 — 已禁用（P0 止血）。
 
-    危险操作：将级联删除该流程的所有版本、运行记录及节点执行记录，
-    不可撤销。
-
-    Args:
-        flow_id: 流程定义 ID。
-        current_user: 当前认证用户（需 flow:manage 权限）。
-        service: 流程运行时服务。
+    物理删除端点已禁用，防止级联删除版本、运行记录和节点执行记录。
+    请使用归档端点 ``POST /{flow_id}/archive`` 替代。
     """
-    await service.delete_flow(flow_id)
+    raise HTTPException(
+        status_code=405,
+        detail="物理删除流程已被禁用（P0 止血）。请使用归档端点 POST /{flow_id}/archive 替代。",
+    )
 
 
 @flows_router.patch("/{flow_id}", response_model=FlowDefinitionResponse)
@@ -566,7 +578,7 @@ async def update_flow(
     from packages.common.database import session_scope
     from packages.components.flow_runtime import FlowDefinition
 
-    async with session_scope(service._factory) as session:
+    async with session_scope(service.session_factory) as session:
         stmt = sa.select(FlowDefinition).where(FlowDefinition.id == flow_id)
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()
@@ -619,7 +631,7 @@ async def list_runs(
     persisted_ids: set = set()
     if run_ids:
         from packages.facts.entities import FactRevision
-        async with session_scope(service._factory) as session:
+        async with session_scope(service.session_factory) as session:
             persist_stmt = (
                 sa.select(FactRevision.flow_run_id)
                 .where(FactRevision.flow_run_id.in_(run_ids))
@@ -632,7 +644,7 @@ async def list_runs(
         resp = _run_to_response(r)
         resp.persisted_as_fact = r.id in persisted_ids
         # 查询成功节点的 output_summary，或失败节点的 error_message
-        async with session_scope(service._factory) as session:
+        async with session_scope(service.session_factory) as session:
             node_stmt = (
                 sa.select(FlowNodeExecution)
                 .where(FlowNodeExecution.flow_run_id == r.id)
@@ -689,21 +701,20 @@ async def create_run(
             fields={"flow_id": str(flow_id)},
         )
 
+    # 安全约束（F-13）：过滤掉文件路径类受保护参数，防止 inputs 覆盖节点路径配置
+    safe_inputs: dict[str, Any] = {
+        k: v for k, v in body.inputs.items()
+        if k not in PROTECTED_PARAMS
+    }
+
     run = await service.create_run(
         flow_version_id=version.id,
-        inputs=body.inputs,
+        inputs=safe_inputs,
     )
 
-    # 立即发送 Celery 任务（不走 Outbox 轮询，直接发）
-    try:
-        from apps.worker.celery_app import celery_app
-        celery_app.send_task(
-            "irip.flow.execute",
-            kwargs={"run_id": str(run.id), "flow_version_id": str(version.id)},
-            queue="irip-jobs",
-        )
-    except Exception:
-        pass
+    # F-04 §8.5：不再直接 send_task，统一走 Outbox→Dispatcher→Celery 链路
+    # service.create_run() 内部通过 job_service.accept() 已在同事务中
+    # INSERT outbox_event，OutboxDispatcher 会定期拉取并投递。
 
     return _run_to_response(run)
 
@@ -834,14 +845,14 @@ async def delete_run(
     current_user: ManageUserDep,
     service: FlowServiceDep,
 ) -> None:
-    """删除执行记录及其所有节点执行记录。
+    """删除执行记录 — 已禁用（P0 止血）。
 
-    Args:
-        run_id: 执行记录 ID。
-        current_user: 当前认证用户（需 flow:manage 权限）。
-        service: 流程运行时服务。
+    物理删除执行记录及其节点执行记录已禁用，防止证据链数据丢失。
     """
-    await service.delete_run(run_id)
+    raise HTTPException(
+        status_code=405,
+        detail="物理删除执行记录已被禁用（P0 止血）。",
+    )
 
 
 # ---- 端点：写入事实 ----
@@ -951,8 +962,8 @@ async def persist_run_as_fact(
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
-            session_factory=service._factory,
-            organization_id=service._org_id,
+            session_factory=service.session_factory,
+            organization_id=service.organization_id,
             uploaded_by=current_user.user_id,
         )
 
@@ -1007,7 +1018,7 @@ async def persist_run_as_fact(
         from packages.common.database import session_scope
         from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
         from packages.departments.entities import Department
-        async with session_scope(service._factory) as sess:
+        async with session_scope(service.session_factory) as sess:
             fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run.flow_version_id)
             fv = (await sess.execute(fv_stmt)).scalar_one_or_none()
             if fv:
@@ -1027,8 +1038,8 @@ async def persist_run_as_fact(
 
     # 7. 创建事实
     fact_service = FactService(
-        session_factory=service._factory,
-        organization_id=service._org_id,
+        session_factory=service.session_factory,
+        organization_id=service.organization_id,
         actor_id=current_user.user_id,
     )
 
@@ -1039,7 +1050,7 @@ async def persist_run_as_fact(
     command = CreateFactCommand(
         fact_type="experiment_run",
         template_version_id=body.template_version_id,
-        organization_id=service._org_id,
+        organization_id=service.organization_id,
         object_id=body.object_id,
         subject_id=f"{task_name or ''}-{header.get('sample_name') or header.get('subject_id') or str(run_id)}",
         started_at=run.started_at or run.created_at,
@@ -1091,7 +1102,7 @@ async def persist_run_as_fact(
                 })
 
         if index_rows:
-            async with session_scope(service._factory) as sess:
+            async with session_scope(service.session_factory) as sess:
                 await sess.execute(
                     sa.insert(FactDataIndex),
                     index_rows,
@@ -1128,7 +1139,7 @@ async def list_facts_by_flow(
     from packages.facts.entities import FactRevision, Fact
     from packages.facts.observations import FactRevisionRef
 
-    async with session_scope(service._factory) as session:
+    async with session_scope(service.session_factory) as session:
         # flow_definition → flow_definition_version → flow_run → fact_revision
         stmt = (
             sa.select(FactRevision)
