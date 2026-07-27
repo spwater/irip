@@ -866,7 +866,12 @@ export function FlowDetail(): JSX.Element {
                         执行
                       </Button>
                     )}
-                    {activeRunId === record.id && record.status !== 'pending' && record.status !== 'succeeded' && record.status !== 'cancelled' && (
+                    {record.status === 'failed' && (
+                      <Popconfirm title="确认重试？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                        <Button type="link" size="small">继续</Button>
+                      </Popconfirm>
+                    )}
+                    {activeRunId === record.id && record.status !== 'pending' && record.status !== 'succeeded' && record.status !== 'cancelled' && record.status !== 'failed' && (
                       <>
                         <Popconfirm title="确认继续？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
                           <Button type="link" size="small">继续</Button>
