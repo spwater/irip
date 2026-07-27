@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>KaTeX 测试</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.js"></script>
+<style>
+body { font-family: sans-serif; padding: 20px; }
+.test-box { margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+</style>
+</head>
+<body>
+<h2>KaTeX 上标测试</h2>
+
+<div class="test-box">
+  <p>1. 直接 katex.render: <span id="t1"></span></p>
+  <p>2. HTML sup: x<sup>2</sup></p>
+  <p>3. 行内公式: <span id="t2"></span></p>
+  <p>4. 分数公式: <span id="t3"></span></p>
+</div>
+
+<div class="test-box" id="struct">
+  <p>5. KaTeX 生成的 HTML 结构:</p>
+</div>
+
+<script>
+// 测试1: sigma^2
+katex.render('\\sigma^2', document.getElementById('t1'), { throwOnError: false });
+
+// 测试2: 行内
+katex.render('6.6 \\times 10^{-5}', document.getElementById('t2'), { throwOnError: false });
+
+// 测试3: 分数
+katex.render('\\frac{0.414 + 0.05}{2}', document.getElementById('t3'), { throwOnError: false });
+
+// 测试4: 打印HTML结构
+var tmp = document.createElement('span');
+katex.render('x^2', tmp, { throwOnError: false });
+document.getElementById('struct').innerHTML += '<pre style="font-size:11px;overflow:auto;max-height:200px">' + 
+  tmp.innerHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+
+// 检查字体是否加载
+document.fonts.ready.then(function() {
+  var fonts = [];
+  document.fonts.forEach(function(f) { if (f.family.includes('KaTeX')) fonts.push(f.family + ' ' + f.weight + ' ' + f.status); });
+  console.log('KaTeX fonts:', fonts);
+  document.getElementById('struct').innerHTML += '<p><b>字体加载状态:</b> ' + fonts.join(', ') + '</p>';
+});
+</script>
+</body>
+</html>

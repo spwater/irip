@@ -10,10 +10,11 @@ import 'katex/dist/katex.min.css';
 
 const { Text, Paragraph } = Typography;
 
-// KaTeX 公式样式：只控制溢出，不覆盖 KaTeX 内部定位
+// KaTeX 公式样式：修复 Antd reset.css 的 box-sizing:border-box 干扰 KaTeX vlist 定位
 const katexStyle = `
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
+.ai-markdown-body .katex * { box-sizing: content-box !important; }
 `;
 
 /**
