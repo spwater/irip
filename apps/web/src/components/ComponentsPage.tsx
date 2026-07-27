@@ -80,7 +80,6 @@ function compareVersions(a: string, b: string): number {
 
 /** 表单字段名称集合（表单模式共用） */
 const FORM_FIELD_NAMES = [
-  'name',
   'display_name',
   'description',
   'prompt',
@@ -90,7 +89,6 @@ const FORM_FIELD_NAMES = [
 
 /** 表单模式的初始（清空）状态：file_engine 默认 pymupdf，其余为空 */
 const FRESH_FORM_VALUES: Record<string, string | undefined> = {
-  name: undefined,
   display_name: undefined,
   description: undefined,
   prompt: undefined,
@@ -100,7 +98,6 @@ const FRESH_FORM_VALUES: Record<string, string | undefined> = {
 
 /** 表单模式提交时的字段值 */
 interface ComponentFormValues {
-  name: string;
   display_name: string;
   description: string;
   prompt: string;
@@ -127,17 +124,17 @@ function yamlEscapeDouble(value: string): string {
  * 把表单字段值组装成 ingestion 组件的 manifest YAML。
  *
  * 固定结构：kind 固定 ingestion，inputs 固定 []，outputs 固定 observation_table。
+ * name 自动生成，YAML 里显示占位值 iface_ffffffff。
  * version 由系统自动管理，不在 YAML 里。
  */
 function buildManifestYaml(v: ComponentFormValues): string {
-  const name = v.name ?? '';
   const displayName = v.display_name ?? '';
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const fileEngine = v.file_engine ?? 'pymupdf';
   const expCode = v.experimental_object_code ?? '';
   const lines: string[] = [
-    `name: ${name}`,
+    'name: iface_ffffffff  # 自动生成，无需修改',
     'kind: ingestion',
     `display_name: "${yamlEscapeDouble(displayName)}"`,
     `description: "${yamlEscapeDouble(description)}"`,
@@ -181,10 +178,6 @@ type ObjectOption = { value: string; label: string };
 function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
   const result: Partial<ComponentFormValues> = {};
 
-  // name: xxx（顶层，无引号）—— 用 [ \t]* 代替 \s* 避免空值时跨行匹配下一行内容
-  const nameMatch = yaml.match(/^name:[ \t]*(\S+)/m);
-  if (nameMatch) result.name = nameMatch[1];
-
   // display_name: "xxx" 或 display_name: xxx
   const dnMatch = yaml.match(/^display_name:[ \t]*["']?(.*?)["']?[ \t]*$/m);
   if (dnMatch) result.display_name = dnMatch[1];
@@ -218,29 +211,17 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
 function ComponentFormFields({
   objectOptions,
   objectMap: _objectMap,
-  isEdit = false,
 }: {
   objectOptions: ObjectOption[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
-  isEdit?: boolean;
 }): JSX.Element {
   return (
     <>
       <Row gutter={16}>
         <Col span={12}>
-          <Form.Item
-            name="name"
-            label="组件编码"
-            rules={[
-              { required: true, message: '请输入组件编码' },
-              {
-                pattern: /^[a-z][a-z0-9_]*$/,
-                message: '仅允许小写字母/数字/下划线，且以字母开头',
-              },
-            ]}
-          >
-            <Input placeholder="例如：xrf_ez_extractor" disabled={isEdit} />
+          <Form.Item label="接口编码">
+            <Input value="iface_ffffffff" disabled />
           </Form.Item>
         </Col>
         <Col span={12}>
@@ -455,7 +436,6 @@ export function ComponentsPage(): JSX.Element {
       // 表单 → 高级：从表单值生成 YAML
       const formValues = form.getFieldsValue([...FORM_FIELD_NAMES]);
       const yaml = buildManifestYaml({
-        name: (formValues.name as string) ?? '',
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
@@ -469,7 +449,6 @@ export function ComponentsPage(): JSX.Element {
       const parsed = parseYamlToFormValues(yaml);
       form.setFieldsValue({
         ...FRESH_FORM_VALUES,
-        name: parsed.name,
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
@@ -492,7 +471,6 @@ export function ComponentsPage(): JSX.Element {
       } else {
         const values = await form.validateFields([...FORM_FIELD_NAMES]);
         const yaml = buildManifestYaml({
-          name: values.name as string,
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
@@ -527,7 +505,6 @@ export function ComponentsPage(): JSX.Element {
     editForm.resetFields();
     editForm.setFieldsValue({
       manifest_yaml: yaml,
-      name: parsed.name,
       display_name: parsed.display_name,
       description: parsed.description,
       prompt: parsed.prompt,
@@ -549,7 +526,6 @@ export function ComponentsPage(): JSX.Element {
       // 表单 → 高级
       const formValues = editForm.getFieldsValue([...FORM_FIELD_NAMES]);
       const yaml = buildManifestYaml({
-        name: (formValues.name as string) ?? '',
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
@@ -563,7 +539,6 @@ export function ComponentsPage(): JSX.Element {
       const parsed = parseYamlToFormValues(yaml);
       editForm.setFieldsValue({
         ...FRESH_FORM_VALUES,
-        name: parsed.name,
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
@@ -583,7 +558,6 @@ export function ComponentsPage(): JSX.Element {
       } else {
         const values = await editForm.validateFields([...FORM_FIELD_NAMES]);
         let yaml = buildManifestYaml({
-          name: values.name as string,
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
@@ -814,7 +788,7 @@ export function ComponentsPage(): JSX.Element {
               ]}
             >
               <Input.TextArea
-                placeholder={`name: my_component\nkind: transform\ndisplay_name: "组件名"\n...`}
+                placeholder={`name: iface_ffffffff  # 自动生成\nkind: ingestion\ndisplay_name: \"接口名\"\n...`}
                 rows={16}
                 style={{ fontFamily: 'monospace', fontSize: 13 }}
               />
@@ -894,7 +868,7 @@ export function ComponentsPage(): JSX.Element {
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} isEdit />
+              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
             </>
           )}
         </Form>
