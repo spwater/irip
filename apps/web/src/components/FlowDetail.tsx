@@ -751,6 +751,16 @@ export function FlowDetail(): JSX.Element {
                 disabled={!canExecute}
                 onClick={() => {
                   runForm.resetFields();
+                  // 手动设置初始值（resetFields 后 initialValue 不生效，需要 setFieldsValue）
+                  if (runNode && runParamEntries.length > 0) {
+                    const initialValues: Record<string, unknown> = {};
+                    for (const [key, defaultVal] of runParamEntries) {
+                      const formKey = `${runNode.node_id}__${key}`;
+                      if (key === 'experimental_object_code') continue;
+                      initialValues[formKey] = defaultVal || (key === 'file_engine' ? 'pymupdf' : '');
+                    }
+                    runForm.setFieldsValue(initialValues);
+                  }
                   setRunModalOpen(true);
                 }}
               >
