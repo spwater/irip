@@ -162,15 +162,15 @@ export function FactsPage(): JSX.Element {
     queryKey: ['facts', searchQuery],
     queryFn: async ({ pageParam }) => {
       if (!searchQuery) {
-        return apiListFacts({ cursor: pageParam, page_size: 20 });
+        return apiListFacts({ cursor: pageParam, page_size: 100 });
       }
       // 先搜元数据
-      const metaResult = await apiSearchFacts({ q: searchQuery, cursor: pageParam, page_size: 20 });
+      const metaResult = await apiSearchFacts({ q: searchQuery, cursor: pageParam, page_size: 100 });
       if (metaResult.items.length > 0) {
         return metaResult;
       }
       // 元数据没搜到，搜数据内容
-      return apiSearchFactsByData({ q: searchQuery, page_size: 20 });
+      return apiSearchFactsByData({ q: searchQuery, page_size: 100 });
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
