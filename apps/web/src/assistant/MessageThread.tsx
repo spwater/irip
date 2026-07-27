@@ -79,7 +79,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
         const option = JSON.parse(optionStr);
         // 补充默认 grid 配置，确保轴标签不被裁切
         if (!option.grid) {
-          option.grid = { left: 80, right: 30, top: 50, bottom: 50, containLabel: true };
+          option.grid = { left: 80, right: 80, top: 60, bottom: 60, containLabel: true };
         }
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
