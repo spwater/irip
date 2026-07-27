@@ -580,7 +580,13 @@ class AIService:
         if system_context:
             user_context["system_context"] = system_context
             # 同时存到对话记录里，切回对话时恢复
-            conv.system_context = system_context
+            async with self._factory() as session:
+                conv_obj = await session.scalar(
+                    sa.select(AIConversation).where(AIConversation.id == conversation_id)
+                )
+                if conv_obj:
+                    conv_obj.system_context = system_context
+                    await session.commit()
 
         # 构建工具名称元组（全部白名单 + 候选）
         tool_names: tuple[str, ...] = self._tool_registry.names()
