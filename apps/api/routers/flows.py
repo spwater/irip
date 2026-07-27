@@ -693,6 +693,18 @@ async def create_run(
         flow_version_id=version.id,
         inputs=body.inputs,
     )
+
+    # 立即发送 Celery 任务（不走 Outbox 轮询，直接发）
+    try:
+        from apps.worker.celery_app import celery_app
+        celery_app.send_task(
+            "irip.flow.execute",
+            kwargs={"run_id": str(run.id), "flow_version_id": str(version.id)},
+            queue="irip-jobs",
+        )
+    except Exception:
+        pass
+
     return _run_to_response(run)
 
 
