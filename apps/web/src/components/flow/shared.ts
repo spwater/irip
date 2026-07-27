@@ -8,14 +8,12 @@
 
 /** 流程状态 → 颜色 */
 export const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
   published: 'green',
   deprecated: 'default',
 };
 
 /** 流程状态 → 中文标签 */
 export const STATUS_LABEL: Record<string, string> = {
-  draft: '草稿',
   published: '已发布',
   deprecated: '已弃用',
 };
