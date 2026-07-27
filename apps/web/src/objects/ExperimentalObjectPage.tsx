@@ -224,7 +224,7 @@ export function ExperimentalObjectPage({
   };
 
   // ---- 批量导入 ----
-  // CSV 格式：编码,名称,类型,设备编码,描述
+  // CSV 格式：名称,类型,设备编码,描述
   // 类型：material / signal（默认 material）
   // 设备编码：可选，按 equipment.code 匹配
   const handleBatchImport = async (): Promise<void> => {
@@ -251,10 +251,10 @@ export function ExperimentalObjectPage({
         errors.push(`第${i + 1}行：列数不足`);
         continue;
       }
-      const [code, display_name, objectType, equipCode, description] = parts;
-      if (!code || !display_name) {
+      const [display_name, objectType, equipCode, description] = parts;
+      if (!display_name) {
         failed++;
-        errors.push(`第${i + 1}行：编码或名称为空`);
+        errors.push(`第${i + 1}行：名称为空`);
         continue;
       }
       try {
@@ -265,7 +265,6 @@ export function ExperimentalObjectPage({
           continue;
         }
         await apiCreateObject({
-          code,
           display_name,
           object_type: objectType || 'material',
           equipment_id,
@@ -321,7 +320,6 @@ export function ExperimentalObjectPage({
         });
       } else {
         createMutation.mutate({
-          code: values.code,
           display_name: values.display_name,
           object_type: values.object_type,
           description: values.description,
@@ -549,24 +547,6 @@ export function ExperimentalObjectPage({
       >
         <Form form={form} layout="vertical">
           <Form.Item
-            name="code"
-            label="对象编码"
-            rules={[
-              { required: true, message: '请输入对象编码' },
-              {
-                pattern: /^[a-zA-Z][a-zA-Z0-9_-]*$/,
-                message: '字母/数字/下划线/连字符，首字符必须为字母',
-              },
-            ]}
-            extra={editingItem ? '编码创建后锁定，不可修改' : undefined}
-          >
-            <Input
-              placeholder="如：aluminum_alloy"
-              disabled={!!editingItem}
-              maxLength={64}
-            />
-          </Form.Item>
-          <Form.Item
             name="display_name"
             label="名称"
             rules={[{ required: true, message: '请输入名称' }]}
@@ -620,7 +600,7 @@ export function ExperimentalObjectPage({
           </Text>
           <br />
           <Text code style={{ fontSize: 12 }}>
-            编码,名称,类型,设备编码,描述
+            名称,类型,设备编码,描述
           </Text>
           <br />
           <Text type="secondary" style={{ fontSize: 12 }}>

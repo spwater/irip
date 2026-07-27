@@ -49,18 +49,8 @@ DepartmentServiceDep = Annotated[
 
 
 class CreateDepartmentRequest(BaseModel):
-    """创建实验室请求。
+    """创建实验室请求。"""
 
-    code 创建后锁定不可修改。
-    """
-
-    code: str = Field(
-        ...,
-        min_length=1,
-        max_length=64,
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description="实验室编码，仅小写字母/数字/下划线，创建后锁定",
-    )
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     sort_order: int = Field(0, ge=0)
@@ -175,8 +165,9 @@ async def create_department(
     Raises:
         AppError: code="conflict"，当编码已存在时。
     """
+    from packages.common.ids import gen_code
     dept = await service.create(
-        code=body.code,
+        code=gen_code("dept"),
         display_name=body.display_name,
         description=body.description,
         sort_order=body.sort_order,

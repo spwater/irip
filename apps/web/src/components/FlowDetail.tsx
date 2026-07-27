@@ -385,7 +385,6 @@ export function FlowDetail(): JSX.Element {
       }];
       createMutation.mutate(
         {
-          code: values.code,
           display_name: values.display_name,
           department_id: (values.department_id as string) ?? null,
           project_name: (values.project_name as string) ?? null,
@@ -939,19 +938,6 @@ export function FlowDetail(): JSX.Element {
             />
           </Form.Item>
           <Form.Item
-            name="code"
-            label="流程编码"
-            rules={[
-              { required: true, message: '请输入流程编码' },
-              {
-                pattern: /^[a-z][a-z0-9_]*$/,
-                message: '仅小写字母/数字/下划线，首字符必须为字母',
-              },
-            ]}
-          >
-            <Input placeholder="如：grate_cooler_pipeline" maxLength={64} />
-          </Form.Item>
-          <Form.Item
             name="display_name"
             label="流程名称"
             rules={[{ required: true, message: '请输入流程名称' }]}
@@ -1000,9 +986,6 @@ export function FlowDetail(): JSX.Element {
         cancelText="取消"
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="code" label="流程编码">
-            <Input disabled />
-          </Form.Item>
           <Form.Item
             name="display_name"
             label="流程名称"

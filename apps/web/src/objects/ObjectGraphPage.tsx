@@ -147,7 +147,6 @@ export function ObjectGraphPage(): JSX.Element {
     try {
       const values = await form.validateFields();
       createMutation.mutate({
-        code: values.code,
         display_name: values.display_name,
         object_type: values.object_type,
         description: values.description,
@@ -284,19 +283,6 @@ export function ObjectGraphPage(): JSX.Element {
         width={600}
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="code"
-            label="对象编码"
-            rules={[
-              { required: true, message: '请输入对象编码' },
-              {
-                pattern: /^[a-z][a-z0-9_]*$/,
-                message: '仅小写字母/数字/下划线，首字符必须为字母',
-              },
-            ]}
-          >
-            <Input placeholder="如：aluminum_alloy" maxLength={64} />
-          </Form.Item>
           <Form.Item
             name="display_name"
             label="名称"

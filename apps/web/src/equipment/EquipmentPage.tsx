@@ -200,7 +200,6 @@ export function EquipmentPage({
         });
       } else {
         createMutation.mutate({
-          code: values.code,
           display_name: values.display_name,
           description: values.description ?? null,
           department_id: values.department_id,
@@ -363,24 +362,6 @@ export function EquipmentPage({
         cancelText="取消"
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="code"
-            label="设备编码"
-            rules={[
-              { required: true, message: '请输入设备编码' },
-              {
-                pattern: /^[a-z][a-z0-9_]*$/,
-                message: '仅小写字母/数字/下划线，首字符必须为字母',
-              },
-            ]}
-            extra={editingItem ? '编码创建后锁定，不可修改' : undefined}
-          >
-            <Input
-              placeholder="如：spectrometer_01"
-              disabled={!!editingItem}
-              maxLength={64}
-            />
-          </Form.Item>
           <Form.Item
             name="display_name"
             label="设备名称"

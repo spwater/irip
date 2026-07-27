@@ -58,18 +58,8 @@ EquipmentServiceDep = Annotated[
 
 
 class CreateEquipmentBody(BaseModel):
-    """创建设备请求。
+    """创建设备请求。"""
 
-    code 创建后锁定不可修改。
-    """
-
-    code: str = Field(
-        ...,
-        min_length=1,
-        max_length=64,
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description="设备编码，仅小写字母/数字/下划线，创建后锁定",
-    )
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     department_id: str = Field(..., description="所属部门 UUID")
@@ -176,9 +166,10 @@ async def create_equipment(
     Raises:
         AppError: code="conflict"，当编码已存在时。
     """
+    from packages.common.ids import gen_code
     equipment = await service.create(
         department_id=UUID(body.department_id),
-        code=body.code,
+        code=gen_code("equip"),
         display_name=body.display_name,
         description=body.description,
         sort_order=body.sort_order,

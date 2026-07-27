@@ -259,7 +259,6 @@ export function DepartmentManagement({
       } else {
         // 创建
         createMutation.mutate({
-          code: values.code,
           display_name: values.display_name,
           description: values.description ?? null,
           sort_order: values.sort_order ?? 0,
@@ -494,24 +493,6 @@ export function DepartmentManagement({
         }
       >
         <Form form={form} layout="vertical">
-          <Form.Item
-            name="code"
-            label="实验室编码"
-            rules={[
-              { required: true, message: '请输入实验室编码' },
-              {
-                pattern: /^[a-z][a-z0-9_]*$/,
-                message: '仅小写字母/数字/下划线，首字符必须为字母',
-              },
-            ]}
-            extra={editingDept ? '编码创建后锁定，不可修改' : undefined}
-          >
-            <Input
-              placeholder="如：lab_materials"
-              disabled={!!editingDept}
-              maxLength={64}
-            />
-          </Form.Item>
           <Form.Item
             name="display_name"
             label="实验室名称"

@@ -113,13 +113,6 @@ class FlowEdgeSchema(BaseModel):
 class CreateFlowRequest(BaseModel):
     """创建流程定义请求。"""
 
-    code: str = Field(
-        ...,
-        min_length=1,
-        max_length=64,
-        pattern=r"^[a-z][a-z0-9_]*$",
-        description="流程编码，仅小写字母/数字/下划线",
-    )
     display_name: str = Field(..., min_length=1, max_length=200)
     department_id: UUID | None = Field(None, description="执行实验部门 ID")
     project_name: str | None = Field(None, max_length=200, description="项目名称")
@@ -374,8 +367,9 @@ async def create_flow(
     edges = _edges_to_schema_list(
         [e.model_dump() for e in body.edges]
     )
+    from packages.common.ids import gen_code
     definition = await service.create_definition(
-        code=body.code,
+        code=gen_code("flow"),
         display_name=body.display_name,
         nodes=nodes,
         edges=edges,

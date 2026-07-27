@@ -262,7 +262,6 @@ export async function apiGetDepartment(id: string): Promise<Department> {
 }
 
 export async function apiCreateDepartment(body: {
-  code: string;
   display_name: string;
   description?: string;
   sort_order?: number;
@@ -709,7 +708,6 @@ export async function apiConvertUnits(params: {
 // ============================================================
 
 export async function apiCreateObject(body: {
-  code: string;
   display_name: string;
   object_type: string;
   description?: string;
@@ -1354,7 +1352,6 @@ export async function apiGetEquipment(id: string): Promise<Equipment> {
 }
 
 export async function apiCreateEquipment(body: {
-  code: string;
   display_name: string;
   description?: string;
   department_id: string;
@@ -1610,7 +1607,6 @@ export type FlowEdgeSchema = {
 };
 
 export async function apiCreateFlow(body: {
-  code: string;
   display_name: string;
   department_id?: string | null;
   project_name?: string | null;

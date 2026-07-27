@@ -18,3 +18,18 @@ def new_id() -> UUID:
         UUID: 随机 UUID。未来切换 UUIDv7 时本签名保持不变。
     """
     return uuid4()
+
+
+def gen_code(prefix: str = "obj") -> str:
+    """自动生成实体编码（满足 ^[a-z][a-z0-9_]*$ 格式）。
+
+    格式: {prefix}_{uuid_hex前8位}
+    例: obj_a1b2c3d4, flow_e5f6g7h8
+
+    Args:
+        prefix: 编码前缀，默认 "obj"。
+
+    Returns:
+        str: 自动生成的唯一编码。
+    """
+    return f"{prefix}_{uuid4().hex[:8]}"

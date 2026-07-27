@@ -72,13 +72,6 @@ class CreateObjectRequest(BaseModel):
         "material",
         "signal",
     ] = Field(..., description="对象类型")
-    code: str = Field(
-        ...,
-        min_length=1,
-        max_length=64,
-        pattern=r"^[a-zA-Z][a-zA-Z0-9_\-]*$",
-        description="对象编码，组织内+类型内唯一",
-    )
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     parent_id: UUID | None = Field(None, description="父对象 ID")
@@ -189,9 +182,10 @@ async def create_object(
         AppError: code="conflict"，当编码已存在时。
         AppError: code="not_found"，当父对象不存在时。
     """
+    from packages.common.ids import gen_code
     obj = await service.add_object(
         object_type=body.object_type,
-        code=body.code,
+        code=gen_code("obj"),
         display_name=body.display_name,
         description=body.description,
         parent_id=body.parent_id,
