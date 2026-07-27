@@ -109,9 +109,9 @@ export function AssistantPage(): JSX.Element {
     const newLocalMessages = localMessages;
 
     if (streamingAnswer !== null) {
-      // 流式输出中：数据库历史消息（去掉刚发的用户消息避免重复）+ 流式 AI 消息
+      // 流式输出中：数据库历史消息（去掉和本地重复的）+ 流式 AI 消息
       const localIds = new Set(newLocalMessages.map((m) => m.id));
-      const dbHistory = dbMessages.filter((m) => !localIds.has(m.id) && m.role !== 'assistant');
+      const dbHistory = dbMessages.filter((m) => !localIds.has(m.id));
       const aiMsg: AssistantMessage = {
         id: 'streaming-ai',
         conversation_id: selectedConvId ?? '',
