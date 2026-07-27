@@ -14,6 +14,14 @@ const katexStyle = `
 .ai-markdown-body .katex { font-size: 1.05em; }
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
+.ai-markdown-body .katex .vlist-t { border-collapse: collapse; }
+.ai-markdown-body .katex .vlist-r { display: table-row; }
+.ai-markdown-body .katex .vlist { display: table-cell; position: relative; vertical-align: bottom; }
+.ai-markdown-body .katex .vlist > span { display: block; height: 0; position: relative; }
+.ai-markdown-body .katex .vlist > span > span { display: inline-block; }
+.ai-markdown-body .katex .msupsub { text-align: left; }
+.ai-markdown-body .katex .mfrac > span > span { text-align: center; }
+.ai-markdown-body .katex .mfrac .frac-line { border-bottom-style: solid; display: inline-block; width: 100%; }
 `;
 
 /**
