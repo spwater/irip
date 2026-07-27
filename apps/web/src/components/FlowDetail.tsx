@@ -328,9 +328,8 @@ export function FlowDetail(): JSX.Element {
   const resumeMutation = useMutation({
     mutationFn: apiResumeFlowRun,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
-      void queryClient.invalidateQueries({ queryKey: ['flow-run', activeRunId] });
-      message.success('流程执行已完成');
+      void queryClient.refetchQueries({ queryKey: ['flow-runs', selectedFlowId] });
+      message.success('已开始执行');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
