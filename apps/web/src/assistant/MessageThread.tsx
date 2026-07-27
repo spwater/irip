@@ -11,10 +11,30 @@ import 'katex/dist/katex.min.css';
 const { Text, Paragraph } = Typography;
 
 // KaTeX 公式样式：修复 Antd reset.css 的 box-sizing:border-box 干扰 KaTeX vlist 定位
+// 用 !important + 高优先级选择器确保覆盖 Antd 的全局 reset
 const katexStyle = `
+.ai-markdown-body .katex { font-size: 1.05em; }
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
-.ai-markdown-body .katex * { box-sizing: content-box !important; }
+.ai-markdown-body .katex *,
+.ai-markdown-body .katex *::before,
+.ai-markdown-body .katex *::after {
+  box-sizing: content-box !important;
+}
+.ai-markdown-body .katex .vlist-t { border-collapse: collapse !important; display: inline-table !important; }
+.ai-markdown-body .katex .vlist-r { display: table-row !important; }
+.ai-markdown-body .katex .vlist { display: table-cell !important; position: relative !important; vertical-align: bottom !important; }
+.ai-markdown-body .katex .vlist > span { display: block !important; height: 0 !important; position: relative !important; }
+.ai-markdown-body .katex .vlist > span > span { display: inline-block !important; }
+.ai-markdown-body .katex .msupsub { text-align: left !important; }
+.ai-markdown-body .katex .mfrac > span > span { text-align: center !important; }
+.ai-markdown-body .katex .mfrac .frac-line {
+  border-bottom-style: solid !important;
+  display: inline-block !important;
+  width: 100% !important;
+  min-height: 1px !important;
+}
+.ai-markdown-body .katex .strut { display: inline-block !important; }
 `;
 
 /**
