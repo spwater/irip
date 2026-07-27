@@ -28,9 +28,10 @@ const katexStyle = `
  */
 function MarkdownWithMath({ content }: { content: string }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const chartOptions = useRef<string[]>([]);
 
   // 提取公式，替换为占位符
-  const processed = content
+  let processed = content
     // 块级公式 $$...$$ → 用 div 占位（display 模式需要块级元素）
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
       const escaped = latex.trim().replace(/"/g, '&quot;');
@@ -41,6 +42,14 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
       const escaped = latex.trim().replace(/"/g, '&quot;');
       return `<span class="katex-math" data-latex="${escaped}" data-display="false"></span>`;
     });
+
+  // 提取 echarts 代码块，存到 ref 数组，div 只存索引
+  chartOptions.current = [];
+  processed = processed.replace(/```echarts\n([\s\S]*?)```/g, (_, code) => {
+    const idx = chartOptions.current.length;
+    chartOptions.current.push(code.trim());
+    return `<div class="echarts-chart" data-idx="${idx}" style="width:100%;height:400px;margin:8px 0"></div>`;
+  });
 
   // 渲染完后，用 katex.render 替换占位符
   useEffect(() => {
@@ -63,7 +72,9 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
     // 渲染 ECharts 图表
     const charts = containerRef.current.querySelectorAll('.echarts-chart');
     charts.forEach((div) => {
-      const optionStr = (div.getAttribute('data-option') || '').replace(/&quot;/g, '"');
+      const idx = parseInt(div.getAttribute('data-idx') || '-1', 10);
+      if (idx < 0 || idx >= chartOptions.current.length) return;
+      const optionStr = chartOptions.current[idx];
       try {
         const option = JSON.parse(optionStr);
         // 动态导入 echarts 避免首屏加载慢
@@ -91,12 +102,8 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
 function renderMarkdownToHtml(md: string): string {
   let html = md;
 
-  // 代码块 ```（echarts 代码块用 div 占位，useEffect 里用 ECharts 渲染）
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    if (lang === 'echarts') {
-      const escaped = code.trim().replace(/"/g, '&quot;');
-      return `<div class="echarts-chart" data-option="${escaped}" style="width:100%;height:400px;margin:8px 0"></div>`;
-    }
+  // 代码块 ```（echarts 已在前面提取，这里只处理普通代码块）
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
     return `<pre style="background:#f5f5f5;padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:monospace"><code>${escapeHtml(code.trim())}</code></pre>`;
   });
 
