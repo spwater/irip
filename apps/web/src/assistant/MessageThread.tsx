@@ -5,9 +5,47 @@ import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
-import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
+import { visit } from 'unist-util-visit';
 
 const { Text, Paragraph } = Typography;
+
+/**
+ * 自定义 rehype 插件：处理 math 节点，用 katex.renderToString 生成 HTML
+ *
+ * 兼容 remark-math v6 生成的节点类型：mathinline / inlineMath / math / displayMath
+ */
+function rehypeKatexCustom() {
+  return (tree: any) => {
+    visit(tree, (node: any) => {
+      if (
+        node.type === 'math' ||
+        node.type === 'inlineMath' ||
+        node.type === 'mathinline' ||
+        node.type === 'displayMath'
+      ) {
+        const mathStr = node.value || (node.children?.[0]?.value ?? '');
+        const displayMode = node.type === 'math' || node.type === 'displayMath';
+        try {
+          const html = katex.renderToString(mathStr, {
+            displayMode,
+            throwOnError: false,
+            strict: false,
+          });
+          node.type = 'element';
+          node.tagName = displayMode ? 'div' : 'span';
+          node.properties = {
+            className: displayMode ? 'katex-display' : '',
+            dangerouslySetInnerHTML: { __html: html },
+          };
+          node.children = [];
+        } catch {
+          // 渲染失败保留原文
+        }
+      }
+    });
+  };
+}
 
 // KaTeX 公式样式修正：确保上下标正确显示，公式不溢出
 const katexStyle = `
@@ -234,7 +272,7 @@ export function MessageThread({
                   <style>{katexStyle}</style>
                   <ReactMarkdown
                     remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
+                    rehypePlugins={[rehypeKatexCustom]}
                     components={markdownComponents}
                   >
                     {msg.content}
