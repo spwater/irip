@@ -61,6 +61,7 @@ export function AssistantPage(): JSX.Element {
   const [factContext, setFactContext] = useState<string | null>(null);
   const [factContextLabel, setFactContextLabel] = useState<string | null>(null);
   const [factSearchText, setFactSearchText] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
@@ -721,20 +722,33 @@ export function AssistantPage(): JSX.Element {
                 const groupIds = group.facts.map((f) => f.fact_id);
                 const groupAllSelected = groupIds.every((id) => selectedFactIds.includes(id));
                 const groupSomeSelected = groupIds.some((id) => selectedFactIds.includes(id));
+                // 搜索时自动展开，否则按 expandedGroups 状态
+                const isExpanded = factSearchText.trim() || expandedGroups.has(taskCode);
                 return (
-                  <div key={taskCode} style={{ marginBottom: 12 }}>
+                  <div key={taskCode} style={{ marginBottom: 4 }}>
                     {/* 任务分组标题 */}
                     <div
                       style={{
                         display: 'flex',
                         alignItems: 'center',
                         gap: 8,
-                        padding: '6px 0',
+                        padding: '8px 0',
                         cursor: 'pointer',
                         borderBottom: '1px solid #f5f5f5',
+                        userSelect: 'none',
                       }}
-                      onClick={() => handleToggleGroup(groupIds)}
+                      onClick={() => {
+                        setExpandedGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(taskCode)) next.delete(taskCode);
+                          else next.add(taskCode);
+                          return next;
+                        });
+                      }}
                     >
+                      <span style={{ fontSize: 10, color: '#999', width: 12, display: 'inline-block' }}>
+                        {isExpanded ? '▼' : '▶'}
+                      </span>
                       <Checkbox
                         checked={groupAllSelected}
                         indeterminate={!groupAllSelected && groupSomeSelected}
@@ -743,30 +757,39 @@ export function AssistantPage(): JSX.Element {
                       />
                       <Text strong style={{ fontSize: 13 }}>{group.taskName}</Text>
                       <Tag style={{ fontSize: 10, margin: 0 }}>{group.facts.length}</Tag>
+                      {groupSomeSelected && !groupAllSelected && (
+                        <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
+                          已选 {groupIds.filter((id) => selectedFactIds.includes(id)).length}
+                        </Tag>
+                      )}
                     </div>
-                    {/* 样品列表 */}
-                    <div style={{ paddingLeft: 28 }}>
-                      {group.facts.map((f) => (
-                        <div
-                          key={f.fact_id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 8,
-                            padding: '4px 0',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => handleToggleFact(f.fact_id)}
-                        >
-                          <Checkbox
-                            checked={selectedFactIds.includes(f.fact_id)}
-                            onChange={() => handleToggleFact(f.fact_id)}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
-                        </div>
-                      ))}
-                    </div>
+                    {/* 样品列表 - 折叠时不渲染 */}
+                    {isExpanded && (
+                      <div style={{ paddingLeft: 28, paddingTop: 4 }}>
+                        {group.facts.map((f) => (
+                          <div
+                            key={f.fact_id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              padding: '4px 0',
+                              cursor: 'pointer',
+                              borderRadius: 4,
+                              background: selectedFactIds.includes(f.fact_id) ? '#f0f7ff' : 'transparent',
+                            }}
+                            onClick={() => handleToggleFact(f.fact_id)}
+                          >
+                            <Checkbox
+                              checked={selectedFactIds.includes(f.fact_id)}
+                              onChange={() => handleToggleFact(f.fact_id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })
