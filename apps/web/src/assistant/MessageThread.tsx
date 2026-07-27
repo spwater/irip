@@ -3,12 +3,139 @@ import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
 import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
 import remarkGfm from 'remark-gfm';
-import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { useMemo } from 'react';
 
 const { Text, Paragraph } = Typography;
+
+/**
+ * 渲染包含公式的 Markdown
+ *
+ * 方案：先用正则提取 $$...$$ 和 $...$ 公式，替换为占位符，
+ * 用 ReactMarkdown 渲染剩余 Markdown，再用 katex.renderToString 替换占位符。
+ * 避免 react-markdown + rehype-katex 对 KaTeX HTML 的二次处理导致 vlist 定位错误。
+ */
+function MarkdownWithMath({ content }: { content: string }): JSX.Element {
+  const html = useMemo(() => {
+    // 1. 提取块级公式 $$...$$ 和行内公式 $...$
+    const mathBlocks: { latex: string; display: boolean }[] = [];
+    let processed = content;
+
+    // 先提取 $$...$$（块级）
+    processed = processed.replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
+      mathBlocks.push({ latex: latex.trim(), display: true });
+      return `\u0000MATH${mathBlocks.length - 1}\u0000`;
+    });
+
+    // 再提取 $...$（行内），避免匹配到 $$ 残留
+    processed = processed.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$/g, (_, latex: string) => {
+      mathBlocks.push({ latex: latex.trim(), display: false });
+      return `\u0000MATH${mathBlocks.length - 1}\u0000`;
+    });
+
+    // 2. 用 div 包裹让 ReactMarkdown 渲染纯文本部分
+    // 但 ReactMarkdown 不直接输出 HTML，我们需要另一种方式
+    // 改为：直接生成 HTML 字符串
+    return { processed, mathBlocks };
+  }, [content]);
+
+  // 3. 用 ReactMarkdown 渲染，然后用 rehype 替换占位符为 KaTeX HTML
+  const renderedHtml = useMemo(() => {
+    const { processed, mathBlocks } = html;
+    // 简单方式：用 react-markdown 渲染 processed（占位符作为纯文本保留）
+    // 然后用 dangerouslySetInnerHTML 方式
+    return { processed, mathBlocks };
+  }, [html]);
+
+  // 渲染：ReactMarkdown 输出 React 元素，我们在 code 组件里拦截占位符
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        ...markdownComponents,
+        // 拦截文本节点中的占位符
+        p: ({ children, ...props }: any) => {
+          const processed = processMathInText(children, renderedHtml.mathBlocks);
+          return <p style={{ margin: '4px 0', lineHeight: 1.7 }} {...props}>{processed}</p>;
+        },
+        li: ({ children, ...props }: any) => {
+          const processed = processMathInText(children, renderedHtml.mathBlocks);
+          return <li style={{ margin: '2px 0', lineHeight: 1.7 }} {...props}>{processed}</li>;
+        },
+        code: ({ className, children, ...props }: any) => {
+          const text = String(children);
+          // 检查是否是公式占位符
+          const match = text.match(/\u0000MATH(\d+)\u0000/);
+          if (match) {
+            const idx = parseInt(match[1], 10);
+            const block = renderedHtml.mathBlocks[idx];
+            if (block) {
+              const span = document.createElement('span');
+              katex.render(block.latex, span, {
+                displayMode: block.display,
+                throwOnError: false,
+                strict: false,
+              });
+              return <span dangerouslySetInnerHTML={{ __html: span.innerHTML }} {...props} />;
+            }
+          }
+          const isBlock = className && typeof className === 'string' && className.includes('language-');
+          if (!isBlock) {
+            return <code style={{ background: '#f0f0f0', padding: '1px 4px', borderRadius: 3, fontSize: 13, fontFamily: 'monospace' }} {...props}>{children}</code>;
+          }
+          return <code className={className} style={{ display: 'block', background: '#f5f5f5', padding: '8px 12px', borderRadius: 6, fontSize: 13, fontFamily: 'monospace', overflow: 'auto', margin: '6px 0' }} {...props}>{children}</code>;
+        },
+      }}
+    >
+      {renderedHtml.processed}
+    </ReactMarkdown>
+  );
+}
+
+/** 处理文本节点中的公式占位符，替换为 KaTeX 渲染的 span */
+function processMathInText(children: React.ReactNode, mathBlocks: { latex: string; display: boolean }[]): React.ReactNode {
+  if (!children) return children;
+  if (typeof children === 'string') {
+    return renderMathInString(children, mathBlocks);
+  }
+  if (Array.isArray(children)) {
+    return children.map((child, i) => {
+      if (typeof child === 'string') {
+        return renderMathInString(child, mathBlocks, i);
+      }
+      return child;
+    });
+  }
+  return children;
+}
+
+/** 在字符串中找到公式占位符并替换 */
+function renderMathInString(str: string, mathBlocks: { latex: string; display: boolean }[], key?: number): React.ReactNode {
+  const parts = str.split(/(\u0000MATH\d+\u0000)/);
+  if (parts.length === 1) return str;
+  return parts.map((part, i) => {
+    const match = part.match(/\u0000MATH(\d+)\u0000/);
+    if (match) {
+      const idx = parseInt(match[1], 10);
+      const block = mathBlocks[idx];
+      if (block) {
+        try {
+          const html = katex.renderToString(block.latex, {
+            displayMode: block.display,
+            throwOnError: false,
+            strict: false,
+          });
+          return <span key={`${key}-${i}`} dangerouslySetInnerHTML={{ __html: html }} />;
+        } catch {
+          return part;
+        }
+      }
+    }
+    return part;
+  });
+}
 
 // KaTeX 公式样式：修复 Antd reset.css 的 box-sizing:border-box 干扰 KaTeX vlist 定位
 // 用 !important + 高优先级选择器确保覆盖 Antd 的全局 reset
@@ -245,13 +372,7 @@ export function MessageThread({
               ) : (
                 <div className="ai-markdown-body">
                   <style>{katexStyle}</style>
-                  <ReactMarkdown
-                    remarkPlugins={[remarkMath, remarkGfm]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={markdownComponents}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                  <MarkdownWithMath content={msg.content} />
                 </div>
               )}
 

@@ -2,51 +2,39 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>KaTeX 测试</title>
+<title>KaTeX + Antd 测试</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/antd@5.29.3/dist/reset.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.18.1/dist/katex.min.js"></script>
 <style>
 body { font-family: sans-serif; padding: 20px; }
 .test-box { margin: 10px 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; }
+/* 项目里的修复CSS */
+.ai-markdown-body .katex * { box-sizing: content-box !important; }
 </style>
 </head>
 <body>
-<h2>KaTeX 上标测试</h2>
+<h2>KaTeX + Antd reset.css 测试</h2>
+<p>如果这里也错了，说明是 Antd reset.css 的冲突</p>
 
-<div class="test-box">
-  <p>1. 直接 katex.render: <span id="t1"></span></p>
-  <p>2. HTML sup: x<sup>2</sup></p>
-  <p>3. 行内公式: <span id="t2"></span></p>
-  <p>4. 分数公式: <span id="t3"></span></p>
+<div class="test-box ai-markdown-body">
+  <p>1. sigma^2: <span id="t1"></span></p>
+  <p>2. 分数: <span id="t2"></span></p>
+  <p>3. 10^{-5}: <span id="t3"></span></p>
 </div>
 
-<div class="test-box" id="struct">
-  <p>5. KaTeX 生成的 HTML 结构:</p>
+<div class="test-box">
+  <p>4. 不加 .ai-markdown-body class (没有box-sizing修复):</p>
+  <p>sigma^2: <span id="t4"></span></p>
+  <p>分数: <span id="t5"></span></p>
 </div>
 
 <script>
-// 测试1: sigma^2
 katex.render('\\sigma^2', document.getElementById('t1'), { throwOnError: false });
-
-// 测试2: 行内
-katex.render('6.6 \\times 10^{-5}', document.getElementById('t2'), { throwOnError: false });
-
-// 测试3: 分数
-katex.render('\\frac{0.414 + 0.05}{2}', document.getElementById('t3'), { throwOnError: false });
-
-// 测试4: 打印HTML结构
-var tmp = document.createElement('span');
-katex.render('x^2', tmp, { throwOnError: false });
-document.getElementById('struct').innerHTML += '<pre style="font-size:11px;overflow:auto;max-height:200px">' + 
-  tmp.innerHTML.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
-
-// 检查字体是否加载
-document.fonts.ready.then(function() {
-  var fonts = [];
-  document.fonts.forEach(function(f) { if (f.family.includes('KaTeX')) fonts.push(f.family + ' ' + f.weight + ' ' + f.status); });
-  console.log('KaTeX fonts:', fonts);
-  document.getElementById('struct').innerHTML += '<p><b>字体加载状态:</b> ' + fonts.join(', ') + '</p>';
-});
+katex.render('\\frac{0.414 + 0.05}{2}', document.getElementById('t2'), { throwOnError: false });
+katex.render('6.6 \\times 10^{-5}', document.getElementById('t3'), { throwOnError: false });
+katex.render('\\sigma^2', document.getElementById('t4'), { throwOnError: false });
+katex.render('\\frac{0.414 + 0.05}{2}', document.getElementById('t5'), { throwOnError: false });
 </script>
 </body>
 </html>
