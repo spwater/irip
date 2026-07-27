@@ -29,14 +29,14 @@ const katexStyle = `
 function MarkdownWithMath({ content }: { content: string }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 提取公式，替换为 span 占位符
+  // 提取公式，替换为占位符
   const processed = content
-    // 块级公式 $$...$$
+    // 块级公式 $$...$$ → 用 div 占位（display 模式需要块级元素）
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
       const escaped = latex.trim().replace(/"/g, '&quot;');
-      return `<span class="katex-math" data-latex="${escaped}" data-display="true"></span>`;
+      return `<div class="katex-math" data-latex="${escaped}" data-display="true"></div>`;
     })
-    // 行内公式 $...$
+    // 行内公式 $...$ → 用 span 占位
     .replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$/g, (_, latex: string) => {
       const escaped = latex.trim().replace(/"/g, '&quot;');
       return `<span class="katex-math" data-latex="${escaped}" data-display="false"></span>`;
@@ -122,8 +122,8 @@ function renderMarkdownToHtml(md: string): string {
   // 分隔线 ---
   html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e8e8e8;margin:12px 0" />');
 
-  // 段落（把连续的非标签行用 p 包裹）
-  html = html.replace(/^(?!<[a-z/])((?!<[a-z]).+)$/gm, '<p style="margin:4px 0;line-height:1.7">$1</p>');
+  // 段落（把连续的非标签行用 p 包裹，排除 katex-math div 和其他块级元素）
+  html = html.replace(/^(?!<[a-z/])(?<!<div class="katex-math")((?!<[a-z])(?!<div class="katex-math").+)$/gm, '<p style="margin:4px 0;line-height:1.7">$1</p>');
 
   // 清理多余空行
   html = html.replace(/\n{3,}/g, '\n\n');
