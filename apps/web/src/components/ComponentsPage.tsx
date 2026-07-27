@@ -127,14 +127,17 @@ function yamlEscapeDouble(value: string): string {
  * name 自动生成，YAML 里显示占位值 iface_ffffffff。
  * version 由系统自动管理，不在 YAML 里。
  */
-function buildManifestYaml(v: ComponentFormValues): string {
+function buildManifestYaml(v: ComponentFormValues, originalName?: string): string {
   const displayName = v.display_name ?? '';
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const fileEngine = v.file_engine ?? 'pymupdf';
   const expCode = v.experimental_object_code ?? '';
+  const nameLine = originalName
+    ? `name: ${originalName}`
+    : 'name: iface_ffffffff  # 自动生成，无需修改';
   const lines: string[] = [
-    'name: iface_ffffffff  # 自动生成，无需修改',
+    nameLine,
     'kind: ingestion',
     `display_name: "${yamlEscapeDouble(displayName)}"`,
     `description: "${yamlEscapeDouble(description)}"`,
@@ -294,6 +297,7 @@ export function ComponentsPage(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editOriginalName, setEditOriginalName] = useState<string | undefined>(undefined);
   // 新建接口：默认表单模式（高级模式关闭）
   const [advancedMode, setAdvancedMode] = useState(false);
   // 编辑组件：默认高级模式（已有完整 YAML）
@@ -379,6 +383,7 @@ export function ComponentsPage(): JSX.Element {
       setDetailId(data.id);
       setModalOpen(false);
       setEditModalOpen(false);
+      setEditOriginalName(undefined);
       form.resetFields();
       editForm.resetFields();
       // 重置模式：新建和编辑都回到表单模式
@@ -502,6 +507,8 @@ export function ComponentsPage(): JSX.Element {
     const yaml = compDetail.manifest_yaml;
     // 从 YAML 解析表单字段值
     const parsed = parseYamlToFormValues(yaml);
+    // 保存原始 name（编辑时 buildManifestYaml 用它而不是占位值）
+    setEditOriginalName(compDetail.name);
     editForm.resetFields();
     editForm.setFieldsValue({
       manifest_yaml: yaml,
@@ -531,7 +538,7 @@ export function ComponentsPage(): JSX.Element {
         prompt: (formValues.prompt as string) ?? '',
         file_engine: (formValues.file_engine as string) ?? 'pymupdf',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
-      });
+      }, editOriginalName);
       editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
     } else {
       // 高级 → 表单
@@ -563,7 +570,7 @@ export function ComponentsPage(): JSX.Element {
           prompt: values.prompt as string,
           file_engine: values.file_engine as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
-        });
+        }, editOriginalName);
         publishMutation.mutate({ manifest_yaml: yaml });
       }
     } catch {
@@ -824,6 +831,7 @@ export function ComponentsPage(): JSX.Element {
         onOk={handleEditPublish}
         onCancel={() => {
           setEditModalOpen(false);
+          setEditOriginalName(undefined);
           editForm.resetFields();
           setEditAdvancedMode(true);
         }}
