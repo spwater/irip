@@ -316,7 +316,21 @@ export function parseManifest(manifestYaml: string): ParsedManifest {
                   currentParam.type = cleanVal;
                   break;
                 case 'default':
-                  currentParam.default = parseScalarValue(cleanVal);
+                  if (cleanVal === '|' || cleanVal === '>') {
+                    // 块标量：收集后续缩进行作为值
+                    const blockLines: string[] = [];
+                    for (let j = i + 1; j < sectionLines.length; j++) {
+                      const blockLine = sectionLines[j];
+                      if (!blockLine.trim()) { blockLines.push(''); continue; }
+                      const blockIndent = blockLine.length - blockLine.trimStart().length;
+                      if (blockIndent <= propIndent) break;
+                      blockLines.push(blockLine.slice(propIndent + 1));
+                    }
+                    currentParam.default = blockLines.join('\n').replace(/\n$/, '');
+                    i += blockLines.length > 0 ? blockLines.length - 1 : 0;
+                  } else {
+                    currentParam.default = parseScalarValue(cleanVal);
+                  }
                   break;
                 case 'description':
                   currentParam.description = cleanVal;
