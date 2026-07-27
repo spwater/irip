@@ -250,7 +250,7 @@ export function FactsPage(): JSX.Element {
       key: 'fact_type',
       width: 130,
       render: (t: string | undefined, record: TreeNode) => {
-        if (record.isGroup) return <Text type="secondary">{record.totalCount} 条数据</Text>;
+        if (record.isGroup) return <Text type="secondary">{record.totalCount} 个样品</Text>;
         return t ? <Tag color="blue">{t}</Tag> : '-';
       },
     },
@@ -263,7 +263,7 @@ export function FactsPage(): JSX.Element {
           return (
             <Popconfirm
               title={`删除「${record.task_name ?? record.task_code}」下的全部数据？`}
-              description={`将删除 ${record.totalCount ?? 0} 条数据，此操作不可撤销`}
+              description={`将删除 ${record.totalCount ?? 0} 个样品，此操作不可撤销`}
               onConfirm={() => record.task_code && batchDeleteMutation.mutate(record.task_code)}
               okText="全部删除"
               cancelText="取消"
