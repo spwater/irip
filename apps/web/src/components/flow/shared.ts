@@ -47,7 +47,7 @@ export function fmtTime(v: string | null | undefined): string {
   if (!v) return '-';
   const d = new Date(v);
   if (isNaN(d.getTime())) return v;
-  return d.toLocaleString('zh-CN', { hour12: false });
+  return d.toLocaleString('zh-CN', { hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 }
 
 /** 比较语义化版本号，返回 >0/0/<0 */

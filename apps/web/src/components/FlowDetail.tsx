@@ -516,6 +516,13 @@ export function FlowDetail(): JSX.Element {
       render: (v: string) => fmtTime(v),
     },
     {
+      title: '执行人',
+      dataIndex: 'operator',
+      key: 'operator',
+      width: 100,
+      render: (v: string | null) => v ?? <Text type="secondary">-</Text>,
+    },
+    {
       title: '任务来源',
       key: 'department',
       width: 160,
