@@ -2090,12 +2090,12 @@ export async function apiCancelRequest(conversationId: string): Promise<void> {
  */
 export async function apiSendMessage(
   conversationId: string,
-  body: { question: string; provider_name?: string; thinking_enabled?: boolean },
+  body: { question: string; provider_name?: string; thinking_enabled?: boolean; system_context?: string },
   signal?: AbortSignal,
 ): Promise<AskResponse> {
   const res = await http.post<AskApiResponse>(
     `/assistant/conversations/${conversationId}/messages`,
-    { question: body.question, provider_name: body.provider_name ?? 'openai_compatible', thinking_enabled: body.thinking_enabled ?? false },
+    { question: body.question, provider_name: body.provider_name ?? 'openai_compatible', thinking_enabled: body.thinking_enabled ?? false, system_context: body.system_context ?? null },
     { signal },
   );
   return res.data;

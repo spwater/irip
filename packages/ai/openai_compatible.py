@@ -170,12 +170,15 @@ class OpenAICompatibleProvider:
                 "content": (
                     "你是 IRIP 工业研发智能平台的 AI 助手。"
                     "你可以回答关于工业研究、材料科学、数据分析的问题。"
-                    "当用户询问平台内的数据（如标准变量、实验事实、参数）时，"
-                    "请说明这些数据需要在平台相应页面查看。"
                     "回答使用中文。"
                 ),
             }
         ]
+        # 加入用户传入的 system 上下文（如实验数据）
+        for msg in request.messages:
+            if msg.get("role") == "system":
+                messages.append(msg)
+        # 加入非 system 的历史消息和当前问题
         messages.extend(
             {"role": m.get("role", "user"), "content": str(m.get("content", ""))}
             for m in request.messages

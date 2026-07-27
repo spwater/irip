@@ -128,6 +128,9 @@ class SendMessageRequest(BaseModel):
     thinking_enabled: bool = Field(
         False, description="是否启用思考模式"
     )
+    system_context: str | None = Field(
+        None, max_length=32000, description="系统上下文（如实验数据JSON）"
+    )
 
 
 # ---- 响应模型 ----
@@ -435,6 +438,7 @@ async def send_message(
         conversation_id=conversation_id,
         provider_name=body.provider_name,
         thinking_enabled=body.thinking_enabled,
+        system_context=body.system_context,
     )
     return AskResponse(
         conversation_id=str(conversation_id),

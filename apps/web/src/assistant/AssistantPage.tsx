@@ -29,13 +29,11 @@ import {
   apiSendMessage,
   apiTogglePin,
   apiToggleArchive,
-  apiListFlows,
   apiListFacts,
   apiGetFactData,
   extractApiError,
   type AssistantMessage,
   type ConversationSummary,
-  type FlowSummary,
   type FactSummary,
 } from '@/api/client';
 
@@ -58,18 +56,14 @@ export function AssistantPage(): JSX.Element {
   const [showArchived, setShowArchived] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [factModalOpen, setFactModalOpen] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [selectedFactId, setSelectedFactId] = useState<string | null>(null);
+  const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
   const [insertingFact, setInsertingFact] = useState(false);
+  const [factContext, setFactContext] = useState<string | null>(null);
+  const [factContextLabel, setFactContextLabel] = useState<string | null>(null);
 
-  // 查询任务列表和事实列表（用于插入实验数据）
-  const { data: flowsData } = useQuery({
-    queryKey: ['flows-for-fact-insert'],
-    queryFn: () => apiListFlows(),
-    enabled: factModalOpen,
-  });
+  // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
-    queryKey: ['facts-for-insert', selectedTaskId],
+    queryKey: ['facts-for-insert'],
     queryFn: () => apiListFacts({ page_size: 100 }),
     enabled: factModalOpen,
   });
@@ -142,25 +136,37 @@ export function AssistantPage(): JSX.Element {
 
   // ---- 插入实验数据 ----
   const handleInsertFact = async (): Promise<void> => {
-    if (!selectedFactId) {
-      message.warning('请选择一个样品');
+    if (selectedFactIds.length === 0) {
+      message.warning('请至少选择一个样品');
       return;
     }
     setInsertingFact(true);
     try {
-      const data = await apiGetFactData(selectedFactId);
-      const jsonStr = JSON.stringify(data, null, 2);
-      const prefix = `\n\n---以下是实验数据（JSON格式），请基于此数据回答用户问题---\n`;
-      setInputText((prev) => prev + (prev ? '\n' : '') + prefix + jsonStr + '\n---实验数据结束---\n\n');
+      const allData: string[] = [];
+      const labels: string[] = [];
+      for (const factId of selectedFactIds) {
+        const data = await apiGetFactData(factId);
+        const fact = (factsData?.items ?? []).find((f: FactSummary) => f.fact_id === factId);
+        const label = fact?.subject_id ?? factId;
+        labels.push(label);
+        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\``);
+      }
+      const context = `以下是实验数据，请基于此数据回答用户的问题：\n\n${allData.join('\n\n')}`;
+      setFactContext(context);
+      setFactContextLabel(labels.join(', '));
       setFactModalOpen(false);
-      setSelectedTaskId(null);
-      setSelectedFactId(null);
-      message.success('实验数据已插入，输入问题后发送');
+      setSelectedFactIds([]);
+      message.success(`已加载 ${labels.length} 个样品的实验数据`);
     } catch (err) {
       message.error(`获取数据失败: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setInsertingFact(false);
     }
+  };
+
+  const handleClearFactContext = (): void => {
+    setFactContext(null);
+    setFactContextLabel(null);
   };
 
   // ---- 发送消息 ----
@@ -211,7 +217,7 @@ export function AssistantPage(): JSX.Element {
     // 模拟流式输出（逐字显示）
     // 实际 API 返回完整回答后，用定时器逐字追加
     try {
-      const res = await apiSendMessage(convId, { question: trimmed, thinking_enabled: thinkingEnabled }, abortControllerRef.current.signal);
+      const res = await apiSendMessage(convId, { question: trimmed, thinking_enabled: thinkingEnabled, system_context: factContext ?? undefined }, abortControllerRef.current.signal);
       const fullAnswer = res.answer || '(无回答)';
 
       // 逐字流式显示
@@ -523,11 +529,25 @@ export function AssistantPage(): JSX.Element {
             </Tooltip>
             <Button
               size="small"
+              type={factContext ? 'primary' : 'default'}
               onClick={() => setFactModalOpen(true)}
               style={{ flexShrink: 0 }}
             >
-              插入实验数据
+              {factContext ? '📊 数据已加载' : '插入实验数据'}
             </Button>
+            {factContext && (
+              <Tooltip title={`已加载: ${factContextLabel}（点击清除）`}>
+                <Button
+                  size="small"
+                  type="link"
+                  danger
+                  onClick={handleClearFactContext}
+                  style={{ flexShrink: 0, padding: '0 4px' }}
+                >
+                  ✕
+                </Button>
+              </Tooltip>
+            )}
             <TextArea
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -602,51 +622,29 @@ export function AssistantPage(): JSX.Element {
         title="插入实验数据"
         open={factModalOpen}
         onOk={handleInsertFact}
-        onCancel={() => { setFactModalOpen(false); setSelectedTaskId(null); setSelectedFactId(null); }}
+        onCancel={() => { setFactModalOpen(false); setSelectedFactIds([]); }}
         confirmLoading={insertingFact}
-        okText="插入"
+        okText={`插入 ${selectedFactIds.length > 0 ? `(${selectedFactIds.length})` : ''}`}
         cancelText="取消"
-        width={500}
+        width={600}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div>
-            <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>选择任务</Text>
-            <Select
-              placeholder="选择任务"
-              style={{ width: '100%' }}
-              showSearch
-              optionFilterProp="label"
-              value={selectedTaskId ?? undefined}
-              onChange={(v: string) => { setSelectedTaskId(v); setSelectedFactId(null); }}
-              options={(flowsData?.items ?? []).map((f: FlowSummary) => ({
-                value: f.id,
-                label: f.display_name,
-              }))}
-            />
-          </div>
-          <div>
-            <Text type="secondary" style={{ display: 'block', marginBottom: 6 }}>选择样品</Text>
-            <Select
-              placeholder="选择样品"
-              style={{ width: '100%' }}
-              showSearch
-              optionFilterProp="label"
-              value={selectedFactId ?? undefined}
-              onChange={(v: string) => setSelectedFactId(v)}
-              disabled={!selectedTaskId}
-              options={(factsData?.items ?? [])
-                .filter((f: FactSummary) => {
-                  if (!selectedTaskId) return true;
-                  const flow = (flowsData?.items ?? []).find((fl: FlowSummary) => fl.id === selectedTaskId);
-                  return f.task_code === flow?.code;
-                })
-                .map((f: FactSummary) => ({
-                  value: f.fact_id,
-                  label: f.subject_id,
-                }))}
-            />
-          </div>
+        <div style={{ marginBottom: 8 }}>
+          <Text type="secondary">选择一个或多个样品，数据将作为系统上下文随问题一起发送给 AI</Text>
         </div>
+        <Select
+          mode="multiple"
+          placeholder="选择样品（支持搜索）"
+          style={{ width: '100%' }}
+          showSearch
+          optionFilterProp="label"
+          value={selectedFactIds}
+          onChange={setSelectedFactIds}
+          maxTagCount="responsive"
+          options={(factsData?.items ?? []).map((f: FactSummary) => ({
+            value: f.fact_id,
+            label: `${f.subject_id}${f.task_name ? ` (${f.task_name})` : ''}`,
+          }))}
+        />
       </Modal>
     </div>
   );
