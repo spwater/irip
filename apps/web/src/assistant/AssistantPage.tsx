@@ -274,11 +274,13 @@ export function AssistantPage(): JSX.Element {
     };
   }, []);
 
-  // 切换对话时清空本地消息（但发送中不清，避免首次提问时用户消息一闪而过）
+  // 切换对话/新建对话时清空本地消息和实验数据上下文
   useEffect(() => {
     if (!isSending) {
       setLocalMessages([]);
       setStreamingAnswer(null);
+      setFactContext(null);
+      setFactContextLabel(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConvId]);
