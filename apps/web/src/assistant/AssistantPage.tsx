@@ -358,14 +358,14 @@ export function AssistantPage(): JSX.Element {
             >
               <List.Item.Meta
                 title={
-                  <span style={{ fontWeight: selectedConvId === conv.id ? 600 : 400, fontSize: 14 }}>
-                    {conv.title || '新对话'}
-                  </span>
-                }
-                description={
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
-                    {conv.pinned && <Tag color='gold' style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>置顶</Tag>}
-                    {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px' }}>归档</Tag>}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontWeight: selectedConvId === conv.id ? 600 : 400, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                      {conv.title || '新对话'}
+                    </span>
+                    <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 4 }}>
+                      {conv.pinned && <Tag color='gold' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>置顶</Tag>}
+                      {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>归档</Tag>}
+                    </div>
                   </div>
                 }
               />
