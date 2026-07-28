@@ -125,7 +125,7 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/parameters',
     beforeLoad: () => {
-      throw redirect({ to: '/lab-ops' });
+      throw redirect({ to: '/lab-ops', search: { tab: 'parameters' } });
     },
   });
 
@@ -167,7 +167,7 @@ export function createAppRouter() {
     },
   });
 
-  // 实验室运营页面（Tab：实验执行 / 实验记录 / 数据抽取）
+  // 实验室运营页面（Tab：实验任务 / 原始数据 / 衍生数据）
   // 支持 ?tab= 搜索参数，便于从详情页（如事实详情）深链回指定 Tab
   const labOpsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
@@ -178,7 +178,7 @@ export function createAppRouter() {
     }),
   });
 
-  // 平台应用页面（Tab：AI 助手 / 数据抽取）
+  // 平台应用页面（Tab：AI 助手 / AI 工具管理）
   const platformRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/platform',

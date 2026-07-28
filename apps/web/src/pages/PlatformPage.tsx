@@ -1,19 +1,18 @@
 import { Tabs, Typography } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/assistant/AssistantPage';
-import { ParameterPage } from '@/parameters/ParameterPage';
 import { AIToolsPage } from '@/ai_tools/AIToolsPage';
 import { useAuthStore } from '@/auth/AuthProvider';
 
 const { Title } = Typography;
 
-const VALID_TABS = ['assistant', 'parameters', 'ai-tools'] as const;
+const VALID_TABS = ['assistant', 'ai-tools'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
 
 /**
  * 平台应用页面
  *
- * 三个 Tab：AI 助手 / 数据抽取 / AI 工具管理。
+ * 两个 Tab：AI 助手 / AI 工具管理。
  * "AI 工具管理" Tab 仅对 platform_administrator 角色可见（T-05），
  * 后端端点另由 system:manage 权限守卫。
  */
@@ -41,11 +40,6 @@ export function PlatformPage(): JSX.Element {
       key: 'assistant',
       label: 'AI助手',
       children: <AssistantPage />,
-    },
-    {
-      key: 'parameters',
-      label: '数据抽取',
-      children: <ParameterPage />,
     },
     ...(isAdmin
       ? [

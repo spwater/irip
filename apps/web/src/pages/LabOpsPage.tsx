@@ -2,17 +2,18 @@ import { Tabs, Typography } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { FlowDetail } from '@/components/FlowDetail';
 import { FactsPage } from '@/facts/FactsPage';
+import { ParameterPage } from '@/parameters/ParameterPage';
 
 const { Title } = Typography;
 
 /** 合法的 Tab key 集合。 */
-const VALID_TABS = ['flows', 'facts'] as const;
+const VALID_TABS = ['flows', 'facts', 'parameters'] as const;
 type LabOpsTab = (typeof VALID_TABS)[number];
 
 /**
  * 实验室运营页面
  *
- * 两个 Tab：实验执行 / 实验记录
+ * 三个 Tab：实验任务 / 原始数据 / 衍生数据
  */
 export function LabOpsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -37,13 +38,18 @@ export function LabOpsPage(): JSX.Element {
         items={[
           {
             key: 'flows',
-            label: '实验执行',
+            label: '实验任务',
             children: <FlowDetail />,
           },
           {
             key: 'facts',
-            label: '实验记录',
+            label: '原始数据',
             children: <FactsPage />,
+          },
+          {
+            key: 'parameters',
+            label: '衍生数据',
+            children: <ParameterPage />,
           },
         ]}
       />
