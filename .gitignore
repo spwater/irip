@@ -104,3 +104,4 @@ $RECYCLE.BIN/
 ## ===== 日志 / 临时 =====
 *.log
 logs/
+celerybeat-schedule*
