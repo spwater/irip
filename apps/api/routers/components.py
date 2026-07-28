@@ -496,12 +496,16 @@ async def delete_component(
     current_user: ManageUserDep,
     service: ComponentRegistryServiceDep,
 ) -> dict[str, str]:
-    """彻底删除组件 — 已禁用（P0 止血）。
+    """删除组件及其所有版本。
 
-    物理删除端点已禁用，防止组件版本不可变性和溯源链断裂。
-    请使用归档端点 ``PATCH /{component_id}/archive`` 替代。
+    Args:
+        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录）。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+
+    Returns:
+        dict: {"status": "deleted"}
     """
-    raise HTTPException(
-        status_code=405,
-        detail="物理删除组件已被禁用（P0 止血）。请使用归档端点 PATCH /{component_id}/archive 替代。",
-    )
+    comp, _ = await service.get_version_by_id(component_id)
+    await service.delete_component(comp.id)
+    return {"status": "deleted"}
