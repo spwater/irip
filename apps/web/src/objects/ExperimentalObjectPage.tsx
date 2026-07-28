@@ -331,36 +331,80 @@ export function ExperimentalObjectPage({
     deleteMutation.mutate(editingItem.id);
   };
 
+  // ---- 构建树形数据：第一层是类型，第二层是对象 ----
+  type TreeRow = IndustrialObject & { children?: TreeRow[] };
+  const treeData: TreeRow[] = (() => {
+    // 按 object_type 分组
+    const typeMap = new Map<string, IndustrialObject[]>();
+    for (const item of filteredItems) {
+      const list = typeMap.get(item.object_type) ?? [];
+      list.push(item);
+      typeMap.set(item.object_type, list);
+    }
+    const tree: TreeRow[] = [];
+    // 按 objectTypeData 的顺序构建类型行
+    for (const typeItem of objectTypeData ?? []) {
+      const objs = typeMap.get(typeItem.code);
+      if (objs && objs.length > 0) {
+        tree.push({
+          id: `type_${typeItem.code}`,
+          code: typeItem.code,
+          display_name: typeItem.display_name,
+          object_type: typeItem.code,
+          description: typeItem.description,
+          status: '',
+          parent_id: null,
+          equipment_id: null,
+          department_id: null,
+          visible_departments: [],
+          created_at: '',
+          updated_at: '',
+          lock_version: 0,
+          children: objs as TreeRow[],
+        } as TreeRow);
+        typeMap.delete(typeItem.code);
+      }
+    }
+    // 未匹配类型的对象放顶层
+    for (const [, objs] of typeMap) {
+      for (const obj of objs) {
+        tree.push(obj as TreeRow);
+      }
+    }
+    return tree;
+  })();
+
+  const isTypeRow = (record: TreeRow): boolean => record.id.startsWith('type_');
+
   // ---- 表格列定义 ----
-  const columns: ColumnsType<IndustrialObject> = [
+  const columns: ColumnsType<TreeRow> = [
     {
       title: '名称',
       key: 'name',
       width: 500,
-      render: (_: unknown, record: IndustrialObject) => (
-        <Tooltip title={record.description || undefined} placement="topLeft">
-          <Space size={6}>
-            <Text strong>{record.display_name}</Text>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {record.code}
-            </Text>
-          </Space>
-        </Tooltip>
-      ),
-    },
-    {
-      title: '类型',
-      dataIndex: 'object_type',
-      key: 'object_type',
-      width: 80,
-      render: (t: string) => objectTypeMap.get(t) ?? t,
+      render: (_: unknown, record: TreeRow) => {
+        if (isTypeRow(record)) {
+          return <Text strong style={{ fontSize: 14 }}>{record.display_name}</Text>;
+        }
+        return (
+          <Tooltip title={record.description || undefined} placement="topLeft">
+            <Space size={6}>
+              <Text strong>{record.display_name}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.code}
+              </Text>
+            </Space>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '关联设备',
       dataIndex: 'equipment_id',
       key: 'equipment_id',
       width: 150,
-      render: (eid: string | null) => {
+      render: (eid: string | null, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
         if (!eid) return <Text type="secondary">-</Text>;
         const eq = equipmentMap.get(eid);
         if (!eq) return <Text type="secondary">-</Text>;
@@ -372,7 +416,8 @@ export function ExperimentalObjectPage({
       dataIndex: 'department_id',
       key: 'department_id',
       width: 140,
-      render: (deptId: string | null) => {
+      render: (deptId: string | null, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
         const name = deptId ? deptMap.get(deptId) : null;
         return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
       },
@@ -382,7 +427,8 @@ export function ExperimentalObjectPage({
       dataIndex: 'visible_departments',
       key: 'visible_departments',
       width: 200,
-      render: (deptIds: string[] | null) => {
+      render: (deptIds: string[] | null, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
         if (!deptIds || deptIds.length === 0) {
           return <Text type="secondary">-</Text>;
         }
@@ -401,54 +447,60 @@ export function ExperimentalObjectPage({
       dataIndex: 'status',
       key: 'status',
       width: 80,
-      render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>
-          {STATUS_LABEL[s] ?? s}
-        </Tag>
-      ),
+      render: (s: string, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
+        return (
+          <Tag color={STATUS_COLOR[s] ?? 'default'}>
+            {STATUS_LABEL[s] ?? s}
+          </Tag>
+        );
+      },
     },
     {
       title: '操作',
       key: 'action',
       width: 200,
-      render: (_: unknown, record: IndustrialObject) => (
-        <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => {
-              void navigate({ to: '/lab-ops', search: { tab: 'components', prefill_object: record.code } });
-            }}
-          >
-            +接口
-          </Button>
-          <Popconfirm
-            title={
-              record.status === 'active'
-                ? '确定禁用该对象？'
-                : '确定启用该对象？'
-            }
-            onConfirm={() => handleToggleStatus(record)}
-            okText="确定"
-            cancelText="取消"
-          >
+      render: (_: unknown, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
+        return (
+          <Space size="small">
             <Button
               type="link"
               size="small"
-              danger={record.status === 'active'}
+              onClick={() => handleEdit(record)}
             >
-              {record.status === 'active' ? '禁用' : '启用'}
+              编辑
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Button
+              type="link"
+              size="small"
+              onClick={() => {
+                void navigate({ to: '/lab-ops', search: { tab: 'components', prefill_object: record.code } });
+              }}
+            >
+              +接口
+            </Button>
+            <Popconfirm
+              title={
+                record.status === 'active'
+                  ? '确定禁用该对象？'
+                  : '确定启用该对象？'
+              }
+              onConfirm={() => handleToggleStatus(record)}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button
+                type="link"
+                size="small"
+                danger={record.status === 'active'}
+              >
+                {record.status === 'active' ? '禁用' : '启用'}
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -492,13 +544,14 @@ export function ExperimentalObjectPage({
         />
       </Space>
 
-      <Table<IndustrialObject>
+      <Table<TreeRow>
         columns={columns}
-        dataSource={filteredItems}
+        dataSource={treeData}
         rowKey="id"
         loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
+        pagination={false}
         size="middle"
+        expandable={{ defaultExpandAllRows: true }}
       />
 
       {/* 创建/编辑 Modal */}
