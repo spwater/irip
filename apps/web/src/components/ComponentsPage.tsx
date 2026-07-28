@@ -452,6 +452,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
+  const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editOriginalName, setEditOriginalName] = useState<string | undefined>(undefined);
@@ -511,6 +512,10 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   const objectCodeToDeptId = new Map<string, string | null>(
     (objectData?.items ?? []).map((o) => [o.code, o.department_id ?? null]),
   );
+  // experimental_object_code → equipment_id 映射（通过 objectMap）
+  const objectCodeToEquipmentId = new Map<string, string | null>(
+    (objectData?.items ?? []).map((o) => [o.code, o.equipment_id ?? null]),
+  );
 
   // 当 objectOptions 异步加载完成后，如果弹窗已打开且有预填值，
   // 重新设置一次 experimental_object_code，确保 Select 在 options 就绪后正确显示 label。
@@ -560,6 +565,13 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
     currentItems = currentItems.filter((i) => {
       const deptId = i.experimental_object_code ? objectCodeToDeptId.get(i.experimental_object_code) : null;
       return deptId === deptFilter;
+    });
+  }
+  // 按设备筛选（通过 experimental_object_code → equipment_id 关联）
+  if (equipmentFilter) {
+    currentItems = currentItems.filter((i) => {
+      const eqId = i.experimental_object_code ? objectCodeToEquipmentId.get(i.experimental_object_code) : null;
+      return eqId === equipmentFilter;
     });
   }
 
@@ -949,6 +961,16 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           value={deptFilter}
           onChange={(val: string | undefined) => setDeptFilter(val)}
           options={deptOptions}
+        />
+        <Select
+          placeholder="按设备筛选"
+          style={{ width: 200 }}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          value={equipmentFilter}
+          onChange={(val: string | undefined) => setEquipmentFilter(val)}
+          options={equipmentOptions}
         />
         <Button
           type={activeTab === 'modern' ? 'primary' : 'default'}
