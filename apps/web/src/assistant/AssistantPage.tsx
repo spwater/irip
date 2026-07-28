@@ -325,6 +325,7 @@ export function AssistantPage(): JSX.Element {
   }, []);
 
   // 切换对话时清空本地消息，恢复该对话关联的实验数据上下文
+  // 注意：依赖项含 conversationList，确保对话列表加载完成后也能恢复 system_context
   useEffect(() => {
     if (!isSending) {
       setLocalMessages([]);
@@ -343,7 +344,7 @@ export function AssistantPage(): JSX.Element {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConvId]);
+  }, [selectedConvId, conversationList]);
 
   // 数据库消息到达后清空本地消息（避免重复显示）
   useEffect(() => {
@@ -524,7 +525,7 @@ export function AssistantPage(): JSX.Element {
         title={
           <Space>
             <Title level={5} style={{ margin: 0 }}>
-              AI 助手
+              小艾
             </Title>
             {selectedConvId && (
               <Text type="secondary" style={{ fontSize: 12 }}>

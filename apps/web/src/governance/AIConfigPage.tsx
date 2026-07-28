@@ -117,8 +117,8 @@ export function AIConfigPage(): JSX.Element {
     <div>
       <Title level={5}>大模型配置</Title>
       <Paragraph type="secondary">
-        配置 OpenAI 兼容的 API 地址和密钥。配置启用后，AI 助手将使用真实模型进行对话。
-        未配置或未启用时，AI 助手使用离线模拟模式。
+        配置 OpenAI 兼容的 API 地址和密钥。配置启用后，小艾将使用真实模型进行对话。
+        未配置或未启用时，小艾使用离线模拟模式。
       </Paragraph>
 
       {config && (

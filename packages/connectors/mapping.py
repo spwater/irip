@@ -14,6 +14,7 @@
 """
 
 import json
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID
@@ -443,7 +444,7 @@ class MappingProfileService:
             "source": source,
             "rules": [_rule_to_dict(r) for r in rules],
         }
-        _validate_profile_document(document)
+        await asyncio.to_thread(_validate_profile_document, document)
 
         async with session_scope(self._factory) as session:
             existing = await session.execute(
@@ -525,7 +526,7 @@ class MappingProfileService:
                 "source": profile.source_config,
                 "rules": [_rule_to_dict(r) for r in rules],
             }
-            _validate_profile_document(document)
+            await asyncio.to_thread(_validate_profile_document, document)
 
             await session.execute(
                 sa.update(MappingProfileVersion)

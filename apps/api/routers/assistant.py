@@ -540,7 +540,7 @@ async def get_provider_status(
     current_user: AssistantUserDep,
     service: AIServiceDep,
 ) -> ProviderStatusResponse:
-    """查看可用 Provider 状态与工具列表。
+    """查看可用 Provider 状态与工具列表（仅返回已启用工具）。
 
     Args:
         current_user: 当前用户。
@@ -549,6 +549,8 @@ async def get_provider_status(
     Returns:
         ProviderStatusResponse: Provider 模式 + 白名单工具 + 候选工具。
     """
+    # 先从 DB reload 工具注册表，确保反映最新的启用/禁用状态
+    await service.reload_tools()
     status = service.get_provider_status()
     return ProviderStatusResponse(
         provider_mode=str(status.get("provider_mode", "unknown")),

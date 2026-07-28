@@ -6,7 +6,6 @@ import {
   Input,
   Modal,
   Popconfirm,
-  Radio,
   Select,
   Space,
   Spin,
@@ -764,7 +763,7 @@ export function FlowDetail(): JSX.Element {
                     for (const [key, defaultVal] of runParamEntries) {
                       const formKey = `${runNode.node_id}__${key}`;
                       if (key === 'experimental_object_code') continue;
-                      initialValues[formKey] = defaultVal || (key === 'file_engine' ? 'pymupdf' : '');
+                      initialValues[formKey] = defaultVal || '';
                     }
                     runForm.setFieldsValue(initialValues);
                   }
@@ -1127,28 +1126,11 @@ export function FlowDetail(): JSX.Element {
                   const label = labelMap[key] ?? key;
 
                   if (isFileEngine) {
-                    // 文件读取方式：水平按钮组
+                    // 文件读取方式：自动检测（只读提示）
                     return (
-                      <div key={formKey} style={{ marginBottom: 24 }}>
-                        <div style={{ display: 'inline-block', marginRight: 12, lineHeight: '32px', fontWeight: 500 }}>
-                          {label}
-                        </div>
-                        <Form.Item
-                          name={formKey}
-                          initialValue={defaultVal || 'pymupdf'}
-                          style={{ display: 'inline-block', marginBottom: 0 }}
-                        >
-                          <Radio.Group
-                            optionType="button"
-                            buttonStyle="solid"
-                            options={[
-                              { value: 'pymupdf', label: 'pymupdf' },
-                              { value: 'image', label: 'image' },
-                              { value: 'raw', label: 'raw' },
-                            ]}
-                          />
-                        </Form.Item>
-                      </div>
+                      <Form.Item key={formKey} label={label}>
+                        <Text type="secondary">自动检测（PDF/图片/Word/Excel/文本）</Text>
+                      </Form.Item>
                     );
                   }
 

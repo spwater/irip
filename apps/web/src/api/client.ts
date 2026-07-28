@@ -2652,4 +2652,108 @@ export async function apiGetSystemHealth(): Promise<SystemHealth> {
   };
 }
 
+// ---------------------------------------------------------------------------
+// AI 工具管理 API（/api/v1/ai-tools）
+// ---------------------------------------------------------------------------
 
+/** AI 工具 DTO（列表 + 详情共用） */
+export type AIToolDTO = {
+  name: string;
+  display_name: string;
+  description: string;
+  required_permission: string;
+  candidate: boolean;
+  parameters_schema: Record<string, unknown>;
+  enabled: boolean;
+  lock_version: number;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+/** 列出全部 AI 工具（含禁用工具） */
+export async function apiListAITools(): Promise<AIToolDTO[]> {
+  const res = await http.get<AIToolDTO[]>('/ai-tools');
+  return res.data;
+}
+
+/** 获取单个 AI 工具详情 */
+export async function apiGetAITool(name: string): Promise<AIToolDTO> {
+  const res = await http.get<AIToolDTO>(
+    `/ai-tools/${encodeURIComponent(name)}`,
+  );
+  return res.data;
+}
+
+/** 新建 AI 工具（仅创建声明层） */
+export async function apiCreateAITool(body: {
+  name: string;
+  display_name: string;
+  description: string;
+  required_permission: string;
+  candidate: boolean;
+  parameters_schema: Record<string, unknown>;
+}): Promise<AIToolDTO> {
+  const res = await http.post<AIToolDTO>('/ai-tools', body);
+  return res.data;
+}
+
+/** 编辑 AI 工具声明（乐观锁） */
+export async function apiUpdateAITool(
+  name: string,
+  body: {
+    display_name: string;
+    description: string;
+    required_permission: string;
+    candidate: boolean;
+    parameters_schema: Record<string, unknown>;
+    lock_version: number;
+  },
+): Promise<AIToolDTO> {
+  const res = await http.patch<AIToolDTO>(
+    `/ai-tools/${encodeURIComponent(name)}`,
+    body,
+  );
+  return res.data;
+}
+
+/** 启用/禁用 AI 工具（乐观锁） */
+export async function apiToggleAITool(
+  name: string,
+  body: { enabled: boolean; lock_version: number },
+): Promise<AIToolDTO> {
+  const res = await http.patch<AIToolDTO>(
+    `/ai-tools/${encodeURIComponent(name)}/enabled`,
+    body,
+  );
+  return res.data;
+}
+
+
+// ---------------------------------------------------------------------------
+// 组件预览 API（/api/v1/component-preview）
+// ---------------------------------------------------------------------------
+
+/** 提示词推荐 */
+export async function apiRecommendPrompt(body: {
+  artifact_id: string;
+  filename: string;
+}): Promise<{ prompt: string }> {
+  const res = await http.post<{ prompt: string }>(
+    '/component-preview/prompt-recommend',
+    body,
+  );
+  return res.data;
+}
+
+/** 数据抽取预览 */
+export async function apiExtractPreview(body: {
+  artifact_id: string;
+  filename: string;
+  prompt: string;
+}): Promise<{ result: string }> {
+  const res = await http.post<{ result: string }>(
+    '/component-preview/extract-preview',
+    body,
+  );
+  return res.data;
+}

@@ -2,30 +2,61 @@ import { Tabs, Typography } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/assistant/AssistantPage';
 import { ParameterPage } from '@/parameters/ParameterPage';
+import { AIToolsPage } from '@/ai_tools/AIToolsPage';
+import { useAuthStore } from '@/auth/AuthProvider';
 
 const { Title } = Typography;
 
-const VALID_TABS = ['assistant', 'parameters'] as const;
+const VALID_TABS = ['assistant', 'parameters', 'ai-tools'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
 
 /**
  * 平台应用页面
  *
- * 两个 Tab：AI 助手 / 数据抽取
+ * 三个 Tab：AI 助手 / 数据抽取 / AI 工具管理。
+ * "AI 工具管理" Tab 仅对 platform_administrator 角色可见（T-05），
+ * 后端端点另由 system:manage 权限守卫。
  */
 export function PlatformPage(): JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
+
   const tabRaw = (search as Record<string, unknown>).tab;
-  const activeTab: PlatformTab = (
-    VALID_TABS as readonly string[]
-  ).includes(typeof tabRaw === 'string' ? tabRaw : '')
-    ? (tabRaw as PlatformTab)
-    : 'assistant';
+  const requestedTab = typeof tabRaw === 'string' ? tabRaw : '';
+  const isValidTab = (VALID_TABS as readonly string[]).includes(requestedTab);
+  // 非管理员不可激活 ai-tools Tab，回退到 assistant
+  const activeTab: PlatformTab =
+    isValidTab && !(requestedTab === 'ai-tools' && !isAdmin)
+      ? (requestedTab as PlatformTab)
+      : 'assistant';
 
   const handleTabChange = (key: string): void => {
     void navigate({ to: '/platform', search: { tab: key }, replace: true });
   };
+
+  const items = [
+    {
+      key: 'assistant',
+      label: 'AI助手',
+      children: <AssistantPage />,
+    },
+    {
+      key: 'parameters',
+      label: '数据抽取',
+      children: <ParameterPage />,
+    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'ai-tools',
+            label: 'AI 工具管理',
+            children: <AIToolsPage />,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div>
@@ -33,18 +64,7 @@ export function PlatformPage(): JSX.Element {
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}
-        items={[
-          {
-            key: 'assistant',
-            label: 'AI 助手',
-            children: <AssistantPage />,
-          },
-          {
-            key: 'parameters',
-            label: '数据抽取',
-            children: <ParameterPage />,
-          },
-        ]}
+        items={items}
       />
     </div>
   );

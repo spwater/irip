@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -301,8 +302,8 @@ class IngestionPipeline:
             IngestionResult: 摄入结果。
         """
         try:
-            # 1. download: 计算 SHA-256
-            file_sha256 = _compute_sha256(file_path)
+            # 1. download: 计算 SHA-256（同步 I/O，用 to_thread 避免阻塞）
+            file_sha256 = await asyncio.to_thread(_compute_sha256, file_path)
             idempotency_key = f"sha256:{file_sha256}"
 
             # 去重检查：在完整管线前检查幂等键是否已存在
@@ -328,8 +329,8 @@ class IngestionPipeline:
                     error=None,
                 )
 
-            # 2. parse: 解析文件
-            parsed = _parse_file(file_path)
+            # 2. parse: 解析文件（同步 I/O，用 to_thread 避免阻塞）
+            parsed = await asyncio.to_thread(_parse_file, file_path)
 
             # 提取实验 ID 作为 subject_id
             subject_id = (

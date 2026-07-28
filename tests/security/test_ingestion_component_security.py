@@ -243,17 +243,30 @@ class TestCredentialLeakage:
 
     async def test_auth_token_not_in_output(self):
         """认证 token 不出现在输出中。"""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import AsyncMock, MagicMock, patch
 
         secret_token = "Bearer secret_token_xyz_789"
 
         mock_response = MagicMock()
-        mock_response.geturl.return_value = "https://api.example.com/data"
-        mock_response.read.side_effect = [b'[{"x": 1}]', b""]
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.status_code = 200
+        mock_response.headers = {}
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
+        async def _mock_aiter_bytes(chunk_size: int = 8192):
+            yield b'[{"x": 1}]'
+
+        mock_response.aiter_bytes = _mock_aiter_bytes
+
+        mock_client = AsyncMock()
+        mock_client.request.return_value = mock_response
+        # async with ... as client 需要 __aenter__ 返回 mock_client 自身
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch(
+            "packages.components.builtin.ingestion.rest_fetch."
+            "httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             with patch(
                 "packages.components.builtin.ingestion.rest_fetch."
                 "_resolve_and_check"

@@ -1,8 +1,8 @@
 name: ez_scan_extractor
-version: "1.3.1"
+version: "1.4.0"
 kind: ingestion
 runtime: python
-description: "LLM 驱动的文档提取组件，从 PDF/文本文件中提取结构化数据。大模型全包，输出列由 LLM 决定。"
+description: "LLM 驱动的文档提取组件，从 PDF/图片/Word/Excel/文本文件中提取结构化数据。大模型全包，输出列由 LLM 决定。支持根据文件后缀自动选择读取方式。"
 inputs: []
 outputs:
   - name: observations
@@ -26,8 +26,8 @@ parameters:
       default: "你是一个工业数据分析助手。根据用户提供的报告内容，提取头部信息和所有检测结果。返回JSON格式：{\"header\": {\"analysis_type\": \"...\", \"analysis_date\": \"...\", \"sample_name\": \"...\", \"file_name\": \"...\"}, \"rows\": [{\"No.\": 1, \"组分\": \"...\", \"单位\": \"...\", \"结果\": 0.0}, ...]}。只返回JSON，不要解释。"
     pdf_engine:
       type: string
-      description: "PDF 读取引擎：pymupdf（文字层提取）、image（渲染图片发给多模态大模型识别）、raw（直接当文本读）"
-      default: "pymupdf"
+      description: "文件读取引擎：auto（自动检测，推荐）— 根据文件后缀自动选择读取方式；pymupdf（文字层提取）、image（渲染图片发给多模态大模型识别）、raw（直接当文本读）为旧模式，保留向后兼容"
+      default: "auto"
     image_dpi:
       type: integer
       description: "image 模式下 PDF 渲染分辨率（DPI），150够用/200平衡/300高清"

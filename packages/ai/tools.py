@@ -308,12 +308,18 @@ class ToolRegistry:
     ) -> None:
         """初始化工具注册表。
 
+        初始状态下全部已注册工具均为启用（``_enabled`` 包含全部 name）。
+        ``reload_from_db`` 后 ``_enabled`` 由数据库 ``enabled`` 列决定。
+
         Args:
             tools: 工具规格元组，默认加载全部白名单 + 候选工具。
         """
         self._tools: dict[str, ToolSpec] = {}
+        self._enabled: set[str] = set()
         for spec in tools:
             self.register(spec)
+        # 初始状态：全部已注册工具默认启用（reload_from_db 前的兜底）
+        self._enabled = set(self._tools.keys())
 
     def register(self, spec: ToolSpec | ToolDefinition) -> None:
         """注册一个工具规格。
@@ -370,9 +376,11 @@ class ToolRegistry:
         return spec
 
     def validate(self, name: str) -> ToolSpec:
-        """验证工具名合法性（拒绝未知工具）。
+        """验证工具名合法性（拒绝未知工具 + 禁用工具）。
 
-        与 ``get`` 相同，但语义上强调"拒绝未知工具"的安全检查。
+        与 ``get`` 不同：``validate`` 对禁用工具也抛 ``unknown_tool``
+        （D-3），实现"禁用后 AI 不可见、不可调用"。``get`` 仍可返回
+        禁用工具的 ToolSpec（供管理 API 列出）。
 
         Args:
             name: 工具名称。
@@ -381,9 +389,24 @@ class ToolRegistry:
             ToolSpec: 工具规格。
 
         Raises:
-            AppError: code="validation_failed"，当工具名不在注册表中时。
+            AppError: code="unknown_tool"，当工具名不在注册表中或已被禁用时。
         """
-        return self.get(name)
+        spec = self._tools.get(name)
+        if spec is None:
+            raise AppError(
+                code="unknown_tool",
+                message=f"未知工具: {name}",
+                retryable=False,
+                fields={"tool_name": name},
+            )
+        if name not in self._enabled:
+            raise AppError(
+                code="unknown_tool",
+                message=f"工具 '{name}' 已被禁用，不可调用",
+                retryable=False,
+                fields={"tool_name": name},
+            )
+        return spec
 
     def is_candidate(self, name: str) -> bool:
         """检查工具是否为候选工具（需审批）。
@@ -415,8 +438,27 @@ class ToolRegistry:
         return not spec.candidate
 
     def list_tools(self) -> list[ToolSpec]:
-        """列出全部已注册工具。"""
+        """列出全部已注册工具（含禁用工具，供管理 API 使用）。"""
         return list(self._tools.values())
+
+    def is_registered(self, name: str) -> bool:
+        """检查工具名是否已注册。
+
+        Args:
+            name: 工具名称。
+
+        Returns:
+            bool: 已注册返回 True，未注册返回 False。
+        """
+        return name in self._tools
+
+    def list_enabled_tools(self) -> list[ToolSpec]:
+        """列出全部已启用工具（禁用工具不包含，供 AI 工具 schema 构建）。
+
+        Returns:
+            list[ToolSpec]: 已启用工具规格列表。
+        """
+        return [s for n, s in self._tools.items() if n in self._enabled]
 
     def list_whitelist_tools(self) -> list[ToolSpec]:
         """列出白名单工具（只读）。"""
@@ -427,8 +469,51 @@ class ToolRegistry:
         return [s for s in self._tools.values() if s.candidate]
 
     def names(self) -> tuple[str, ...]:
-        """返回全部工具名称元组。"""
-        return tuple(self._tools.keys())
+        """返回全部已启用工具名称元组（D-3：禁用工具不包含）。
+
+        Returns:
+            tuple[str, ...]: 已启用工具名称元组。
+        """
+        return tuple(self._enabled)
+
+    def enabled_names(self) -> tuple[str, ...]:
+        """返回全部已启用工具名称元组（``names`` 的显式别名）。
+
+        Returns:
+            tuple[str, ...]: 已启用工具名称元组。
+        """
+        return tuple(self._enabled)
+
+    async def reload_from_db(self, session: Any) -> None:
+        """从数据库全量重新加载工具声明，重建 ``_tools`` 与 ``_enabled``。
+
+        热更新入口（D-4）：在 ``AIService.ask`` 入口处调用，每次问答
+        从 DB 重新加载工具声明层。reload 为全量替换：
+        - ``_tools`` 字典清空后重建（name → ToolSpec）；
+        - ``_enabled`` 集合重新计算（仅含 ``enabled=True`` 的工具）；
+        - 禁用工具在 ``_tools`` 中保留 ToolSpec（供管理 API 通过 ``get``
+          返回），但 ``_enabled`` 不含其 name。
+
+        Args:
+            session: 异步数据库会话（由调用方管理事务）。
+        """
+        from packages.ai.tool_repository import ToolRepository
+
+        rows = await ToolRepository.list_all(session)
+        self._tools = {}
+        self._enabled = set()
+        for row in rows:
+            spec = ToolSpec(
+                name=row.name,
+                display_name=row.display_name,
+                description=row.description,
+                required_permission=row.required_permission,
+                candidate=row.candidate,
+                parameters_schema=row.parameters_schema,
+            )
+            self._tools[row.name] = spec
+            if row.enabled:
+                self._enabled.add(row.name)
 
     def to_definitions(self) -> list[ToolDefinition]:
         """将全部 ToolSpec 转为 ToolDefinition（安全验证用）。

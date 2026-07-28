@@ -226,7 +226,7 @@ const ROLE_COLOR: Record<string, string> = {
  */
 const ROLE_LABEL: Record<string, string> = {
   user: '我',
-  assistant: 'AI 助手',
+  assistant: '小艾',
   tool: '工具',
 };
 

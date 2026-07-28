@@ -23,6 +23,8 @@ export function ProviderStatus(): JSX.Element {
     queryKey: ['assistant-provider-status'],
     queryFn: () => apiGetProviderStatus(),
     retry: false,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   const providerMode = data?.provider_mode ?? 'offline';
@@ -37,7 +39,7 @@ export function ProviderStatus(): JSX.Element {
         hoverable
       >
         <Descriptions size="small" column={1}>
-          <Descriptions.Item label="AI Provider">
+          <Descriptions.Item label="中材小艾">
             <Badge
               status={isOffline ? 'default' : 'processing'}
               text={
@@ -53,7 +55,7 @@ export function ProviderStatus(): JSX.Element {
       </Card>
 
       <Modal
-        title="AI Provider 详情"
+        title="中材小艾详情"
         open={detailOpen}
         onCancel={() => setDetailOpen(false)}
         footer={null}
@@ -64,7 +66,7 @@ export function ProviderStatus(): JSX.Element {
         ) : data ? (
           <div>
             <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
-              <Descriptions.Item label="Provider 模式">
+              <Descriptions.Item label="运行模式">
                 <Tag color={isOffline ? 'default' : 'blue'}>{providerMode}</Tag>
               </Descriptions.Item>
             </Descriptions>

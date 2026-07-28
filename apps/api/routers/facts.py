@@ -22,7 +22,6 @@ from sqlalchemy import func
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.dept_scope import should_filter_by_department
-from packages.common.artifacts import ArtifactService
 from packages.common.errors import AppError
 from packages.facts.observations import (
     FactRevisionRef,
@@ -662,109 +661,6 @@ async def search_facts_by_data(
     return FactListResponse(
         items=items,
         next_cursor=None,
-        group_counts=group_counts,
-    )
-async def search_facts(
-    current_user: ReadUserDep,
-    service: FactServiceDep,
-    q: str = Query(..., min_length=1, description="搜索查询"),
-    fact_type: str | None = Query(None, description="按事实类型过滤"),
-    object_id: UUID | None = Query(None, description="按工业对象过滤"),
-    status: str | None = Query(None, description="按状态过滤"),
-    cursor: str | None = Query(None, description="分页游标"),
-    page_size: int = Query(20, ge=1, le=100, description="每页数量"),
-) -> FactListResponse:
-    """全文搜索事实（基于 subject_id 和 fact_type 的 tsvector）。"""
-    filters: dict = {}
-    if fact_type is not None:
-        filters["fact_type"] = fact_type
-    if object_id is not None:
-        filters["object_id"] = object_id
-    if status is not None:
-        filters["status"] = status
-
-    refs, next_cursor = await service.search(
-        query=q,
-        filters=filters if filters else None,
-        cursor=cursor,
-        page_size=page_size,
-    )
-    items = [_ref_to_response(r) for r in refs]
-    group_counts: dict[str, int] = {}
-    if items:
-        import sqlalchemy as sa
-        from sqlalchemy import func
-        from packages.facts.entities import FactRevision
-        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
-        async with service.session_factory() as session:
-            snap_stmt = (
-                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name, FactRevision.operator)
-                .where(FactRevision.id.in_(revision_ids))
-            )
-            snap_result = await session.execute(snap_stmt)
-            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
-            for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
-            for item in items:
-                snap = snap_map.get(item.revision_id)
-                if snap:
-                    item.task_code = snap[0]
-                    item.task_name = snap[1]
-                    item.department_name = snap[2]
-                    item.operator = snap[3]
-
-            # 查每个 task_code 的总数
-            count_stmt = (
-                sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
-                .where(FactRevision.task_code.isnot(None))
-                .group_by(FactRevision.task_code)
-            )
-            count_result = await session.execute(count_stmt)
-            group_counts = {str(row[0]): row[1] for row in count_result}
-
-            # 查数据摘要
-            import json as json_mod
-            from packages.facts.entities import FactArtifact
-            from packages.common.artifacts import Artifact
-            from apps.api.main import _build_s3_repo
-
-            s3_repo = _build_s3_repo()
-            artifact_svc = ArtifactService(
-                s3_repo=s3_repo,
-                session_factory=service.session_factory,
-                organization_id=service.organization_id,
-                uploaded_by=current_user.user_id,
-            )
-            for item in items:
-                try:
-                    fa_stmt = (
-                        sa.select(FactArtifact.artifact_id)
-                        .where(
-                            FactArtifact.fact_revision_id == __import__('uuid').UUID(item.revision_id),
-                            FactArtifact.artifact_id == Artifact.id,
-                            Artifact.media_type == "application/json",
-                        )
-                        .limit(1)
-                    )
-                    fa_result = await session.execute(fa_stmt)
-                    artifact_id = fa_result.scalar_one_or_none()
-                    if artifact_id:
-                        data_bytes = await artifact_svc.get_bytes(artifact_id)
-                        parsed = json_mod.loads(data_bytes.decode("utf-8"))
-                        rows = parsed.get("data", [])[:3]
-                        if rows:
-                            parts = []
-                            for r in rows:
-                                comp = r.get("组分", r.get("component", ""))
-                                val = r.get("结果", r.get("result", r.get("value", "")))
-                                parts.append(f"{comp}={val}")
-                            item.data_summary = "；".join(parts) + ("..." if len(parsed.get("data", [])) > 3 else "")
-                except Exception:
-                    pass
-
-    return FactListResponse(
-        items=items,
-        next_cursor=next_cursor,
         group_counts=group_counts,
     )
 

@@ -543,6 +543,12 @@ class AIService:
             # CurrentUser 可能没有 organization_id，使用默认值
             org_id = new_id()
 
+        # 热更新：每次 ask 从 DB 重新加载工具声明层（D-4）
+        # 表预计 < 50 行，单行 SELECT 开销 < 1ms，可忽略。
+        if self._factory is not None:
+            async with session_scope(self._factory) as session:
+                await self._tool_registry.reload_from_db(session)
+
         # 加载或创建对话
         if conversation_id is None:
             conv_ref = await self.create_conversation(
@@ -589,8 +595,8 @@ class AIService:
                     conv_obj.system_context = system_context
                     await session.commit()
 
-        # 构建工具名称元组（全部白名单 + 候选）
-        tool_names: tuple[str, ...] = self._tool_registry.names()
+        # 构建工具名称元组（仅已启用工具，D-3 禁用工具不进 schema）
+        tool_names: tuple[str, ...] = self._tool_registry.enabled_names()
 
         # 构建工具的 OpenAI JSON schema 定义
         tool_schemas: tuple[dict[str, Any], ...] = self._build_tool_schemas()
@@ -901,7 +907,7 @@ class AIService:
             ``{"type": "function", "function": {"name", "description", "parameters"}}``。
         """
         schemas: list[dict[str, Any]] = []
-        for spec in self._tool_registry.list_tools():
+        for spec in self._tool_registry.list_enabled_tools():
             schemas.append(
                 {
                     "type": "function",
@@ -1455,12 +1461,24 @@ class AIService:
             return True
         return False
 
+    async def reload_tools(self) -> None:
+        """从 DB 重新加载工具注册表（供 provider-status 等端点调用）。
+
+        确保管理页面的启用/禁用变更能立即反映到状态查询中，
+        而不仅是在 ask 时才 reload。
+        """
+        if self._factory is not None:
+            async with session_scope(self._factory) as session:
+                await self._tool_registry.reload_from_db(session)
+
     def get_provider_status(self) -> dict[str, Any]:
         """返回当前 Provider 状态信息。
 
         Returns:
-            dict: 包含 provider_mode、可用工具列表等。
+            dict: 包含 provider_mode、可用工具列表（仅已启用工具）。
         """
+        # 仅展示已启用工具（D-3：禁用工具对 AI 不可见）
+        enabled = self._tool_registry.list_enabled_tools()
         return {
             "provider_mode": getattr(self._provider, "provider_mode", "unknown"),
             "whitelist_tools": [
@@ -1471,7 +1489,7 @@ class AIService:
                     "required_permission": s.required_permission,
                     "candidate": s.candidate,
                 }
-                for s in self._tool_registry.list_whitelist_tools()
+                for s in enabled if not s.candidate
             ],
             "candidate_tools": [
                 {
@@ -1481,6 +1499,6 @@ class AIService:
                     "required_permission": s.required_permission,
                     "candidate": s.candidate,
                 }
-                for s in self._tool_registry.list_candidate_tools()
+                for s in enabled if s.candidate
             ],
         }

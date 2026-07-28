@@ -1,6 +1,6 @@
 """LLM 驱动的文档提取组件。
 
-从 PDF 或文本文件中提取文本，调用大模型转为结构化 ObservationTable。
+从 PDF、图片、Word、Excel 或文本文件中提取文本，调用大模型转为结构化 ObservationTable。
 所有可配置项通过 manifest 参数传入，代码中无硬编码。
 
 参数（全部在 manifest 定义，网页可编辑）：
@@ -8,12 +8,21 @@
   - artifact:{artifact_id} — 从 MinIO 下载工件到临时文件再处理（推荐）
   - 文件系统路径 — 直接读取本地文件（兼容旧格式）
 - prompt: LLM 提示词（包含角色设定 + 提取指令 + 输出格式要求）
-- file_engine: 文件读取方式（pymupdf / image / raw）
+- file_engine: 文件读取方式（auto / pymupdf / image / raw），默认 auto 自动检测
+  - auto：根据文件后缀自动选择读取方式（推荐）
+    - .pdf：先提取文字层，文字太少（平均每页 < 50 字符）自动切换到 image 模式
+    - .txt/.md：直接 UTF-8 读取
+    - .jpg/.jpeg/.png：返回 base64 图片列表（多模态大模型识别）
+    - .doc/.docx：用 python-docx 读取文本
+    - .xls/.xlsx：用 openpyxl 读取
+    - 其他后缀：尝试当文本读取
+  - pymupdf/image/raw：旧模式，保留向后兼容
 - image_dpi: image 模式渲染分辨率
 - max_content_chars: 最大内容字符数
 - timeout: LLM 调用超时秒数
 """
 
+import asyncio
 import json
 import os
 import re
@@ -43,7 +52,7 @@ class EZScanExtractor:
         """读取文件 → 提取文本 → 调用 LLM → 返回 ObservationTable。"""
         path_str: str = params["path"]
         prompt: str = params.get("prompt", "")
-        pdf_engine: str = params.get("file_engine", "pymupdf")
+        engine: str = params.get("file_engine", "auto")
         image_dpi: int = 200
         max_chars: int = 999999999
         timeout: int = 300
@@ -64,8 +73,8 @@ class EZScanExtractor:
         else:
             file_path = Path(path_str)
 
-        # 1. 提取文件文本
-        content = _extract_text(file_path, pdf_engine, image_dpi)
+        # 1. 提取文件文本（同步 I/O，用 to_thread 避免阻塞事件循环）
+        content = await asyncio.to_thread(_extract_text, file_path, engine, image_dpi)
         if isinstance(content, str) and len(content) > max_chars:
             content = content[:max_chars]
 
@@ -254,60 +263,208 @@ class EZScanExtractor:
         return Path(temp_path)
 
 
-def _extract_text(file_path: Path, engine: str = "pymupdf", image_dpi: int = 200) -> str | list[str]:
+def _extract_text(file_path: Path, engine: str = "auto", image_dpi: int = 200) -> str | list[str]:
     """从文件中提取文本内容。
 
-    PDF 文件根据 engine 参数选择读取方式：
-    - pymupdf: 使用 PyMuPDF 提取文字层
-    - image: 使用 PyMuPDF 渲染为图片，返回 base64 列表（多模态）
-    - raw: 直接以 UTF-8 读取
-
-    非 PDF 文件直接以 UTF-8 读取。
+    根据 engine 参数选择模式：
+    - auto（默认）：根据文件后缀自动选择读取方式
+      - .pdf: 先提取文字层，文字太少（平均每页 < 50 字符）自动切换到 image 模式
+      - .txt/.md: 直接 UTF-8 读取
+      - .jpg/.jpeg/.png: 返回 base64 图片列表（多模态）
+      - .doc/.docx: 用 python-docx 读取
+      - .xls/.xlsx: 用 openpyxl 读取
+      - 其他: 尝试当文本读取
+    - pymupdf: 使用 PyMuPDF 提取文字层（仅对 PDF 有效，向后兼容）
+    - image: 使用 PyMuPDF 渲染为图片，返回 base64 列表（仅对 PDF 有效，向后兼容）
+    - raw: 直接以 UTF-8 读取（向后兼容）
 
     Args:
         file_path: 文件路径。
-        engine: PDF 读取引擎（pymupdf / image / raw）。
+        engine: 读取引擎（auto / pymupdf / image / raw），默认 auto。
         image_dpi: image 模式下的渲染分辨率。
 
     Returns:
         str | list[str]: 文本模式返回文本；image 模式返回 base64 图片列表。
     """
-    if file_path.suffix.lower() != ".pdf":
+    suffix: str = file_path.suffix.lower()
+
+    # 非 auto 模式：保留旧逻辑向后兼容
+    if engine != "auto":
+        if suffix != ".pdf":
+            return file_path.read_text(encoding="utf-8", errors="ignore")
+        if engine == "image":
+            return _extract_pdf_as_images(file_path, image_dpi)
+        if engine == "pymupdf":
+            try:
+                import fitz  # PyMuPDF
+
+                doc = fitz.open(str(file_path))
+                text_parts: list[str] = []
+                for page in doc:
+                    text_parts.append(page.get_text())
+                doc.close()
+                return "\n".join(text_parts)
+            except ImportError:
+                return file_path.read_text(encoding="utf-8", errors="ignore")
         return file_path.read_text(encoding="utf-8", errors="ignore")
 
-    if engine == "image":
-        try:
-            import fitz  # PyMuPDF
-            import base64
-
-            doc = fitz.open(str(file_path))
-            images: list[str] = []
-            for page in doc:
-                pix = page.get_pixmap(dpi=image_dpi)
-                img_bytes = pix.tobytes("png")
-                b64 = base64.b64encode(img_bytes).decode("utf-8")
-                images.append(f"data:image/png;base64,{b64}")
-            doc.close()
-            return images
-        except ImportError:
-            # PyMuPDF 不可用，回退到文本提取
-            return file_path.read_text(encoding="utf-8", errors="ignore")
-
-    if engine == "pymupdf":
-        try:
-            import fitz  # PyMuPDF
-
-            doc = fitz.open(str(file_path))
-            text_parts: list[str] = []
-            for page in doc:
-                text_parts.append(page.get_text())
-            doc.close()
-            return "\n".join(text_parts)
-        except ImportError:
-            # PyMuPDF 不可用，回退到直接读取
-            return file_path.read_text(encoding="utf-8", errors="ignore")
+    # auto 模式：按文件后缀自动分派
+    if suffix == ".pdf":
+        return _extract_pdf(file_path, image_dpi)
+    elif suffix in (".txt", ".md", ""):
+        return file_path.read_text(encoding="utf-8", errors="ignore")
+    elif suffix in (".jpg", ".jpeg", ".png"):
+        return _extract_image_file(file_path)
+    elif suffix in (".doc", ".docx"):
+        return _extract_docx(file_path)
+    elif suffix in (".xls", ".xlsx"):
+        return _extract_xlsx(file_path)
     else:
         return file_path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _extract_pdf(file_path: Path, image_dpi: int = 200) -> str | list[str]:
+    """PDF 自动检测：先提取文字层，文字太少则切换到 image 模式。
+
+    用 PyMuPDF 提取每页文字，计算平均每页字符数。如果平均每页 < 50 字符，
+    判定为扫描版 PDF，自动切换到 image 模式（渲染图片发给多模态大模型识别）。
+
+    Args:
+        file_path: PDF 文件路径。
+        image_dpi: image 模式下的渲染分辨率。
+
+    Returns:
+        str | list[str]: 文本模式返回文本；image 模式返回 base64 图片列表。
+    """
+    try:
+        import fitz  # PyMuPDF
+
+        doc = fitz.open(str(file_path))
+        text_parts: list[str] = []
+        for page in doc:
+            text_parts.append(page.get_text())
+        doc.close()
+        full_text: str = "\n".join(text_parts)
+
+        # 自动检测：如果文字层内容太少（平均每页 < 50 字符），判定为扫描版
+        page_count: int = len(text_parts) if text_parts else 1
+        avg_chars: float = len(full_text) / max(page_count, 1)
+        if avg_chars < 50:
+            # 扫描版 PDF，切换到 image 模式
+            return _extract_pdf_as_images(file_path, image_dpi)
+        return full_text
+    except ImportError:
+        # PyMuPDF 不可用，回退到直接读取
+        return file_path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _extract_pdf_as_images(file_path: Path, image_dpi: int = 200) -> list[str] | str:
+    """将 PDF 渲染为 base64 图片列表（用于多模态大模型识别）。
+
+    Args:
+        file_path: PDF 文件路径。
+        image_dpi: 渲染分辨率（DPI）。
+
+    Returns:
+        list[str] | str: base64 data URL 列表；PyMuPDF 不可用时回退到文本读取。
+    """
+    try:
+        import fitz  # PyMuPDF
+        import base64
+
+        doc = fitz.open(str(file_path))
+        images: list[str] = []
+        for page in doc:
+            pix = page.get_pixmap(dpi=image_dpi)
+            img_bytes: bytes = pix.tobytes("png")
+            b64: str = base64.b64encode(img_bytes).decode("utf-8")
+            images.append(f"data:image/png;base64,{b64}")
+        doc.close()
+        return images
+    except ImportError:
+        return file_path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _extract_image_file(file_path: Path) -> list[str]:
+    """将图片文件转为 base64 data URL 列表（用于多模态大模型识别）。
+
+    支持 .jpg/.jpeg/.png 格式。返回格式与 PDF image 模式一致，
+    使下游 is_image_mode 判断无需修改。
+
+    Args:
+        file_path: 图片文件路径。
+
+    Returns:
+        list[str]: 包含单个 base64 data URL 的列表。
+    """
+    import base64
+
+    suffix: str = file_path.suffix.lower()
+    mime: str = "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/png"
+    with open(file_path, "rb") as f:
+        b64: str = base64.b64encode(f.read()).decode("utf-8")
+    return [f"data:{mime};base64,{b64}"]
+
+
+def _extract_docx(file_path: Path) -> str:
+    """提取 Word 文档文本。
+
+    使用 python-docx 库读取 .doc/.docx 文件的段落文本。
+
+    Args:
+        file_path: Word 文件路径。
+
+    Returns:
+        str: 文档中所有段落的文本，以换行连接。
+
+    Raises:
+        AppError: code="validation_failed"，当 python-docx 依赖不可用时。
+    """
+    try:
+        from docx import Document
+
+        doc = Document(str(file_path))
+        return "\n".join(p.text for p in doc.paragraphs)
+    except ImportError:
+        raise AppError(
+            code="validation_failed",
+            message="读取 Word 文件需要 python-docx 依赖，请执行 pip install python-docx",
+            retryable=False,
+        )
+
+
+def _extract_xlsx(file_path: Path) -> str:
+    """提取 Excel 文件文本。
+
+    使用 openpyxl 库读取 .xls/.xlsx 文件，将每个工作表的每行以 tab 分隔，
+    行间以换行连接。
+
+    Args:
+        file_path: Excel 文件路径。
+
+    Returns:
+        str: 所有工作表的文本内容。
+
+    Raises:
+        AppError: code="validation_failed"，当 openpyxl 依赖不可用时。
+    """
+    try:
+        from openpyxl import load_workbook
+
+        wb = load_workbook(filename=str(file_path), read_only=True, data_only=True)
+        lines: list[str] = []
+        for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+                cells: list[str] = [str(c) if c is not None else "" for c in row]
+                lines.append("\t".join(cells))
+        wb.close()
+        return "\n".join(lines)
+    except ImportError:
+        raise AppError(
+            code="validation_failed",
+            message="读取 Excel 文件需要 openpyxl 依赖，请执行 pip install openpyxl",
+            retryable=False,
+        )
 
 
 def _parse_llm_json(content: str) -> dict[str, Any]:

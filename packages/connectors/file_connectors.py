@@ -14,6 +14,7 @@
 
 import csv
 import json
+import asyncio
 from collections.abc import AsyncIterator
 
 from packages.common.errors import AppError
@@ -112,11 +113,11 @@ class FileConnector:
     ) -> tuple[tuple[str, ...], list[list]]:
         """读取前 limit 行，返回 (列名元组, 行列表)。"""
         if fmt == "csv":
-            return self._read_csv(path, limit)
+            return await asyncio.to_thread(self._read_csv, path, limit)
         if fmt == "xlsx":
-            return self._read_xlsx(path, limit)
+            return await asyncio.to_thread(self._read_xlsx, path, limit)
         if fmt == "json":
-            return self._read_json(path, limit)
+            return await asyncio.to_thread(self._read_json, path, limit)
         raise AppError(
             code="unsupported_media_type",
             message=f"不支持的文件格式：{fmt}",

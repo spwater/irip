@@ -8,7 +8,6 @@ import {
   Input,
   Modal,
   Popconfirm,
-  Radio,
   Row,
   Select,
   Space,
@@ -18,6 +17,7 @@ import {
   Tag,
   Tooltip,
   Typography,
+  Upload,
   message,
 } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -34,12 +34,16 @@ import {
   apiListObjects,
   apiPublishComponent,
   apiRestoreComponent,
+  apiUploadFile,
+  apiRecommendPrompt,
+  apiExtractPreview,
   extractApiError,
   type ComponentDetail,
   type ComponentSummary,
   type ComponentVersionItem,
   type IndustrialObject,
 } from '@/api/client';
+import type { UploadProps } from 'antd';
 
 /** 把 UTC 时间字符串转成本地时间显示 */
 function fmtTime(v: string | null | undefined): string {
@@ -84,16 +88,14 @@ const FORM_FIELD_NAMES = [
   'display_name',
   'description',
   'prompt',
-  'file_engine',
   'experimental_object_code',
 ] as const;
 
-/** 表单模式的初始（清空）状态：file_engine 默认 pymupdf，其余为空 */
+/** 表单模式的初始（清空）状态：其余为空 */
 const FRESH_FORM_VALUES: Record<string, string | undefined> = {
   display_name: undefined,
   description: undefined,
   prompt: undefined,
-  file_engine: 'pymupdf',
   experimental_object_code: undefined,
 };
 
@@ -102,7 +104,6 @@ interface ComponentFormValues {
   display_name: string;
   description: string;
   prompt: string;
-  file_engine: string;
   experimental_object_code: string;
 }
 
@@ -132,7 +133,6 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
   const displayName = v.display_name ?? '';
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
-  const fileEngine = v.file_engine ?? 'pymupdf';
   const expCode = v.experimental_object_code ?? '';
   const nameLine = originalName
     ? `name: ${originalName}`
@@ -160,7 +160,7 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
     '    file_engine:',
     '      type: string',
     '      description: "文件读取方式"',
-    `      default: "${yamlEscapeDouble(fileEngine)}"`,
+    '      default: "auto"',
     '    experimental_object_code:',
     '      type: string',
     '      description: "关联实验对象编码"',
@@ -200,10 +200,6 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
     if (promptMatch) result.prompt = promptMatch[1];
   }
 
-  // file_engine 的 default 值
-  const feMatch = yaml.match(/file_engine:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
-  if (feMatch) result.file_engine = feMatch[1];
-
   // experimental_object_code 的 default 值
   const eocMatch = yaml.match(/experimental_object_code:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
   if (eocMatch) result.experimental_object_code = eocMatch[1];
@@ -222,6 +218,38 @@ function ComponentFormFields({
   objectMap: Map<string, IndustrialObject>;
   originalName?: string;
 }): JSX.Element {
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; artifactId: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [recommending, setRecommending] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewResult, setPreviewResult] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const formInstance = Form.useFormInstance();
+
+  const uploadProps: UploadProps = {
+    accept: '.pdf,.txt,.md,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx',
+    maxCount: 1,
+    showUploadList: false,
+    customRequest: async (options) => {
+      const { file, onSuccess, onError } = options;
+      setUploading(true);
+      try {
+        const res = await apiUploadFile(file as File);
+        setUploadedFile({ name: res.filename, artifactId: res.artifact_id });
+        onSuccess?.(res);
+        message.success(`文件 ${res.filename} 预加载成功`);
+      } catch (err: unknown) {
+        onError?.(err as Error);
+        message.error(extractApiError(err));
+      } finally {
+        setUploading(false);
+      }
+    },
+    onRemove: () => {
+      setUploadedFile(null);
+    },
+  };
+
   return (
     <>
       <Row gutter={16}>
@@ -247,34 +275,36 @@ function ComponentFormFields({
       >
         <Input placeholder="LLM 驱动的文档提取组件" />
       </Form.Item>
-      <Form.Item
-        name="prompt"
-        label="LLM 提示词"
-        rules={[{ required: true, message: '请输入 LLM 提示词' }]}
-      >
-        <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
+      <Form.Item label="文件预加载">
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Space>
+            <Upload {...uploadProps}>
+              <Button loading={uploading}>
+                {uploading ? '上传中...' : '选择文件预加载'}
+              </Button>
+            </Upload>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              自动检测（PDF/图片/Word/Excel/文本），临时预览用，关闭窗口即失效。
+            </Text>
+          </Space>
+          {uploadedFile && (
+            <Space>
+              <Tag color="blue">{uploadedFile.name}</Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                artifact:{uploadedFile.artifactId}
+              </Text>
+              <Button
+                type="link"
+                size="small"
+                danger
+                onClick={() => setUploadedFile(null)}
+              >
+                移除
+              </Button>
+            </Space>
+          )}
+        </Space>
       </Form.Item>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'inline-block', marginRight: 12, lineHeight: '32px', fontWeight: 500 }}>
-          文件读取方式
-        </div>
-        <Form.Item
-          name="file_engine"
-          initialValue="pymupdf"
-          rules={[{ required: true, message: '请选择文件读取方式' }]}
-          style={{ display: 'inline-block', marginBottom: 0 }}
-        >
-          <Radio.Group
-            optionType="button"
-            buttonStyle="solid"
-            options={[
-              { value: 'pymupdf', label: 'pymupdf' },
-              { value: 'image', label: 'image' },
-              { value: 'raw', label: 'raw' },
-            ]}
-          />
-        </Form.Item>
-      </div>
       <Form.Item name="experimental_object_code" label="关联实验对象">
         <Select
           placeholder="请选择实验对象"
@@ -284,6 +314,90 @@ function ComponentFormFields({
           options={objectOptions}
         />
       </Form.Item>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <Text>LLM 提示词</Text>
+        <Space>
+          <Button
+            type="link"
+            size="small"
+            disabled={!uploadedFile}
+            loading={recommending}
+            onClick={async () => {
+              if (!uploadedFile) return;
+              setRecommending(true);
+              try {
+                const res = await apiRecommendPrompt({
+                  artifact_id: uploadedFile.artifactId,
+                  filename: uploadedFile.name,
+                });
+                formInstance.setFieldsValue({ prompt: res.prompt });
+                message.success('提示词已生成');
+              } catch (err: unknown) {
+                message.error(extractApiError(err));
+              } finally {
+                setRecommending(false);
+              }
+            }}
+          >
+            提示词推荐
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            disabled={!uploadedFile}
+            loading={previewing}
+            onClick={async () => {
+              if (!uploadedFile) return;
+              setPreviewing(true);
+              setPreviewResult(null);
+              setPreviewOpen(true);
+              try {
+                const currentPrompt = formInstance.getFieldValue('prompt') as string ?? '';
+                const res = await apiExtractPreview({
+                  artifact_id: uploadedFile.artifactId,
+                  filename: uploadedFile.name,
+                  prompt: currentPrompt,
+                });
+                setPreviewResult(res.result);
+              } catch (err: unknown) {
+                setPreviewResult(extractApiError(err));
+              } finally {
+                setPreviewing(false);
+              }
+            }}
+          >
+            数据抽取预览
+          </Button>
+        </Space>
+      </div>
+      <Form.Item
+        name="prompt"
+        labelCol={{ span: 0 }}
+        wrapperCol={{ span: 24 }}
+        rules={[{ required: true, message: '请输入 LLM 提示词' }]}
+      >
+        <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
+      </Form.Item>
+      <Modal
+        title="数据抽取预览"
+        open={previewOpen}
+        onCancel={() => setPreviewOpen(false)}
+        footer={null}
+        width={800}
+      >
+        {previewing ? (
+          <div style={{ textAlign: 'center', padding: 40 }}>
+            <Spin tip="正在调用大模型抽取数据..." />
+          </div>
+        ) : previewResult ? (
+          <Input.TextArea
+            value={previewResult}
+            readOnly
+            rows={20}
+            style={{ fontFamily: 'monospace', fontSize: 13 }}
+          />
+        ) : null}
+      </Modal>
     </>
   );
 }
@@ -316,7 +430,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       form.resetFields();
       setAdvancedMode(false);
       setModalOpen(true);
-      form.setFieldsValue({ experimental_object_code: prefillObject, file_engine: 'pymupdf' });
+      form.setFieldsValue({ experimental_object_code: prefillObject });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillObject]);
@@ -493,7 +607,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
-        file_engine: (formValues.file_engine as string) ?? 'pymupdf',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
       });
       form.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
@@ -506,7 +619,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
-        file_engine: parsed.file_engine ?? 'pymupdf',
         experimental_object_code: parsed.experimental_object_code,
         manifest_yaml: undefined,
       });
@@ -528,7 +640,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
-          file_engine: values.file_engine as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
         });
         publishMutation.mutate({
@@ -564,7 +675,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       display_name: parsed.display_name,
       description: parsed.description,
       prompt: parsed.prompt,
-      file_engine: parsed.file_engine,
       experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
     });
     // 编辑默认表单模式
@@ -585,7 +695,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
-        file_engine: (formValues.file_engine as string) ?? 'pymupdf',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
       }, editOriginalName);
       editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
@@ -598,7 +707,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
-        file_engine: parsed.file_engine ?? 'pymupdf',
         experimental_object_code: parsed.experimental_object_code,
         manifest_yaml: undefined,
       });
@@ -617,7 +725,6 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
-          file_engine: values.file_engine as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
         }, editOriginalName);
         publishMutation.mutate({ manifest_yaml: yaml });
@@ -845,6 +952,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         okText="发布"
         cancelText="取消"
         width={680}
+        destroyOnClose
       >
         <div style={{ marginBottom: 16 }}>
           <Space align="center">
@@ -910,6 +1018,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         okText="发布新版本"
         cancelText="取消"
         width={680}
+        destroyOnClose
       >
         <div style={{ marginBottom: 16 }}>
           <Space align="center">

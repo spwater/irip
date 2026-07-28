@@ -24,7 +24,9 @@ import ipaddress
 import json
 import socket
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
+
+import httpx
 
 from packages.common.errors import AppError
 
@@ -148,8 +150,8 @@ class RESTFetch:
             token = context.secrets.get(auth_header_secret, "")
             headers = {**headers, "Authorization": f"Bearer {token}"}
 
-        data = await asyncio.to_thread(
-            self._fetch_with_redirects, url, method, headers, query_params
+        data = await self._fetch_with_redirects(
+            url, method, headers, query_params
         )
 
         # 解析 JSON 并展平
@@ -196,14 +198,17 @@ class RESTFetch:
             },
         )
 
-    def _fetch_with_redirects(
+    async def _fetch_with_redirects(
         self,
         url: str,
         method: str,
         headers: dict[str, str],
         query_params: dict[str, Any],
     ) -> str:
-        """同步执行 HTTP 请求（含重定向与大小限制）。
+        """异步执行 HTTP 请求（含重定向与大小限制）。
+
+        使用 httpx.AsyncClient 替代 urllib.request.urlopen，
+        避免在事件循环中阻塞。手动处理重定向以在跳转前校验目标。
 
         Args:
             url: 请求 URL。
@@ -219,66 +224,82 @@ class RESTFetch:
             AppError: code="too_many_redirects"，当重定向超过 3 次。
             AppError: code="ssrf_blocked"，当重定向目标在禁止网段。
         """
-        import urllib.request
-        import urllib.parse
-
         current_url = url
         for _ in range(_MAX_REDIRECTS + 1):
-            if query_params:
-                sep = "&" if "?" in current_url else "?"
-                qs = urllib.parse.urlencode(query_params)
-                current_url = f"{current_url}{sep}{qs}"
-
-            req = urllib.request.Request(
-                current_url, method=method, headers=headers
-            )
             try:
-                with urllib.request.urlopen(req) as resp:
-                    # 检查重定向
-                    final_url = resp.geturl()
-                    if final_url != current_url:
-                        # 校验重定向目标
-                        redirect_parsed = urlparse(final_url)
-                        redirect_host = redirect_parsed.hostname or ""
-                        _resolve_and_check(redirect_host)
-                        if not redirect_parsed.scheme.lower().startswith(
-                            "https"
-                        ) and not params_allow_http(
-                            query_params
-                        ):
-                            raise AppError(
-                                code="https_required",
-                                message="重定向目标非 HTTPS",
-                                retryable=False,
-                                fields={},
-                            )
-                        current_url = final_url
-                        continue
-
-                    # 读取响应（限制大小）
-                    chunks: list[bytes] = []
-                    total = 0
-                    while True:
-                        chunk = resp.read(8192)
-                        if not chunk:
-                            break
-                        total += len(chunk)
-                        if total > _MAX_RESPONSE_BYTES:
-                            raise AppError(
-                                code="response_too_large",
-                                message="响应超过 50MB 限制",
-                                retryable=False,
-                                fields={"max_bytes": _MAX_RESPONSE_BYTES},
-                            )
-                        chunks.append(chunk)
-                    return b"".join(chunks).decode("utf-8")
-            except urllib.error.HTTPError as exc:
+                async with httpx.AsyncClient(
+                    follow_redirects=False,
+                    timeout=httpx.Timeout(30.0),
+                    proxy=None,
+                ) as client:
+                    resp = await client.request(
+                        method,
+                        current_url,
+                        headers=headers,
+                        params=query_params if current_url == url else None,
+                    )
+            except httpx.HTTPError as exc:
                 raise AppError(
                     code="http_error",
-                    message=f"HTTP 请求失败: {exc.code}",
+                    message=f"HTTP 请求失败: {exc}",
                     retryable=False,
-                    fields={"status_code": exc.code},
+                    fields={},
                 ) from exc
+
+            # 检查重定向（3xx 状态码）
+            if resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("location")
+                if location is None:
+                    raise AppError(
+                        code="http_error",
+                        message=f"重定向响应缺少 Location 头: {resp.status_code}",
+                        retryable=False,
+                        fields={"status_code": resp.status_code},
+                    )
+                # 解析重定向目标（处理相对 URL）
+                redirect_url = urljoin(current_url, location)
+
+                # 校验重定向目标
+                redirect_parsed = urlparse(redirect_url)
+                redirect_host = redirect_parsed.hostname or ""
+                await asyncio.to_thread(_resolve_and_check, redirect_host)
+                if not redirect_parsed.scheme.lower().startswith(
+                    "https"
+                ) and not params_allow_http(
+                    query_params
+                ):
+                    raise AppError(
+                        code="https_required",
+                        message="重定向目标非 HTTPS",
+                        retryable=False,
+                        fields={},
+                    )
+                current_url = redirect_url
+                continue
+
+            # 非 2xx 响应视为错误
+            if resp.status_code >= 400:
+                raise AppError(
+                    code="http_error",
+                    message=f"HTTP 请求失败: {resp.status_code}",
+                    retryable=False,
+                    fields={"status_code": resp.status_code},
+                )
+
+            # 读取响应（限制大小）
+            chunks: list[bytes] = []
+            total = 0
+            async for chunk in resp.aiter_bytes(8192):
+                total += len(chunk)
+                if total > _MAX_RESPONSE_BYTES:
+                    raise AppError(
+                        code="response_too_large",
+                        message="响应超过 50MB 限制",
+                        retryable=False,
+                        fields={"max_bytes": _MAX_RESPONSE_BYTES},
+                    )
+                chunks.append(chunk)
+            return b"".join(chunks).decode("utf-8")
 
         raise AppError(
             code="too_many_redirects",

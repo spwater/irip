@@ -108,7 +108,7 @@ class TestUnknownToolRejection:
             tool_name="fact.search ",  # 末尾多空格
             parameters={},
             user_id=uuid4(),
-            user_roles=["researcher"],
+            user_roles=["lab_viewer"],
             confirmed=True,
         )
         with pytest.raises(AppError, match="未知工具"):
@@ -121,7 +121,7 @@ class TestUnknownToolRejection:
             tool_name="fact.search",
             parameters={"query": "粒度"},
             user_id=uuid4(),
-            user_roles=["researcher"],
+            user_roles=["lab_viewer"],
             confirmed=True,
         )
         tool = registry.validate_invocation(invocation)
@@ -151,7 +151,7 @@ class TestAutoExecutionPrevention:
             tool_name="fact.delete",
             parameters={"fact_id": "abc"},
             user_id=uuid4(),
-            user_roles=["data_steward"],
+            user_roles=["lab_member"],
             confirmed=False,
         )
         with pytest.raises(AppError, match="需要用户确认"):
@@ -164,7 +164,7 @@ class TestAutoExecutionPrevention:
             tool_name="fact.delete",
             parameters={"fact_id": "abc"},
             user_id=uuid4(),
-            user_roles=["data_steward"],
+            user_roles=["lab_member"],
             confirmed=True,
         )
         tool = registry.validate_invocation(invocation)
@@ -177,7 +177,7 @@ class TestAutoExecutionPrevention:
             tool_name="fact.search",
             parameters={"query": "粒度"},
             user_id=uuid4(),
-            user_roles=["researcher"],
+            user_roles=["lab_viewer"],
             confirmed=False,
         )
         tool = registry.validate_invocation(invocation)
@@ -190,7 +190,7 @@ class TestAutoExecutionPrevention:
             tool_name="parameter.publish",
             parameters={"parameter_id": "xyz"},
             user_id=uuid4(),
-            user_roles=["reviewer"],
+            user_roles=["lab_director"],
             confirmed=False,
         )
         with pytest.raises(AppError, match="需要用户确认"):
@@ -278,66 +278,66 @@ class TestParameterRedaction:
 class TestPermissionScopeEnforcement:
     """用户权限范围外的工具操作被拒绝。"""
 
-    def test_researcher_cannot_delete_fact(self) -> None:
-        """researcher 无 fact:write 权限 → 不能调用 fact.delete。"""
+    def test_lab_viewer_cannot_delete_fact(self) -> None:
+        """lab_viewer 无 fact:write 权限 → 不能调用 fact.delete。"""
         registry = _build_registry()
         invocation = ToolInvocation(
             tool_name="fact.delete",
             parameters={"fact_id": "abc"},
             user_id=uuid4(),
-            user_roles=["researcher"],
+            user_roles=["lab_viewer"],
             confirmed=True,
         )
         with pytest.raises(AppError, match="无权"):
             registry.validate_invocation(invocation)
 
-    def test_read_only_user_cannot_predict(self) -> None:
-        """read_only_user 无 model:predict 权限 → 不能调用 model.predict。"""
+    def test_lab_viewer_cannot_predict(self) -> None:
+        """lab_viewer 无 model:predict 权限 → 不能调用 model.predict。"""
         registry = _build_registry()
         invocation = ToolInvocation(
             tool_name="model.predict",
             parameters={"input": [1, 2, 3]},
             user_id=uuid4(),
-            user_roles=["read_only_user"],
+            user_roles=["lab_viewer"],
             confirmed=True,
         )
         with pytest.raises(AppError, match="无权"):
             registry.validate_invocation(invocation)
 
-    def test_researcher_can_search_facts(self) -> None:
-        """researcher 有 fact:read 权限 → 可以调用 fact.search。"""
+    def test_lab_viewer_can_search_facts(self) -> None:
+        """lab_viewer 有 fact:read 权限 → 可以调用 fact.search。"""
         registry = _build_registry()
         invocation = ToolInvocation(
             tool_name="fact.search",
             parameters={"query": "粒度"},
             user_id=uuid4(),
-            user_roles=["researcher"],
+            user_roles=["lab_viewer"],
             confirmed=False,  # auto_executable=True
         )
         tool = registry.validate_invocation(invocation)
         assert tool.name == "fact.search"
 
-    def test_data_steward_can_delete_fact(self) -> None:
-        """data_steward 有 fact:write 权限 → 可以调用 fact.delete（需确认）。"""
+    def test_lab_member_can_delete_fact(self) -> None:
+        """lab_member 有 fact:write 权限 → 可以调用 fact.delete（需确认）。"""
         registry = _build_registry()
         invocation = ToolInvocation(
             tool_name="fact.delete",
             parameters={"fact_id": "abc"},
             user_id=uuid4(),
-            user_roles=["data_steward"],
+            user_roles=["lab_member"],
             confirmed=True,
         )
         tool = registry.validate_invocation(invocation)
         assert tool.name == "fact.delete"
 
-    def test_model_engineer_can_predict(self) -> None:
-        """model_engineer 有 model:predict 权限 → 可以调用 model.predict。"""
+    def test_lab_member_can_predict(self) -> None:
+        """lab_member 有 model:predict 权限 → 可以调用 model.predict。"""
         registry = _build_registry()
         invocation = ToolInvocation(
             tool_name="model.predict",
             parameters={"input": [1, 2, 3]},
             user_id=uuid4(),
-            user_roles=["model_engineer"],
+            user_roles=["lab_member"],
             confirmed=False,  # auto_executable=True
         )
         tool = registry.validate_invocation(invocation)
@@ -377,7 +377,7 @@ class TestPermissionScopeEnforcement:
             tool_name="fact.delete",
             parameters={},
             user_id=uuid4(),
-            user_roles=["read_only_user"],
+            user_roles=["lab_viewer"],
             confirmed=False,
         )
         with pytest.raises(AppError, match="需要用户确认"):

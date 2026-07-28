@@ -35,6 +35,22 @@ if TYPE_CHECKING:
     from packages.jobs.worker import JobExecutor, WorkerLeaseManager
 
 
+class RecordingTaskSender:
+    """测试用 TaskSender 替身：记录投递任务，不连接真实 broker。
+
+    Phase 3 架构收敛（T3-3）：``packages.jobs`` 的 Outbox 调度器改为通过
+    ``TaskSender`` 协议依赖注入接收任务投递通道。测试中注入本替身，
+    ``send_task`` 不抛异常（使事件被标记为已投递），并记录调用以供断言。
+    """
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, list, str]] = []
+
+    def send_task(self, name: str, args: list, queue: str) -> None:
+        """记录任务投递（模拟成功，不连接 broker）。"""
+        self.sent.append((name, list(args), queue))
+
+
 def _to_async_url(url: str) -> str:
     """将同步 psycopg URL 转换为异步 psycopg_async URL。"""
     if url.startswith("postgresql+psycopg://"):
@@ -408,7 +424,11 @@ async def job_harness(
 
     lease_manager = WorkerLeaseManager(async_session_factory)
     executor = JobExecutor(lease_manager, async_session_factory)
-    dispatcher = OutboxDispatcher(async_session_factory, redis_url=redis_url)
+    dispatcher = OutboxDispatcher(
+        async_session_factory,
+        redis_url=redis_url,
+        task_sender=RecordingTaskSender(),
+    )
 
     # 注册测试 handlers
     async def echo_handler(job: "Job") -> dict[str, object]:

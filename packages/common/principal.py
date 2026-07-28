@@ -14,13 +14,31 @@
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from packages.common.query_scope import QueryScope
 
-if TYPE_CHECKING:
-    from apps.api.dependencies.auth import CurrentUser
+
+@runtime_checkable
+class UserLike(Protocol):
+    """当前认证用户的结构化协议（duck typing）。
+
+    Phase 3 架构收敛（T3-3）：``packages/common`` 不得直接依赖
+    ``apps.api.dependencies.auth.CurrentUser``。本 Protocol 以结构化子类型
+    方式声明 ``Principal.from_current_user`` 所需的最小属性集合；
+    任何具备这些属性的对象（包括 ``CurrentUser``）均自动满足此协议，
+    无需显式继承，从而切断 packages→apps 的反向依赖。
+
+    Attributes:
+        user_id: 用户 UUID。
+        email: 用户邮箱。
+        roles: 用户角色列表（如 ``["admin"]``）。
+    """
+
+    user_id: UUID
+    email: str
+    roles: list[str]
 
 
 @dataclass(frozen=True)
@@ -48,14 +66,18 @@ class Principal:
 
     @staticmethod
     def from_current_user(
-        user: "CurrentUser",
+        user: UserLike,
         org_id: UUID,
         scope: QueryScope,
     ) -> "Principal":
-        """从 CurrentUser 构造 Principal。
+        """从当前认证用户构造 Principal。
+
+        通过 ``UserLike`` Protocol 接收任意具备 ``user_id``/``email``/``roles``
+        属性的用户对象（结构化子类型），无需直接依赖 ``apps`` 层的
+        ``CurrentUser``。
 
         Args:
-            user: 当前认证用户（从 JWT 解析）。
+            user: 当前认证用户（满足 ``UserLike`` 协议，从 JWT 解析）。
             org_id: 从数据库查询到的组织 ID。
             scope: 查询范围（基于 org_id 构造）。
 

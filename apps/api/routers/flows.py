@@ -622,7 +622,7 @@ async def list_runs(
     import sqlalchemy as sa
 
     from packages.common.database import session_scope
-    from packages.components.flow_runtime import FlowRun, FlowNodeExecution
+    from packages.components.flow_runtime import FlowNodeExecution
 
     runs = await service.list_runs(flow_id)
     result = []
@@ -1135,7 +1135,7 @@ async def list_facts_by_flow(
     """
     import sqlalchemy as sa
     from packages.common.database import session_scope
-    from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM, FlowRun
+    from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
     from packages.facts.entities import FactRevision, Fact
     from packages.facts.observations import FactRevisionRef
 

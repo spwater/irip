@@ -20,8 +20,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from apps.api.routers.ai_config import ai_config_router
+from apps.api.routers.ai_tools import ai_tools_router
 from apps.api.routers.assistant import assistant_router
 from apps.api.routers.audit import audit_router
+from apps.api.routers.component_preview import component_preview_router
 from apps.api.routers.auth import auth_router, me_router
 from apps.api.routers.backups import backups_router
 from apps.api.routers.components import components_router
@@ -124,6 +126,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     register_all(ctx)
 
+    # ---- 6. AI 工具种子数据（表空时写入 12 条内置工具，幂等） ----
+    from packages.ai.tool_seeding import seed_tools_if_empty
+    from packages.common.database import session_scope
+
+    async with session_scope(session_factory) as session:
+        await seed_tools_if_empty(session)
+
     yield
 
     # 清理
@@ -219,7 +228,9 @@ def create_app() -> FastAPI:
     app.include_router(backups_router)
     app.include_router(assistant_router)
     app.include_router(ai_config_router)
+    app.include_router(ai_tools_router)
     app.include_router(files_router)
+    app.include_router(component_preview_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

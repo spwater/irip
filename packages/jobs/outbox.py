@@ -25,6 +25,7 @@ from packages.common.clock import Clock, SystemClock
 from packages.common.database import Base, session_scope
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.ids import new_id
+from packages.jobs.task_sender import TaskSender
 
 logger = logging.getLogger(__name__)
 
@@ -79,17 +80,27 @@ class OutboxDispatcher:
         session_factory: async_sessionmaker[AsyncSession],
         clock: Clock | None = None,
         redis_url: str | None = None,
+        task_sender: TaskSender | None = None,
     ) -> None:
         """初始化 Outbox 调度器。
+
+        Phase 3 架构收敛（T3-3）：通过 ``task_sender`` 依赖注入接收任务投递通道，
+        不再在 ``_send_to_broker`` 中 lazy import ``apps.worker.celery_app``。
+        由 ``apps/`` 组装层注入真实 Celery 实例，测试中注入测试替身。
 
         Args:
             session_factory: 异步会话工厂。
             clock: 时钟（默认 SystemClock）。
-            redis_url: Redis 连接 URL（用于实际发送，None 时模拟发送）。
+            redis_url: Redis 连接 URL（保留以兼容旧调用方，当前投递通道
+                统一由 ``task_sender`` 提供）。
+            task_sender: 任务发送者（满足 ``TaskSender`` 协议）。``None`` 时
+                ``_send_to_broker`` 将跳过投递并返回 False，等待下次调度重试；
+                生产环境必须由组装层注入。
         """
         self._factory = session_factory
         self._clock = clock or SystemClock()
         self._redis_url = redis_url
+        self._task_sender = task_sender
 
     @staticmethod
     async def enqueue(
@@ -164,9 +175,12 @@ class OutboxDispatcher:
     async def _send_to_broker(self, event: OutboxEvent) -> bool:
         """发送事件到 Celery broker。
 
-        技术设计文档 F-04 §8.5：统一通过 ``celery_app.send_task`` 发送，
-        不再使用 Redis LPUSH。所有异步任务只通过 Outbox→Dispatcher→Celery
-        一条通道。
+        技术设计文档 F-04 §8.5：统一通过 ``TaskSender.send_task`` 发送，
+        不再使用 Redis LPUSH，也不再直接 import ``apps.worker.celery_app``。
+        所有异步任务只通过 Outbox→Dispatcher→Celery 一条通道。
+
+        通过依赖注入的 ``self._task_sender`` 投递；未配置时跳过并返回 False，
+        等待下一调度周期重试。
 
         Args:
             event: 待发送的 outbox 事件。
@@ -174,10 +188,15 @@ class OutboxDispatcher:
         Returns:
             bool: 发送成功返回 True。
         """
+        if self._task_sender is None:
+            logger.warning(
+                "TaskSender not configured; skip dispatch for event %s "
+                "(will retry on next cycle)",
+                event.id,
+            )
+            return False
         try:
-            from apps.worker.celery_app import celery_app
-
-            celery_app.send_task(
+            self._task_sender.send_task(
                 "jobs.execute",
                 args=[str(event.aggregate_id)],
                 queue="irip-jobs",

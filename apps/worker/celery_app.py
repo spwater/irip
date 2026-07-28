@@ -105,12 +105,16 @@ def dispatch_outbox() -> int:
     技术设计文档 F-04：由 Beat 每 5 秒触发，使用 FOR UPDATE SKIP LOCKED
     拉取 pending 事件，通过 send_task 发送到 irip-jobs 队列。
 
+    Phase 3 架构收敛（T3-3）：作为 ``packages`` 层的组装/注入点，在此将
+    本模块的 ``celery_app`` 作为 ``task_sender`` 注入 ``run_dispatch``，
+    使 ``packages.jobs`` 不再直接依赖 ``apps.worker.celery_app``。
+
     Returns:
         int: 已投递事件数。
     """
     from packages.jobs.dispatcher import run_dispatch
 
-    return run_dispatch()
+    return run_dispatch(task_sender=celery_app)
 
 
 @celery_app.task(name="worker.heartbeat")

@@ -13,6 +13,9 @@ from apps.api.routers.ai_config import (
 from apps.api.routers.ai_config import (
     set_session_factory as set_ai_config_session_factory,
 )
+from apps.api.routers.ai_tools import (
+    set_session_factory as set_ai_tools_session_factory,
+)
 from apps.api.routers.assistant import (
     get_ai_service,
 )
@@ -34,6 +37,7 @@ def register(ctx: CompositionContext) -> None:
 
     set_ai_config_session_factory(ctx.session_factory)
     set_assistant_session_factory(ctx.session_factory)
+    set_ai_tools_session_factory(ctx.session_factory)
 
     async def _get_ai_service_dep() -> AIService:
         config = await get_active_ai_config()

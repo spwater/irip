@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import session_scope
 from packages.jobs.outbox import OutboxEvent
+from packages.jobs.task_sender import TaskSender
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +33,43 @@ class OutboxDispatcherService:
     """Outbox 事件周期调度服务。
 
     由 Celery Beat 定时调用 ``dispatch()`` 方法，拉取未投递的 outbox 事件
-    并通过 ``celery_app.send_task`` 发送到 Celery broker。
+    并通过依赖注入的 ``TaskSender.send_task`` 发送到 Celery broker。
 
     Attributes:
         _factory: 异步会话工厂。
         _clock: 时钟实例。
+        _task_sender: 任务发送者（依赖注入）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         clock: Clock | None = None,
+        task_sender: TaskSender | None = None,
     ) -> None:
         """初始化 Outbox 调度服务。
+
+        Phase 3 架构收敛（T3-3）：通过 ``task_sender`` 依赖注入接收任务投递通道，
+        不再在 ``_send_to_celery`` 中 lazy import ``apps.worker.celery_app``。
+        由 ``apps/`` 组装层注入真实 Celery 实例，测试中注入测试替身。
 
         Args:
             session_factory: 异步会话工厂。
             clock: 时钟（默认 SystemClock）。
+            task_sender: 任务发送者（满足 ``TaskSender`` 协议）。``None`` 时
+                ``_send_to_celery`` 将跳过投递并返回 False，等待下次调度重试；
+                生产环境必须由组装层注入。
         """
         self._factory = session_factory
         self._clock = clock or SystemClock()
+        self._task_sender = task_sender
 
     async def dispatch(self, batch_size: int = DEFAULT_BATCH_SIZE) -> int:
         """拉取未投递事件并发送到 Celery，返回已投递事件数。
 
         使用 ``FOR UPDATE SKIP LOCKED`` 拉取未投递事件（``delivered_at IS NULL``），
-        逐条通过 ``celery_app.send_task`` 发送，发送成功后标记 ``delivered_at``。
+        逐条通过依赖注入的 ``TaskSender.send_task`` 发送，发送成功后标记
+        ``delivered_at``。
 
         Args:
             batch_size: 单次拉取数量上限。
@@ -101,7 +113,9 @@ class OutboxDispatcherService:
     async def _send_to_celery(self, event: OutboxEvent) -> bool:
         """发送事件到 Celery broker。
 
-        通过 ``celery_app.send_task`` 将作业 ID 发送到 ``irip-jobs`` 队列。
+        通过依赖注入的 ``self._task_sender.send_task`` 将作业 ID 发送到
+        ``irip-jobs`` 队列；未配置 ``TaskSender`` 时跳过并返回 False，
+        等待下一调度周期重试。
 
         Args:
             event: 待发送的 outbox 事件。
@@ -109,10 +123,15 @@ class OutboxDispatcherService:
         Returns:
             bool: 发送成功返回 True。
         """
+        if self._task_sender is None:
+            logger.warning(
+                "TaskSender not configured; skip dispatch for event %s "
+                "(will retry on next cycle)",
+                event.id,
+            )
+            return False
         try:
-            from apps.worker.celery_app import celery_app
-
-            celery_app.send_task(
+            self._task_sender.send_task(
                 "jobs.execute",
                 args=[str(event.aggregate_id)],
                 queue="irip-jobs",
@@ -146,10 +165,17 @@ class OutboxDispatcherService:
             return count
 
 
-def run_dispatch() -> int:
+def run_dispatch(task_sender: TaskSender | None = None) -> int:
     """Celery Beat 调度入口：同步包装的 dispatch 调用。
 
     由 Celery Beat 定时调用此函数，触发 Outbox 事件投递。
+    ``apps/`` 组装层（``dispatch_outbox`` Beat 任务）在调用时注入真实的
+    ``celery_app`` 作为 ``task_sender``，从而避免 ``packages`` 层直接依赖
+    ``apps.worker.celery_app``。
+
+    Args:
+        task_sender: 任务发送者（满足 ``TaskSender`` 协议）。生产环境由
+            Celery Beat 任务入口注入 ``celery_app``；为 ``None`` 时投递被跳过。
 
     Returns:
         int: 已投递事件数。
@@ -171,6 +197,6 @@ def run_dispatch() -> int:
         async_url = db_url
 
     factory = build_session_factory(async_url)
-    dispatcher = OutboxDispatcherService(factory)
+    dispatcher = OutboxDispatcherService(factory, task_sender=task_sender)
 
     return asyncio.run(dispatcher.dispatch())
