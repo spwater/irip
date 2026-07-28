@@ -389,7 +389,14 @@ export function ExperimentalObjectPage({
       width: 500,
       render: (_: unknown, record: TreeRow) => {
         if (isTypeRow(record)) {
-          return <Text strong style={{ fontSize: 14 }}>{record.display_name}</Text>;
+          return (
+            <Space size={6}>
+              <Text strong style={{ fontSize: 14 }}>{record.display_name}</Text>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.code}
+              </Text>
+            </Space>
+          );
         }
         return (
           <Tooltip title={record.description || undefined} placement="topLeft">
