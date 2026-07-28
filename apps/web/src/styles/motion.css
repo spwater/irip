@@ -1,0 +1,20 @@
+/**
+ * Data Ocean — 动效与 prefers-reduced-motion 硬降级
+ *
+ * 第一阶段即支持 prefers-reduced-motion，确保所有动画可降级。
+ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ocean-atmosphere {
+    transform: none !important;
+  }
+}

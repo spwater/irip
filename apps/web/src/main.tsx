@@ -5,6 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider, App as AntApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
+import { dataOceanTheme } from '@/theme/themeConfig';
+import '@/styles/global.css';
+import '@/styles/ocean.css';
+import '@/styles/motion.css';
 import 'katex/dist/katex.min.css';
 
 /** TanStack Query 客户端实例 */
@@ -19,7 +23,7 @@ const queryClient = new QueryClient();
  */
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider locale={zhCN} theme={dataOceanTheme}>
       <AntApp>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />

@@ -45,4 +45,13 @@ describe('LoginPage', () => {
 
     expect(await screen.findByRole('heading', { name: '实验事实' })).toBeVisible();
   });
+
+  it('presents a branded but accessible login surface', async () => {
+    renderApp({ initialUrl: '/login', api: successfulLoginApi });
+    expect(await screen.findByRole('heading', { name: 'IRIP 控制台' })).toBeVisible();
+    expect(screen.getByTestId('login-visual')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('form', { name: '登录 IRIP' })).toBeVisible();
+    expect(screen.getByLabelText('邮箱')).toHaveAttribute('autocomplete', 'username');
+    expect(screen.getByLabelText('密码')).toHaveAttribute('autocomplete', 'current-password');
+  });
 });

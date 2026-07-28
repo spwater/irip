@@ -1,0 +1,481 @@
+/**
+ * Data Ocean — Polar Mist 画布与表面系统
+ *
+ * 三色画布、最多两层装饰、72px+ 网格、1680px 最大内容宽度、稳定表面。
+ */
+
+/* ── 主背景 — 三色画布 + 径向高光 ── */
+.ocean-backdrop {
+  min-height: 100vh;
+  color: #102f44;
+  background:
+    radial-gradient(60rem 42rem at 92% 0%, rgba(255, 255, 255, 0.72), transparent 68%),
+    linear-gradient(145deg, #a9d2df 0%, #cfe5ea 50%, #e8f3f5 100%);
+}
+
+/* ── 装饰大气层 — 最多两层装饰，aria-hidden ── */
+.ocean-atmosphere {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(48rem 36rem at 8% 100%, rgba(57, 185, 194, 0.10), transparent 60%);
+}
+
+/* ── 内容层 — 位于装饰层之上，稳定表面 ── */
+.ocean-content-layer {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── 内容框架 — 1680px 最大内容宽度，72px 网格 ── */
+.ocean-content-frame {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 72px;
+  box-sizing: border-box;
+}
+
+.ocean-content-frame[data-width='wide'] {
+  max-width: 1680px;
+}
+
+/* ── 稳定表面面板 ── */
+.ocean-panel {
+  background: rgba(240, 250, 251, 0.72);
+  border: 1px solid rgba(24, 102, 133, 0.16);
+  border-radius: 6px;
+  padding: 24px;
+  box-sizing: border-box;
+  backdrop-filter: blur(8px);
+}
+
+.ocean-panel--default {
+  background: rgba(240, 250, 251, 0.72);
+}
+
+.ocean-panel--strong {
+  background: rgba(232, 246, 249, 0.90);
+}
+
+.ocean-panel--structural {
+  background: rgba(142, 191, 208, 0.46);
+}
+
+/* ── 外壳布局 — 替换硬编码颜色 ── */
+.ocean-shell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.ocean-shell-brand {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 24px;
+  font-weight: 700;
+  font-size: 18px;
+  color: #1686ae;
+}
+
+.ocean-shell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: transparent !important;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(24, 102, 133, 0.16);
+  backdrop-filter: blur(8px);
+}
+
+.ocean-shell-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1686ae;
+  letter-spacing: 0.5px;
+}
+
+.ocean-shell-avatar {
+  background-color: #1686ae !important;
+}
+
+.ocean-shell-content {
+  padding: 24px;
+  background: transparent;
+}
+
+/* ── 登录页 — 55:45 桌面结构 ── */
+.ocean-login {
+  display: flex;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.ocean-login-visual {
+  flex: 0 0 55%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 72px;
+  position: relative;
+  overflow: hidden;
+}
+
+.ocean-login-hero {
+  font-size: 32px;
+  font-weight: 700;
+  color: #102f44;
+  margin-top: 16px;
+}
+
+.ocean-login-track {
+  margin-top: 32px;
+  height: 4px;
+  width: 240px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #1686ae, #39b9c2, transparent);
+}
+
+.ocean-login-panel {
+  flex: 0 0 45%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  margin: auto 72px;
+  max-width: 420px;
+}
+
+/* ── 索引标签 ── */
+.ocean-index {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #486b7e;
+}
+
+/* ── 页面引导 ── */
+.ocean-page-intro__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.ocean-page-intro__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ocean-page-intro__actions {
+  flex-shrink: 0;
+}
+
+/* ── 数据英雄区 ── */
+.ocean-data-hero__label {
+  display: block;
+  font-size: 13px;
+  color: #6f8d9c;
+  margin-bottom: 4px;
+}
+
+.ocean-data-hero__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.ocean-data-hero__value {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #102f44;
+}
+
+.ocean-data-hero__unit {
+  font-size: 16px;
+  color: #486b7e;
+}
+
+/* ── 指标条 ── */
+.ocean-metric-strip {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.ocean-metric-strip__item {
+  flex: 1 1 160px;
+  min-width: 160px;
+}
+
+.ocean-metric-strip__label {
+  display: block;
+  font-size: 13px;
+  color: #6f8d9c;
+  margin-bottom: 4px;
+}
+
+.ocean-metric-strip__value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.ocean-metric-strip__value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #102f44;
+}
+
+.ocean-metric-strip__unit {
+  font-size: 14px;
+  color: #486b7e;
+}
+
+.ocean-metric-strip__note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6f8d9c;
+}
+
+/* ── 状态标记 ── */
+.ocean-status-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ocean-status-mark__marker {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.ocean-status-mark[data-marker='outline'] .ocean-status-mark__marker {
+  border: 1.5px solid currentColor;
+  background: transparent;
+}
+
+.ocean-status-mark[data-marker='solid'] .ocean-status-mark__marker {
+  background: currentColor;
+}
+
+.ocean-status-mark[data-marker='diamond'] .ocean-status-mark__marker {
+  background: currentColor;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.ocean-status-mark[data-marker='cross'] .ocean-status-mark__marker {
+  background: transparent;
+  position: relative;
+}
+
+.ocean-status-mark[data-marker='cross'] .ocean-status-mark__marker::before,
+.ocean-status-mark[data-marker='cross'] .ocean-status-mark__marker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 1.5px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.ocean-status-mark[data-marker='cross'] .ocean-status-mark__marker::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.ocean-status-mark[data-marker='ring'] .ocean-status-mark__marker {
+  border: 1.5px solid currentColor;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.ocean-status-mark__detail {
+  font-size: 12px;
+  color: #6f8d9c;
+  margin-left: 2px;
+}
+
+/* ── 操作栏 ── */
+.ocean-action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ocean-action-bar__filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ocean-action-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── 数据表壳 ── */
+.ocean-data-table-shell__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ocean-data-table-shell__body {
+  overflow-x: auto;
+}
+
+/* ── 详情区段 ── */
+.ocean-detail-section {
+  margin-bottom: 24px;
+}
+
+.ocean-detail-section__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+/* ── 流程轨道 ── */
+.ocean-flow-track {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ocean-flow-track__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ocean-flow-track__marker {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.ocean-flow-track__item[data-marker='outline'] .ocean-flow-track__marker {
+  border: 1.5px solid currentColor;
+  background: transparent;
+}
+
+.ocean-flow-track__item[data-marker='solid'] .ocean-flow-track__marker {
+  background: currentColor;
+}
+
+.ocean-flow-track__item[data-marker='diamond'] .ocean-flow-track__marker {
+  background: currentColor;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.ocean-flow-track__item[data-marker='cross'] .ocean-flow-track__marker {
+  background: transparent;
+  position: relative;
+}
+
+.ocean-flow-track__item[data-marker='cross'] .ocean-flow-track__marker::before,
+.ocean-flow-track__item[data-marker='cross'] .ocean-flow-track__marker::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 1.5px;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.ocean-flow-track__item[data-marker='cross'] .ocean-flow-track__marker::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.ocean-flow-track__item[data-marker='ring'] .ocean-flow-track__marker {
+  border: 1.5px solid currentColor;
+  background: transparent;
+  border-radius: 50%;
+}
+
+.ocean-flow-track__item--active {
+  font-weight: 600;
+}
+
+.ocean-flow-track__label {
+  font-weight: inherit;
+}
+
+.ocean-flow-track__detail {
+  font-size: 13px;
+  color: #486b7e;
+  margin-top: 2px;
+}
+
+.ocean-flow-track__progress {
+  height: 4px;
+  background: rgba(24, 102, 133, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.ocean-flow-track__progress-bar {
+  height: 100%;
+  background: #1686ae;
+  border-radius: 2px;
+  transition: width 320ms ease;
+}
+
+/* ── 焦点覆盖层错误区 ── */
+.ocean-focus-error {
+  margin-bottom: 16px;
+}
+
+/* ── 响应式 — 900px 以下隐藏登录装饰区，单列居中 ── */
+@media (max-width: 900px) {
+  .ocean-login {
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .ocean-login-visual {
+    display: none;
+  }
+
+  .ocean-login-panel {
+    flex: 1 1 auto;
+    margin: 24px auto;
+    max-width: 400px;
+    width: 100%;
+    padding: 0 24px;
+  }
+
+  .ocean-content-frame {
+    padding: 0 24px;
+  }
+}

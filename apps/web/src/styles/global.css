@@ -1,0 +1,90 @@
+/**
+ * Data Ocean — 全局基础样式
+ *
+ * 系统字体栈、body 最小宽度、选区、focus-visible 环、tabular numeric、
+ * technical text、page-safe overflow。
+ * 不引入外部字体。
+ */
+
+:root {
+  /* 系统字体栈 — 跨平台原生字体，无外部依赖 */
+  --ocean-font-stack: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  --ocean-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas,
+    'Liberation Mono', monospace;
+}
+
+html {
+  font-family: var(--ocean-font-stack);
+  /* Page-safe overflow — 防止装饰性渐变产生水平滚动 */
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  font-family: var(--ocean-font-stack);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 选区样式 */
+::selection {
+  background: rgba(22, 134, 174, 0.20);
+  color: #102f44;
+}
+
+/* 可见键盘焦点环 */
+:focus-visible {
+  outline: 2px solid #6fa9be;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Tabular numeric 工具类 — 数字等宽对齐 */
+.ocean-tabular-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Technical text 工具类 — 等宽字体，用于代码/ID/技术内容 */
+.ocean-tech {
+  font-family: var(--ocean-font-mono);
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+/* 屏幕阅读器专用工具类 */
+.ocean-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 进入动画工具类 */
+.ocean-enter {
+  animation: ocean-enter 360ms ease-out both;
+}
+
+@keyframes ocean-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 焦点过渡工具类 */
+.ocean-focus {
+  transition: box-shadow 320ms ease;
+}
