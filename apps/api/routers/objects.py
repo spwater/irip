@@ -93,15 +93,7 @@ async def _check_object_ownership(
 class CreateObjectRequest(BaseModel):
     """创建工业对象请求。"""
 
-    object_type: Literal[
-        "lab",
-        "production_line",
-        "equipment_group",
-        "instrument",
-        "measurement_point",
-        "material",
-        "signal",
-    ] = Field(..., description="对象类型")
+    object_type: str = Field(..., max_length=50, description="对象类型")
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     parent_id: UUID | None = Field(None, description="父对象 ID")
