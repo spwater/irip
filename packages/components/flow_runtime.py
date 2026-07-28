@@ -1980,7 +1980,6 @@ class FlowRuntimeService:
                 .values(
                     status=job_status.value,
                     updated_at=sa.func.now(),
-                    lock_version=Job.lock_version + 1,
                 )
                 .where(Job.id == job_id)
             )
