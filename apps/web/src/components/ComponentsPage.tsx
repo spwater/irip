@@ -210,12 +210,16 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
 /** 组件表单字段（表单模式共用，绑定到外层 Form 上下文） */
 function ComponentFormFields({
   objectOptions,
-  objectMap: _objectMap,
+  objectMap,
+  deptMap,
+  objectCodeToDeptId,
   originalName,
 }: {
   objectOptions: ObjectOption[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
+  deptMap: Map<string, string>;
+  objectCodeToDeptId: Map<string, string | null>;
   originalName?: string;
 }): JSX.Element {
   const [uploadedFile, setUploadedFile] = useState<{ name: string; artifactId: string } | null>(null);
@@ -225,6 +229,28 @@ function ComponentFormFields({
   const [previewResult, setPreviewResult] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const formInstance = Form.useFormInstance();
+
+  // 监听关联实验对象变化，自动填充所属单位 + 组件名称默认值
+  const watchedExpCode = Form.useWatch('experimental_object_code', formInstance);
+  const inheritedDeptName = (() => {
+    if (!watchedExpCode) return null;
+    const deptId = objectCodeToDeptId.get(watchedExpCode);
+    return deptId ? deptMap.get(deptId) : null;
+  })();
+
+  // 当实验对象变化时，如果组件名称为空或之前是自动填充的，则更新默认值
+  useEffect(() => {
+    if (watchedExpCode) {
+      const obj = objectMap.get(watchedExpCode);
+      if (obj) {
+        const currentName = formInstance.getFieldValue('display_name') as string ?? '';
+        // 如果名称为空或是之前自动生成的（以"接口"结尾的旧默认值），则更新
+        if (!currentName || currentName.endsWith('接口')) {
+          formInstance.setFieldsValue({ display_name: `${obj.display_name}接口` });
+        }
+      }
+    }
+  }, [watchedExpCode, objectMap, formInstance]);
 
   const uploadProps: UploadProps = {
     accept: '.pdf,.txt,.md,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx',
@@ -254,8 +280,30 @@ function ComponentFormFields({
     <>
       <Row gutter={16}>
         <Col span={12}>
+          <Form.Item label="所属单位">
+            <Input
+              value={inheritedDeptName ?? ''}
+              disabled
+              placeholder="选择关联实验对象后自动填充"
+            />
+          </Form.Item>
+        </Col>
+        <Col span={12}>
           <Form.Item label="接口编码">
             <Input value={originalName ?? 'iface_ffffffff'} disabled />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={16}>
+        <Col span={12}>
+          <Form.Item name="experimental_object_code" label="关联实验对象">
+            <Select
+              placeholder="请选择实验对象"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={objectOptions}
+            />
           </Form.Item>
         </Col>
         <Col span={12}>
@@ -264,7 +312,7 @@ function ComponentFormFields({
             label="组件名称"
             rules={[{ required: true, message: '请输入组件名称' }]}
           >
-            <Input placeholder="例如：XRF-EZ扫描提取器" />
+            <Input placeholder="如：XRF-EZ扫描提取器接口" />
           </Form.Item>
         </Col>
       </Row>
@@ -304,15 +352,6 @@ function ComponentFormFields({
             </Space>
           )}
         </Space>
-      </Form.Item>
-      <Form.Item name="experimental_object_code" label="关联实验对象">
-        <Select
-          placeholder="请选择实验对象"
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          options={objectOptions}
-        />
       </Form.Item>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <Text>LLM 提示词</Text>
@@ -980,7 +1019,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
               />
             </Form.Item>
           ) : (
-            <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
+            <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} />
           )}
         </Form>
       </Modal>
@@ -1056,7 +1095,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} originalName={editOriginalName} />
+              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} />
             </>
           )}
         </Form>
