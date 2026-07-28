@@ -485,6 +485,8 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   const { data: objectData } = useQuery({
     queryKey: ['objects-for-component'],
     queryFn: () => apiListObjects({ page_size: 100 }),
+    staleTime: 0,
+    refetchOnMount: true,
   });
   // code → 实验对象（含 equipment_id，用于间接查设备名称）
   const objectMap = new Map<string, IndustrialObject>(
