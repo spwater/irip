@@ -22,6 +22,9 @@ from apps.api.routers.assistant import (
 from apps.api.routers.assistant import (
     set_ai_session_factory as set_assistant_session_factory,
 )
+from apps.api.routers.object_types import (
+    set_session_factory as set_object_types_session_factory,
+)
 
 
 def register(ctx: CompositionContext) -> None:
@@ -38,6 +41,7 @@ def register(ctx: CompositionContext) -> None:
     set_ai_config_session_factory(ctx.session_factory)
     set_assistant_session_factory(ctx.session_factory)
     set_ai_tools_session_factory(ctx.session_factory)
+    set_object_types_session_factory(ctx.session_factory)
 
     async def _get_ai_service_dep() -> AIService:
         config = await get_active_ai_config()

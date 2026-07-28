@@ -1,7 +1,7 @@
 """实验对象类型管理路由。"""
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -19,6 +19,20 @@ object_types_router = APIRouter(prefix="/api/v1/object-types", tags=["object-typ
 
 WriteUserDep = Annotated[CurrentUser, Depends(require_permission("standard:write"))]
 ReadUserDep = Annotated[CurrentUser, Depends(require_permission("standard:read"))]
+
+# 全局 session factory（由 composition 注册）
+_session_factory: Any = None
+
+
+def set_session_factory(factory: Any) -> None:
+    global _session_factory
+    _session_factory = factory
+
+
+def _get_session_factory() -> Any:
+    if _session_factory is None:
+        raise RuntimeError("Session factory not set. Call set_session_factory() first.")
+    return _session_factory
 
 
 class ObjectTypeResponse(BaseModel):
@@ -57,7 +71,7 @@ def _to_response(obj: ObjectTypeDict) -> ObjectTypeResponse:
 async def list_object_types(
     current_user: ReadUserDep,
 ) -> list[ObjectTypeResponse]:
-    async with session_scope() as session:
+    async with session_scope(_get_session_factory()) as session:
         result = await session.execute(
             sa.select(ObjectTypeDict).order_by(ObjectTypeDict.sort_order.asc())
         )
@@ -72,7 +86,7 @@ async def create_object_type(
 ) -> ObjectTypeResponse:
     from packages.common.ids import gen_code
     code = gen_code("obtype_")
-    async with session_scope() as session:
+    async with session_scope(_get_session_factory()) as session:
         existing = await session.execute(
             sa.select(ObjectTypeDict).where(ObjectTypeDict.display_name == body.display_name)
         )
@@ -100,7 +114,7 @@ async def update_object_type(
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
     from datetime import UTC, datetime as dt
-    async with session_scope() as session:
+    async with session_scope(_get_session_factory()) as session:
         result = await session.execute(
             sa.select(ObjectTypeDict).where(ObjectTypeDict.id == type_id)
         )
@@ -121,7 +135,7 @@ async def delete_object_type(
     type_id: UUID,
     current_user: WriteUserDep,
 ) -> None:
-    async with session_scope() as session:
+    async with session_scope(_get_session_factory()) as session:
         result = await session.execute(
             sa.select(ObjectTypeDict).where(ObjectTypeDict.id == type_id)
         )
