@@ -112,20 +112,8 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     run_uuid = UUID(run_id)
 
-    # 更新作业状态为 RUNNING
-    async with session_scope(factory) as session:
-        await session.execute(
-            sa.update(Job)
-            .values(
-                status=JobStatus.RUNNING.value,
-                updated_at=sa.func.now(),
-                lock_version=Job.lock_version + 1,
-            )
-            .where(
-                Job.kind == "flow_execute",
-                Job.payload.op("->>")("run_id") == run_id,
-            )
-        )
+    # 注意：不在这里更新 job 表状态 — JobExecutor 已经管理租约和状态转换。
+    # 直接执行流程即可。
 
     # 执行流程
     await service.execute(run_uuid)
