@@ -368,10 +368,12 @@ export function ExperimentalObjectPage({
         typeMap.delete(typeItem.code);
       }
     }
-    // 未匹配类型的对象放顶层
-    for (const [, objs] of typeMap) {
-      for (const obj of objs) {
-        tree.push(obj as TreeRow);
+    // 未匹配类型的对象放顶层（仅在无类型筛选时显示）
+    if (!typeFilter) {
+      for (const [, objs] of typeMap) {
+        for (const obj of objs) {
+          tree.push(obj as TreeRow);
+        }
       }
     }
     return tree;
