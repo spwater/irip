@@ -969,13 +969,13 @@ export function FlowDetail(): JSX.Element {
               showSearch
               optionFilterProp="label"
               options={componentOptions}
-              onChange={(value: string) => {
+              onChange={(value: string, option: { label?: string } | undefined) => {
                 const now = new Date();
                 const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-                const tsDisplay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                const compLabel = option?.label ? option.label.split(' (')[0] : value;
                 createForm.setFieldsValue({
                   code: `${value}_${ts}`,
-                  display_name: `${value}_${ts}`,
+                  display_name: `${compLabel}_${ts}`,
                 });
               }}
             />
