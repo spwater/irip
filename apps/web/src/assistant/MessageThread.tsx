@@ -1,6 +1,7 @@
 import { Avatar, Typography } from 'antd';
 import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
+import { createOceanChartOptions } from '@/theme/chartTheme';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -25,6 +26,10 @@ const katexStyle = `
  * 3. useEffect 里找到所有 .katex-math span，用 katex.render 渲染公式
  *
  * 这样 KaTeX HTML 完全由 katex.render 生成，不经过 react-markdown 处理。
+ *
+ * Data Ocean Phase 4：用 createOceanChartOptions 合并图表主题，
+ * 用 data-echarts / data-echarts-animation 属性暴露动效配置，
+ * 用语义 CSS class 替换硬编码白色/灰色。保留 Markdown 正则、KaTeX、复制行为不变。
  */
 function MarkdownWithMath({ content }: { content: string }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,10 +50,15 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
 
   // 提取 echarts 代码块，存到 ref 数组，div 只存索引
   chartOptions.current = [];
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   processed = processed.replace(/```echarts\n([\s\S]*?)```/g, (_, code) => {
     const idx = chartOptions.current.length;
     chartOptions.current.push(code.trim());
-    return `<div class="echarts-chart" data-idx="${idx}" style="width:100%;height:400px;margin:8px 0"></div>`;
+    return `<div class="echarts-chart ocean-chart-container" data-idx="${idx}" data-echarts="true" data-echarts-animation="${!reducedMotion}" style="width:100%;height:400px;margin:8px 0"></div>`;
   });
 
   // 渲染完后，用 katex.render 替换占位符
@@ -85,6 +95,8 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
           option.xAxis.nameLocation = 'middle';
           option.xAxis.nameGap = 25;
         }
+        // 用 Data Ocean 主题合并视觉默认值（不覆盖 series / grid / yAxis）
+        const themedOption = createOceanChartOptions(option, reducedMotion);
         // 动态导入 echarts 避免首屏加载慢
         import('echarts').then((echarts) => {
           // 找消息气泡容器（向上遍历到有 padding 的 div）
@@ -101,7 +113,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
           (div as HTMLElement).style.width = '100%';
           (div as HTMLElement).style.position = 'relative';
           const chart = echarts.init(div as HTMLElement, undefined, { width, height: 400 });
-          chart.setOption(option);
+          chart.setOption(themedOption);
 
           // 在图表右上角添加复制按钮（hover 时显示）
           if (!div.querySelector('.echarts-copy-btn')) {
@@ -109,7 +121,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
             btn.className = 'echarts-copy-btn';
             btn.innerHTML = '📋';
             btn.title = '复制 ECharts 配置';
-            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.9);border:1px solid #d9d9d9;border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
+            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(232, 246, 249, 0.90);border:1px solid rgba(24, 102, 133, 0.16);border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
             (div as HTMLElement).onmouseenter = () => { btn.style.opacity = '1'; };
             (div as HTMLElement).onmouseleave = () => { btn.style.opacity = '0'; };
             btn.onclick = (e) => {
@@ -139,24 +151,27 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
  *
  * 不用 react-markdown，直接用正则处理常见的 Markdown 语法。
  * 避免 react-markdown 对 HTML 标签的转义和重新处理。
+ *
+ * Data Ocean Phase 4：用语义 CSS class 替换硬编码颜色，
+ * 保留正则逻辑和转义行为不变。
  */
 function renderMarkdownToHtml(md: string): string {
   let html = md;
 
   // 代码块 ```（echarts 已在前面提取，这里只处理普通代码块）
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
-    return `<pre style="background:#f5f5f5;padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:monospace"><code>${escapeHtml(code.trim())}</code></pre>`;
+    return `<pre class="ocean-md-pre"><code>${escapeHtml(code.trim())}</code></pre>`;
   });
 
   // 行内代码 `...`
   html = html.replace(/`([^`]+)`/g, (_, code) => {
-    return `<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace">${escapeHtml(code)}</code>`;
+    return `<code class="ocean-md-inline-code">${escapeHtml(code)}</code>`;
   });
 
   // 标题
-  html = html.replace(/^### (.+)$/gm, '<h3 style="font-size:15px;font-weight:600;margin:8px 0 4px">$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2 style="font-size:16px;font-weight:700;margin:10px 0 6px">$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1 style="font-size:18px;font-weight:700;margin:12px 0 8px">$1</h1>');
+  html = html.replace(/^### (.+)$/gm, '<h3 class="ocean-md-h3">$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2 class="ocean-md-h2">$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1 class="ocean-md-h1">$1</h1>');
 
   // 粗体 **...**
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -168,30 +183,30 @@ function renderMarkdownToHtml(md: string): string {
   html = html.replace(/^\|(.+)\|\n\|([-| :]+)\|\n((?:\|.*\|\n?)*)/gm, (_, header, _sep, body) => {
     const headers = header.split('|').map((h: string) => h.trim()).filter(Boolean);
     const rows = body.trim().split('\n').map((r: string) => r.split('|').map((c: string) => c.trim()).filter(Boolean));
-    let table = '<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px">';
-    table += '<tr>' + headers.map((h: string) => `<th style="border:1px solid #d9d9d9;padding:6px 10px;background:#fafafa;font-weight:600;text-align:left">${h}</th>`).join('') + '</tr>';
+    let table = '<table class="ocean-md-table">';
+    table += '<tr>' + headers.map((h: string) => `<th class="ocean-md-th">${h}</th>`).join('') + '</tr>';
     rows.forEach((row: string[]) => {
-      table += '<tr>' + row.map((c: string) => `<td style="border:1px solid #d9d9d9;padding:6px 10px">${c}</td>`).join('') + '</tr>';
+      table += '<tr>' + row.map((c: string) => `<td class="ocean-md-td">${c}</td>`).join('') + '</tr>';
     });
     table += '</table>';
     return table;
   });
 
   // 引用块 >
-  html = html.replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #91caff;margin:6px 0;padding:4px 12px;color:#666;background:#f6f8fa">$1</blockquote>');
+  html = html.replace(/^> (.+)$/gm, '<blockquote class="ocean-md-quote">$1</blockquote>');
 
   // 无序列表 - 或 *
-  html = html.replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
-  html = html.replace(/(<li[^<]*<\/li>\n?)+/g, (m) => `<ul style="margin:4px 0;padding-left:20px">${m}</ul>`);
+  html = html.replace(/^[-*] (.+)$/gm, '<li class="ocean-md-li">$1</li>');
+  html = html.replace(/(<li[^<]*<\/li>\n?)+/g, (m) => `<ul class="ocean-md-ul">${m}</ul>`);
 
   // 有序列表 1.
-  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li class="ocean-md-li">$1</li>');
 
   // 分隔线 ---
-  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e8e8e8;margin:12px 0" />');
+  html = html.replace(/^---$/gm, '<hr class="ocean-md-hr" />');
 
   // 段落（把连续的非标签行用 p 包裹，排除 katex-math div 和其他块级元素）
-  html = html.replace(/^(?!<[a-z/])(?<!<div class="katex-math")((?!<[a-z])(?!<div class="katex-math").+)$/gm, '<p style="margin:4px 0;line-height:1.7">$1</p>');
+  html = html.replace(/^(?!<[a-z/])(?<!<div class="katex-math")((?!<[a-z])(?!<div class="katex-math").+)$/gm, '<p class="ocean-md-p">$1</p>');
 
   // 清理多余空行
   html = html.replace(/\n{3,}/g, '\n\n');
@@ -235,6 +250,9 @@ const ROLE_LABEL: Record<string, string> = {
  *
  * 展示对话历史，区分用户消息、AI 回答与工具消息。
  * AI 回答使用 Markdown 渲染（含表格、公式、代码块等）。
+ *
+ * Data Ocean Phase 4：用语义 CSS class 替换硬编码颜色，
+ * 保留 Markdown/KaTeX/ECharts/copy 行为不变。
  */
 export function MessageThread({
   messages,
@@ -249,7 +267,6 @@ export function MessageThread({
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#999',
         }}
       >
         <Text type="secondary">开始一段新对话吧 ✨</Text>
@@ -286,12 +303,11 @@ export function MessageThread({
               {ROLE_AVATAR_TEXT[msg.role] ?? 'AI'}
             </Avatar>
             <div
+              className={isUser ? 'ocean-msg-bubble ocean-msg-bubble--user' : 'ocean-msg-bubble ocean-msg-bubble--assistant'}
               style={{
                 maxWidth: '75%',
                 padding: '12px 16px',
                 borderRadius: 12,
-                background: isUser ? '#e6f4ff' : '#f6ffed',
-                border: `1px solid ${isUser ? '#91caff' : '#b7eb8f'}`,
               }}
             >
               <div style={{ marginBottom: 4 }}>

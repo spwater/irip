@@ -15,16 +15,18 @@ import {
   type CurrentUser,
   type ParameterCandidate,
 } from '@/api/client';
+import { StatusMark } from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
 const { Text } = Typography;
 
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  in_review: 'orange',
-  published: 'green',
-  deprecated: 'default',
-  rejected: 'red',
+/** 状态 → StatusTone */
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  in_review: 'warning',
+  published: 'success',
+  deprecated: 'neutral',
+  rejected: 'danger',
 };
 
 /** 状态 → 中文标签 */
@@ -52,6 +54,8 @@ const QUALITY_COLOR: Record<string, string> = {
  * - 显示「查看完整来源」链接，跳转到溯源图谱
  * - 提交者不能审批自己提交的候选（self_approval_forbidden）
  *   当 currentUser.id === candidate.submitted_by 时，隐藏「批准发布」和「驳回」按钮
+ *
+ * Data Ocean Phase 4：用 StatusMark 替换状态 Tag，保留审批/驳回 mutation 和角色规则不变。
  */
 export function ApprovalPanel({
   candidate,
@@ -118,9 +122,10 @@ export function ApprovalPanel({
           </Tag>
         </Descriptions.Item>
         <Descriptions.Item label="状态">
-          <Tag color={STATUS_COLOR[candidate.status] ?? 'default'}>
-            {STATUS_LABEL[candidate.status] ?? candidate.status}
-          </Tag>
+          <StatusMark
+            tone={STATUS_TONE[candidate.status] ?? 'neutral'}
+            label={STATUS_LABEL[candidate.status] ?? candidate.status}
+          />
         </Descriptions.Item>
         <Descriptions.Item label="提交者">
           {candidate.submitted_by}

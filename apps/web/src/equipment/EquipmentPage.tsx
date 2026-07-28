@@ -30,6 +30,12 @@ import {
   extractApiError,
   type EquipmentListItem,
 } from '@/api/client';
+import {
+  ActionBar,
+  DataTableShell,
+  FeedbackState,
+  StatusMark,
+} from '@/components/ui';
 
 /**
  * 设备仪器管理页面
@@ -40,6 +46,9 @@ import {
  * - Modal + Form 创建/编辑弹窗（code 编辑时 disabled）
  * - 物理量管理 Drawer（多选已发布物理量，全量替换）
  * - Popconfirm 启用/禁用确认
+ *
+ * Data Ocean Phase 2：使用 ActionBar + DataTableShell + StatusMark + FeedbackState
+ * 包装视觉层，保留所有 query/mutation/form/callback/预设行为不变。
  */
 export function EquipmentPage({
   presetDeptId,
@@ -296,14 +305,12 @@ export function EquipmentPage({
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status: string) =>
-        status === 'active' ? (
-          <Tag color="green">启用</Tag>
-        ) : (
-          <Tag color="default" style={{ opacity: 0.5 }}>
-            禁用
-          </Tag>
-        ),
+      render: (status: string) => (
+        <StatusMark
+          tone={status === 'active' ? 'success' : 'neutral'}
+          label={status === 'active' ? '启用' : '禁用'}
+        />
+      ),
     },
     {
       title: '排序',
@@ -356,39 +363,54 @@ export function EquipmentPage({
   ];
 
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button type="primary" onClick={handleCreate}>
-          新建仪器或方法
-        </Button>
-        <Select
-          placeholder="状态筛选"
-          style={{ width: 140 }}
-          value={statusFilter ?? '__all__'}
-          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'active', label: '启用' },
-            { value: 'disabled', label: '禁用' },
-          ]}
+    <section role="region" aria-label="设备仪器目录">
+      <DataTableShell
+        title="设备仪器目录"
+        toolbar={
+          <ActionBar
+            filters={
+              <>
+                <Select
+                  placeholder="状态筛选"
+                  style={{ width: 140 }}
+                  value={statusFilter ?? '__all__'}
+                  onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+                  options={[
+                    { value: '__all__', label: '全部' },
+                    { value: 'active', label: '启用' },
+                    { value: 'disabled', label: '禁用' },
+                  ]}
+                />
+                <Select
+                  placeholder="机构筛选"
+                  style={{ width: 200 }}
+                  value={deptFilter ?? '__all__'}
+                  onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+                  options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+                />
+              </>
+            }
+            actions={
+              <Button type="primary" onClick={handleCreate}>
+                新建仪器或方法
+              </Button>
+            }
+          />
+        }
+      >
+        <Table<EquipmentListItem>
+          columns={columns}
+          dataSource={items}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+          size="middle"
+          scroll={{ x: 1280 }}
+          locale={{
+            emptyText: <FeedbackState kind="empty" title="暂无设备仪器" />,
+          }}
         />
-        <Select
-          placeholder="机构筛选"
-          style={{ width: 200 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-      </Space>
-
-      <Table<EquipmentListItem>
-        columns={columns}
-        dataSource={items}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="middle"
-      />
+      </DataTableShell>
 
       {/* 创建/编辑 Modal */}
       <Modal
@@ -486,6 +508,6 @@ export function EquipmentPage({
       </Modal>
 
       {/* 物理量管理 Drawer */}
-    </div>
+    </section>
   );
 }

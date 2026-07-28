@@ -30,6 +30,8 @@ const CITATION_LABEL: Record<string, string> = {
  * 引用列表组件
  *
  * 展示 AI 回答的引用来源，可点击跳转到对应对象详情页。
+ *
+ * Data Ocean Phase 4：移除硬编码 border 样式，保留引用数据和跳转行为不变。
  */
 export function CitationList({
   citations,

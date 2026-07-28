@@ -2,7 +2,6 @@ import { useState } from 'react';
 import {
   Button,
   Divider,
-  Drawer,
   Form,
   Input,
   Modal,
@@ -32,16 +31,24 @@ import {
 import { useAuthStore } from '@/auth/AuthProvider';
 import { ApprovalPanel } from '@/parameters/ApprovalPanel';
 import { ProvenancePage } from '@/provenance/ProvenancePage';
+import {
+  ActionBar,
+  DataTableShell,
+  StatusMark,
+  FocusDrawer,
+  FocusModal,
+} from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
 const { Title, Text } = Typography;
 
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  in_review: 'orange',
-  published: 'green',
-  deprecated: 'default',
-  rejected: 'red',
+/** 状态 → StatusTone */
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  in_review: 'warning',
+  published: 'success',
+  deprecated: 'neutral',
+  rejected: 'danger',
 };
 
 /** 状态 → 中文标签 */
@@ -63,6 +70,9 @@ const STATUS_LABEL: Record<string, string> = {
  * - 版本历史抽屉（Timeline）
  * - 候选版本抽屉（ApprovalPanel）
  * - 弃用操作（Popconfirm）
+ *
+ * Data Ocean Phase 4：用 ActionBar + DataTableShell + StatusMark + FocusDrawer 包裹，
+ * 保留 query / mutation / form / Timeline / 角色规则不变。
  */
 export function ParameterPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -158,11 +168,12 @@ export function ParameterPage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (status: string) => (
-        <Tag color={STATUS_COLOR[status] ?? 'default'}>
-          {STATUS_LABEL[status] ?? status}
-        </Tag>
+        <StatusMark
+          tone={STATUS_TONE[status] ?? 'neutral'}
+          label={STATUS_LABEL[status] ?? status}
+        />
       ),
     },
     {
@@ -185,7 +196,11 @@ export function ParameterPage(): JSX.Element {
       key: 'staleness_status',
       width: 100,
       render: (s: string | null) =>
-        s ? <Tag color="orange">{s}</Tag> : <Tag>正常</Tag>,
+        s ? (
+          <StatusMark tone="warning" label={s} />
+        ) : (
+          <StatusMark tone="success" label="正常" />
+        ),
     },
     {
       title: '操作',
@@ -234,37 +249,43 @@ export function ParameterPage(): JSX.Element {
             label: '参数列表',
             children: (
               <>
-                <Space style={{ marginBottom: 16 }}>
-                  <Button type="primary" onClick={handleCreate}>
-                    新建参数
-                  </Button>
-                  <Select
-                    placeholder="状态筛选"
-                    style={{ width: 140 }}
-                    value={statusFilter ?? '__all__'}
-                    onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-                    options={[
-                      { value: '__all__', label: '全部' },
-                      { value: 'draft', label: '草稿' },
-                      { value: 'in_review', label: '审核中' },
-                      { value: 'published', label: '已发布' },
-                      { value: 'deprecated', label: '已弃用' },
-                      { value: 'rejected', label: '已驳回' },
-                    ]}
-                  />
-                </Space>
-
-                <Table<ParameterSummary>
-                  columns={columns}
-                  dataSource={items}
-                  rowKey="id"
-                  loading={isLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
+                <ActionBar
+                  filters={
+                    <Select
+                      placeholder="状态筛选"
+                      style={{ width: 140 }}
+                      value={statusFilter ?? '__all__'}
+                      onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+                      options={[
+                        { value: '__all__', label: '全部' },
+                        { value: 'draft', label: '草稿' },
+                        { value: 'in_review', label: '审核中' },
+                        { value: 'published', label: '已发布' },
+                        { value: 'deprecated', label: '已弃用' },
+                        { value: 'rejected', label: '已驳回' },
+                      ]}
+                    />
+                  }
+                  actions={
+                    <Button type="primary" onClick={handleCreate}>
+                      新建参数
+                    </Button>
+                  }
                 />
 
+                <DataTableShell style={{ marginTop: 16 }}>
+                  <Table<ParameterSummary>
+                    columns={columns}
+                    dataSource={items}
+                    rowKey="id"
+                    loading={isLoading}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    size="middle"
+                  />
+                </DataTableShell>
+
                 {/* 创建参数 Modal */}
-                <Modal
+                <FocusModal
                   title="新建参数"
                   open={modalOpen}
                   onOk={handleSubmit}
@@ -307,10 +328,10 @@ export function ParameterPage(): JSX.Element {
                       <Input.TextArea placeholder="参数描述（可选）" rows={3} />
                     </Form.Item>
                   </Form>
-                </Modal>
+                </FocusModal>
 
                 {/* 版本历史 Drawer */}
-                <Drawer
+                <FocusDrawer
                   title="版本历史"
                   open={!!versionsDrawerParam}
                   onClose={() => setVersionsDrawerParam(null)}
@@ -335,19 +356,20 @@ export function ParameterPage(): JSX.Element {
                               <br />
                               <Text type="secondary">{v.created_at} by {v.created_by}</Text>
                               <br />
-                              <Tag color={STATUS_COLOR[v.status] ?? 'default'}>
-                                {STATUS_LABEL[v.status] ?? v.status}
-                              </Tag>
+                              <StatusMark
+                                tone={STATUS_TONE[v.status] ?? 'neutral'}
+                                label={STATUS_LABEL[v.status] ?? v.status}
+                              />
                             </div>
                           ),
                         }))}
                       />
                     </>
                   )}
-                </Drawer>
+                </FocusDrawer>
 
                 {/* 候选版本 Drawer */}
-                <Drawer
+                <FocusDrawer
                   title="候选版本审批"
                   open={!!candidatesDrawerParam}
                   onClose={() => setCandidatesDrawerParam(null)}
@@ -373,7 +395,7 @@ export function ParameterPage(): JSX.Element {
                       )}
                     </>
                   )}
-                </Drawer>
+                </FocusDrawer>
               </>
             ),
           },

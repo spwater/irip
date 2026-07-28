@@ -44,6 +44,8 @@ import {
   type IndustrialObject,
 } from '@/api/client';
 import type { UploadProps } from 'antd';
+import { ActionBar, DataTableShell, StatusMark, FocusDrawer } from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
 /** 把 UTC 时间字符串转成本地时间显示 */
 function fmtTime(v: string | null | undefined): string {
@@ -67,6 +69,13 @@ const STATUS_LABEL: Record<string, string> = {
   draft: '草稿',
   published: '已发布',
   deprecated: '已弃用',
+};
+
+/** 组件状态 → 语义色调（用于 StatusMark） */
+const COMPONENT_STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  published: 'success',
+  deprecated: 'neutral',
 };
 
 /** 比较函数 —— 摩登/古法由后端 engine 字段决定（llm=摩登, code=古法） */
@@ -737,7 +746,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   // ---- 表格列定义 ----
   const columns: ColumnsType<ComponentSummary> = [
     {
-      title: '名称',
+      title: '组件名称',
       key: 'name',
       width: 200,
       render: (_: unknown, record: ComponentSummary) => (
@@ -806,9 +815,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       key: 'status',
       width: 100,
       render: (v: string) => (
-        <Tag color={STATUS_COLOR[v] ?? 'default'}>
-          {STATUS_LABEL[v] ?? v}
-        </Tag>
+        <StatusMark tone={COMPONENT_STATUS_TONE[v] ?? 'neutral'} label={STATUS_LABEL[v] ?? v} />
       ),
     },
     {
@@ -896,47 +903,57 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   ];
 
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleOpenModal}>
-          新建接口
-        </Button>
-        <Select
-          placeholder="按单位筛选"
-          style={{ width: 180 }}
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          value={deptFilter}
-          onChange={(val: string | undefined) => setDeptFilter(val)}
-          options={deptOptions}
+    <section aria-label="数据接口目录">
+      <DataTableShell
+        title="数据接口"
+        description="管理数据提取组件及其版本，关联实验对象和设备。"
+        toolbar={
+          <ActionBar
+            filters={
+              <Select
+                placeholder="按单位筛选"
+                style={{ width: 180 }}
+                allowClear
+                showSearch
+                optionFilterProp="label"
+                value={deptFilter}
+                onChange={(val: string | undefined) => setDeptFilter(val)}
+                options={deptOptions}
+              />
+            }
+            actions={
+              <>
+                <Button type="primary" onClick={handleOpenModal}>新建接口</Button>
+                <Button
+                  type={activeTab === 'modern' ? 'primary' : 'default'}
+                  onClick={() => setActiveTab('modern')}
+                >
+                  活跃
+                </Button>
+                <Button
+                  type={activeTab === 'archived' ? 'primary' : 'default'}
+                  onClick={() => setActiveTab('archived')}
+                >
+                  归档
+                </Button>
+              </>
+            }
+          />
+        }
+      >
+        <Table<ComponentSummary>
+          columns={columns}
+          dataSource={currentItems}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+          size="middle"
+          onRow={(record) => ({
+            onClick: () => setDetailId(record.id),
+            style: { cursor: 'pointer' },
+          })}
         />
-        <Button
-          type={activeTab === 'modern' ? 'primary' : 'default'}
-          onClick={() => setActiveTab('modern')}
-        >
-          活跃
-        </Button>
-        <Button
-          type={activeTab === 'archived' ? 'primary' : 'default'}
-          onClick={() => setActiveTab('archived')}
-        >
-          归档
-        </Button>
-      </Space>
-
-      <Table<ComponentSummary>
-        columns={columns}
-        dataSource={currentItems}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="middle"
-        onRow={(record) => ({
-          onClick: () => setDetailId(record.id),
-          style: { cursor: 'pointer' },
-        })}
-      />
+      </DataTableShell>
 
       {/* 新建接口 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
       <Modal
@@ -986,7 +1003,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       </Modal>
 
       {/* 组件详情 Drawer */}
-      <Drawer
+      <FocusDrawer
         title="组件详情"
         open={!!detailId}
         onClose={() => setDetailId(null)}
@@ -1001,7 +1018,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         }
       >
         {detail && <ComponentDetailPanel detail={detail} detailId={detailId!} />}
-      </Drawer>
+      </FocusDrawer>
 
       {/* 编辑组件 Modal（双模式：默认高级模式，可切换到表单模式）*/}
       <Modal
@@ -1061,7 +1078,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           )}
         </Form>
       </Modal>
-    </div>
+    </section>
   );
 }
 

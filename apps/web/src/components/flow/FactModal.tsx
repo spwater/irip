@@ -7,9 +7,7 @@
 
 import {
   Button,
-  Card,
   Input,
-  Modal,
   Space,
   Typography,
   message,
@@ -25,6 +23,7 @@ import {
   type FlowNodeSchema,
   type FlowSummary,
 } from '@/api/client';
+import { FocusModal, DetailSection } from '@/components/ui';
 import { fmtTime } from './shared';
 
 const { Text } = Typography;
@@ -135,7 +134,7 @@ export function FactModal({
   const expObjDisplay = matchedObject ? `${matchedObject.display_name}（${matchedObject.code}）` : '-';
 
   return (
-    <Modal
+    <FocusModal
       title="执行结果数据"
       open={open}
       onCancel={onClose}
@@ -155,57 +154,66 @@ export function FactModal({
       width={720}
     >
       {/* 任务信息 */}
-      <Card size="small" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px' }}>
-          <div><Text type="secondary">任务名称：</Text><Text strong>{taskName}</Text></div>
-          <div><Text type="secondary">任务来源：</Text><Text>{deptName}</Text></div>
-          <div><Text type="secondary">实验对象：</Text><Text>{expObjDisplay}</Text></div>
-          <div><Text type="secondary">数据接口：</Text><Text>{compDisplay}</Text></div>
-          <div><Text type="secondary">创建时间：</Text><Text>{createdTime}</Text></div>
-        </div>
-      </Card>
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: '12px 24px',
+        padding: '12px 16px',
+        background: 'rgba(240, 250, 251, 0.72)',
+        borderRadius: 6,
+        marginBottom: 16,
+      }}>
+        <div><Text type="secondary">任务名称：</Text><Text strong>{taskName}</Text></div>
+        <div><Text type="secondary">任务来源：</Text><Text>{deptName}</Text></div>
+        <div><Text type="secondary">实验对象：</Text><Text>{expObjDisplay}</Text></div>
+        <div><Text type="secondary">数据接口：</Text><Text>{compDisplay}</Text></div>
+        <div><Text type="secondary">创建时间：</Text><Text>{createdTime}</Text></div>
+      </div>
+
       {/* metadata 区域 */}
-      <Text strong>Metadata</Text>
-      <Input.TextArea
-        value={headerText}
-        onChange={(e) => setHeaderText(e.target.value)}
-        rows={6}
-        style={{
-          fontFamily: 'monospace',
-          fontSize: 13,
-          marginTop: 4,
-          marginBottom: 16,
-        }}
-      />
+      <DetailSection title="Metadata" technical>
+        <Input.TextArea
+          value={headerText}
+          onChange={(e) => setHeaderText(e.target.value)}
+          rows={6}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 13,
+          }}
+        />
+      </DetailSection>
 
       {/* 全部数据区域 */}
-      <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
-        <Text strong>数据（可编辑）</Text>
-        <Button
-          size="small"
-          onClick={() => {
-            const blob = new Blob([dataText], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `run-${runId?.slice(0, 8)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
+      <DetailSection
+        title="数据（可编辑）"
+        technical
+        extra={
+          <Button
+            size="small"
+            onClick={() => {
+              const blob = new Blob([dataText], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `run-${runId?.slice(0, 8)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            导出 JSON
+          </Button>
+        }
+      >
+        <Input.TextArea
+          value={dataText}
+          onChange={(e) => setDataText(e.target.value)}
+          rows={16}
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 13,
           }}
-        >
-          导出 JSON
-        </Button>
-      </Space>
-      <Input.TextArea
-        value={dataText}
-        onChange={(e) => setDataText(e.target.value)}
-        rows={16}
-        style={{
-          fontFamily: 'monospace',
-          fontSize: 13,
-          marginTop: 4,
-        }}
-      />
-    </Modal>
+        />
+      </DetailSection>
+    </FocusModal>
   );
 }

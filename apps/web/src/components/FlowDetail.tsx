@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import {
   Button,
-  Card,
   Form,
   Input,
   Modal,
@@ -45,17 +44,26 @@ import {
   type FlowSummary,
   type IndustrialObject,
 } from '@/api/client';
+import { DataTableShell, OceanPanel, StatusMark, FeedbackState } from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 import { FactModal } from './flow/FactModal';
 import {
   fmtTime,
   parseManifest,
   RUN_STATUS_COLOR,
   RUN_STATUS_LABEL,
+  RUN_STATUS_TONE,
   STATUS_COLOR,
   STATUS_LABEL,
 } from './flow/shared';
 
 const { Text } = Typography;
+
+/** 流程状态 → 语义色调（用于 StatusMark） */
+const FLOW_STATUS_TONE: Record<string, StatusTone> = {
+  published: 'success',
+  deprecated: 'neutral',
+};
 
 export function FlowDetail(): JSX.Element {
   const queryClient = useQueryClient();
@@ -591,7 +599,7 @@ export function FlowDetail(): JSX.Element {
       key: 'status',
       width: 100,
       render: (v: string) => (
-        <Tag color={STATUS_COLOR[v] ?? 'default'}>{STATUS_LABEL[v] ?? v}</Tag>
+        <StatusMark tone={FLOW_STATUS_TONE[v] ?? 'neutral'} label={STATUS_LABEL[v] ?? v} />
       ),
     },
     {
@@ -690,243 +698,253 @@ export function FlowDetail(): JSX.Element {
 
   const canExecute = flow?.status === 'published' || !!flow?.latest_version;
 
+  // ---- 流程列表工具栏 ----
+  const flowToolbar = (
+    <Space>
+      <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+        新建任务
+      </Button>
+      <Button
+        type={showArchived ? 'default' : 'primary'}
+        onClick={() => setShowArchived(false)}
+      >
+        活跃
+      </Button>
+      <Button
+        type={showArchived ? 'primary' : 'default'}
+        onClick={() => setShowArchived(true)}
+      >
+        归档
+      </Button>
+      <Select
+        placeholder="所属单位筛选"
+        style={{ width: 200 }}
+        value={deptFilter ?? '__all__'}
+        onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+        options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+      />
+      <Select
+        placeholder="实验设备筛选"
+        style={{ width: 200 }}
+        value={equipFilter ?? '__all__'}
+        onChange={(val: string) => setEquipFilter(val === '__all__' ? undefined : val)}
+        options={[{ value: '__all__', label: '全部' }, ...equipOptions]}
+      />
+    </Space>
+  );
+
   return (
-    <div>
-      <Space style={{ marginBottom: 16, alignItems: 'center' }}>
-        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
-          新建任务
-        </Button>
-        <Button
-          type={showArchived ? 'default' : 'primary'}
-          onClick={() => setShowArchived(false)}
-        >
-          活跃
-        </Button>
-        <Button
-          type={showArchived ? 'primary' : 'default'}
-          onClick={() => setShowArchived(true)}
-        >
-          归档
-        </Button>
-        <Select
-          placeholder="所属单位筛选"
-          style={{ width: 200 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-        <Select
-          placeholder="实验设备筛选"
-          style={{ width: 200 }}
-          value={equipFilter ?? '__all__'}
-          onChange={(val: string) => setEquipFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...equipOptions]}
-        />
-      </Space>
-
-      {/* 任务列表 */}
-      <Card title="任务列表" style={{ marginBottom: 16 }}>
-        <Table<FlowSummary>
-          columns={flowColumns}
-          dataSource={flows}
-          rowKey="id"
-          loading={listLoading}
-          pagination={{
-            pageSize: flowPageSize,
-            showSizeChanger: true,
-            pageSizeOptions: [10, 20, 50],
-            onShowSizeChange: (_: number, size: number) => setFlowPageSize(size),
-          }}
-          size="middle"
-          onRow={(record) => ({
-            onClick: () => setSelectedFlowId(record.id),
-            style: { cursor: 'pointer' },
-          })}
-        />
-      </Card>
-
-      {/* 运行管理 */}
-      {selectedFlowId && (
-        <Card
-          title={
-            <Space>
-              <span>运行管理</span>
-              <Button
-                type="primary"
-                size="small"
-                disabled={!canExecute}
-                onClick={() => {
-                  runForm.resetFields();
-                  // 手动设置初始值（resetFields 后 initialValue 不生效，需要 setFieldsValue）
-                  if (runNode && runParamEntries.length > 0) {
-                    const initialValues: Record<string, unknown> = {};
-                    for (const [key, defaultVal] of runParamEntries) {
-                      const formKey = `${runNode.node_id}__${key}`;
-                      if (key === 'experimental_object_code') continue;
-                      initialValues[formKey] = defaultVal || '';
-                    }
-                    runForm.setFieldsValue(initialValues);
-                  }
-                  setRunModalOpen(true);
-                }}
-              >
-                执行
-              </Button>
-              <Button
-                size="small"
-                disabled={!canExecute}
-                onClick={() => {
-                  setBatchFiles([]);
-                  setBatchProgress(null);
-                  setBatchModalOpen(true);
-                }}
-              >
-                批量执行
-              </Button>
-            </Space>
-          }
-          style={{ marginBottom: 16 }}
-        >
-          {/* 运行列表 */}
-          <Table<FlowRunSummary>
-            columns={[
-              { title: '作业 ID', dataIndex: 'job_id', key: 'job_id', width: 280, ellipsis: true,
-                render: (v: string | null, record: FlowRunSummary) => {
-                  if (!v) return '-';
-                  const out = record.output_summary;
-                  const meta = (out?._metadata ?? {}) as Record<string, unknown>;
-                  const header = (meta.header ?? {}) as Record<string, unknown>;
-                  const previewText = Object.keys(header).length > 0
-                    ? JSON.stringify(header, null, 2)
-                    : '';
-                  return (
-                    <Tooltip
-                      title={previewText ? (
-                        <pre style={{ fontSize: 11, maxHeight: 300, overflow: 'auto', margin: 0 }}>
-                          {previewText}
-                        </pre>
-                      ) : '暂无输出数据'}
-                      placement="rightTop"
-                      overlayStyle={{ maxWidth: 500 }}
-                    >
-                      <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>
-                    </Tooltip>
-                  );
-                },
-              },
-              { title: '数据接口', key: 'component', width: 200,
-                render: () => {
-                  const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string; component_version?: string } | undefined;
-                  if (!node?.component_name) return <Text type="secondary">-</Text>;
-                  const comp = compMap.get(node.component_name);
-                  return (
-                    <Space size={4}>
-                      <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                        {comp?.display_name ?? node.component_name}
-                      </Tag>
-                      {node.component_version && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>v{node.component_version}</Text>
-                      )}
-                    </Space>
-                  );
-                },
-              },
-              { title: '状态', dataIndex: 'status', key: 'status', width: 100,
-                render: (s: string, record: FlowRunSummary) =>
-                  s === 'failed' && record.error_message
-                    ? <Tooltip title={record.error_message}><Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag></Tooltip>
-                    : <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
-              { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
-                render: (v: string) => fmtTime(v) },
-              { title: '耗时', key: 'duration', width: 100,
-                render: (_: unknown, record: FlowRunSummary) => {
-                  if (!record.started_at || !record.completed_at) return '-';
-                  const ms = new Date(record.completed_at).getTime() - new Date(record.started_at).getTime();
-                  if (ms < 1000) return `${ms}ms`;
-                  return `${(ms / 1000).toFixed(1)}s`;
-                },
-              },
-              { title: '已存', key: 'persisted', width: 60, align: 'center' as const,
-                render: (_: unknown, record: FlowRunSummary) =>
-                  record.persisted_as_fact
-                    ? <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 16 }}>&#10003;</span>
-                    : null,
-              },
-              { title: '操作', key: 'action', width: 200,
-                render: (_: unknown, record: FlowRunSummary) => (
-                  <Space size="small">
-                    {record.status === 'succeeded' && (
-                      <Button type="link" size="small"
-                        onClick={() => {
-                          setDataRunId(record.id);
-                          setFactModalOpen(true);
-                        }}
-                      >
-                        数据入库
-                      </Button>
-                    )}
-                    {record.status === 'pending' && (
-                      <Button type="link" size="small"
-                        loading={resumeMutation.isPending}
-                        onClick={() => resumeMutation.mutate(record.id)}>
-                        执行
-                      </Button>
-                    )}
-                    {record.status === 'failed' && (
-                      <Popconfirm title="确认重试？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
-                        <Button type="link" size="small">继续</Button>
-                      </Popconfirm>
-                    )}
-                    {activeRunId === record.id && record.status !== 'pending' && record.status !== 'succeeded' && record.status !== 'cancelled' && record.status !== 'failed' && (
-                      <>
-                        <Popconfirm title="确认继续？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
-                          <Button type="link" size="small">继续</Button>
-                        </Popconfirm>
-                        <Popconfirm title="确认取消？" onConfirm={() => cancelMutation.mutate(record.id)} okText="确定" cancelText="取消">
-                          <Button type="link" size="small" danger>取消</Button>
-                        </Popconfirm>
-                      </>
-                    )}
-                    <Popconfirm
-                      title="确定删除该运行记录？"
-                      description="将同时删除其所有节点执行记录，不可撤销"
-                      onConfirm={() => deleteRunMutation.mutate(record.id)}
-                      okText="删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
-                    >
-                      <Button type="link" size="small" danger loading={deleteRunMutation.isPending}>
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  </Space>
-                ),
-              },
-            ]}
-            dataSource={runs}
+    <div className="ocean-flow-workbench">
+      {/* ── 实验流程目录 ── */}
+      <section aria-label="实验流程目录" style={{ marginBottom: 16 }}>
+        <DataTableShell title="任务列表" toolbar={flowToolbar}>
+          <Table<FlowSummary>
+            columns={flowColumns}
+            dataSource={flows}
             rowKey="id"
-            loading={runsLoading}
+            loading={listLoading}
             pagination={{
-              pageSize: runPageSize,
+              pageSize: flowPageSize,
               showSizeChanger: true,
               pageSizeOptions: [10, 20, 50],
-              onShowSizeChange: (_: number, size: number) => setRunPageSize(size),
+              onShowSizeChange: (_: number, size: number) => setFlowPageSize(size),
             }}
-            size="small"
-            style={{ marginBottom: 16 }}
+            size="middle"
+            onRow={(record) => ({
+              onClick: () => setSelectedFlowId(record.id),
+              style: { cursor: 'pointer' },
+            })}
           />
+        </DataTableShell>
+      </section>
 
-          {/* 数据入库 Modal */}
-          <FactModal
-            runId={dataRunId}
-            flow={flow}
-            deptMap={deptMap}
-            compMap={compMap}
-            open={factModalOpen}
-            onClose={() => setFactModalOpen(false)}
-          />
-        </Card>
-      )}
+      {/* ── 流程运行状态 ── */}
+      <section aria-label="流程运行状态">
+        <OceanPanel level="strong" as="div">
+          {selectedFlowId ? (
+            <>
+              {/* 运行管理标题 + 操作按钮 */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <Text strong style={{ fontSize: 16 }}>运行管理</Text>
+                <Space>
+                  <Button
+                    type="primary"
+                    size="small"
+                    disabled={!canExecute}
+                    onClick={() => {
+                      runForm.resetFields();
+                      if (runNode && runParamEntries.length > 0) {
+                        const initialValues: Record<string, unknown> = {};
+                        for (const [key, defaultVal] of runParamEntries) {
+                          const formKey = `${runNode.node_id}__${key}`;
+                          if (key === 'experimental_object_code') continue;
+                          initialValues[formKey] = defaultVal || '';
+                        }
+                        runForm.setFieldsValue(initialValues);
+                      }
+                      setRunModalOpen(true);
+                    }}
+                  >
+                    执行
+                  </Button>
+                  <Button
+                    size="small"
+                    disabled={!canExecute}
+                    onClick={() => {
+                      setBatchFiles([]);
+                      setBatchProgress(null);
+                      setBatchModalOpen(true);
+                    }}
+                  >
+                    批量执行
+                  </Button>
+                </Space>
+              </div>
+
+              {/* 运行列表 */}
+              <Table<FlowRunSummary>
+                columns={[
+                  { title: '作业 ID', dataIndex: 'job_id', key: 'job_id', width: 280, ellipsis: true,
+                    render: (v: string | null, record: FlowRunSummary) => {
+                      if (!v) return '-';
+                      const out = record.output_summary;
+                      const meta = (out?._metadata ?? {}) as Record<string, unknown>;
+                      const header = (meta.header ?? {}) as Record<string, unknown>;
+                      const previewText = Object.keys(header).length > 0
+                        ? JSON.stringify(header, null, 2)
+                        : '';
+                      return (
+                        <Tooltip
+                          title={previewText ? (
+                            <pre style={{ fontSize: 11, maxHeight: 300, overflow: 'auto', margin: 0 }}>
+                              {previewText}
+                            </pre>
+                          ) : '暂无输出数据'}
+                          placement="rightTop"
+                          overlayStyle={{ maxWidth: 500 }}
+                        >
+                          <Text style={{ fontFamily: 'monospace', fontSize: 12 }}>{v}</Text>
+                        </Tooltip>
+                      );
+                    },
+                  },
+                  { title: '数据接口', key: 'component', width: 200,
+                    render: () => {
+                      const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string; component_version?: string } | undefined;
+                      if (!node?.component_name) return <Text type="secondary">-</Text>;
+                      const comp = compMap.get(node.component_name);
+                      return (
+                        <Space size={4}>
+                          <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                            {comp?.display_name ?? node.component_name}
+                          </Tag>
+                          {node.component_version && (
+                            <Text type="secondary" style={{ fontSize: 12 }}>v{node.component_version}</Text>
+                          )}
+                        </Space>
+                      );
+                    },
+                  },
+                  { title: '状态', dataIndex: 'status', key: 'status', width: 120,
+                    render: (s: string, record: FlowRunSummary) =>
+                      s === 'failed' && record.error_message
+                        ? <Tooltip title={record.error_message}><StatusMark tone={RUN_STATUS_TONE[s] ?? 'neutral'} label={RUN_STATUS_LABEL[s] ?? s} /></Tooltip>
+                        : <StatusMark tone={RUN_STATUS_TONE[s] ?? 'neutral'} label={RUN_STATUS_LABEL[s] ?? s} /> },
+                  { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
+                    render: (v: string) => fmtTime(v) },
+                  { title: '耗时', key: 'duration', width: 100,
+                    render: (_: unknown, record: FlowRunSummary) => {
+                      if (!record.started_at || !record.completed_at) return '-';
+                      const ms = new Date(record.completed_at).getTime() - new Date(record.started_at).getTime();
+                      if (ms < 1000) return `${ms}ms`;
+                      return `${(ms / 1000).toFixed(1)}s`;
+                    },
+                  },
+                  { title: '已存', key: 'persisted', width: 60, align: 'center' as const,
+                    render: (_: unknown, record: FlowRunSummary) =>
+                      record.persisted_as_fact
+                        ? <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 16 }}>&#10003;</span>
+                        : null,
+                  },
+                  { title: '操作', key: 'action', width: 200,
+                    render: (_: unknown, record: FlowRunSummary) => (
+                      <Space size="small">
+                        {record.status === 'succeeded' && (
+                          <Button type="link" size="small"
+                            onClick={() => {
+                              setDataRunId(record.id);
+                              setFactModalOpen(true);
+                            }}
+                          >
+                            数据入库
+                          </Button>
+                        )}
+                        {record.status === 'pending' && (
+                          <Button type="link" size="small"
+                            loading={resumeMutation.isPending}
+                            onClick={() => resumeMutation.mutate(record.id)}>
+                            执行
+                          </Button>
+                        )}
+                        {record.status === 'failed' && (
+                          <Popconfirm title="确认重试？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                            <Button type="link" size="small">继续</Button>
+                          </Popconfirm>
+                        )}
+                        {activeRunId === record.id && record.status !== 'pending' && record.status !== 'succeeded' && record.status !== 'cancelled' && record.status !== 'failed' && (
+                          <>
+                            <Popconfirm title="确认继续？" onConfirm={() => resumeMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                              <Button type="link" size="small">继续</Button>
+                            </Popconfirm>
+                            <Popconfirm title="确认取消？" onConfirm={() => cancelMutation.mutate(record.id)} okText="确定" cancelText="取消">
+                              <Button type="link" size="small" danger>取消</Button>
+                            </Popconfirm>
+                          </>
+                        )}
+                        <Popconfirm
+                          title="确定删除该运行记录？"
+                          description="将同时删除其所有节点执行记录，不可撤销"
+                          onConfirm={() => deleteRunMutation.mutate(record.id)}
+                          okText="删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true }}
+                        >
+                          <Button type="link" size="small" danger loading={deleteRunMutation.isPending}>
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      </Space>
+                    ),
+                  },
+                ]}
+                dataSource={runs}
+                rowKey="id"
+                loading={runsLoading}
+                pagination={{
+                  pageSize: runPageSize,
+                  showSizeChanger: true,
+                  pageSizeOptions: [10, 20, 50],
+                  onShowSizeChange: (_: number, size: number) => setRunPageSize(size),
+                }}
+                size="small"
+                style={{ marginBottom: 16 }}
+              />
+
+              {/* 数据入库 Modal */}
+              <FactModal
+                runId={dataRunId}
+                flow={flow}
+                deptMap={deptMap}
+                compMap={compMap}
+                open={factModalOpen}
+                onClose={() => setFactModalOpen(false)}
+              />
+            </>
+          ) : (
+            <FeedbackState kind="empty" title="请从任务列表选择一个流程查看运行状态" />
+          )}
+        </OceanPanel>
+      </section>
 
       {/* 新建任务 Modal */}
       <Modal

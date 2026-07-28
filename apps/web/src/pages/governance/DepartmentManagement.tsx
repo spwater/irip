@@ -9,7 +9,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   message,
@@ -28,6 +27,12 @@ import {
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
+import {
+  ActionBar,
+  DataTableShell,
+  FeedbackState,
+  StatusMark,
+} from '@/components/ui';
 
 /**
  * 树形节点类型：DepartmentListItem + children 数组。
@@ -47,6 +52,9 @@ type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]
  * - Popconfirm 启用/禁用确认
  * - 禁用行灰色标签
  * - 成员管理抽屉（P1，MemberDrawer）
+ *
+ * Data Ocean Phase 2：使用 DataTableShell + ActionBar + StatusMark + FeedbackState
+ * 包装视觉层，保留所有 query/mutation/form/callback/预设行为不变。
  */
 
 /**
@@ -311,12 +319,12 @@ export function DepartmentManagement({
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (status: string) =>
-        status === 'active' ? (
-          <Tag color="green">启用</Tag>
-        ) : (
-          <Tag color="default" style={{ opacity: 0.5 }}>禁用</Tag>
-        ),
+      render: (status: string) => (
+        <StatusMark
+          tone={status === 'active' ? 'success' : 'neutral'}
+          label={status === 'active' ? '启用' : '禁用'}
+        />
+      ),
     },
     {
       title: '成员数',
@@ -395,37 +403,49 @@ export function DepartmentManagement({
   ];
 
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate} disabled={!isAdmin}>
-          新建组织机构
-        </Button>
-        <Select
-          placeholder="状态筛选"
-          style={{ width: 140 }}
-          value={statusFilter ?? '__all__'}
-          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'active', label: '启用' },
-            { value: 'disabled', label: '禁用' },
-          ]}
+    <section role="region" aria-label="组织机构目录">
+      <DataTableShell
+        title="组织机构目录"
+        toolbar={
+          <ActionBar
+            filters={
+              <Select
+                placeholder="状态筛选"
+                style={{ width: 140 }}
+                value={statusFilter ?? '__all__'}
+                onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+                options={[
+                  { value: '__all__', label: '全部' },
+                  { value: 'active', label: '启用' },
+                  { value: 'disabled', label: '禁用' },
+                ]}
+              />
+            }
+            actions={
+              <Button type="primary" onClick={handleCreate} disabled={!isAdmin}>
+                新建组织机构
+              </Button>
+            }
+          />
+        }
+      >
+        <Table<DepartmentTreeNode>
+          columns={columns}
+          dataSource={treeData}
+          rowKey="id"
+          loading={isLoading}
+          pagination={false}
+          size="middle"
+          scroll={{ x: 1280, y: 600 }}
+          expandable={{
+            childrenColumnName: 'children',
+            defaultExpandAllRows: true,
+          }}
+          locale={{
+            emptyText: <FeedbackState kind="empty" title="暂无组织机构" />,
+          }}
         />
-      </Space>
-
-      <Table<DepartmentTreeNode>
-        columns={columns}
-        dataSource={treeData}
-        rowKey="id"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-        scroll={{ y: 600 }}
-        expandable={{
-          childrenColumnName: 'children',
-          defaultExpandAllRows: true,
-        }}
-      />
+      </DataTableShell>
 
       <Modal
         title={editingDept ? '编辑组织机构' : '新建组织机构'}
@@ -541,7 +561,7 @@ export function DepartmentManagement({
           onClose={() => setMemberDrawerDept(null)}
         />
       )}
-    </div>
+    </section>
   );
 }
 

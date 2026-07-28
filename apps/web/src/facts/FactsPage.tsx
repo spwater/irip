@@ -22,6 +22,7 @@ import {
   apiSearchFactsByData,
   type FactSummary,
 } from '@/api/client';
+import { ActionBar, DataTableShell, StatusMark, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -155,6 +156,8 @@ export function FactsPage(): JSX.Element {
   const {
     data,
     isLoading,
+    isError,
+    refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
@@ -195,6 +198,29 @@ export function FactsPage(): JSX.Element {
   const handleSearch = (val: string): void => {
     setSearchQuery(val);
   };
+
+  // ---- 工具栏 ----
+  const toolbar = (
+    <ActionBar
+      filters={
+        <>
+          <Input.Search
+            placeholder="搜索事实..."
+            allowClear
+            style={{ width: 300 }}
+            onSearch={handleSearch}
+          />
+          <Select
+            placeholder="实验室筛选"
+            style={{ width: 200 }}
+            value={deptFilter ?? '__all__'}
+            onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+            options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+          />
+        </>
+      }
+    />
+  );
 
   // ---- 表格列定义 ----
   const columns: ColumnsType<TreeNode> = [
@@ -250,7 +276,14 @@ export function FactsPage(): JSX.Element {
       key: 'fact_type',
       width: 130,
       render: (t: string | undefined, record: TreeNode) => {
-        if (record.isGroup) return <Text type="secondary">{record.totalCount} 个样品</Text>;
+        if (record.isGroup) {
+          return (
+            <StatusMark
+              tone="info"
+              label={`${record.totalCount ?? 0} 条记录`}
+            />
+          );
+        }
         return t ? <Tag color="blue">{t}</Tag> : '-';
       },
     },
@@ -307,55 +340,83 @@ export function FactsPage(): JSX.Element {
     },
   ];
 
+  // ---- 渲染表格主体 ----
+  const tableContent: React.ReactNode = (() => {
+    if (isLoading) {
+      return <FeedbackState kind="loading" title="正在加载实验记录..." rows={5} />;
+    }
+    if (isError && allItems.length === 0) {
+      return (
+        <FeedbackState
+          kind="error"
+          title="实验记录加载失败"
+          onRetry={() => void refetch()}
+        />
+      );
+    }
+    if (treeData.length === 0) {
+      return (
+        <FeedbackState
+          kind="empty"
+          title={searchQuery ? '搜索无结果' : '暂无实验记录'}
+          description={searchQuery ? '尝试更换搜索关键词或清除搜索条件' : undefined}
+        />
+      );
+    }
+    return (
+      <>
+        {isError && allItems.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <FeedbackState
+              kind="partial"
+              title="部分数据加载失败"
+              description="已显示已加载的记录，可点击重试获取完整数据。"
+              onRetry={() => void refetch()}
+            />
+          </div>
+        )}
+        <Table<TreeNode>
+          columns={columns}
+          dataSource={treeData}
+          rowKey="key"
+          pagination={false}
+          size="middle"
+          expandable={{
+            defaultExpandAllRows: true,
+            rowExpandable: (record) => record.isGroup,
+          }}
+          onRow={(record) => ({
+            onClick: () => {
+              if (!record.isGroup && record.fact_id) {
+                void navigate({ to: `/facts/${record.fact_id}` });
+              }
+            },
+            style: record.isGroup ? {} : { cursor: 'pointer' },
+          })}
+        />
+        {hasNextPage && (
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <Button
+              loading={isFetchingNextPage}
+              onClick={() => void fetchNextPage()}
+            >
+              加载更多
+            </Button>
+          </div>
+        )}
+      </>
+    );
+  })();
+
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Input.Search
-          placeholder="搜索事实..."
-          allowClear
-          style={{ width: 300 }}
-          onSearch={handleSearch}
-        />
-        <Select
-          placeholder="实验室筛选"
-          style={{ width: 200 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-      </Space>
-
-      <Table<TreeNode>
-        columns={columns}
-        dataSource={treeData}
-        rowKey="key"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-        expandable={{
-          defaultExpandAllRows: true,
-          rowExpandable: (record) => record.isGroup,
-        }}
-        onRow={(record) => ({
-          onClick: () => {
-            if (!record.isGroup && record.fact_id) {
-              void navigate({ to: `/facts/${record.fact_id}` });
-            }
-          },
-          style: record.isGroup ? {} : { cursor: 'pointer' },
-        })}
-      />
-
-      {hasNextPage && (
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <Button
-            loading={isFetchingNextPage}
-            onClick={() => void fetchNextPage()}
-          >
-            加载更多
-          </Button>
-        </div>
-      )}
-    </div>
+    <section aria-label="实验记录目录">
+      <DataTableShell
+        title="实验记录"
+        description="按实验任务组织事实记录；组计数来自接口 group_counts。"
+        toolbar={toolbar}
+      >
+        {tableContent}
+      </DataTableShell>
+    </section>
   );
 }

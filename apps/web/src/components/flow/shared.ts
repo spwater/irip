@@ -4,6 +4,8 @@
  * 从 FlowDetail.tsx 提取，供主组件和子组件共用。
  */
 
+import type { StatusTone } from '@/theme/tokens';
+
 // ---- 状态映射 ----
 
 /** 流程状态 → 颜色 */
@@ -36,6 +38,16 @@ export const RUN_STATUS_LABEL: Record<string, string> = {
   failed: '失败',
   cancelled: '已取消',
   paused: '已暂停',
+};
+
+/** 运行状态 → 语义色调（用于 StatusMark） */
+export const RUN_STATUS_TONE: Record<string, StatusTone> = {
+  pending: 'neutral',
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
+  cancelled: 'neutral',
+  paused: 'warning',
 };
 
 // ---- 工具函数 ----

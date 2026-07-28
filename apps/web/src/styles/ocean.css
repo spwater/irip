@@ -456,6 +456,208 @@
   margin-bottom: 16px;
 }
 
+/* ── 页面级容器 ── */
+.ocean-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── 看板页面 ── */
+.ocean-workbench__hero-panel {
+  margin-bottom: 0;
+}
+
+.ocean-workbench__metrics {
+  margin-bottom: 0;
+}
+
+.ocean-workbench__section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #102f44;
+  margin-bottom: 12px;
+}
+
+.ocean-workbench__jobs {
+  margin-bottom: 0;
+}
+
+/* ── AI 助手工作台 ── */
+.ocean-assistant-workbench {
+  gap: 16px;
+}
+
+/* 消息气泡 — 语义化替换硬编码颜色 */
+.ocean-msg-bubble--user {
+  background: rgba(22, 134, 174, 0.10);
+  border: 1px solid rgba(22, 134, 174, 0.24);
+}
+
+.ocean-msg-bubble--assistant {
+  background: rgba(20, 118, 94, 0.08);
+  border: 1px solid rgba(20, 118, 94, 0.20);
+}
+
+/* Markdown 内容语义化样式 — 替换硬编码白色/灰色 */
+.ocean-md-pre {
+  background: rgba(240, 250, 251, 0.72);
+  padding: 8px 12px;
+  border-radius: 6px;
+  overflow: auto;
+  margin: 6px 0;
+  font-size: 13px;
+  font-family: var(--ocean-font-mono);
+  border: 1px solid rgba(24, 102, 133, 0.16);
+}
+
+.ocean-md-inline-code {
+  background: rgba(240, 250, 251, 0.72);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: var(--ocean-font-mono);
+}
+
+.ocean-md-h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 12px 0 8px;
+}
+
+.ocean-md-h2 {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 10px 0 6px;
+}
+
+.ocean-md-h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 8px 0 4px;
+}
+
+.ocean-md-table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.ocean-md-th {
+  border: 1px solid rgba(24, 102, 133, 0.16);
+  padding: 6px 10px;
+  background: rgba(240, 250, 251, 0.72);
+  font-weight: 600;
+  text-align: left;
+}
+
+.ocean-md-td {
+  border: 1px solid rgba(24, 102, 133, 0.16);
+  padding: 6px 10px;
+}
+
+.ocean-md-quote {
+  border-left: 3px solid #6FA9BE;
+  margin: 6px 0;
+  padding: 4px 12px;
+  color: #486B7E;
+  background: rgba(240, 250, 251, 0.50);
+}
+
+.ocean-md-li {
+  margin: 2px 0;
+  line-height: 1.7;
+  padding-left: 4px;
+}
+
+.ocean-md-ul {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.ocean-md-hr {
+  border: none;
+  border-top: 1px solid rgba(24, 102, 133, 0.16);
+  margin: 12px 0;
+}
+
+.ocean-md-p {
+  margin: 4px 0;
+  line-height: 1.7;
+}
+
+/* ECharts 图表容器 */
+.ocean-chart-container {
+  border-radius: 6px;
+}
+
+.ocean-workbench__health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ocean-workbench__health-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.ocean-workbench__links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── 实验室建设链路轨道 ── */
+.ocean-construction-track {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.ocean-construction-track > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  color: #6f8d9c;
+  white-space: nowrap;
+}
+
+.ocean-construction-track > li[data-active='true'] {
+  font-weight: 600;
+  color: #102f44;
+  background: rgba(22, 134, 174, 0.08);
+  border-radius: 4px;
+}
+
+.ocean-construction-track > li > span[aria-hidden='true'] {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #486b7e;
+}
+
+.ocean-construction-track > li[data-active='true'] > span[aria-hidden='true'] {
+  color: #1686ae;
+}
+
+.ocean-construction-track > li:not(:last-child)::after {
+  content: '→';
+  margin-left: 16px;
+  color: rgba(24, 102, 133, 0.24);
+  font-size: 14px;
+}
+
 /* ── 响应式 — 900px 以下隐藏登录装饰区，单列居中 ── */
 @media (max-width: 900px) {
   .ocean-login {

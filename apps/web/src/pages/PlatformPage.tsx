@@ -1,11 +1,10 @@
-import { Tabs, Typography } from 'antd';
+import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/assistant/AssistantPage';
 import { ParameterPage } from '@/parameters/ParameterPage';
 import { AIToolsPage } from '@/ai_tools/AIToolsPage';
 import { useAuthStore } from '@/auth/AuthProvider';
-
-const { Title } = Typography;
+import { PageIntro, OceanPanel } from '@/components/ui';
 
 const VALID_TABS = ['assistant', 'parameters', 'ai-tools'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
@@ -16,6 +15,9 @@ type PlatformTab = (typeof VALID_TABS)[number];
  * 三个 Tab：AI 助手 / 数据抽取 / AI 工具管理。
  * "AI 工具管理" Tab 仅对 platform_administrator 角色可见（T-05），
  * 后端端点另由 system:manage 权限守卫。
+ *
+ * Data Ocean Phase 4：用 PageIntro + OceanPanel 包裹 Tabs，
+ * 保留 VALID_TABS、search validation、non-admin fallback 行为不变。
  */
 export function PlatformPage(): JSX.Element {
   const navigate = useNavigate();
@@ -59,13 +61,14 @@ export function PlatformPage(): JSX.Element {
   ];
 
   return (
-    <div>
-      <Title level={2}>平台应用</Title>
-      <Tabs
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={items}
-      />
-    </div>
+    <PageIntro index="PLATFORM" title="平台应用" description="AI 助手、数据抽取与工具治理">
+      <OceanPanel level="strong">
+        <Tabs
+          activeKey={activeTab}
+          onChange={handleTabChange}
+          items={items}
+        />
+      </OceanPanel>
+    </PageIntro>
   );
 }

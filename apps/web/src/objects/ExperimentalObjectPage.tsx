@@ -31,6 +31,12 @@ import {
   extractApiError,
   type IndustrialObject,
 } from '@/api/client';
+import {
+  ActionBar,
+  DataTableShell,
+  FeedbackState,
+  StatusMark,
+} from '@/components/ui';
 
 /**
  * 实验对象管理页面（要素管理第 3 个 Tab）
@@ -44,6 +50,9 @@ import {
  * - 顶部"新建实验对象"按钮 + 类型筛选
  * - Modal + Form 创建/编辑弹窗（编码与类型创建后锁定）
  * - Popconfirm 启用/禁用确认
+ *
+ * Data Ocean Phase 2：使用 ActionBar + DataTableShell + StatusMark + FeedbackState
+ * 包装视觉层，保留所有 query/mutation/form/callback/预设行为不变。
  */
 
 /** 实验对象类型选项 */
@@ -61,18 +70,6 @@ const TYPE_LABEL: Record<string, string> = {
 
 /** 列表查询用的类型过滤 */
 const LIST_TYPE_FILTER = 'material,signal';
-
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  active: 'green',
-  inactive: 'default',
-};
-
-/** 状态 → 中文标签 */
-const STATUS_LABEL: Record<string, string> = {
-  active: '启用',
-  inactive: '禁用',
-};
 
 export function ExperimentalObjectPage({
   presetEquipmentId,
@@ -448,9 +445,10 @@ export function ExperimentalObjectPage({
       key: 'status',
       width: 80,
       render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>
-          {STATUS_LABEL[s] ?? s}
-        </Tag>
+        <StatusMark
+          tone={s === 'active' ? 'success' : 'neutral'}
+          label={s === 'active' ? '启用' : '禁用'}
+        />
       ),
     },
     {
@@ -499,53 +497,70 @@ export function ExperimentalObjectPage({
   ];
 
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate}>
-          新建实验对象
-        </Button>
-        <Button onClick={() => setBatchOpen(true)}>
-          批量导入
-        </Button>
-        <Select
-          placeholder="类型筛选"
-          style={{ width: 140 }}
-          value={typeFilter ?? '__all__'}
-          onChange={(val: string) => setTypeFilter(val === '__all__' ? undefined : val)}
-          options={EXP_OBJECT_TYPES}
-        />
-        <Select
-          placeholder="关联单位筛选"
-          style={{ width: 160 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => {
-            const v = val === '__all__' ? undefined : val;
-            setDeptFilter(v);
-            if (v) setEquipmentFilter(undefined);
+    <section role="region" aria-label="实验对象目录">
+      <DataTableShell
+        title="实验对象目录"
+        toolbar={
+          <ActionBar
+            filters={
+              <>
+                <Select
+                  placeholder="类型筛选"
+                  style={{ width: 140 }}
+                  value={typeFilter ?? '__all__'}
+                  onChange={(val: string) => setTypeFilter(val === '__all__' ? undefined : val)}
+                  options={EXP_OBJECT_TYPES}
+                />
+                <Select
+                  placeholder="关联单位筛选"
+                  style={{ width: 160 }}
+                  value={deptFilter ?? '__all__'}
+                  onChange={(val: string) => {
+                    const v = val === '__all__' ? undefined : val;
+                    setDeptFilter(v);
+                    if (v) setEquipmentFilter(undefined);
+                  }}
+                  options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+                />
+                <Select
+                  placeholder="关联设备筛选"
+                  style={{ width: 200 }}
+                  value={equipmentFilter ?? '__all__'}
+                  onChange={(val: string) => {
+                    const v = val === '__all__' ? undefined : val;
+                    setEquipmentFilter(v);
+                    if (v) setDeptFilter(undefined);
+                  }}
+                  options={[{ value: '__all__', label: '全部' }, ...equipmentOptions]}
+                />
+              </>
+            }
+            actions={
+              <>
+                <Button type="primary" onClick={handleCreate}>
+                  新建实验对象
+                </Button>
+                <Button onClick={() => setBatchOpen(true)}>
+                  批量导入
+                </Button>
+              </>
+            }
+          />
+        }
+      >
+        <Table<IndustrialObject>
+          columns={columns}
+          dataSource={filteredItems}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+          size="middle"
+          scroll={{ x: 1280 }}
+          locale={{
+            emptyText: <FeedbackState kind="empty" title="暂无实验对象" />,
           }}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
         />
-        <Select
-          placeholder="关联设备筛选"
-          style={{ width: 200 }}
-          value={equipmentFilter ?? '__all__'}
-          onChange={(val: string) => {
-            const v = val === '__all__' ? undefined : val;
-            setEquipmentFilter(v);
-            if (v) setDeptFilter(undefined);
-          }}
-          options={[{ value: '__all__', label: '全部' }, ...equipmentOptions]}
-        />
-      </Space>
-
-      <Table<IndustrialObject>
-        columns={columns}
-        dataSource={filteredItems}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="middle"
-      />
+      </DataTableShell>
 
       {/* 创建/编辑 Modal */}
       <Modal
@@ -697,6 +712,6 @@ export function ExperimentalObjectPage({
           </Text>
         </div>
       </Modal>
-    </div>
+    </section>
   );
 }

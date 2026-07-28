@@ -1,10 +1,9 @@
-import { Tabs, Typography } from 'antd';
+import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { FlowDetail } from '@/components/FlowDetail';
 import { FactsPage } from '@/facts/FactsPage';
 import { ComponentsPage } from '@/components/ComponentsPage';
-
-const { Title } = Typography;
+import { PageIntro, OceanPanel } from '@/components/ui';
 
 /** 合法的 Tab key 集合。 */
 const VALID_TABS = ['flows', 'facts', 'components'] as const;
@@ -33,29 +32,35 @@ export function LabOpsPage(): JSX.Element {
   };
 
   return (
-    <div>
-      <Title level={2}>实验室运营</Title>
-      <Tabs
-        activeKey={activeTab}
-        onChange={handleTabChange}
-        items={[
-          {
-            key: 'flows',
-            label: '实验执行',
-            children: <FlowDetail />,
-          },
-          {
-            key: 'facts',
-            label: '实验记录',
-            children: <FactsPage />,
-          },
-          {
-            key: 'components',
-            label: '数据接口',
-            children: <ComponentsPage prefillObject={prefillObject} />,
-          },
-        ]}
+    <div className="ocean-page ocean-lab-ops">
+      <PageIntro
+        index="IRIP / 03"
+        title="实验室运营"
+        description="执行实验流程，记录事实并维护数据接口。"
       />
+      <OceanPanel level="strong">
+        <Tabs
+          activeKey={activeTab}
+          onChange={handleTabChange}
+          items={[
+            {
+              key: 'flows',
+              label: '实验执行',
+              children: <FlowDetail />,
+            },
+            {
+              key: 'facts',
+              label: '实验记录',
+              children: <FactsPage />,
+            },
+            {
+              key: 'components',
+              label: '数据接口',
+              children: <ComponentsPage prefillObject={prefillObject} />,
+            },
+          ]}
+        />
+      </OceanPanel>
     </div>
   );
 }

@@ -4,16 +4,6 @@ import type { ToolCallSummary } from '@/api/client';
 const { Text, Paragraph } = Typography;
 
 /**
- * 工具状态 → 颜色映射
- */
-const STATUS_COLOR: Record<string, string> = {
-  executed: 'green',
-  candidate: 'orange',
-  rejected: 'red',
-  forbidden: 'volcano',
-};
-
-/**
  * 工具状态 → 中文标签
  */
 const STATUS_LABEL: Record<string, string> = {
@@ -24,10 +14,23 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 /**
+ * 工具状态 → Tag 颜色
+ */
+const STATUS_COLOR: Record<string, string> = {
+  executed: 'green',
+  candidate: 'orange',
+  rejected: 'red',
+  forbidden: 'volcano',
+};
+
+/**
  * 工具调用轨迹组件
  *
  * 展示 AI 调用了哪些工具、传入了什么参数、结果摘要与执行状态。
  * 使用 Collapse 折叠面板，每项一个工具调用。
+ *
+ * Data Ocean Phase 4：用语义 CSS class 替换硬编码灰色背景，
+ * 保留工具数据、状态映射、折叠行为不变。
  */
 export function ToolTrace({
   toolCalls,
@@ -59,16 +62,7 @@ export function ToolTrace({
           参数：
         </Text>
         <Paragraph style={{ margin: '4px 0 0 0' }}>
-          <pre
-            style={{
-              margin: 0,
-              padding: 8,
-              background: '#f5f5f5',
-              borderRadius: 4,
-              fontSize: 12,
-              overflowX: 'auto',
-            }}
-          >
+          <pre className="ocean-md-pre">
             {JSON.stringify(tc.args, null, 2)}
           </pre>
         </Paragraph>

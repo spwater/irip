@@ -47,6 +47,9 @@ const { TextArea } = Input;
  * 1. 进入页面直接可对话，首次发言自动创建对话，标题根据首条消息自动生成
  * 2. 对话消息持久化，刷新页面后历史消息保留
  * 3. 用户消息立即显示，AI 回答逐字流式输出
+ *
+ * Data Ocean Phase 4：建立稳定的命名 region（对话列表 / 消息线程 / 消息输入 / 实验事实选择），
+ * 保留所有 query / mutation / streaming / fact 逻辑不变。
  */
 export function AssistantPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -354,329 +357,333 @@ export function AssistantPage(): JSX.Element {
   }, [messagesData, isSending, streamingAnswer]);
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 140px)' }}>
+    <div className="ocean-assistant-workbench" style={{ display: 'flex', gap: 16, height: 'calc(100vh - 140px)' }}>
       <style>{`
         .ant-list-item:hover .conv-actions {
           opacity: 1 !important;
         }
       `}</style>
-      {/* ---- 左侧：对话列表 ---- */}
-      <Card
-        size="small"
-        style={{ width: 260, display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{ padding: 0, flex: 1, overflow: 'auto' }}
-        title={
-          <Space size={4}>
-            <Title level={5} style={{ margin: 0 }}>
-              {showArchived ? '归档对话' : '对话列表'}
-            </Title>
-            <Button
-              type="link"
-              size="small"
-              style={{ padding: '0 4px', fontSize: 12 }}
-              onClick={() => setShowArchived(!showArchived)}
-            >
-              {showArchived ? '返回' : '归档'}
-            </Button>
-          </Space>
-        }
-        extra={
-          showArchived ? null : (
-          <Button
-            type="primary"
-            size="small"
-            onClick={async () => {
-              try {
-                const conv = await apiCreateConversation({
-                  title: '',
-                  provider_mode: 'openai_compatible',
-                });
-                setSelectedConvId(conv.id);
-                setLocalMessages([]);
-                void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-              } catch (err) {
-                message.error(extractApiError(err));
-              }
-            }}
-          >
-            新建
-          </Button>
-          )
-        }
-      >
-        <List
-          dataSource={conversationList}
-          renderItem={(conv: ConversationSummary) => (
-            <List.Item
-              style={{
-                padding: '8px 12px',
-                cursor: 'pointer',
-                position: 'relative',
-                background: selectedConvId === conv.id ? '#e6f4ff' : 'transparent',
-                transition: 'background 0.2s',
-              }}
-              onClick={() => setSelectedConvId(conv.id)}
-            >
-              <List.Item.Meta
-                title={
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontWeight: selectedConvId === conv.id ? 600 : 400, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                      {conv.title || '新对话'}
-                    </span>
-                    <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 4 }}>
-                      {conv.pinned && <Tag color='gold' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>置顶</Tag>}
-                      {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>归档</Tag>}
-                    </div>
-                  </div>
-                }
-              />
-              {/* hover 悬浮操作按钮 */}
-              <div
-                className="conv-actions"
-                style={{
-                  position: 'absolute',
-                  right: 6,
-                  top: 6,
-                  display: 'flex',
-                  gap: 2,
-                  opacity: 0,
-                  transition: 'opacity 0.2s',
-                  background: selectedConvId === conv.id ? '#e6f4ff' : '#fff',
-                  padding: '2px 4px',
-                  borderRadius: 4,
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                }}
+      {/* ---- 左侧：对话列表（命名 region） ---- */}
+      <aside className="ocean-assistant-list" aria-label="对话列表">
+        <Card
+          size="small"
+          style={{ width: 260, display: 'flex', flexDirection: 'column' }}
+          bodyStyle={{ padding: 0, flex: 1, overflow: 'auto' }}
+          title={
+            <Space size={4}>
+              <Title level={5} style={{ margin: 0 }}>
+                {showArchived ? '归档对话' : '对话列表'}
+              </Title>
+              <Button
+                type="link"
+                size="small"
+                style={{ padding: '0 4px', fontSize: 12 }}
+                onClick={() => setShowArchived(!showArchived)}
               >
-                <Button
-                  size="small"
-                  type="text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    apiTogglePin(conv.id).then(() => {
-                      void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-                    }).catch((err) => message.error(extractApiError(err)));
+                {showArchived ? '返回' : '归档'}
+              </Button>
+            </Space>
+          }
+          extra={
+            showArchived ? null : (
+            <Button
+              type="primary"
+              size="small"
+              onClick={async () => {
+                try {
+                  const conv = await apiCreateConversation({
+                    title: '',
+                    provider_mode: 'openai_compatible',
+                  });
+                  setSelectedConvId(conv.id);
+                  setLocalMessages([]);
+                  void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+                } catch (err) {
+                  message.error(extractApiError(err));
+                }
+              }}
+            >
+              新建
+            </Button>
+            )
+          }
+        >
+          <List
+            dataSource={conversationList}
+            renderItem={(conv: ConversationSummary) => (
+              <List.Item
+                style={{
+                  padding: '8px 12px',
+                  cursor: 'pointer',
+                  position: 'relative',
+                  background: selectedConvId === conv.id ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
+                  transition: 'background 0.2s',
+                }}
+                onClick={() => setSelectedConvId(conv.id)}
+              >
+                <List.Item.Meta
+                  title={
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: selectedConvId === conv.id ? 600 : 400, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {conv.title || '新对话'}
+                      </span>
+                      <div style={{ display: 'flex', gap: 2, flexShrink: 0, marginLeft: 4 }}>
+                        {conv.pinned && <Tag color='gold' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>置顶</Tag>}
+                        {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>归档</Tag>}
+                      </div>
+                    </div>
+                  }
+                />
+                {/* hover 悬浮操作按钮 */}
+                <div
+                  className="conv-actions"
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    top: 6,
+                    display: 'flex',
+                    gap: 2,
+                    opacity: 0,
+                    transition: 'opacity 0.2s',
+                    background: selectedConvId === conv.id ? 'rgba(232, 246, 249, 0.90)' : 'rgba(240, 250, 251, 0.72)',
+                    padding: '2px 4px',
+                    borderRadius: 4,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
                   }}
-                  style={{ padding: '0 4px', fontSize: 12 }}
                 >
-                  {conv.pinned ? '解除置顶' : '置顶'}
-                </Button>
-                <Button
-                  size="small"
-                  type="text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    apiToggleArchive(conv.id).then(() => {
-                      void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-                      if (selectedConvId === conv.id) {
-                        setSelectedConvId(null);
-                      }
-                    }).catch((err) => message.error(extractApiError(err)));
-                  }}
-                  style={{ padding: '0 4px', fontSize: 12 }}
-                >
-                  {conv.archived ? '取消归档' : '归档'}
-                </Button>
-                {showArchived && (
-                  <Popconfirm
-                    title="确认永久删除？"
-                    description="删除后无法恢复该对话及其所有消息。"
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true }}
-                    onConfirm={() => {
-                      apiDeleteConversation(conv.id).then(() => {
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      apiTogglePin(conv.id).then(() => {
+                        void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+                      }).catch((err) => message.error(extractApiError(err)));
+                    }}
+                    style={{ padding: '0 4px', fontSize: 12 }}
+                  >
+                    {conv.pinned ? '解除置顶' : '置顶'}
+                  </Button>
+                  <Button
+                    size="small"
+                    type="text"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      apiToggleArchive(conv.id).then(() => {
                         void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
                         if (selectedConvId === conv.id) {
                           setSelectedConvId(null);
                         }
-                        message.success('对话已删除');
                       }).catch((err) => message.error(extractApiError(err)));
                     }}
+                    style={{ padding: '0 4px', fontSize: 12 }}
                   >
-                    <Button
-                      size="small"
-                      type="text"
-                      danger
-                      onClick={(e) => e.stopPropagation()}
-                      style={{ padding: '0 4px', fontSize: 12, color: '#ff4d4f' }}
+                    {conv.archived ? '取消归档' : '归档'}
+                  </Button>
+                  {showArchived && (
+                    <Popconfirm
+                      title="确认永久删除？"
+                      description="删除后无法恢复该对话及其所有消息。"
+                      okText="删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => {
+                        apiDeleteConversation(conv.id).then(() => {
+                          void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+                          if (selectedConvId === conv.id) {
+                            setSelectedConvId(null);
+                          }
+                          message.success('对话已删除');
+                        }).catch((err) => message.error(extractApiError(err)));
+                      }}
                     >
-                      删除
-                    </Button>
-                  </Popconfirm>
-                )}
-              </div>
-            </List.Item>
-          )}
-          locale={{ emptyText: showArchived ? '暂无归档对话' : '暂无对话，直接输入消息即可开始' }}
-        />
-      </Card>
-
-      {/* ---- 右侧：对话区域 ---- */}
-      <Card
-        size="small"
-        style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{
-          padding: 16,
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-        title={
-          <Space>
-            <Title level={5} style={{ margin: 0 }}>
-              小艾
-            </Title>
-            {selectedConvId && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {conversationList.find((c) => c.id === selectedConvId)?.title ?? ''}
-              </Text>
-            )}
-          </Space>
-        }
-        extra={<ProviderStatus />}
-      >
-        {/* 消息列表区域 */}
-        <div
-          style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: '8px 4px',
-            background: '#fafafa',
-            borderRadius: 8,
-            marginBottom: 12,
-          }}
-        >
-          {displayMessages.length === 0 && !isSending ? (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-              }}
-            >
-              <Text type="secondary">
-                直接输入问题开始对话，无需新建
-              </Text>
-            </div>
-          ) : (
-            <>
-              <MessageThread messages={displayMessages} />
-              {isSending && streamingAnswer === '' && (
-                <div style={{ padding: '8px 16px' }}>
-                  <Text type="secondary">AI 正在回复...</Text>
+                      <Button
+                        size="small"
+                        type="text"
+                        danger
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ padding: '0 4px', fontSize: 12, color: '#ff4d4f' }}
+                      >
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  )}
                 </div>
-              )}
-              <div ref={messagesEndRef} />
-            </>
-          )}
-        </div>
-
-        {/* 输入区域 */}
-        <div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-            <Tooltip title="开启后 AI 会先思考再回答（适用于 Qwen3 等支持思考模式的模型）">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 8, flexShrink: 0 }}>
-                <Switch
-                  size="small"
-                  checked={thinkingEnabled}
-                  onChange={setThinkingEnabled}
-                />
-                <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-                  思考
-                </Text>
-              </div>
-            </Tooltip>
-            <Button
-              type={factContext ? 'primary' : 'default'}
-              onClick={() => setFactModalOpen(true)}
-              style={{ flexShrink: 0, height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
-            >
-              {factContext ? '📊 数据已加载' : '载入实验数据'}
-            </Button>
-            {factContext && (
-              <Tooltip title={`已加载: ${factContextLabel}（点击清除）`}>
-                <Button
-                  type="link"
-                  danger
-                  onClick={handleClearFactContext}
-                  style={{ flexShrink: 0, padding: '0 4px', height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
-                >
-                  ✕
-                </Button>
-              </Tooltip>
+              </List.Item>
             )}
-            <TextArea
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="输入问题，Enter 发送"
-              autoSize={{ minRows: 1, maxRows: 4 }}
-              onPressEnter={(e) => {
-                if (!e.shiftKey) {
-                  e.preventDefault();
-                  void handleSend();
-                }
-              }}
-              disabled={isSending}
-              style={{ flex: 1 }}
-            />
-          </div>
-          <div
-            style={{
-              marginTop: 8,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <Text type="secondary" style={{ fontSize: 11 }}>
-              Enter 发送 · Shift+Enter 换行
-            </Text>
+            locale={{ emptyText: showArchived ? '暂无归档对话' : '暂无对话，直接输入消息即可开始' }}
+          />
+        </Card>
+      </aside>
+
+      {/* ---- 右侧：对话区域（命名 region） ---- */}
+      <section className="ocean-assistant-thread" aria-label="消息线程" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Card
+          size="small"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+          bodyStyle={{
+            padding: 16,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+          title={
             <Space>
-              <Button
-                type="primary"
-                onClick={() => void handleSend()}
-                loading={isSending}
-                disabled={!inputText.trim()}
-              >
-                发送
-              </Button>
-              {isSending && (
-                <Button
-                  danger
-                  onClick={() => {
-                    // 1. 通知后端取消 AI 请求
-                    if (selectedConvId) {
-                      void apiCancelRequest(selectedConvId);
-                    }
-                    // 2. 中断前端 HTTP 请求
-                    if (abortControllerRef.current) {
-                      abortControllerRef.current.abort();
-                      abortControllerRef.current = null;
-                    }
-                    // 3. 清除流式定时器
-                    if (streamingTimerRef.current) {
-                      clearInterval(streamingTimerRef.current);
-                      streamingTimerRef.current = null;
-                    }
-                    // 4. 重置状态
-                    setStreamingAnswer(null);
-                    setIsSending(false);
-                    void queryClient.invalidateQueries({ queryKey: ['assistant-messages', selectedConvId] });
-                  }}
-                  style={{ fontWeight: 700 }}
-                  title="中断对话"
-                >
-                  ■
-                </Button>
+              <Title level={5} style={{ margin: 0 }}>
+                小艾
+              </Title>
+              {selectedConvId && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {conversationList.find((c) => c.id === selectedConvId)?.title ?? ''}
+                </Text>
               )}
             </Space>
+          }
+          extra={<ProviderStatus />}
+        >
+          {/* 消息列表区域 */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '8px 4px',
+              borderRadius: 8,
+              marginBottom: 12,
+            }}
+          >
+            {displayMessages.length === 0 && !isSending ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: '100%',
+                }}
+              >
+                <Text type="secondary">
+                  直接输入问题开始对话，无需新建
+                </Text>
+              </div>
+            ) : (
+              <>
+                <MessageThread messages={displayMessages} />
+                {isSending && streamingAnswer === '' && (
+                  <div style={{ padding: '8px 16px' }}>
+                    <Text type="secondary">AI 正在回复...</Text>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </>
+            )}
           </div>
-        </div>
-      </Card>
 
-      {/* 载入实验数据 Modal */}
+          {/* 输入区域（命名 region） */}
+          <div aria-label="消息输入">
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <Tooltip title="开启后 AI 会先思考再回答（适用于 Qwen3 等支持思考模式的模型）">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 8, flexShrink: 0 }}>
+                  <Switch
+                    size="small"
+                    checked={thinkingEnabled}
+                    onChange={setThinkingEnabled}
+                  />
+                  <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+                    思考
+                  </Text>
+                </div>
+              </Tooltip>
+              <Button
+                type={factContext ? 'primary' : 'default'}
+                onClick={() => setFactModalOpen(true)}
+                style={{ flexShrink: 0, height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
+              >
+                {factContext ? '📊 数据已加载' : '载入实验数据'}
+              </Button>
+              {factContext && (
+                <Tooltip title={`已加载: ${factContextLabel}（点击清除）`}>
+                  <Button
+                    type="link"
+                    danger
+                    onClick={handleClearFactContext}
+                    style={{ flexShrink: 0, padding: '0 4px', height: 'auto', minHeight: 32, alignSelf: 'stretch' }}
+                  >
+                    ✕
+                  </Button>
+                </Tooltip>
+              )}
+              <TextArea
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder="输入问题，Enter 发送"
+                autoSize={{ minRows: 1, maxRows: 4 }}
+                onPressEnter={(e) => {
+                  if (!e.shiftKey) {
+                    e.preventDefault();
+                    void handleSend();
+                  }
+                }}
+                disabled={isSending}
+                aria-label="向 AI 助手提问"
+                style={{ flex: 1 }}
+              />
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <Text type="secondary" style={{ fontSize: 11 }}>
+                Enter 发送 · Shift+Enter 换行
+              </Text>
+              <Space>
+                <Button
+                  type="primary"
+                  onClick={() => void handleSend()}
+                  loading={isSending}
+                  disabled={!inputText.trim()}
+                >
+                  发送
+                </Button>
+                {isSending && (
+                  <Button
+                    danger
+                    onClick={() => {
+                      // 1. 通知后端取消 AI 请求
+                      if (selectedConvId) {
+                        void apiCancelRequest(selectedConvId);
+                      }
+                      // 2. 中断前端 HTTP 请求
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current.abort();
+                        abortControllerRef.current = null;
+                      }
+                      // 3. 清除流式定时器
+                      if (streamingTimerRef.current) {
+                        clearInterval(streamingTimerRef.current);
+                        streamingTimerRef.current = null;
+                      }
+                      // 4. 重置状态
+                      setStreamingAnswer(null);
+                      setIsSending(false);
+                      void queryClient.invalidateQueries({ queryKey: ['assistant-messages', selectedConvId] });
+                    }}
+                    style={{ fontWeight: 700 }}
+                    title="中断对话"
+                  >
+                    ■
+                  </Button>
+                )}
+              </Space>
+            </div>
+          </div>
+        </Card>
+      </section>
+
+      {/* 载入实验数据 Modal（命名 region） */}
       <Modal
         title="载入实验数据"
         open={factModalOpen}
@@ -688,9 +695,9 @@ export function AssistantPage(): JSX.Element {
         width={700}
         styles={{ body: { padding: 0 } }}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 280px)' }}>
+        <div aria-label="实验事实选择" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 280px)' }}>
           {/* 搜索栏 */}
-          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid rgba(24, 102, 133, 0.16)' }}>
             <Input.Search
               placeholder="搜索样品名称或任务名称..."
               value={factSearchText}
@@ -715,7 +722,7 @@ export function AssistantPage(): JSX.Element {
           {/* 分组列表 */}
           <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px' }}>
             {Object.keys(factGroups).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+              <div style={{ textAlign: 'center', padding: 40 }}>
                 <Text type="secondary">暂无数据或未找到匹配的样品</Text>
               </div>
             ) : (
@@ -735,7 +742,7 @@ export function AssistantPage(): JSX.Element {
                         gap: 8,
                         padding: '8px 0',
                         cursor: 'pointer',
-                        borderBottom: '1px solid #f5f5f5',
+                        borderBottom: '1px solid rgba(24, 102, 133, 0.12)',
                         userSelect: 'none',
                       }}
                       onClick={() => {
@@ -747,7 +754,7 @@ export function AssistantPage(): JSX.Element {
                         });
                       }}
                     >
-                      <span style={{ fontSize: 10, color: '#999', width: 12, display: 'inline-block' }}>
+                      <span style={{ fontSize: 10, color: '#6F8D9C', width: 12, display: 'inline-block' }}>
                         {isExpanded ? '▼' : '▶'}
                       </span>
                       <Checkbox
@@ -777,7 +784,7 @@ export function AssistantPage(): JSX.Element {
                               padding: '4px 0',
                               cursor: 'pointer',
                               borderRadius: 4,
-                              background: selectedFactIds.includes(f.fact_id) ? '#f0f7ff' : 'transparent',
+                              background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.08)' : 'transparent',
                             }}
                             onClick={() => handleToggleFact(f.fact_id)}
                           >
