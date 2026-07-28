@@ -543,15 +543,8 @@ async def delete_flow(
     current_user: ManageUserDep,
     service: FlowServiceDep,
 ) -> None:
-    """删除流程定义 — 已禁用（P0 止血）。
-
-    物理删除端点已禁用，防止级联删除版本、运行记录和节点执行记录。
-    请使用归档端点 ``POST /{flow_id}/archive`` 替代。
-    """
-    raise HTTPException(
-        status_code=405,
-        detail="物理删除流程已被禁用（P0 止血）。请使用归档端点 POST /{flow_id}/archive 替代。",
-    )
+    """删除流程定义及其所有版本和运行记录。"""
+    await service.delete_flow(flow_id)
 
 
 @flows_router.patch("/{flow_id}", response_model=FlowDefinitionResponse)
@@ -845,14 +838,8 @@ async def delete_run(
     current_user: ManageUserDep,
     service: FlowServiceDep,
 ) -> None:
-    """删除执行记录 — 已禁用（P0 止血）。
-
-    物理删除执行记录及其节点执行记录已禁用，防止证据链数据丢失。
-    """
-    raise HTTPException(
-        status_code=405,
-        detail="物理删除执行记录已被禁用（P0 止血）。",
-    )
+    """删除执行记录及其所有节点执行记录。"""
+    await service.delete_run(run_id)
 
 
 # ---- 端点：写入事实 ----

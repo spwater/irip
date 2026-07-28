@@ -1006,15 +1006,21 @@ async def delete_fact(
     current_user: WriteUserDep,
     service: FactServiceDep,
 ) -> None:
-    """删除实验事实 — 已改为归档（tombstone）。
+    """物理删除实验事实。"""
+    import sqlalchemy as sa
+    from packages.facts.entities import Fact, FactRevision, FactDataIndex, FactArtifact
+    from packages.common.database import session_scope
 
-    技术设计文档 F-03：物理删除已禁用，改为设置 status='archived'（tombstone）。
-    请使用 POST /{fact_id}/archive 端点进行归档。
-    """
-    raise HTTPException(
-        status_code=405,
-        detail="物理删除事实已被禁用。请使用 POST /api/v1/facts/{id}/archive 归档端点替代。",
-    )
+    async with session_scope(service.session_factory) as session:
+        # 删除关联的 FactRevision
+        await session.execute(
+            sa.delete(FactRevision).where(FactRevision.fact_id == fact_id)
+        )
+        # 删除 Fact
+        await session.execute(
+            sa.delete(Fact).where(Fact.id == fact_id)
+        )
+        await session.flush()
 
 
 @facts_router.delete("/by-task/{task_code}", status_code=204)
@@ -1023,14 +1029,25 @@ async def delete_facts_by_task(
     current_user: WriteUserDep,
     service: FactServiceDep,
 ) -> None:
-    """按任务编码批量删除事实 — 已禁用（P0 止血）。
+    """按任务编码批量删除事实。"""
+    import sqlalchemy as sa
+    from packages.facts.entities import Fact, FactRevision
+    from packages.common.database import session_scope
 
-    批量物理删除端点已禁用，防止不可逆的数据丢失和证据链断裂。
-    """
-    raise HTTPException(
-        status_code=405,
-        detail="按任务编码批量物理删除事实已被禁用（P0 止血）。",
-    )
+    async with session_scope(service.session_factory) as session:
+        # 查找该 task_code 的所有 fact_id
+        result = await session.execute(
+            sa.select(Fact.id).where(Fact.task_code == task_code)
+        )
+        fact_ids = [row[0] for row in result]
+        if fact_ids:
+            await session.execute(
+                sa.delete(FactRevision).where(FactRevision.fact_id.in_(fact_ids))
+            )
+            await session.execute(
+                sa.delete(Fact).where(Fact.id.in_(fact_ids))
+            )
+            await session.flush()
 
 
 @facts_router.post(
