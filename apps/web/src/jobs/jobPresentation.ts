@@ -19,10 +19,10 @@ export const JOB_STATUS_VIEW: Record<JobStatus, { label: string; tone: StatusTon
 };
 
 /** 终态：不需要继续轮询 */
-export const TERMINAL_STATUSES: JobStatus[] = ['succeeded', 'failed', 'cancelled'];
+export const TERMINAL_STATUSES: string[] = ['succeeded', 'failed', 'cancelled'];
 
 /** 可取消状态集合 */
-export const CANCELLABLE_STATUSES: JobStatus[] = [
+export const CANCELLABLE_STATUSES: string[] = [
   'accepted',
   'queued',
   'running',
