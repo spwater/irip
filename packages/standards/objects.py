@@ -110,7 +110,6 @@ class IndustrialObject(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    category: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     parent_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)

@@ -386,7 +386,6 @@ export type IndustrialObject = {
   display_name: string;
   object_type: string;
   description: string | null;
-  category: string | null;
   status: string;
   parent_id: string | null;
   equipment_id: string | null;
@@ -731,7 +730,6 @@ export async function apiCreateObject(body: {
   display_name: string;
   object_type: string;
   description?: string;
-  category?: string;
   parent_id?: string;
   equipment_id?: string;
   department_id?: string;
@@ -758,7 +756,6 @@ export async function apiGetObject(objectId: string): Promise<IndustrialObject> 
 export async function apiUpdateObject(objectId: string, body: {
   display_name: string;
   description?: string | null;
-  category?: string | null;
   equipment_id?: string | null;
   department_id?: string | null;
   visible_departments?: string[] | null;
