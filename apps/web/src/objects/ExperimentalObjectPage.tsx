@@ -26,10 +26,15 @@ import {
   apiListDepartments,
   apiListEquipment,
   apiListObjects,
+  apiListObjectTypes,
+  apiCreateObjectType,
+  apiUpdateObjectType,
+  apiDeleteObjectType,
   apiUpdateObject,
   apiUpdateObjectStatus,
   extractApiError,
   type IndustrialObject,
+  type ObjectTypeDictItem,
 } from '@/api/client';
 
 /**
@@ -91,6 +96,12 @@ export function ExperimentalObjectPage({
   const [batchOpen, setBatchOpen] = useState(false);
   const [batchText, setBatchText] = useState('');
   const [batchImporting, setBatchImporting] = useState(false);
+  const [typeMgrOpen, setTypeMgrOpen] = useState(false);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [newTypeDesc, setNewTypeDesc] = useState('');
+  const [editingType, setEditingType] = useState<ObjectTypeDictItem | null>(null);
+  const [editTypeName, setEditTypeName] = useState('');
+  const [editTypeDesc, setEditTypeDesc] = useState('');
   const [form] = Form.useForm();
 
   // 当 presetEquipmentId 变化时，自动打开新建弹窗并预填
@@ -509,6 +520,9 @@ export function ExperimentalObjectPage({
         <Button onClick={() => setBatchOpen(true)}>
           批量导入
         </Button>
+        <Button onClick={() => setTypeMgrOpen(true)}>
+          类型管理
+        </Button>
         <Select
           placeholder="类型筛选"
           style={{ width: 140 }}
@@ -661,6 +675,114 @@ export function ExperimentalObjectPage({
         </Form>
       </Modal>
 
+      {/* 类型管理弹窗 */}
+      <Modal
+        title="类型管理"
+        open={typeMgrOpen}
+        onCancel={() => { setTypeMgrOpen(false); setNewTypeName(''); setNewTypeDesc(''); setEditingType(null); }}
+        footer={null}
+        width={500}
+      >
+        {/* 新建类型 */}
+        <div style={{ marginBottom: 16 }}>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder="新类型名称"
+              value={newTypeName}
+              onChange={(e) => setNewTypeName(e.target.value)}
+              maxLength={100}
+            />
+            <Button
+              type="primary"
+              onClick={async () => {
+                if (!newTypeName.trim()) return;
+                try {
+                  await apiCreateObjectType({ display_name: newTypeName.trim(), description: newTypeDesc || undefined });
+                  void queryClient.invalidateQueries({ queryKey: ['object-types'] });
+                  setNewTypeName('');
+                  setNewTypeDesc('');
+                  message.success('类型创建成功');
+                } catch (err) {
+                  message.error(extractApiError(err));
+                }
+              }}
+            >
+              新建
+            </Button>
+          </Space.Compact>
+          <Input
+            placeholder="描述（可选）"
+            value={newTypeDesc}
+            onChange={(e) => setNewTypeDesc(e.target.value)}
+            maxLength={500}
+            style={{ marginTop: 8 }}
+          />
+        </div>
+
+        {/* 类型列表 */}
+        <ObjectTypesList
+          onEdit={(item) => {
+            setEditingType(item);
+            setEditTypeName(item.display_name);
+            setEditTypeDesc(item.description ?? '');
+          }}
+          onDelete={async (item) => {
+            try {
+              await apiDeleteObjectType(item.id);
+              void queryClient.invalidateQueries({ queryKey: ['object-types'] });
+              message.success('类型已删除');
+            } catch (err) {
+              message.error(extractApiError(err));
+            }
+          }}
+        />
+
+        {/* 编辑类型 */}
+        {editingType && (
+          <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+            <Text strong>编辑类型: {editingType.code}</Text>
+            <Input
+              placeholder="类型名称"
+              value={editTypeName}
+              onChange={(e) => setEditTypeName(e.target.value)}
+              maxLength={100}
+              style={{ marginTop: 8 }}
+            />
+            <Input
+              placeholder="描述"
+              value={editTypeDesc}
+              onChange={(e) => setEditTypeDesc(e.target.value)}
+              maxLength={500}
+              style={{ marginTop: 8 }}
+            />
+            <Space style={{ marginTop: 8 }}>
+              <Button
+                type="primary"
+                size="small"
+                onClick={async () => {
+                  try {
+                    await apiUpdateObjectType(editingType.id, {
+                      display_name: editTypeName,
+                      description: editTypeDesc || undefined,
+                    });
+                    void queryClient.invalidateQueries({ queryKey: ['object-types'] });
+                    setEditingType(null);
+                    message.success('类型已更新');
+                  } catch (err) {
+                    message.error(extractApiError(err));
+                  }
+                }}
+              >
+                保存
+              </Button>
+              <Button size="small" onClick={() => setEditingType(null)}>
+                取消
+              </Button>
+            </Space>
+          </div>
+        )}
+      </Modal>
+
       {/* 批量导入弹窗 */}
       <Modal
         title="批量导入实验对象"
@@ -698,5 +820,58 @@ export function ExperimentalObjectPage({
         </div>
       </Modal>
     </div>
+  );
+}
+
+/** 类型管理列表子组件 */
+function ObjectTypesList({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: (item: ObjectTypeDictItem) => void;
+  onDelete: (item: ObjectTypeDictItem) => void;
+}): JSX.Element {
+  const { data, isLoading } = useQuery({
+    queryKey: ['object-types'],
+    queryFn: apiListObjectTypes,
+  });
+  const items = data ?? [];
+  if (isLoading) return <Spin />;
+  if (items.length === 0) return <Text type="secondary">暂无类型</Text>;
+  return (
+    <Table<ObjectTypeDictItem>
+      dataSource={items}
+      rowKey="id"
+      size="small"
+      pagination={false}
+      columns={[
+        { title: '名称', dataIndex: 'display_name', key: 'display_name', width: 120 },
+        { title: '编码', dataIndex: 'code', key: 'code', width: 140 },
+        { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+        {
+          title: '操作',
+          key: 'action',
+          width: 120,
+          render: (_: unknown, record: ObjectTypeDictItem) => (
+            <Space size="small">
+              <Button type="link" size="small" onClick={() => onEdit(record)}>
+                改名
+              </Button>
+              <Popconfirm
+                title="确定删除该类型？"
+                description="如果类型下有对象则无法删除"
+                onConfirm={() => onDelete(record)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button type="link" size="small" danger>
+                  删除
+                </Button>
+              </Popconfirm>
+            </Space>
+          ),
+        },
+      ]}
+    />
   );
 }

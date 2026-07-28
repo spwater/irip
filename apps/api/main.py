@@ -43,6 +43,7 @@ from apps.api.routers.ingestions import ingestions_router
 from apps.api.routers.jobs import jobs_router
 from apps.api.routers.models import models_router
 from apps.api.routers.objects import objects_router
+from apps.api.routers.object_types import object_types_router
 from apps.api.routers.parameters import parameters_router
 from apps.api.routers.provenance import provenance_router
 from apps.api.routers.standards import standards_router
@@ -212,6 +213,7 @@ def create_app() -> FastAPI:
     app.include_router(user_departments_router)
     app.include_router(standards_router)
     app.include_router(objects_router)
+    app.include_router(object_types_router)
     app.include_router(templates_router)
     app.include_router(methods_router)
     app.include_router(packages_router)

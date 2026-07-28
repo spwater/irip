@@ -776,6 +776,45 @@ export async function apiDeleteObject(objectId: string): Promise<void> {
   await http.delete(`/objects/${objectId}`);
 }
 
+// ============================================================
+// Object Types API（/object-types）— 实验对象类型管理
+// ============================================================
+
+export type ObjectTypeDictItem = {
+  id: string;
+  code: string;
+  display_name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function apiListObjectTypes(): Promise<ObjectTypeDictItem[]> {
+  const res = await http.get<ObjectTypeDictItem[]>('/object-types');
+  return res.data;
+}
+
+export async function apiCreateObjectType(body: {
+  display_name: string;
+  description?: string;
+}): Promise<ObjectTypeDictItem> {
+  const res = await http.post<ObjectTypeDictItem>('/object-types', body);
+  return res.data;
+}
+
+export async function apiUpdateObjectType(
+  typeId: string,
+  body: { display_name?: string; description?: string },
+): Promise<ObjectTypeDictItem> {
+  const res = await http.patch<ObjectTypeDictItem>(`/object-types/${typeId}`, body);
+  return res.data;
+}
+
+export async function apiDeleteObjectType(typeId: string): Promise<void> {
+  await http.delete(`/object-types/${typeId}`);
+}
+
 export async function apiAddObjectRelation(objectId: string, body: {
   target_id: string;
   relation_type: string;
