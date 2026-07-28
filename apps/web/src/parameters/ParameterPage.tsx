@@ -4,13 +4,11 @@ import {
   Divider,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
   Table,
   Tabs,
-  Tag,
   Timeline,
   Typography,
   message,
@@ -273,16 +271,18 @@ export function ParameterPage(): JSX.Element {
                   }
                 />
 
-                <DataTableShell style={{ marginTop: 16 }}>
-                  <Table<ParameterSummary>
-                    columns={columns}
-                    dataSource={items}
-                    rowKey="id"
-                    loading={isLoading}
-                    pagination={{ pageSize: 20, showSizeChanger: false }}
-                    size="middle"
-                  />
-                </DataTableShell>
+                <div style={{ marginTop: 16 }}>
+                  <DataTableShell>
+                    <Table<ParameterSummary>
+                      columns={columns}
+                      dataSource={items}
+                      rowKey="id"
+                      loading={isLoading}
+                      pagination={{ pageSize: 20, showSizeChanger: false }}
+                      size="middle"
+                    />
+                  </DataTableShell>
+                </div>
 
                 {/* 创建参数 Modal */}
                 <FocusModal

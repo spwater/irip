@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Button,
-  Card,
   Form,
   Input,
   Modal,
@@ -9,7 +8,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Typography,
   message,
 } from 'antd';
@@ -27,16 +25,24 @@ import {
   type ModelSummary,
   type ModelVersionSummary,
 } from '@/api/client';
+import {
+  PageIntro,
+  ActionBar,
+  DataTableShell,
+  StatusMark,
+  FocusModal,
+} from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
 const { Text } = Typography;
 
-/** 模型状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  pending_validation: 'orange',
-  validated: 'cyan',
-  published: 'green',
-  deprecated: 'default',
+/** 模型状态 → StatusTone */
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  pending_validation: 'warning',
+  validated: 'info',
+  published: 'success',
+  deprecated: 'neutral',
 };
 
 /** 模型状态 → 中文标签 */
@@ -66,6 +72,9 @@ const VERSION_STATUS_LABEL: Record<string, string> = {
  * - 操作列：查看详情 / 发布 / 回滚 / 废弃
  * - 状态颜色映射：draft=blue, pending_validation=orange, validated=cyan,
  *   published=green, deprecated=default
+ *
+ * Data Ocean Phase 4：用 PageIntro + ActionBar + DataTableShell + StatusMark 包裹，
+ * 保留 create/publish/rollback/deprecate modal 状态、列定义、当前版本逻辑、navigate 调用不变。
  */
 export function ModelsPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -189,11 +198,9 @@ export function ModelsPage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 110,
+      width: 120,
       render: (v: string) => (
-        <Tag color={STATUS_COLOR[v] ?? 'default'}>
-          {STATUS_LABEL[v] ?? v}
-        </Tag>
+        <StatusMark tone={STATUS_TONE[v] ?? 'neutral'} label={STATUS_LABEL[v] ?? v} />
       ),
     },
     {
@@ -268,28 +275,38 @@ export function ModelsPage(): JSX.Element {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
-          新建模型
-        </Button>
-        <Button onClick={() => void navigate({ to: '/models/predict' })}>
-          预测工作台
-        </Button>
-      </Space>
-
-      <Card>
-        <Table<ModelSummary>
-          columns={columns}
-          dataSource={items}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{ pageSize: 20, showSizeChanger: false }}
-          size="middle"
-        />
-      </Card>
+      <PageIntro
+        index="MODELS"
+        title="模型目录"
+        description="管理模型生命周期：创建、验证、发布、回滚与废弃"
+        actions={
+          <Space>
+            <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+              新建模型
+            </Button>
+            <Button onClick={() => void navigate({ to: '/models/predict' })}>
+              预测工作台
+            </Button>
+          </Space>
+        }
+      >
+        <ActionBar />
+        <div style={{ marginTop: 16 }}>
+          <DataTableShell>
+            <Table<ModelSummary>
+              columns={columns}
+              dataSource={items}
+              rowKey="id"
+              loading={isLoading}
+              pagination={{ pageSize: 20, showSizeChanger: false }}
+              size="middle"
+            />
+          </DataTableShell>
+        </div>
+      </PageIntro>
 
       {/* 新建模型 Modal */}
-      <Modal
+      <FocusModal
         title="新建模型"
         open={createModalOpen}
         onOk={handleCreate}
@@ -323,7 +340,7 @@ export function ModelsPage(): JSX.Element {
             <Input placeholder="如：篦冷机降阶模型" maxLength={256} />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 发布版本 Modal */}
       <Modal

@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import {
   Button,
-  Card,
   Form,
   Input,
   Modal,
+  Segmented,
   Select,
   Space,
   Table,
-  Tag,
   Tabs,
   Typography,
   message,
@@ -33,21 +32,23 @@ import {
   type ProvenanceNode,
   type Recipe,
 } from '@/api/client';
+import { DetailSection, DataTableShell, StatusMark } from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
-/** 状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  in_review: 'orange',
-  published: 'green',
-  frozen: 'cyan',
-  active: 'green',
-  succeeded: 'green',
-  failed: 'red',
-  running: 'processing',
-  deprecated: 'default',
-  pending: 'default',
+/** 状态 → StatusTone */
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  in_review: 'warning',
+  published: 'success',
+  frozen: 'info',
+  active: 'success',
+  succeeded: 'success',
+  failed: 'danger',
+  running: 'info',
+  deprecated: 'neutral',
+  pending: 'neutral',
 };
 
 /** 状态 → 中文标签 */
@@ -73,6 +74,9 @@ const NODE_TYPE_LABEL: Record<string, string> = {
   parameter_version: '参数版本',
 };
 
+/** 溯源视图模式 */
+type ProvenanceViewMode = 'graph' | 'table';
+
 /**
  * 溯源链路页面
  *
@@ -81,7 +85,11 @@ const NODE_TYPE_LABEL: Record<string, string> = {
  * - 证据集：列表 + 创建 + 冻结
  * - 配方：列表 + 创建 + 发布
  * - 推导运行：列表 + 创建 + 重放 + 查看图谱
- * - 溯源图谱：选择运行后展示节点和边的表格
+ * - 溯源图谱：选择运行后展示节点和边的表格，支持关系图/数据表视图切换
+ *
+ * Data Ocean Phase 4：用 DetailSection + Segmented 视图切换包裹，
+ * 溯源图谱默认提供「关系图 / 数据表」切换，reduced-motion 或图谱初始化失败时默认 table。
+ * 保留所有 query / mutation / form 行为不变。
  */
 export function ProvenancePage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -101,6 +109,7 @@ export function ProvenancePage(): JSX.Element {
 
   // 图谱状态
   const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
+  const [viewMode, setViewMode] = useState<ProvenanceViewMode>('table');
 
   // ---- 数据查询 ----
   const { data: evidenceSetsData, isLoading: evidenceLoading } = useQuery({
@@ -126,6 +135,12 @@ export function ProvenancePage(): JSX.Element {
     queryFn: () => apiGetProvenanceGraph(selectedRunId!),
     enabled: !!selectedRunId,
   });
+
+  // ---- 检测 reduced-motion，默认 table 视图 ----
+  const reducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---- Mutations ----
   const createEvidenceSetMutation = useMutation({
@@ -229,9 +244,9 @@ export function ProvenancePage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
+        <StatusMark tone={STATUS_TONE[s] ?? 'neutral'} label={STATUS_LABEL[s] ?? s} />
       ),
     },
     {
@@ -272,9 +287,9 @@ export function ProvenancePage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
+        <StatusMark tone={STATUS_TONE[s] ?? 'neutral'} label={STATUS_LABEL[s] ?? s} />
       ),
     },
     {
@@ -307,9 +322,9 @@ export function ProvenancePage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
+        <StatusMark tone={STATUS_TONE[s] ?? 'neutral'} label={STATUS_LABEL[s] ?? s} />
       ),
     },
     {
@@ -370,9 +385,9 @@ export function ProvenancePage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: 120,
       render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
+        <StatusMark tone={STATUS_TONE[s] ?? 'neutral'} label={STATUS_LABEL[s] ?? s} />
       ),
     },
   ];
@@ -383,8 +398,12 @@ export function ProvenancePage(): JSX.Element {
     { title: '关系类型', dataIndex: 'edge_type', key: 'edge_type' },
   ];
 
+  // 图谱数据存在时才有 graph 视图
+  const hasGraphData = graph && Array.isArray(graph.nodes) && graph.nodes.length > 0;
+  const effectiveViewMode: ProvenanceViewMode = (reducedMotion || !hasGraphData) ? 'table' : viewMode;
+
   return (
-    <Card>
+    <div>
       <Tabs
         activeKey={activeTab}
         onChange={setActiveTab}
@@ -405,14 +424,17 @@ export function ProvenancePage(): JSX.Element {
                     新建证据集
                   </Button>
                 </Space>
-                <Table<EvidenceSet>
-                  columns={evidenceSetColumns}
-                  dataSource={evidenceSets}
-                  rowKey="set_id"
-                  loading={evidenceLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                />
+                <DataTableShell>
+                  <Table<EvidenceSet>
+                    columns={evidenceSetColumns}
+                    dataSource={evidenceSets}
+                    rowKey="set_id"
+                    loading={evidenceLoading}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    size="middle"
+                    locale={{ emptyText: '暂无证据集' }}
+                  />
+                </DataTableShell>
               </div>
             ),
           },
@@ -432,14 +454,16 @@ export function ProvenancePage(): JSX.Element {
                     新建配方
                   </Button>
                 </Space>
-                <Table<Recipe>
-                  columns={recipeColumns}
-                  dataSource={recipes}
-                  rowKey="recipe_id"
-                  loading={recipesLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                />
+                <DataTableShell>
+                  <Table<Recipe>
+                    columns={recipeColumns}
+                    dataSource={recipes}
+                    rowKey="recipe_id"
+                    loading={recipesLoading}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    size="middle"
+                  />
+                </DataTableShell>
               </div>
             ),
           },
@@ -459,14 +483,16 @@ export function ProvenancePage(): JSX.Element {
                     新建推导运行
                   </Button>
                 </Space>
-                <Table<DerivationRun>
-                  columns={runColumns}
-                  dataSource={runs}
-                  rowKey="id"
-                  loading={runsLoading}
-                  pagination={{ pageSize: 20, showSizeChanger: false }}
-                  size="middle"
-                />
+                <DataTableShell>
+                  <Table<DerivationRun>
+                    columns={runColumns}
+                    dataSource={runs}
+                    rowKey="id"
+                    loading={runsLoading}
+                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    size="middle"
+                  />
+                </DataTableShell>
               </div>
             ),
           },
@@ -487,29 +513,61 @@ export function ProvenancePage(): JSX.Element {
                 />
                 {graph && (
                   <>
-                    <Title level={5}>节点</Title>
-                    <Table<ProvenanceNode>
-                      columns={nodeColumns}
-                      dataSource={Array.isArray(graph.nodes)
-                        ? graph.nodes.map((n) => ({ ...n, key: n.id }))
-                        : []}
-                      pagination={false}
-                      size="small"
-                    />
-                    <Title level={5} style={{ marginTop: 16 }}>
-                      边
-                    </Title>
-                    <Table<ProvenanceEdge>
-                      columns={edgeColumns}
-                      dataSource={Array.isArray(graph.edges)
-                        ? graph.edges.map((e, idx) => ({
-                            ...e,
-                            key: `${e.source_id}-${e.target_id}-${idx}`,
-                          }))
-                        : []}
-                      pagination={false}
-                      size="small"
-                    />
+                    <div style={{ marginBottom: 16 }}>
+                      <Segmented
+                        aria-label="溯源视图"
+                        options={[{ label: '关系图', value: 'graph' }, { label: '数据表', value: 'table' }]}
+                        value={effectiveViewMode}
+                        onChange={(value) => setViewMode(value as 'graph' | 'table')}
+                      />
+                    </div>
+
+                    {effectiveViewMode === 'table' && (
+                      <>
+                        <DetailSection title="节点">
+                          <Table<ProvenanceNode>
+                            columns={nodeColumns}
+                            dataSource={Array.isArray(graph.nodes)
+                              ? graph.nodes.map((n) => ({ ...n, key: n.id }))
+                              : []}
+                            pagination={false}
+                            size="small"
+                          />
+                        </DetailSection>
+
+                        <DetailSection title="边">
+                          <Table<ProvenanceEdge>
+                            columns={edgeColumns}
+                            dataSource={Array.isArray(graph.edges)
+                              ? graph.edges.map((e, idx) => ({
+                                  ...e,
+                                  key: `${e.source_id}-${e.target_id}-${idx}`,
+                                }))
+                              : []}
+                            pagination={false}
+                            size="small"
+                          />
+                        </DetailSection>
+                      </>
+                    )}
+
+                    {effectiveViewMode === 'graph' && (
+                      <DetailSection title="关系图" technical>
+                        <Text type="secondary">
+                          关系图视图暂以数据表形式展示。节点和边 ID/类型可复制。
+                        </Text>
+                        <div style={{ marginTop: 12 }}>
+                          <Table<ProvenanceNode>
+                            columns={nodeColumns}
+                            dataSource={Array.isArray(graph.nodes)
+                              ? graph.nodes.map((n) => ({ ...n, key: n.id }))
+                              : []}
+                            pagination={false}
+                            size="small"
+                          />
+                        </div>
+                      </DetailSection>
+                    )}
                   </>
                 )}
                 {!graph && selectedRunId && (
@@ -615,6 +673,6 @@ export function ProvenancePage(): JSX.Element {
           </Form.Item>
         </Form>
       </Modal>
-    </Card>
+    </div>
   );
 }

@@ -2,17 +2,13 @@ import { useState } from 'react';
 import {
   Alert,
   Button,
-  Card,
   Descriptions,
-  Empty,
   Form,
   Input,
   Modal,
   Select,
   Space,
-  Spin,
   Table,
-  Tag,
   Typography,
   message,
 } from 'antd';
@@ -28,16 +24,18 @@ import {
   extractApiError,
   type ModelVersionSummary,
 } from '@/api/client';
+import { DataHero, DetailSection, StatusMark, FeedbackState } from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
-/** 模型状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  pending_validation: 'orange',
-  validated: 'cyan',
-  published: 'green',
-  deprecated: 'default',
+/** 模型状态 → StatusTone */
+const STATUS_TONE: Record<string, StatusTone> = {
+  draft: 'info',
+  pending_validation: 'warning',
+  validated: 'info',
+  published: 'success',
+  deprecated: 'neutral',
 };
 
 /** 模型状态 → 中文标签 */
@@ -65,6 +63,9 @@ type ApplicabilityEntry = {
  * - 版本历史 Table（版本号 / 状态 / 指标 / 发布时间）
  * - 适用域范围展示
  * - 操作按钮：提交验证 / 发布 / 回滚
+ *
+ * Data Ocean Phase 4：用 DataHero 展示模型名/版本，用 DetailSection 分组展示信息，
+ * 保留 loading/404/error、version queries、publish/rollback/deprecate actions 和技术 ID 不变。
  */
 export function ModelDetail(): JSX.Element {
   const queryClient = useQueryClient();
@@ -186,13 +187,13 @@ export function ModelDetail(): JSX.Element {
   // ---- 加载与空状态 ----
   if (modelLoading) {
     return (
-      <div style={{ textAlign: 'center', padding: 48 }}>
-        <Spin size="large" />
-      </div>
+      <FeedbackState kind="loading" title="加载模型详情中..." />
     );
   }
   if (!model) {
-    return <Empty description="未找到模型" />;
+    return (
+      <FeedbackState kind="empty" title="未找到模型" />
+    );
   }
 
   // ---- 版本历史表格列 ----
@@ -208,9 +209,9 @@ export function ModelDetail(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 110,
+      width: 120,
       render: (v: string) => (
-        <Tag color={STATUS_COLOR[v] ?? 'default'}>{STATUS_LABEL[v] ?? v}</Tag>
+        <StatusMark tone={STATUS_TONE[v] ?? 'neutral'} label={STATUS_LABEL[v] ?? v} />
       ),
     },
     {
@@ -222,9 +223,9 @@ export function ModelDetail(): JSX.Element {
         return (
           <Space size="small" wrap>
             {entries.map(([k, val]) => (
-              <Tag key={k} color="blue">
+              <Text key={k} style={{ fontSize: 12 }}>
                 {k}: {String(val)}
-              </Tag>
+              </Text>
             ))}
           </Space>
         );
@@ -250,6 +251,10 @@ export function ModelDetail(): JSX.Element {
     label: `v${v.version} — ${STATUS_LABEL[v.status] ?? v.status}`,
   }));
 
+  const currentVersionLabel = model.current_version_id
+    ? model.current_version_id.slice(0, 12) + '…'
+    : '未发布';
+
   return (
     <div>
       <Button
@@ -259,8 +264,57 @@ export function ModelDetail(): JSX.Element {
         返回列表
       </Button>
 
+      {/* 数据英雄区 — 模型名称 + 当前版本 */}
+      <div style={{ marginBottom: 24 }}>
+        <DataHero
+          label={model.code}
+          value={model.display_name}
+          summary={
+            <Space size="small">
+              <StatusMark tone={STATUS_TONE[model.status] ?? 'neutral'} label={STATUS_LABEL[model.status] ?? model.status} />
+              <Text type="secondary">当前版本: {currentVersionLabel}</Text>
+            </Space>
+          }
+        />
+      </div>
+
       {/* 基本信息 */}
-      <Card title="模型详情" style={{ marginBottom: 16 }}>
+      <DetailSection
+        title="模型详情"
+        extra={
+          <Space wrap>
+            <Button
+              onClick={() => {
+                setSelectedVersionId(undefined);
+                validateForm.resetFields();
+                setValidateModalOpen(true);
+              }}
+            >
+              提交验证
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => {
+                setSelectedVersionId(undefined);
+                setPublishModalOpen(true);
+              }}
+            >
+              发布版本
+            </Button>
+            <Button
+              onClick={() => {
+                setRollbackVersionId(undefined);
+                setRollbackModalOpen(true);
+              }}
+            >
+              回滚
+            </Button>
+            <Button onClick={() => void navigate({ to: '/models/predict', search: { modelId: model.id } })}>
+              前往预测
+            </Button>
+          </Space>
+        }
+      >
         <Descriptions bordered column={2} size="small">
           <Descriptions.Item label="编码">
             <Text code>{model.code}</Text>
@@ -269,9 +323,7 @@ export function ModelDetail(): JSX.Element {
             <Text strong>{model.display_name}</Text>
           </Descriptions.Item>
           <Descriptions.Item label="状态">
-            <Tag color={STATUS_COLOR[model.status] ?? 'default'}>
-              {STATUS_LABEL[model.status] ?? model.status}
-            </Tag>
+            <StatusMark tone={STATUS_TONE[model.status] ?? 'neutral'} label={STATUS_LABEL[model.status] ?? model.status} />
           </Descriptions.Item>
           <Descriptions.Item label="当前版本">
             {model.current_version_id ? (
@@ -285,43 +337,11 @@ export function ModelDetail(): JSX.Element {
           <Descriptions.Item label="锁版本">{model.lock_version}</Descriptions.Item>
           <Descriptions.Item label="更新时间">{model.updated_at}</Descriptions.Item>
         </Descriptions>
-
-        <Space style={{ marginTop: 16 }} wrap>
-          <Button
-            onClick={() => {
-              setSelectedVersionId(undefined);
-              validateForm.resetFields();
-              setValidateModalOpen(true);
-            }}
-          >
-            提交验证
-          </Button>
-          <Button
-            type="primary"
-            onClick={() => {
-              setSelectedVersionId(undefined);
-              setPublishModalOpen(true);
-            }}
-          >
-            发布版本
-          </Button>
-          <Button
-            onClick={() => {
-              setRollbackVersionId(undefined);
-              setRollbackModalOpen(true);
-            }}
-          >
-            回滚
-          </Button>
-          <Button onClick={() => void navigate({ to: '/models/predict', search: { modelId: model.id } })}>
-            前往预测
-          </Button>
-        </Space>
-      </Card>
+      </DetailSection>
 
       {/* 适用域范围 */}
       {currentVersion && (
-        <Card title="适用域范围（当前版本）" style={{ marginBottom: 16 }}>
+        <DetailSection title="适用域范围（当前版本）">
           {applicabilityEntries.length === 0 ? (
             <Text type="secondary">暂无适用域定义</Text>
           ) : (
@@ -338,11 +358,11 @@ export function ModelDetail(): JSX.Element {
               ))}
             </Descriptions>
           )}
-        </Card>
+        </DetailSection>
       )}
 
       {/* 版本历史 */}
-      <Card title="版本历史" style={{ marginBottom: 16 }}>
+      <DetailSection title="版本历史">
         <Table<ModelVersionSummary>
           columns={versionColumns}
           dataSource={versionList}
@@ -352,9 +372,9 @@ export function ModelDetail(): JSX.Element {
           size="small"
         />
         {versionList.length === 0 && (
-          <Paragraph type="secondary">暂无版本记录</Paragraph>
+          <Text type="secondary">暂无版本记录</Text>
         )}
-      </Card>
+      </DetailSection>
 
       {/* 提交验证 Modal */}
       <Modal

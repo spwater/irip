@@ -4,10 +4,8 @@ import {
   Input,
   Modal,
   Select,
-  Space,
   Switch,
   Table,
-  Tag,
   Typography,
   message,
 } from 'antd';
@@ -21,8 +19,15 @@ import {
 import type { AIToolDTO } from './types';
 import type { ToolFilter } from './types';
 import { ToolEditDrawer } from './ToolEditDrawer';
+import {
+  ActionBar,
+  DataTableShell,
+  StatusMark,
+  FeedbackState,
+} from '@/components/ui';
+import type { StatusTone } from '@/theme/tokens';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /**
  * AI 工具管理页面
@@ -32,6 +37,10 @@ const { Title, Text } = Typography;
  *
  * 仅 platform_administrator 可见（由 PlatformPage Tab 条件渲染保证），
  * 后端端点另由 system:manage 权限守卫。
+ *
+ * Data Ocean Phase 4：用 ActionBar + DataTableShell + StatusMark + FeedbackState 包裹，
+ * 保留 list/search/filter/toggle/lock_version/permission 行为不变。
+ * 仅声明层/未实现以可见文本警告展示。
  */
 export function AIToolsPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -143,25 +152,43 @@ export function AIToolsPage(): JSX.Element {
     {
       title: '类型',
       key: 'type',
-      width: 100,
-      render: (_: unknown, r: AIToolDTO) =>
-        r.candidate ? (
-          <Tag color="orange">候选</Tag>
-        ) : (
-          <Tag color="blue">只读</Tag>
-        ),
+      width: 120,
+      render: (_: unknown, r: AIToolDTO) => {
+        const tone: StatusTone = r.candidate ? 'warning' : 'info';
+        const label = r.candidate ? '候选' : '只读';
+        return <StatusMark tone={tone} label={label} />;
+      },
     },
     {
       title: '状态',
-      key: 'enabled',
-      width: 90,
-      render: (_: unknown, r: AIToolDTO) => (
-        <Switch
-          checked={r.enabled}
-          onChange={(v) => handleToggle(r, v)}
-          loading={toggleMutation.isPending}
-        />
-      ),
+      key: 'status',
+      width: 140,
+      render: (_: unknown, r: AIToolDTO) => {
+        const tone: StatusTone = r.enabled ? 'success' : 'neutral';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Switch
+              checked={r.enabled}
+              onChange={(v) => handleToggle(r, v)}
+              loading={toggleMutation.isPending}
+            />
+            <StatusMark tone={tone} label={r.enabled ? '已启用' : '已禁用'} />
+          </div>
+        );
+      },
+    },
+    {
+      title: '声明层',
+      key: 'declaration',
+      width: 120,
+      render: (_: unknown, r: AIToolDTO) =>
+        !r.enabled ? (
+          <Text type="warning" style={{ fontSize: 12 }}>
+            仅声明层/未实现
+          </Text>
+        ) : (
+          <Text type="secondary" style={{ fontSize: 12 }}>-</Text>
+        ),
     },
     {
       title: '更新时间',
@@ -185,49 +212,66 @@ export function AIToolsPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={5}>AI 工具管理</Title>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search
-          placeholder="搜索工具名 / 显示名"
-          allowClear
-          style={{ width: 240 }}
-          value={filter.keyword}
-          onChange={(e) =>
-            setFilter((f) => ({ ...f, keyword: e.target.value }))
-          }
-        />
-        <Select
-          style={{ width: 120 }}
-          value={filter.type}
-          onChange={(v) => setFilter((f) => ({ ...f, type: v }))}
-          options={[
-            { value: 'all', label: '全部类型' },
-            { value: 'whitelist', label: '只读' },
-            { value: 'candidate', label: '候选' },
-          ]}
-        />
-        <Select
-          style={{ width: 120 }}
-          value={filter.status}
-          onChange={(v) => setFilter((f) => ({ ...f, status: v }))}
-          options={[
-            { value: 'all', label: '全部状态' },
-            { value: 'enabled', label: '已启用' },
-            { value: 'disabled', label: '已禁用' },
-          ]}
-        />
-        <Button type="primary" onClick={handleCreate}>
-          新建工具
-        </Button>
-      </Space>
-      <Table
-        columns={columns}
-        dataSource={filteredTools}
-        rowKey="name"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
+      <ActionBar
+        filters={
+          <>
+            <Input.Search
+              placeholder="搜索工具名 / 显示名"
+              allowClear
+              style={{ width: 240 }}
+              value={filter.keyword}
+              onChange={(e) =>
+                setFilter((f) => ({ ...f, keyword: e.target.value }))
+              }
+            />
+            <Select
+              style={{ width: 120 }}
+              value={filter.type}
+              onChange={(v) => setFilter((f) => ({ ...f, type: v }))}
+              options={[
+                { value: 'all', label: '全部类型' },
+                { value: 'whitelist', label: '只读' },
+                { value: 'candidate', label: '候选' },
+              ]}
+            />
+            <Select
+              style={{ width: 120 }}
+              value={filter.status}
+              onChange={(v) => setFilter((f) => ({ ...f, status: v }))}
+              options={[
+                { value: 'all', label: '全部状态' },
+                { value: 'enabled', label: '已启用' },
+                { value: 'disabled', label: '已禁用' },
+              ]}
+            />
+          </>
+        }
+        actions={
+          <Button type="primary" onClick={handleCreate}>
+            新建工具
+          </Button>
+        }
       />
+
+      <div style={{ marginTop: 16 }}>
+        {isLoading ? (
+          <FeedbackState kind="loading" title="加载工具列表中..." rows={4} />
+        ) : filteredTools.length === 0 ? (
+          <FeedbackState kind="empty" title="暂无工具" description="点击「新建工具」创建工具声明" />
+        ) : (
+          <DataTableShell>
+            <Table
+              columns={columns}
+              dataSource={filteredTools}
+              rowKey="name"
+              loading={isLoading}
+              pagination={false}
+              size="middle"
+            />
+          </DataTableShell>
+        )}
+      </div>
+
       <ToolEditDrawer
         open={drawerOpen}
         tool={editingTool}

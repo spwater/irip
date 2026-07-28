@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Descriptions, Modal, Tag, Typography } from 'antd';
+import { Modal, Tag, Typography } from 'antd';
 import {
   useQuery,
 } from '@tanstack/react-query';

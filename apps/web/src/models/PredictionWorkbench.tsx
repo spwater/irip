@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import {
   Alert,
   Button,
-  Card,
   Descriptions,
   Empty,
   Form,
@@ -28,8 +27,9 @@ import {
   type ModelVersionSummary,
   type PredictionResult,
 } from '@/api/client';
+import { PageIntro, DetailSection } from '@/components/ui';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
 /** 适用域条目 */
 type ApplicabilityEntry = {
@@ -58,6 +58,9 @@ type PredictionRow = {
  * - 结果展示区域（输出值 + 单位 + 置信度）
  * - 「查看运行事实」链接（当 fact_id 存在时）
  * - 警告展示（适用域外提示）
+ *
+ * Data Ocean Phase 4：建立稳定的命名 region（模型选择 / 预测输入 / 预测结果），
+ * 保留动态输入、select 行为、适用域警告、prediction mutation、结果 Descriptions、fact 链接和单位不变。
  */
 export function PredictionWorkbench(): JSX.Element {
   const navigate = useNavigate();
@@ -194,171 +197,170 @@ export function PredictionWorkbench(): JSX.Element {
 
   return (
     <div>
-      <Title level={2}>预测工作台</Title>
-
-      <Button
-        onClick={() => void navigate({ to: '/models' })}
-        style={{ marginBottom: 16 }}
+      <PageIntro
+        index="PREDICT"
+        title="预测工作台"
+        description="选择已发布模型，输入参数，运行预测并查看结果"
+        actions={
+          <Button onClick={() => void navigate({ to: '/models' })}>
+            返回模型列表
+          </Button>
+        }
       >
-        返回模型列表
-      </Button>
+        {/* 模型选择（命名 region） */}
+        <section aria-label="模型选择" style={{ marginBottom: 16 }}>
+          <Select
+            placeholder="选择已发布的模型"
+            style={{ width: 400 }}
+            loading={modelsLoading}
+            value={selectedModelId}
+            onChange={handleModelChange}
+            options={models.map((m) => ({
+              value: m.id,
+              label: `${m.display_name} (${m.code})`,
+            }))}
+          />
+          {model && (
+            <div style={{ marginTop: 12 }}>
+              <Space size="small">
+                <Tag color="green">{model.status}</Tag>
+                <Text type="secondary">{model.display_name}</Text>
+              </Space>
+            </div>
+          )}
+        </section>
 
-      {/* 模型选择 */}
-      <Card title="模型选择" style={{ marginBottom: 16 }}>
-        <Select
-          placeholder="选择已发布的模型"
-          style={{ width: 400 }}
-          loading={modelsLoading}
-          value={selectedModelId}
-          onChange={handleModelChange}
-          options={models.map((m) => ({
-            value: m.id,
-            label: `${m.display_name} (${m.code})`,
-          }))}
-        />
-        {model && (
-          <div style={{ marginTop: 12 }}>
-            <Space size="small">
-              <Tag color="green">{model.status}</Tag>
-              <Text type="secondary">{model.display_name}</Text>
-            </Space>
+        {!selectedModelId ? (
+          <Empty description="请选择一个已发布的模型" />
+        ) : !currentVersion ? (
+          <div style={{ textAlign: 'center', padding: 24 }}>
+            <Spin tip="加载模型版本…" />
           </div>
-        )}
-      </Card>
+        ) : (
+          <>
+            {/* 输入参数表单（命名 region） */}
+            <section aria-label="预测输入" style={{ marginBottom: 16 }}>
+              <DetailSection title="输入参数">
+                {applicabilityEntries.length === 0 ? (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message="该模型版本未定义适用域，将使用通用 JSON 输入。"
+                  />
+                ) : (
+                  <Form form={form} layout="vertical">
+                    {applicabilityEntries.map((entry) => (
+                      <Form.Item
+                        key={entry.field}
+                        name={entry.field}
+                        label={
+                          <Space size="small">
+                            <Text strong>{entry.field}</Text>
+                            {entry.unit && <Text type="secondary">({entry.unit})</Text>}
+                          </Space>
+                        }
+                        rules={[{ required: true, message: `请输入 ${entry.field}` }]}
+                      >
+                        <InputNumber
+                          style={{ width: 280 }}
+                          placeholder={
+                            entry.min != null && entry.max != null
+                              ? `范围 ${entry.min} ~ ${entry.max}`
+                              : '请输入数值'
+                          }
+                          min={entry.min ?? undefined}
+                          max={entry.max ?? undefined}
+                          step={0.01}
+                        />
+                      </Form.Item>
+                    ))}
+                  </Form>
+                )}
+                <Button
+                  type="primary"
+                  onClick={handlePredict}
+                  loading={predictMutation.isPending}
+                  disabled={applicabilityEntries.length === 0}
+                >
+                  运行模型
+                </Button>
+              </DetailSection>
+            </section>
 
-      {!selectedModelId ? (
-        <Empty description="请选择一个已发布的模型" />
-      ) : !currentVersion ? (
-        <div style={{ textAlign: 'center', padding: 24 }}>
-          <Spin tip="加载模型版本…" />
-        </div>
-      ) : (
-        <>
-          {/* 输入参数表单 */}
-          <Card title="输入参数" style={{ marginBottom: 16 }}>
-            {applicabilityEntries.length === 0 ? (
+            {/* 适用域警告 */}
+            {warnings.length > 0 && (
               <Alert
                 type="warning"
                 showIcon
-                message="该模型版本未定义适用域，将使用通用 JSON 输入。"
+                style={{ marginBottom: 16 }}
+                message="输入超出适用域范围"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 20 }}>
+                    {warnings.map((w) => (
+                      <li key={w}>{w}</li>
+                    ))}
+                  </ul>
+                }
               />
-            ) : (
-              <Form form={form} layout="vertical">
-                {applicabilityEntries.map((entry) => (
-                  <Form.Item
-                    key={entry.field}
-                    name={entry.field}
-                    label={
-                      <Space size="small">
-                        <Text strong>{entry.field}</Text>
-                        {entry.unit && <Text type="secondary">({entry.unit})</Text>}
-                      </Space>
-                    }
-                    rules={[{ required: true, message: `请输入 ${entry.field}` }]}
-                  >
-                    <InputNumber
-                      style={{ width: 280 }}
-                      placeholder={
-                        entry.min != null && entry.max != null
-                          ? `范围 ${entry.min} ~ ${entry.max}`
-                          : '请输入数值'
-                      }
-                      min={entry.min ?? undefined}
-                      max={entry.max ?? undefined}
-                      step={0.01}
-                    />
-                  </Form.Item>
-                ))}
-              </Form>
             )}
-            <Button
-              type="primary"
-              onClick={handlePredict}
-              loading={predictMutation.isPending}
-              disabled={applicabilityEntries.length === 0}
-            >
-              运行模型
-            </Button>
-          </Card>
 
-          {/* 适用域警告 */}
-          {warnings.length > 0 && (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginBottom: 16 }}
-              message="输入超出适用域范围"
-              description={
-                <ul style={{ margin: 0, paddingLeft: 20 }}>
-                  {warnings.map((w) => (
-                    <li key={w}>{w}</li>
-                  ))}
-                </ul>
-              }
-            />
-          )}
+            {/* 结果展示（命名 region） */}
+            <section aria-label="预测结果">
+              {result && (
+                <DetailSection title="预测结果">
+                  {/* 结构化结果始终可见 */}
+                  <Descriptions bordered column={2} size="small" style={{ marginBottom: 16 }}>
+                    <Descriptions.Item label="模型版本 ID">
+                      <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
+                        {result.model_version_id.slice(0, 12)}…
+                      </Text>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="版本号">v{result.version}</Descriptions.Item>
+                  </Descriptions>
 
-          {/* 结果展示 */}
-          {result && (
-            <Card title="预测结果" style={{ marginBottom: 16 }}>
-              <Descriptions bordered column={2} size="small" style={{ marginBottom: 16 }}>
-                <Descriptions.Item label="模型版本 ID">
-                  <Text type="secondary" style={{ fontFamily: 'monospace', fontSize: 12 }}>
-                    {result.model_version_id.slice(0, 12)}…
-                  </Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="版本号">v{result.version}</Descriptions.Item>
-              </Descriptions>
+                  <Table<PredictionRow>
+                    columns={resultColumns}
+                    dataSource={resultRows}
+                    rowKey="key"
+                    pagination={false}
+                    size="small"
+                  />
 
-              <Table<PredictionRow>
-                columns={resultColumns}
-                dataSource={resultRows}
-                rowKey="key"
-                pagination={false}
-                size="small"
-              />
+                  {result.fact_id && (
+                    <div style={{ marginTop: 16 }}>
+                      <Button
+                        type="link"
+                        onClick={() =>
+                          void navigate({ to: '/facts/$factId', params: { factId: result.fact_id! } })
+                        }
+                      >
+                        查看运行事实 →
+                      </Button>
+                    </div>
+                  )}
 
-              {result.fact_id && (
-                <div style={{ marginTop: 16 }}>
-                  <Button
-                    type="link"
-                    onClick={() =>
-                      void navigate({ to: '/facts/$factId', params: { factId: result.fact_id! } })
-                    }
-                  >
-                    查看运行事实 →
-                  </Button>
-                </div>
+                  {Object.keys(result.metadata).length > 0 && (
+                    <div style={{ marginTop: 16 }}>
+                      <DetailSection title="元数据" technical>
+                        <pre
+                          className="ocean-md-pre"
+                          style={{ maxHeight: 200 }}
+                        >
+                          {JSON.stringify(result.metadata, null, 2)}
+                        </pre>
+                      </DetailSection>
+                    </div>
+                  )}
+                </DetailSection>
               )}
 
-              {Object.keys(result.metadata).length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <Title level={5}>元数据</Title>
-                  <pre
-                    style={{
-                      background: '#f5f5f5',
-                      padding: 12,
-                      borderRadius: 6,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                      overflow: 'auto',
-                      maxHeight: 200,
-                    }}
-                  >
-                    {JSON.stringify(result.metadata, null, 2)}
-                  </pre>
-                </div>
+              {!result && !predictMutation.isPending && (
+                <Paragraph type="secondary">点击「运行模型」开始预测</Paragraph>
               )}
-            </Card>
-          )}
-
-          {!result && !predictMutation.isPending && (
-            <Card>
-              <Paragraph type="secondary">点击「运行模型」开始预测</Paragraph>
-            </Card>
-          )}
-        </>
-      )}
+            </section>
+          </>
+        )}
+      </PageIntro>
     </div>
   );
 }

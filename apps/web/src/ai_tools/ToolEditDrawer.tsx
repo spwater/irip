@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
-  Drawer,
   Form,
   Input,
   Modal,
@@ -18,6 +17,7 @@ import {
   extractApiError,
 } from '@/api/client';
 import type { AIToolDTO } from './types';
+import { FocusDrawer } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -46,6 +46,9 @@ type FormValues = {
  * - parameters_schema 用 TextArea + monospace，JSON.parse 实时校验；
  * - candidate 切换为"候选"时弹 Modal 二次确认（U-5）；
  * - 保存调对应 API，成功后 invalidate ['ai-tools'] + toast。
+ *
+ * Data Ocean Phase 4：用 FocusDrawer 替换原生 Drawer，技术面样式包裹 JSON Schema。
+ * 保留 name 锁、candidate 确认、JSON 校验、lock_version、API 错误处理不变。
  */
 export function ToolEditDrawer({
   open,
@@ -172,7 +175,7 @@ export function ToolEditDrawer({
   };
 
   return (
-    <Drawer
+    <FocusDrawer
       title={isCreate ? '新建工具' : '编辑工具'}
       open={open}
       onClose={onClose}
@@ -284,7 +287,8 @@ export function ToolEditDrawer({
             value={schemaText}
             onChange={(e) => handleSchemaChange(e.target.value)}
             rows={10}
-            style={{ fontFamily: 'monospace' }}
+            className="ocean-tech"
+            style={{ fontFamily: 'var(--ocean-font-mono, monospace)' }}
             placeholder='{"type": "object", "properties": {...}}'
           />
         </Form.Item>
@@ -300,6 +304,6 @@ export function ToolEditDrawer({
           </Space>
         )}
       </Form>
-    </Drawer>
+    </FocusDrawer>
   );
 }

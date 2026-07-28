@@ -5,22 +5,11 @@
  * 合并 Polar Mist 视觉默认值（透明背景、语义文字色、调色板、动画降级）。
  *
  * 设计约束：
- * - source 中的 series、grid、yAxis 等字段优先级高于默认值（浅合并对象字段而非整体替换）
+ * - source 中的 series、grid、yAxis 等字段优先级高于默认值
  * - reducedMotion=true 时关闭动画
  * - 不修改任何数据相关字段
  */
 import type { EChartsOption } from 'echarts';
-
-/**
- * 合并两个对象字段：对 object 类型的值做浅合并，其余直接覆盖。
- * 仅对已知的视觉字段（textStyle、tooltip、xAxis、yAxis）做对象级合并。
- */
-function mergeVisualField<T>(source: T, defaults: Partial<T>): T {
-  if (source === undefined || source === null) {
-    return defaults as T;
-  }
-  return source;
-}
 
 /**
  * 创建 Data Ocean 风格的 ECharts 选项。
