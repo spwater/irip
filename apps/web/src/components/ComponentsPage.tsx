@@ -319,9 +319,8 @@ function ComponentFormFields({
       <Form.Item
         name="description"
         label="描述"
-        rules={[{ required: true, message: '请输入描述' }]}
       >
-        <Input placeholder="LLM 驱动的文档提取组件" />
+        <Input placeholder="组件描述（可选）" />
       </Form.Item>
       <Form.Item label="文件预加载">
         <Space direction="vertical" style={{ width: '100%' }}>
