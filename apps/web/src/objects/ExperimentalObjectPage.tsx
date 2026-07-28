@@ -194,6 +194,7 @@ export function ExperimentalObjectPage({
       body: {
         display_name: string;
         description?: string | null;
+        object_type?: string;
         equipment_id?: string | null;
         department_id?: string | null;
         visible_departments?: string[] | null;
@@ -343,6 +344,7 @@ export function ExperimentalObjectPage({
           body: {
             display_name: values.display_name,
             description: values.description ?? null,
+            object_type: values.object_type,
             equipment_id: values.equipment_id || null,
             department_id: values.department_id,
             visible_departments: values.visible_departments ?? [],
@@ -612,12 +614,10 @@ export function ExperimentalObjectPage({
             name="object_type"
             label="类型"
             rules={[{ required: true, message: '请选择类型' }]}
-            extra={editingItem ? '类型创建后锁定，不可修改' : undefined}
           >
             <Select
               placeholder="选择实验对象类型"
-              options={EXP_OBJECT_TYPES}
-              disabled={!!editingItem}
+              options={EXP_OBJECT_TYPES.filter(o => o.value !== '__all__')}
             />
           </Form.Item>
           <Form.Item name="description" label="描述">

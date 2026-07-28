@@ -323,6 +323,7 @@ class UpdateObjectRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    object_type: str | None = Field(None, max_length=50, description="对象类型（可选，修改时传入）")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
     department_id: str | None = Field(None, description="新所属部门 UUID（None 表示不修改）")
     visible_departments: list[str] | None = Field(
@@ -365,6 +366,7 @@ async def update_object(
         object_id=object_id,
         display_name=body.display_name,
         description=body.description,
+        object_type=body.object_type,
         equipment_id=body.equipment_id,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,

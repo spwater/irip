@@ -756,6 +756,7 @@ export async function apiGetObject(objectId: string): Promise<IndustrialObject> 
 export async function apiUpdateObject(objectId: string, body: {
   display_name: string;
   description?: string | null;
+  object_type?: string;
   equipment_id?: string | null;
   department_id?: string | null;
   visible_departments?: string[] | null;
