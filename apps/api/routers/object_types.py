@@ -144,15 +144,16 @@ async def delete_object_type(
             raise AppError(code="not_found", message="类型不存在", retryable=False)
         # 检查是否有对象在用这个类型
         from packages.standards.objects import IndustrialObject
-        count = await session.execute(
+        count_result = await session.execute(
             sa.select(sa.func.count())
             .select_from(IndustrialObject)
             .where(IndustrialObject.object_type == obj.code)
         )
-        if int(count.scalar() or 0) > 0:
+        obj_count = int(count_result.scalar() or 0)
+        if obj_count > 0:
             raise AppError(
                 code="conflict",
-                message=f"该类型下还有 {count.scalar()} 个实验对象，无法删除",
+                message=f"该类型正在使用中（{obj_count} 个实验对象），无法删除",
                 retryable=False,
             )
         await session.delete(obj)
