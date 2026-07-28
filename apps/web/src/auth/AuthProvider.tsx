@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
     return (
       <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: 16 }}>
         <Spin size="large" />
-        <span style={{ color: '#999' }}>正在加载…</span>
+        <span style={{ color: 'var(--ocean-text-muted)' }}>正在加载…</span>
       </div>
     );
   }

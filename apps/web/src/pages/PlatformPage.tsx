@@ -1,16 +1,15 @@
-import { Tabs, Typography } from 'antd';
+import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/assistant/AssistantPage';
 import { AIToolsPage } from '@/ai_tools/AIToolsPage';
 import { useAuthStore } from '@/auth/AuthProvider';
-
-const { Title } = Typography;
+import { PageIntro } from '@/components/ui';
 
 const VALID_TABS = ['assistant', 'ai-tools'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
 
 /**
- * 平台应用页面
+ * 平台应用页面（设计文档第 10.6 节）
  *
  * 两个 Tab：AI 助手 / AI 工具管理。
  * "AI 工具管理" Tab 仅对 platform_administrator 角色可见（T-05），
@@ -53,8 +52,12 @@ export function PlatformPage(): JSX.Element {
   ];
 
   return (
-    <div>
-      <Title level={2}>平台应用</Title>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="MODULE 04 / PLATFORM APPLICATIONS"
+        title="平台应用"
+        subtitle="AI 助手对话、数据抽取工具与平台能力管理。"
+      />
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}

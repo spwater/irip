@@ -4,10 +4,8 @@ import {
   Card,
   Col,
   Descriptions,
-  Empty,
   Radio,
   Row,
-  Spin,
   Table,
   Tabs,
   Tag,
@@ -22,6 +20,7 @@ import {
   apiGetFactData,
   apiGetArtifactDownloadUrl,
 } from '@/api/client';
+import { PageIntro, DetailSection, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -78,30 +77,32 @@ export function FactDetail(): JSX.Element {
   ];
 
   if (factLoading) {
-    return (
-      <div style={{ textAlign: 'center', padding: 48 }}>
-        <Spin size="large" />
-      </div>
-    );
+    return <FeedbackState state="loading" title="加载事实详情…" style={{ padding: 48 }} />;
   }
 
   if (!fact) {
-    return <Empty description="未找到数据" />;
+    return <FeedbackState state="empty" title="未找到数据" />;
   }
 
   return (
-    <div>
-      <Button
-        onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
-        style={{ marginBottom: 16 }}
-      >
-        返回列表
-      </Button>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="DETAIL / FACT"
+        title="事实详情"
+        subtitle="实验数据的来源信息与详细内容。"
+        actions={
+          <Button
+            onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
+          >
+            返回列表
+          </Button>
+        }
+      />
 
       <Row gutter={16}>
         {/* 左侧：导入数据来源 */}
         <Col span={10}>
-          <Card title="导入数据来源">
+          <DetailSection title="导入数据来源">
             <Descriptions bordered column={1} size="small">
               <Descriptions.Item label="任务名称">
                 {taskInfo?.task_name ?? '-'}
@@ -129,7 +130,7 @@ export function FactDetail(): JSX.Element {
                         </Tag>
                         {ds.object_name && (
                           <>
-                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                            <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
                             <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                               {ds.object_name}
                             </Tag>
@@ -137,7 +138,7 @@ export function FactDetail(): JSX.Element {
                         )}
                         {ds.equipment_name && (
                           <>
-                            <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                            <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
                             <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                               {ds.equipment_name}
                             </Tag>
@@ -174,12 +175,12 @@ export function FactDetail(): JSX.Element {
                 )}
               </Descriptions.Item>
             </Descriptions>
-          </Card>
+          </DetailSection>
         </Col>
 
         {/* 右侧：导入数据详情 */}
         <Col span={14}>
-          <Card
+          <DetailSection
             title={`导入数据详情（${allPoints.length} 个指标，${seriesList.length} 组序列）`}
             extra={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -288,11 +289,11 @@ export function FactDetail(): JSX.Element {
             ) : (
               <pre
                 style={{
-                  background: '#f5f5f5',
+                  background: 'var(--ocean-surface-structural)',
                   padding: 12,
                   borderRadius: 6,
                   fontSize: 13,
-                  fontFamily: 'monospace',
+                  fontFamily: 'var(--ocean-font-mono)',
                   maxHeight: 600,
                   overflow: 'auto',
                   whiteSpace: 'pre-wrap',
@@ -303,7 +304,7 @@ export function FactDetail(): JSX.Element {
                 {JSON.stringify({ metadata: factData?.metadata ?? {}, points: allPoints, series: seriesList }, null, 2)}
               </pre>
             )}
-          </Card>
+          </DetailSection>
         </Col>
       </Row>
     </div>

@@ -267,14 +267,14 @@ export function IngestionWizard(): JSX.Element {
           {previewMutation.isPending ? (
             <div style={{ textAlign: 'center', padding: 24 }}>
               <Spin size="large" />
-              <p style={{ marginTop: 16, color: '#999' }}>正在上传...</p>
+              <p style={{ marginTop: 16, color: 'var(--ocean-text-muted)' }}>正在上传...</p>
             </div>
           ) : (
             <>
               <p style={{ fontSize: 16, margin: '8px 0' }}>
                 点击或拖拽文件到此区域上传
               </p>
-              <p style={{ color: '#999', margin: 0 }}>支持 Excel、CSV 格式</p>
+              <p style={{ color: 'var(--ocean-text-muted)', margin: 0 }}>支持 Excel、CSV 格式</p>
             </>
           )}
         </Upload.Dragger>
@@ -397,7 +397,7 @@ export function IngestionWizard(): JSX.Element {
       {currentStep === 4 && (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <Spin size="large" />
-          <p style={{ marginTop: 16, color: '#999' }}>正在创建作业...</p>
+          <p style={{ marginTop: 16, color: 'var(--ocean-text-muted)' }}>正在创建作业...</p>
         </div>
       )}
 

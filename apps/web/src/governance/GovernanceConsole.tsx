@@ -1,22 +1,28 @@
 import { useState } from 'react';
-import { Row, Col, Tabs, Typography } from 'antd';
+import { Row, Col, Tabs } from 'antd';
 import { UsersPage } from '@/governance/UsersPage';
 import { AuditPage } from '@/governance/AuditPage';
 import { SystemHealthPage } from '@/governance/SystemHealthPage';
 import { AIConfigPage } from '@/governance/AIConfigPage';
 import { JobsPage } from '@/jobs/JobsPage';
-
-const { Title } = Typography;
+import { PageIntro } from '@/components/ui';
 
 /**
- * 平台治理页面 — Tabs 布局
+ * 平台治理页面 — 治理监控原型（设计文档第 10.7 节）
+ *
+ * 系统配置使用两区监控台：AI 配置与系统健康；1280px 以下可垂直排列。
+ * destroyInactiveTabPane 行为保持不变，避免改变治理页面刷新语义。
  */
 export function GovernanceConsole(): JSX.Element {
   const [activeTab, setActiveTab] = useState<string>('system-config');
 
   return (
-    <div>
-      <Title level={2}>平台治理</Title>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="MODULE 05 / PLATFORM GOVERNANCE"
+        title="平台治理"
+        subtitle="系统配置、用户管理、审计事件与作业中心。"
+      />
       <Tabs
         activeKey={activeTab}
         onChange={(key) => setActiveTab(key)}

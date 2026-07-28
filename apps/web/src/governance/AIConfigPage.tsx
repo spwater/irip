@@ -1,17 +1,16 @@
 import { useState, useEffect } from 'react';
 import {
   Button,
-  Card,
   Form,
   Input,
   Switch,
   Space,
-  Tag,
   Typography,
   message,
 } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { http, extractApiError } from '@/api/client';
+import { OceanPanel, StatusMark } from '@/components/ui';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -32,7 +31,7 @@ type AITestResult = {
 };
 
 /**
- * AI 大模型配置页面
+ * AI 大模型配置页面（设计文档第 10.7 节 — 治理监控原型）
  *
  * 配置 OpenAI 兼容的 API 地址、密钥、模型名称。
  * 配置后 AI 助手自动使用真实模型，未配置时使用离线模拟模式。
@@ -115,19 +114,20 @@ export function AIConfigPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={5}>大模型配置</Title>
+      <Title level={5} style={{ color: 'var(--ocean-text-primary)' }}>大模型配置</Title>
       <Paragraph type="secondary">
         配置 OpenAI 兼容的 API 地址和密钥。配置启用后，小艾将使用真实模型进行对话。
         未配置或未启用时，小艾使用离线模拟模式。
       </Paragraph>
 
       {config && (
-        <Card size="small" style={{ marginBottom: 16 }}>
+        <OceanPanel variant="default" padding="12px 16px" style={{ marginBottom: 16 }}>
           <Space size="large">
             <Text>当前状态: </Text>
-            <Tag color={config.enabled ? 'green' : 'default'}>
-              {config.enabled ? '已启用' : '未启用'}
-            </Tag>
+            <StatusMark
+              semantic={config.enabled ? 'success' : 'neutral'}
+              label={config.enabled ? '已启用' : '未启用'}
+            />
             {config.model_name && (
               <>
                 <Text type="secondary">模型: {config.model_name}</Text>
@@ -135,7 +135,7 @@ export function AIConfigPage(): JSX.Element {
               </>
             )}
           </Space>
-        </Card>
+        </OceanPanel>
       )}
 
       <Form form={form} layout="vertical" style={{ maxWidth: 600 }}>

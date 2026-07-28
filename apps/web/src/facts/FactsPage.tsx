@@ -22,6 +22,7 @@ import {
   apiSearchFactsByData,
   type FactSummary,
 } from '@/api/client';
+import { ActionBar, DataTableShell, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -99,7 +100,10 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
 }
 
 /**
- * 实验事实列表页面
+ * 实验事实列表页面（设计文档第 10.5 节 — 实验记录原型）
+ *
+ * 保留按 task_code 分组的树形数据结构、搜索、数据内搜索、删除、按任务删除和详情跳转。
+ * 使用 ActionBar + DataTableShell 统一视觉。
  */
 export function FactsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -158,6 +162,7 @@ export function FactsPage(): JSX.Element {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    error,
   } = useInfiniteQuery({
     queryKey: ['facts', searchQuery],
     queryFn: async ({ pageParam }) => {
@@ -211,7 +216,7 @@ export function FactsPage(): JSX.Element {
             </Space>
           );
         }
-        return <span style={{ fontFamily: 'monospace', fontSize: 13 }}>{record.subject_id}</span>;
+        return <span style={{ fontFamily: 'var(--ocean-font-mono)', fontSize: 13 }}>{record.subject_id}</span>;
       },
     },
     {
@@ -262,45 +267,35 @@ export function FactsPage(): JSX.Element {
         if (record.isGroup) {
           return (
             <div onClick={(e) => e.stopPropagation()}>
-            <Popconfirm
-              title={`删除「${record.task_name ?? record.task_code}」下的全部数据？`}
-              description={`将删除 ${record.totalCount ?? 0} 个样品，此操作不可撤销`}
-              onConfirm={() => record.task_code && batchDeleteMutation.mutate(record.task_code)}
-              okText="全部删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-            >
-              <Button
-                type="link"
-                size="small"
-                danger
-                loading={batchDeleteMutation.isPending}
+              <Popconfirm
+                title={`删除「${record.task_name ?? record.task_code}」下的全部数据？`}
+                description={`将删除 ${record.totalCount ?? 0} 个样品，此操作不可撤销`}
+                onConfirm={() => record.task_code && batchDeleteMutation.mutate(record.task_code)}
+                okText="全部删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
               >
-                全部删除
-              </Button>
-            </Popconfirm>
+                <Button type="link" size="small" danger loading={batchDeleteMutation.isPending}>
+                  全部删除
+                </Button>
+              </Popconfirm>
             </div>
           );
         }
         return (
           <div onClick={(e) => e.stopPropagation()}>
-          <Popconfirm
-            title="确定删除该事实？此操作不可撤销。"
-            description="将同时删除所有关联数据"
-            onConfirm={() => record.fact_id && deleteMutation.mutate(record.fact_id)}
-            okText="删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-              loading={deleteMutation.isPending}
+            <Popconfirm
+              title="确定删除该事实？此操作不可撤销。"
+              description="将同时删除所有关联数据"
+              onConfirm={() => record.fact_id && deleteMutation.mutate(record.fact_id)}
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
             >
-              删除
-            </Button>
-          </Popconfirm>
+              <Button type="link" size="small" danger loading={deleteMutation.isPending}>
+                删除
+              </Button>
+            </Popconfirm>
           </div>
         );
       },
@@ -309,53 +304,63 @@ export function FactsPage(): JSX.Element {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Input.Search
-          placeholder="搜索事实..."
-          allowClear
-          style={{ width: 300 }}
-          onSearch={handleSearch}
-        />
-        <Select
-          placeholder="实验室筛选"
-          style={{ width: 200 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-      </Space>
+      {/* 筛选与操作区 */}
+      <ActionBar style={{ marginBottom: 16 }}>
+        <Space>
+          <Input.Search
+            placeholder="搜索事实..."
+            allowClear
+            style={{ width: 300 }}
+            onSearch={handleSearch}
+          />
+          <Select
+            placeholder="实验室筛选"
+            style={{ width: 200 }}
+            value={deptFilter ?? '__all__'}
+            onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+            options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+          />
+        </Space>
+      </ActionBar>
 
-      <Table<TreeNode>
-        columns={columns}
-        dataSource={treeData}
-        rowKey="key"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-        expandable={{
-          defaultExpandAllRows: false,
-          rowExpandable: (record) => record.isGroup,
-        }}
-        onRow={(record) => ({
-          onClick: () => {
-            if (!record.isGroup && record.fact_id) {
-              void navigate({ to: `/facts/${record.fact_id}` });
-            }
-          },
-          style: record.isGroup ? {} : { cursor: 'pointer' },
-        })}
-      />
-
-      {hasNextPage && (
-        <div style={{ textAlign: 'center', marginTop: 16 }}>
-          <Button
-            loading={isFetchingNextPage}
-            onClick={() => void fetchNextPage()}
-          >
-            加载更多
-          </Button>
-        </div>
-      )}
+      {/* 表格外壳 */}
+      <DataTableShell
+        bodyPadding={0}
+        footer={
+          hasNextPage ? (
+            <div style={{ textAlign: 'center' }}>
+              <Button loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+                加载更多
+              </Button>
+            </div>
+          ) : undefined
+        }
+      >
+        {error ? (
+          <FeedbackState state="error" title="数据加载失败" />
+        ) : (
+          <Table<TreeNode>
+            columns={columns}
+            dataSource={treeData}
+            rowKey="key"
+            loading={isLoading}
+            pagination={false}
+            size="middle"
+            expandable={{
+              defaultExpandAllRows: false,
+              rowExpandable: (record) => record.isGroup,
+            }}
+            onRow={(record) => ({
+              onClick: () => {
+                if (!record.isGroup && record.fact_id) {
+                  void navigate({ to: `/facts/${record.fact_id}` });
+                }
+              },
+              style: record.isGroup ? {} : { cursor: 'pointer' },
+            })}
+          />
+        )}
+      </DataTableShell>
     </div>
   );
 }

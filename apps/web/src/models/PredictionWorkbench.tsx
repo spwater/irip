@@ -336,11 +336,11 @@ export function PredictionWorkbench(): JSX.Element {
                   <Title level={5}>元数据</Title>
                   <pre
                     style={{
-                      background: '#f5f5f5',
+                      background: 'var(--ocean-surface-structural)',
                       padding: 12,
                       borderRadius: 6,
                       fontSize: 12,
-                      fontFamily: 'monospace',
+                      fontFamily: 'var(--ocean-font-mono)',
                       overflow: 'auto',
                       maxHeight: 200,
                     }}

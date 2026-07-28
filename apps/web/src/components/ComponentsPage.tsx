@@ -932,7 +932,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
             </Tag>
             {eqName && (
               <>
-                <span style={{ color: '#999', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
+                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
                 <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
                   {eqName}
                 </Tag>
@@ -1295,11 +1295,11 @@ function ComponentDetailPanel({
       </Title>
       <pre
         style={{
-          background: '#f5f5f5',
+          background: 'var(--ocean-surface-structural)',
           padding: 16,
           borderRadius: 6,
           fontSize: 13,
-          fontFamily: 'monospace',
+          fontFamily: 'var(--ocean-font-mono)',
           overflow: 'auto',
           maxHeight: 320,
           whiteSpace: 'pre-wrap',
@@ -1329,8 +1329,8 @@ function ComponentDetailPanel({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 12px',
-                  borderBottom: '1px solid #f0f0f0',
-                  background: isCurrent ? '#f6ffed' : 'transparent',
+                  borderBottom: '1px solid var(--ocean-border-subtle)',
+                  background: isCurrent ? 'rgba(20, 118, 94, 0.06)' : 'transparent',
                 }}
               >
                 <Space size={8}>

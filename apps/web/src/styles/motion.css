@@ -1,0 +1,125 @@
+/**
+ * IRIP Data Ocean 动效
+ *
+ * 按设计文档第 6.7 节：
+ * - 即时反馈 120ms（hover、press、focus）
+ * - 控件状态 180ms（选中、展开、标签变化）
+ * - 内容进入 240ms（opacity + 最大 6px 上浮）
+ * - 面板聚焦 320ms（边框、背景和最大 8px 位移）
+ * - 页面层次 360ms（仅用于路由主要内容显现）
+ * - 背景呼吸 24–40s（极低振幅，不能影响阅读）
+ *
+ * 统一缓动：cubic-bezier(0.22, 1, 0.36, 1)
+ * 禁止弹跳、持续摇晃、高频闪烁、强旋转和粒子爆发。
+ *
+ * prefers-reduced-motion: reduce 下：
+ * - 所有背景位移、漂浮和轨迹动画关闭
+ * - 内容仅允许 80ms 内的透明度变化或无动画显示
+ */
+
+/* ============================================================
+ * 内容进入：opacity + 6px 上浮
+ * ========================================================== */
+.ocean-enter {
+  animation: ocean-enter var(--ocean-motion-enter) var(--ocean-motion-easing) both;
+}
+
+@keyframes ocean-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+ * 页面层次：路由主要内容显现
+ * ========================================================== */
+.ocean-page-enter {
+  animation: ocean-page-enter var(--ocean-motion-page) var(--ocean-motion-easing) both;
+}
+
+@keyframes ocean-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+ * 面板聚焦：边框、背景和最大 8px 位移
+ * ========================================================== */
+.ocean-focus-enter {
+  animation: ocean-focus-enter var(--ocean-motion-focus) var(--ocean-motion-easing) both;
+}
+
+@keyframes ocean-focus-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ============================================================
+ * 控件状态过渡类（选中、展开、标签变化）
+ * ========================================================== */
+.ocean-motion-control {
+  transition: all var(--ocean-motion-control) var(--ocean-motion-easing);
+}
+
+/* 即时反馈过渡类（hover、press、focus） */
+.ocean-motion-instant {
+  transition: all var(--ocean-motion-instant) var(--ocean-motion-easing);
+}
+
+/* ============================================================
+ * 进度条真实进度过渡（不显示无意义循环动画）
+ * ========================================================== */
+.ocean-progress-fill {
+  transition: width var(--ocean-motion-control) var(--ocean-motion-easing);
+}
+
+/* ============================================================
+ * reduced motion 降级
+ * - 所有背景位移、漂浮和轨迹动画关闭
+ * - 内容仅允许 80ms 内的透明度变化或无动画显示
+ * ========================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .ocean-enter,
+  .ocean-page-enter,
+  .ocean-focus-enter {
+    animation: none;
+    /* 仅允许 80ms 内的透明度变化或无动画显示 */
+    transition: opacity 80ms linear;
+    opacity: 1;
+    transform: none;
+  }
+
+  .ocean-motion-control,
+  .ocean-motion-instant {
+    transition: none;
+  }
+
+  .ocean-progress-fill {
+    transition: none;
+  }
+
+  /* 关闭所有可能存在的旋转/晃动 */
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

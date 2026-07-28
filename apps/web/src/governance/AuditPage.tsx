@@ -21,6 +21,7 @@ import {
   type AuditEventItem,
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
+import { ActionBar, DataTableShell } from '@/components/ui';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -213,7 +214,7 @@ export function AuditPage(): JSX.Element {
   return (
     <div>
       {/* 筛选区 */}
-      <Space style={{ marginBottom: 16 }} wrap direction="vertical">
+      <ActionBar style={{ marginBottom: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
         <Space wrap>
           <Select
             placeholder="对象类型"
@@ -277,16 +278,11 @@ export function AuditPage(): JSX.Element {
             导出（异步作业）
           </Button>
         </Space>
-      </Space>
+      </ActionBar>
 
-      <Table<AuditEventItem>
-        columns={columns}
-        dataSource={displayItems}
-        rowKey="id"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-        footer={() =>
+      <DataTableShell
+        bodyPadding={0}
+        footer={
           hasNext ? (
             <div style={{ textAlign: 'center' }}>
               <Button type="link" onClick={handleLoadMore} loading={isFetching}>
@@ -299,7 +295,16 @@ export function AuditPage(): JSX.Element {
             </Text>
           )
         }
-      />
+      >
+        <Table<AuditEventItem>
+          columns={columns}
+          dataSource={displayItems}
+          rowKey="id"
+          loading={isLoading}
+          pagination={false}
+          size="middle"
+        />
+      </DataTableShell>
     </div>
   );
 }

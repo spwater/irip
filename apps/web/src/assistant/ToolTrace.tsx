@@ -63,7 +63,7 @@ export function ToolTrace({
             style={{
               margin: 0,
               padding: 8,
-              background: '#f5f5f5',
+              background: 'var(--ocean-surface-structural)',
               borderRadius: 4,
               fontSize: 12,
               overflowX: 'auto',

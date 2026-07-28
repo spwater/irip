@@ -7,9 +7,7 @@
 
 import {
   Button,
-  Card,
   Input,
-  Modal,
   Space,
   Typography,
   message,
@@ -26,6 +24,8 @@ import {
   type FlowSummary,
 } from '@/api/client';
 import { fmtTime } from './shared';
+import { FocusModal } from '@/components/ui';
+import { OceanPanel } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -138,27 +138,27 @@ export function FactModal({
   const expObjDisplay = matchedObject ? `${matchedObject.display_name}（${matchedObject.code}）` : '-';
 
   return (
-    <Modal
-      title="执行结果数据"
+    <FocusModal
       open={open}
+      title="执行结果数据"
       onCancel={onClose}
-      footer={
-        <Space>
-          <Button onClick={onClose}>关闭</Button>
-          <Button
-            type="primary"
-            disabled={!factObjectId}
-            loading={persistFactMutation.isPending}
-            onClick={() => persistFactMutation.mutate()}
-          >
-            写入事实
-          </Button>
-        </Space>
-      }
       width={720}
     >
+      {/* 底部操作区 */}
+      <Space style={{ width: '100%', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <Button onClick={onClose}>关闭</Button>
+        <Button
+          type="primary"
+          disabled={!factObjectId}
+          loading={persistFactMutation.isPending}
+          onClick={() => persistFactMutation.mutate()}
+        >
+          写入事实
+        </Button>
+      </Space>
+
       {/* 任务信息 */}
-      <Card size="small" style={{ marginBottom: 16 }}>
+      <OceanPanel variant="default" padding="12px 16px" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px' }}>
           <div><Text type="secondary">任务名称：</Text><Text strong>{taskName}</Text></div>
           <div><Text type="secondary">任务来源：</Text><Text>{deptName}</Text></div>
@@ -166,7 +166,7 @@ export function FactModal({
           <div><Text type="secondary">数据接口：</Text><Text>{compDisplay}</Text></div>
           <div><Text type="secondary">创建时间：</Text><Text>{createdTime}</Text></div>
         </div>
-      </Card>
+      </OceanPanel>
       {/* metadata 区域 */}
       <Text strong>Metadata</Text>
       <Input.TextArea
@@ -174,7 +174,7 @@ export function FactModal({
         onChange={(e) => setHeaderText(e.target.value)}
         rows={6}
         style={{
-          fontFamily: 'monospace',
+          fontFamily: 'var(--ocean-font-mono)',
           fontSize: 13,
           marginTop: 4,
           marginBottom: 16,
@@ -204,11 +204,11 @@ export function FactModal({
         onChange={(e) => setDataText(e.target.value)}
         rows={16}
         style={{
-          fontFamily: 'monospace',
+          fontFamily: 'var(--ocean-font-mono)',
           fontSize: 13,
           marginTop: 4,
         }}
       />
-    </Modal>
+    </FocusModal>
   );
 }

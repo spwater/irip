@@ -540,7 +540,7 @@ export function FlowDetail(): JSX.Element {
               </Tag>
             )}
             {projName && deptName && (
-              <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+              <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
             )}
             {deptName && (
               <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
@@ -571,7 +571,7 @@ export function FlowDetail(): JSX.Element {
             </Tag>
             {obj && (
               <>
-                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
                 <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                   {obj.display_name}
                 </Tag>
@@ -579,7 +579,7 @@ export function FlowDetail(): JSX.Element {
             )}
             {eqName && (
               <>
-                <span style={{ color: '#999', fontSize: 12 }}>&#10142;</span>
+                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
                 <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                   {eqName}
                 </Tag>
@@ -875,7 +875,7 @@ export function FlowDetail(): JSX.Element {
               { title: '已存', key: 'persisted', width: 60, align: 'center' as const,
                 render: (_: unknown, record: FlowRunSummary) =>
                   record.persisted_as_fact
-                    ? <span style={{ color: '#52c41a', fontWeight: 'bold', fontSize: 16 }}>&#10003;</span>
+                    ? <span style={{ color: 'var(--ocean-status-success)', fontWeight: 'bold', fontSize: 16 }}>&#10003;</span>
                     : null,
               },
               { title: '操作', key: 'action', width: 200,
@@ -1133,7 +1133,7 @@ export function FlowDetail(): JSX.Element {
           {runNode && (() => {
             const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
             return runComp ? (
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6 }}>
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
                 <Space size={6}>
                   <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
                   <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
@@ -1260,7 +1260,7 @@ export function FlowDetail(): JSX.Element {
             {runNode && (() => {
               const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
               return runComp ? (
-                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6 }}>
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
                   <Space size={6}>
                     <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
                     <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
@@ -1285,7 +1285,7 @@ export function FlowDetail(): JSX.Element {
             <div
               onClick={() => document.getElementById('batch-file-input')?.click()}
               style={{
-                border: '2px dashed #d9d9d9',
+                border: '2px dashed var(--ocean-border-strong)',
                 borderRadius: 8,
                 padding: 32,
                 textAlign: 'center',
@@ -1301,7 +1301,7 @@ export function FlowDetail(): JSX.Element {
               {batchFiles.length > 0 && (
                 <div style={{ marginTop: 8, textAlign: 'left', maxHeight: 200, overflow: 'auto' }}>
                   {batchFiles.map((f, i) => (
-                    <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid var(--ocean-border-subtle)' }}>
                       <Text style={{ fontSize: 13 }}>{f.name}</Text>
                       <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
                         ({(f.size / 1024).toFixed(0)} KB)

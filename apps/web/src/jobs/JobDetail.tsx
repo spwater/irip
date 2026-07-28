@@ -1,6 +1,5 @@
 import {
   Button,
-  Card,
   Descriptions,
   Popconfirm,
   Progress,
@@ -17,19 +16,21 @@ import {
   apiRetryJob,
   extractApiError,
 } from '@/api/client';
+import { PageIntro, DetailSection, StatusMark, FeedbackState } from '@/components/ui';
+import type { StatusSemantic } from '@/theme/tokens';
 
-const { Title, Text, Paragraph } = Typography;
+const { Text, Paragraph } = Typography;
 
-/** 状态 → 颜色映射 */
-const STATUS_COLOR: Record<string, string> = {
-  accepted: 'default',
-  queued: 'blue',
-  running: 'processing',
-  retry_wait: 'orange',
+/** 状态 → 语义映射（用于 StatusMark） */
+const JOB_SEMANTIC: Record<string, StatusSemantic> = {
+  accepted: 'neutral',
+  queued: 'info',
+  running: 'info',
+  retry_wait: 'warning',
   succeeded: 'success',
-  failed: 'error',
+  failed: 'danger',
   cancel_requested: 'warning',
-  cancelled: 'default',
+  cancelled: 'neutral',
 };
 
 /** 状态 → 中文标签映射 */
@@ -109,12 +110,7 @@ export function JobDetail(): JSX.Element {
   });
 
   if (isLoading || !data) {
-    return (
-      <div>
-        <Title level={3}>作业详情</Title>
-        <Text type="secondary">加载中…</Text>
-      </div>
-    );
+    return <FeedbackState state="loading" title="加载作业详情…" style={{ padding: 48 }} />;
   }
 
   const job = data;
@@ -122,46 +118,52 @@ export function JobDetail(): JSX.Element {
   const canRetry = TERMINAL_STATUSES.includes(job.status);
 
   return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button onClick={() => void navigate({ to: '/jobs' })}>返回列表</Button>
-        {canRetry && (
-          <Popconfirm
-            title="确定重试此作业？"
-            onConfirm={() => retryMutation.mutate()}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button type="primary" loading={retryMutation.isPending}>
-              重试
-            </Button>
-          </Popconfirm>
-        )}
-        {canCancel && (
-          <Popconfirm
-            title="确定取消此作业？"
-            onConfirm={() => cancelMutation.mutate()}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button danger loading={cancelMutation.isPending}>
-              取消作业
-            </Button>
-          </Popconfirm>
-        )}
-      </Space>
-
-      <Title level={3}>作业详情</Title>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="DETAIL / JOB"
+        title="作业详情"
+        subtitle="作业基本信息、执行历史与工件。"
+        actions={
+          <Space>
+            <Button onClick={() => void navigate({ to: '/jobs' })}>返回列表</Button>
+            {canRetry && (
+              <Popconfirm
+                title="确定重试此作业？"
+                onConfirm={() => retryMutation.mutate()}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button type="primary" loading={retryMutation.isPending}>
+                  重试
+                </Button>
+              </Popconfirm>
+            )}
+            {canCancel && (
+              <Popconfirm
+                title="确定取消此作业？"
+                onConfirm={() => cancelMutation.mutate()}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button danger loading={cancelMutation.isPending}>
+                  取消作业
+                </Button>
+              </Popconfirm>
+            )}
+          </Space>
+        }
+      />
 
       {/* 基本信息 */}
-      <Card title="基本信息" style={{ marginBottom: 16 }}>
+      <DetailSection title="基本信息" style={{ marginBottom: 16 }}>
         <Descriptions bordered column={2} size="small">
           <Descriptions.Item label="作业 ID">{job.id}</Descriptions.Item>
           <Descriptions.Item label="类型">{job.kind}</Descriptions.Item>
           <Descriptions.Item label="状态">
-            <Tag color={STATUS_COLOR[job.status] ?? 'default'}>
-              {STATUS_LABEL[job.status] ?? job.status}
-            </Tag>
+            <StatusMark
+              semantic={JOB_SEMANTIC[job.status] ?? 'neutral'}
+              label={STATUS_LABEL[job.status] ?? job.status}
+            />
           </Descriptions.Item>
           <Descriptions.Item label="阶段">
             {job.stage || <Text type="secondary">-</Text>}
@@ -185,18 +187,19 @@ export function JobDetail(): JSX.Element {
             {new Date(job.updated_at).toLocaleString()}
           </Descriptions.Item>
         </Descriptions>
-      </Card>
+      </DetailSection>
 
       {/* 输入载荷 */}
       {job.payload && Object.keys(job.payload).length > 0 && (
-        <Card title="输入载荷" style={{ marginBottom: 16 }}>
+        <DetailSection title="输入载荷" style={{ marginBottom: 16 }}>
           <Paragraph>
             <pre
               style={{
-                background: '#f5f5f5',
+                background: 'var(--ocean-surface-structural)',
                 padding: 12,
                 borderRadius: 4,
                 fontSize: 12,
+                fontFamily: 'var(--ocean-font-mono)',
                 overflow: 'auto',
                 maxHeight: 300,
               }}
@@ -204,43 +207,45 @@ export function JobDetail(): JSX.Element {
               {JSON.stringify(job.payload, null, 2)}
             </pre>
           </Paragraph>
-        </Card>
+        </DetailSection>
       )}
 
       {/* 错误日志 */}
       {job.last_error && (
-        <Card title="错误日志" style={{ marginBottom: 16 }}>
+        <DetailSection title="错误日志" style={{ marginBottom: 16 }}>
           <Paragraph>
             <pre
               style={{
-                background: '#fff2f0',
+                background: 'rgba(165, 61, 82, 0.08)',
                 padding: 12,
                 borderRadius: 4,
                 fontSize: 12,
+                fontFamily: 'var(--ocean-font-mono)',
                 overflow: 'auto',
                 maxHeight: 300,
-                border: '1px solid #ffccc7',
+                border: '1px solid var(--ocean-border-strong)',
               }}
             >
               {JSON.stringify(job.last_error, null, 2)}
             </pre>
           </Paragraph>
-        </Card>
+        </DetailSection>
       )}
 
       {/* 执行结果 / 工件 */}
       {job.result && Object.keys(job.result).length > 0 && (
-        <Card title="执行结果 / 工件" style={{ marginBottom: 16 }}>
+        <DetailSection title="执行结果 / 工件" style={{ marginBottom: 16 }}>
           <Paragraph>
             <pre
               style={{
-                background: '#f6ffed',
+                background: 'rgba(20, 118, 94, 0.06)',
                 padding: 12,
                 borderRadius: 4,
                 fontSize: 12,
+                fontFamily: 'var(--ocean-font-mono)',
                 overflow: 'auto',
                 maxHeight: 400,
-                border: '1px solid #b7eb8f',
+                border: '1px solid var(--ocean-border-subtle)',
               }}
             >
               {JSON.stringify(job.result, null, 2)}
@@ -250,7 +255,7 @@ export function JobDetail(): JSX.Element {
           {Boolean(job.result.artifact_id) && (
             <Space>
               <Text>工件 ID: </Text>
-              <Text copyable style={{ fontFamily: 'monospace' }}>
+              <Text copyable style={{ fontFamily: 'var(--ocean-font-mono)' }}>
                 {String(job.result.artifact_id)}
               </Text>
             </Space>
@@ -262,17 +267,18 @@ export function JobDetail(): JSX.Element {
               </a>
             </div>
           )}
-        </Card>
+        </DetailSection>
       )}
 
       {/* 终态提示 */}
       {TERMINAL_STATUSES.includes(job.status) && !job.last_error && !job.result && (
-        <Card title="执行历史">
+        <DetailSection title="执行历史">
           <Descriptions column={1} size="small">
             <Descriptions.Item label="当前状态">
-              <Tag color={STATUS_COLOR[job.status] ?? 'default'}>
-                {STATUS_LABEL[job.status] ?? job.status}
-              </Tag>
+              <StatusMark
+                semantic={JOB_SEMANTIC[job.status] ?? 'neutral'}
+                label={STATUS_LABEL[job.status] ?? job.status}
+              />
             </Descriptions.Item>
             <Descriptions.Item label="尝试次数">
               {job.attempt} / {job.max_attempts}
@@ -281,7 +287,7 @@ export function JobDetail(): JSX.Element {
               {new Date(job.updated_at).toLocaleString()}
             </Descriptions.Item>
           </Descriptions>
-        </Card>
+        </DetailSection>
       )}
     </div>
   );

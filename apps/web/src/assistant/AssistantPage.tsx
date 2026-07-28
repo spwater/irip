@@ -412,7 +412,7 @@ export function AssistantPage(): JSX.Element {
                 padding: '8px 12px',
                 cursor: 'pointer',
                 position: 'relative',
-                background: selectedConvId === conv.id ? '#e6f4ff' : 'transparent',
+                background: selectedConvId === conv.id ? 'rgba(22, 134, 174, 0.12)' : 'transparent',
                 transition: 'background 0.2s',
               }}
               onClick={() => setSelectedConvId(conv.id)}
@@ -441,7 +441,7 @@ export function AssistantPage(): JSX.Element {
                   gap: 2,
                   opacity: 0,
                   transition: 'opacity 0.2s',
-                  background: selectedConvId === conv.id ? '#e6f4ff' : '#fff',
+                  background: selectedConvId === conv.id ? 'rgba(22, 134, 174, 0.12)' : 'var(--ocean-surface-strong)',
                   padding: '2px 4px',
                   borderRadius: 4,
                   boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
@@ -498,7 +498,7 @@ export function AssistantPage(): JSX.Element {
                       type="text"
                       danger
                       onClick={(e) => e.stopPropagation()}
-                      style={{ padding: '0 4px', fontSize: 12, color: '#ff4d4f' }}
+                      style={{ padding: '0 4px', fontSize: 12, color: 'var(--ocean-status-danger)' }}
                     >
                       删除
                     </Button>
@@ -542,7 +542,7 @@ export function AssistantPage(): JSX.Element {
             flex: 1,
             overflowY: 'auto',
             padding: '8px 4px',
-            background: '#fafafa',
+            background: 'rgba(232, 246, 249, 0.5)',
             borderRadius: 8,
             marginBottom: 12,
           }}
@@ -690,7 +690,7 @@ export function AssistantPage(): JSX.Element {
       >
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 280px)' }}>
           {/* 搜索栏 */}
-          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid #f0f0f0' }}>
+          <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ocean-border-subtle)' }}>
             <Input.Search
               placeholder="搜索样品名称或任务名称..."
               value={factSearchText}
@@ -715,7 +715,7 @@ export function AssistantPage(): JSX.Element {
           {/* 分组列表 */}
           <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px' }}>
             {Object.keys(factGroups).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--ocean-text-muted)' }}>
                 <Text type="secondary">暂无数据或未找到匹配的样品</Text>
               </div>
             ) : (
@@ -735,7 +735,7 @@ export function AssistantPage(): JSX.Element {
                         gap: 8,
                         padding: '8px 0',
                         cursor: 'pointer',
-                        borderBottom: '1px solid #f5f5f5',
+                        borderBottom: '1px solid var(--ocean-border-subtle)',
                         userSelect: 'none',
                       }}
                       onClick={() => {
@@ -747,7 +747,7 @@ export function AssistantPage(): JSX.Element {
                         });
                       }}
                     >
-                      <span style={{ fontSize: 10, color: '#999', width: 12, display: 'inline-block' }}>
+                      <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
                         {isExpanded ? '▼' : '▶'}
                       </span>
                       <Checkbox
@@ -777,7 +777,7 @@ export function AssistantPage(): JSX.Element {
                               padding: '4px 0',
                               cursor: 'pointer',
                               borderRadius: 4,
-                              background: selectedFactIds.includes(f.fact_id) ? '#f0f7ff' : 'transparent',
+                              background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
                             }}
                             onClick={() => handleToggleFact(f.fact_id)}
                           >

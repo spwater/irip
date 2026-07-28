@@ -6,7 +6,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   message,
@@ -22,19 +21,21 @@ import {
   type JobListItem,
   type JobStatus,
 } from '@/api/client';
+import { ActionBar, DataTableShell, StatusMark } from '@/components/ui';
+import type { StatusSemantic } from '@/theme/tokens';
 
 const { Text } = Typography;
 
-/** 状态 → 颜色映射 */
-const STATUS_COLOR: Record<string, string> = {
-  accepted: 'default',
-  queued: 'blue',
-  running: 'processing',
-  retry_wait: 'orange',
+/** 状态 → 语义映射 */
+const STATUS_SEMANTIC: Record<string, StatusSemantic> = {
+  accepted: 'neutral',
+  queued: 'info',
+  running: 'info',
+  retry_wait: 'warning',
   succeeded: 'success',
-  failed: 'error',
+  failed: 'danger',
   cancel_requested: 'warning',
-  cancelled: 'default',
+  cancelled: 'neutral',
 };
 
 /** 状态 → 中文标签映射 */
@@ -119,7 +120,7 @@ export function JobsPage(): JSX.Element {
       render: (val: string) => (
         <Tooltip title={val}>
           <Text
-            style={{ fontSize: 12, cursor: 'pointer', color: '#1677ff' }}
+            style={{ fontSize: 12, cursor: 'pointer', color: 'var(--ocean-action-primary)' }}
             onClick={() => void navigate({ to: '/jobs/$jobId', params: { jobId: val } })}
           >
             {val.slice(0, 16)}…
@@ -139,9 +140,10 @@ export function JobsPage(): JSX.Element {
       key: 'status',
       width: 120,
       render: (status: string) => (
-        <Tag color={STATUS_COLOR[status] ?? 'default'}>
-          {STATUS_LABEL[status as JobStatus] ?? status}
-        </Tag>
+        <StatusMark
+          semantic={STATUS_SEMANTIC[status] ?? 'neutral'}
+          label={STATUS_LABEL[status as JobStatus] ?? status}
+        />
       ),
     },
     {
@@ -218,41 +220,45 @@ export function JobsPage(): JSX.Element {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Select
-          placeholder="状态筛选"
-          style={{ width: 160 }}
-          value={statusFilter ?? '__all__'}
-          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
-          ]}
-        />
-        <Select
-          placeholder="类型筛选"
-          style={{ width: 200 }}
-          value={kindFilter ?? '__all__'}
-          onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'echo', label: 'echo' },
-            { value: 'parse_excel', label: 'parse_excel' },
-            { value: 'audit_export', label: 'audit_export' },
-            { value: 'ingestion', label: 'ingestion' },
-            { value: 'derivation', label: 'derivation' },
-          ]}
-        />
-      </Space>
+      <ActionBar style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Select
+            placeholder="状态筛选"
+            style={{ width: 160 }}
+            value={statusFilter ?? '__all__'}
+            onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+            options={[
+              { value: '__all__', label: '全部' },
+              ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
+            ]}
+          />
+          <Select
+            placeholder="类型筛选"
+            style={{ width: 200 }}
+            value={kindFilter ?? '__all__'}
+            onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
+            options={[
+              { value: '__all__', label: '全部' },
+              { value: 'echo', label: 'echo' },
+              { value: 'parse_excel', label: 'parse_excel' },
+              { value: 'audit_export', label: 'audit_export' },
+              { value: 'ingestion', label: 'ingestion' },
+              { value: 'derivation', label: 'derivation' },
+            ]}
+          />
+        </Space>
+      </ActionBar>
 
-      <Table<JobListItem>
-        columns={columns}
-        dataSource={items}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: true }}
-        size="middle"
-      />
+      <DataTableShell bodyPadding={0}>
+        <Table<JobListItem>
+          columns={columns}
+          dataSource={items}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: true }}
+          size="middle"
+        />
+      </DataTableShell>
     </div>
   );
 }

@@ -1,21 +1,21 @@
 import { useState } from 'react';
-import { Tabs, Typography } from 'antd';
+import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
 import { EquipmentPage } from '@/equipment/EquipmentPage';
 import { ComponentsPage } from '@/components/ComponentsPage';
-
-const { Title } = Typography;
+import { PageIntro } from '@/components/ui';
 
 /** 合法的 Tab key 集合。 */
 const VALID_TABS = ['departments', 'equipment', 'exp-objects', 'components'] as const;
 type StandardsTab = (typeof VALID_TABS)[number];
 
 /**
- * 实验室建设页面
+ * 实验室建设页面（设计文档第 10.4 节）
  *
  * 四个 Tab：组织机构 / 设备仪器 / 实验对象 / 数据接口
+ * PageIntro 下增加"组织机构 → 设备仪器 → 实验对象"建设链路提示。
  */
 export function StandardsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -52,8 +52,34 @@ export function StandardsPage(): JSX.Element {
   };
 
   return (
-    <div>
-      <Title level={2}>实验室建设</Title>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="MODULE 02 / LAB STANDARDS"
+        title="实验室建设"
+        subtitle="建立组织机构、设备仪器与实验对象，三者构成实验数据的来源链路。"
+      >
+        {/* 建设链路提示 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 0',
+            fontSize: 13,
+            color: 'var(--ocean-text-secondary)',
+          }}
+        >
+          <span style={{ fontWeight: 600, color: 'var(--ocean-text-primary)' }}>建设链路</span>
+          <span style={{ color: 'var(--ocean-action-primary)' }}>组织机构</span>
+          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
+          <span style={{ color: 'var(--ocean-action-primary)' }}>设备仪器</span>
+          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
+          <span style={{ color: 'var(--ocean-action-primary)' }}>实验对象</span>
+          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
+          <span style={{ color: 'var(--ocean-action-primary)' }}>数据接口</span>
+        </div>
+      </PageIntro>
+
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}

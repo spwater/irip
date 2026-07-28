@@ -1,0 +1,241 @@
+/**
+ * IRIP Data Ocean 全局基础样式
+ *
+ * - reset 补充
+ * - 页面底色（由 ocean backdrop 提供透明背景）
+ * - 基础文字字体栈
+ * - 焦点样式（2px 可见焦点）
+ * - 滚动条样式
+ * - font-variant-numeric: tabular-nums 用于核心数据
+ *
+ * CSS 变量 `--ocean-*` 与 theme/tokens.ts 保持一一对应，
+ * 组件样式统一引用这些变量，避免硬编码色值。
+ */
+
+/* ============================================================
+ * CSS 变量：与 theme/tokens.ts 同步
+ * ========================================================== */
+:root {
+  /* 画布渐变 */
+  --ocean-canvas-start: #a9d2df;
+  --ocean-canvas-middle: #cfe5ea;
+  --ocean-canvas-end: #e8f3f5;
+
+  /* 面板材质 */
+  --ocean-surface-default: rgba(240, 250, 251, 0.72);
+  --ocean-surface-strong: rgba(232, 246, 249, 0.9);
+  --ocean-surface-structural: rgba(142, 191, 208, 0.46);
+  --ocean-surface-focus: #6fa9be;
+
+  /* 文字 */
+  --ocean-text-primary: #102f44;
+  --ocean-text-secondary: #486b7e;
+  --ocean-text-muted: #6f8d9c;
+
+  /* 边框 */
+  --ocean-border-subtle: rgba(24, 102, 133, 0.16);
+  --ocean-border-strong: rgba(14, 118, 156, 0.34);
+  --ocean-border-input: rgba(24, 102, 133, 0.2);
+  --ocean-border-split: rgba(24, 102, 133, 0.14);
+
+  /* 主操作 */
+  --ocean-action-primary: #1686ae;
+  --ocean-action-hover: #0e769c;
+  --ocean-action-active: #075c7d;
+
+  /* 强调 */
+  --ocean-accent-current: #39b9c2;
+
+  /* 状态 */
+  --ocean-status-success: #14765e;
+  --ocean-status-warning: #9a6818;
+  --ocean-status-danger: #a53d52;
+  --ocean-status-info: #245f9a;
+  --ocean-status-violet: #6655a4;
+
+  /* 间距 */
+  --ocean-space-xs: 4px;
+  --ocean-space-sm: 8px;
+  --ocean-space-md: 12px;
+  --ocean-space-base: 16px;
+  --ocean-space-lg: 24px;
+  --ocean-space-xl: 32px;
+
+  /* 圆角 */
+  --ocean-radius-xs: 2px;
+  --ocean-radius-sm: 4px;
+  --ocean-radius-md: 6px;
+  --ocean-radius-lg: 8px;
+
+  /* 阴影 */
+  --ocean-shadow-panel: 0 12px 30px rgba(45, 104, 125, 0.1);
+  --ocean-shadow-float: 0 24px 64px rgba(29, 78, 103, 0.18);
+
+  /* 层级 */
+  --ocean-z-background: 0;
+  --ocean-z-decoration: 1;
+  --ocean-z-content: 10;
+  --ocean-z-header: 100;
+
+  /* 动效 */
+  --ocean-motion-instant: 120ms;
+  --ocean-motion-control: 180ms;
+  --ocean-motion-enter: 240ms;
+  --ocean-motion-focus: 320ms;
+  --ocean-motion-page: 360ms;
+  --ocean-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* 字体 */
+  --ocean-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  --ocean-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+/* ============================================================
+ * reset 补充
+ * ========================================================== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  /* 页面底色透明，由 OceanBackdrop 提供极地雾蓝背景 */
+  background: transparent;
+  color: var(--ocean-text-primary);
+  font-family: var(--ocean-font-family);
+  font-size: 14px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 标题字重 */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--ocean-text-primary);
+}
+
+/* 段落默认间距 */
+p {
+  margin: 0 0 var(--ocean-space-base);
+}
+
+/* 链接基础色 */
+a {
+  color: var(--ocean-action-primary);
+  text-decoration: none;
+  transition: color var(--ocean-motion-instant) var(--ocean-motion-easing);
+}
+
+a:hover {
+  color: var(--ocean-action-hover);
+}
+
+a:active {
+  color: var(--ocean-action-active);
+}
+
+/* ============================================================
+ * 焦点样式：2px 可见焦点
+ * ========================================================== */
+:focus-visible {
+  outline: 2px solid var(--ocean-action-primary);
+  outline-offset: 2px;
+  border-radius: var(--ocean-radius-xs);
+}
+
+/* 移除浏览器默认焦点轮廓时保留 focus-visible */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================================
+ * 滚动条样式（极地雾蓝）
+ * ========================================================== */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 102, 133, 0.24) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(24, 102, 133, 0.22);
+  border-radius: var(--ocean-radius-xs);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 102, 133, 0.34);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================
+ * 等宽数据：UUID、版本、时间、日志与代码使用等宽字体栈
+ * ========================================================== */
+code,
+pre,
+kbd,
+samp {
+  font-family: var(--ocean-font-mono);
+  font-size: 0.95em;
+}
+
+/* 核心数据：tabular-nums 保证数字等宽对齐 */
+.ocean-tabular-nums,
+.ocean-data-value {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ============================================================
+ * 选择文本
+ * ========================================================== */
+::selection {
+  background: rgba(22, 134, 174, 0.22);
+  color: var(--ocean-text-primary);
+}
+
+/* ============================================================
+ * 图片与媒体
+ * ========================================================== */
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+/* 移除按钮默认样式，由 Ant Design 控制 */
+button {
+  font-family: inherit;
+}

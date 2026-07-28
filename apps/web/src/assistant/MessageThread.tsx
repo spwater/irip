@@ -109,7 +109,7 @@ function MarkdownWithMath({ content }: { content: string }): JSX.Element {
             btn.className = 'echarts-copy-btn';
             btn.innerHTML = '📋';
             btn.title = '复制 ECharts 配置';
-            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,0.9);border:1px solid #d9d9d9;border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
+            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(232,246,249,0.9);border:1px solid rgba(24,102,133,0.20);border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
             (div as HTMLElement).onmouseenter = () => { btn.style.opacity = '1'; };
             (div as HTMLElement).onmouseleave = () => { btn.style.opacity = '0'; };
             btn.onclick = (e) => {
@@ -145,12 +145,12 @@ function renderMarkdownToHtml(md: string): string {
 
   // 代码块 ```（echarts 已在前面提取，这里只处理普通代码块）
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
-    return `<pre style="background:#f5f5f5;padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:monospace"><code>${escapeHtml(code.trim())}</code></pre>`;
+    return `<pre style="background:rgba(142,191,208,0.16);padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:var(--ocean-font-mono,monospace)"><code>${escapeHtml(code.trim())}</code></pre>`;
   });
 
   // 行内代码 `...`
   html = html.replace(/`([^`]+)`/g, (_, code) => {
-    return `<code style="background:#f0f0f0;padding:1px 4px;border-radius:3px;font-size:13px;font-family:monospace">${escapeHtml(code)}</code>`;
+    return `<code style="background:rgba(142,191,208,0.18);padding:1px 4px;border-radius:3px;font-size:13px;font-family:var(--ocean-font-mono,monospace)">${escapeHtml(code)}</code>`;
   });
 
   // 标题
@@ -169,9 +169,9 @@ function renderMarkdownToHtml(md: string): string {
     const headers = header.split('|').map((h: string) => h.trim()).filter(Boolean);
     const rows = body.trim().split('\n').map((r: string) => r.split('|').map((c: string) => c.trim()).filter(Boolean));
     let table = '<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px">';
-    table += '<tr>' + headers.map((h: string) => `<th style="border:1px solid #d9d9d9;padding:6px 10px;background:#fafafa;font-weight:600;text-align:left">${h}</th>`).join('') + '</tr>';
+    table += '<tr>' + headers.map((h: string) => `<th style="border:1px solid rgba(24,102,133,0.20);padding:6px 10px;background:rgba(142,191,208,0.16);font-weight:600;text-align:left">${h}</th>`).join('') + '</tr>';
     rows.forEach((row: string[]) => {
-      table += '<tr>' + row.map((c: string) => `<td style="border:1px solid #d9d9d9;padding:6px 10px">${c}</td>`).join('') + '</tr>';
+      table += '<tr>' + row.map((c: string) => `<td style="border:1px solid rgba(24,102,133,0.14);padding:6px 10px">${c}</td>`).join('') + '</tr>';
     });
     table += '</table>';
     return table;
@@ -216,9 +216,9 @@ const ROLE_AVATAR_TEXT: Record<string, string> = {
  * 消息角色 → 头像颜色
  */
 const ROLE_COLOR: Record<string, string> = {
-  user: '#1677ff',
-  assistant: '#52c41a',
-  tool: '#fa8c16',
+  user: '#1686AE',
+  assistant: '#14765E',
+  tool: '#9A6818',
 };
 
 /**
@@ -249,7 +249,7 @@ export function MessageThread({
           alignItems: 'center',
           justifyContent: 'center',
           height: '100%',
-          color: '#999',
+          color: 'var(--ocean-text-muted)',
         }}
       >
         <Text type="secondary">开始一段新对话吧 ✨</Text>
@@ -277,7 +277,7 @@ export function MessageThread({
             <Avatar
               size={36}
               style={{
-                backgroundColor: ROLE_COLOR[msg.role] ?? '#1677ff',
+                backgroundColor: ROLE_COLOR[msg.role] ?? '#1686AE',
                 flexShrink: 0,
                 fontSize: 14,
                 fontWeight: 600,
@@ -290,8 +290,8 @@ export function MessageThread({
                 maxWidth: '75%',
                 padding: '12px 16px',
                 borderRadius: 12,
-                background: isUser ? '#e6f4ff' : '#f6ffed',
-                border: `1px solid ${isUser ? '#91caff' : '#b7eb8f'}`,
+                background: isUser ? 'rgba(22, 134, 174, 0.10)' : 'rgba(20, 118, 94, 0.06)',
+                border: `1px solid ${isUser ? 'rgba(22, 134, 174, 0.20)' : 'rgba(20, 118, 94, 0.18)'}`,
               }}
             >
               <div style={{ marginBottom: 4 }}>

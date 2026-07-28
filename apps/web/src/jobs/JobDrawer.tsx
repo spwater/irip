@@ -70,9 +70,9 @@ export function JobDrawer(): JSX.Element {
               key={job.id}
               style={{
                 padding: 16,
-                border: '1px solid #f0f0f0',
-                borderRadius: 8,
-                background: '#fafafa',
+                border: '1px solid var(--ocean-border-subtle)',
+                borderRadius: 6,
+                background: 'var(--ocean-surface-default)',
               }}
             >
               <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
@@ -80,7 +80,7 @@ export function JobDrawer(): JSX.Element {
                 <Tag color={STATUS_COLOR[job.status]}>{STATUS_LABEL[job.status]}</Tag>
               </div>
               <Progress percent={job.progress} size="small" />
-              <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+              <div style={{ marginTop: 8, fontSize: 12, color: 'var(--ocean-text-muted)' }}>
                 类型: {job.kind}
                 {job.retryable && <Tag color="orange" style={{ marginLeft: 8 }}>可重试</Tag>}
               </div>

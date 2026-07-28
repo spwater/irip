@@ -1,19 +1,19 @@
-import { Tabs, Typography } from 'antd';
+import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { FlowDetail } from '@/components/FlowDetail';
 import { FactsPage } from '@/facts/FactsPage';
 import { ParameterPage } from '@/parameters/ParameterPage';
-
-const { Title } = Typography;
+import { PageIntro } from '@/components/ui';
 
 /** 合法的 Tab key 集合。 */
 const VALID_TABS = ['flows', 'facts', 'parameters'] as const;
 type LabOpsTab = (typeof VALID_TABS)[number];
 
 /**
- * 实验室运营页面
+ * 实验室运营页面（设计文档第 10.5 节）
  *
  * 三个 Tab：实验任务 / 原始数据 / 衍生数据
+ * 使用 PageIntro 统一标题区。
  */
 export function LabOpsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -30,8 +30,12 @@ export function LabOpsPage(): JSX.Element {
   };
 
   return (
-    <div>
-      <Title level={2}>实验室运营</Title>
+    <div className="ocean-page-enter">
+      <PageIntro
+        index="MODULE 03 / LAB OPERATIONS"
+        title="实验室运营"
+        subtitle="管理实验执行流程、原始数据记录与衍生数据参数。"
+      />
       <Tabs
         activeKey={activeTab}
         onChange={handleTabChange}

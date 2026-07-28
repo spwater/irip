@@ -1,0 +1,183 @@
+/**
+ * IRIP Data Ocean 极地雾蓝空间
+ *
+ * - 静态雾蓝渐变（canvas.start → middle → end）
+ * - 低透明度网格（透明度 ≤ 6%，尺寸 ≥ 72px）
+ * - 1–2 个大范围光域
+ * - 透明面板材质
+ * - 装饰层
+ *
+ * 约束（设计文档第 7.3 节）：
+ * - 网格透明度不高于 6%，尺寸不小于 72px
+ * - 背景不得持续跟随鼠标或制造景深晃动
+ * - 复杂表格、对话和流程区必须使用稳定 surface 覆盖背景纹理
+ * - 单页同时运动的背景层不超过 2 个
+ */
+
+/* ============================================================
+ * 极地雾蓝背景层：雾蓝渐变 + 网格 + 光域
+ * .ocean-backdrop 固定定位，z-index: 0，不承载业务数据
+ * ========================================================== */
+.ocean-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ocean-z-background);
+  overflow: hidden;
+  pointer-events: none;
+  /* 静态雾蓝渐变：start → middle → end */
+  background:
+    linear-gradient(
+      135deg,
+      var(--ocean-canvas-start) 0%,
+      var(--ocean-canvas-middle) 48%,
+      var(--ocean-canvas-end) 100%
+    );
+}
+
+/* ============================================================
+ * 网格层：低透明度（≤ 6%），尺寸 ≥ 72px
+ * ========================================================== */
+.ocean-backdrop__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(
+      to right,
+      rgba(24, 102, 133, 0.05) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      rgba(24, 102, 133, 0.05) 1px,
+      transparent 1px
+    );
+  background-size: 80px 80px;
+  background-position: -1px -1px;
+  opacity: 1;
+  mask-image: radial-gradient(
+    ellipse at 50% 40%,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.4) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  -webkit-mask-image: radial-gradient(
+    ellipse at 50% 40%,
+    rgba(0, 0, 0, 0.9) 0%,
+    rgba(0, 0, 0, 0.4) 60%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* ============================================================
+ * 光域：1–2 个大范围柔光，极低振幅呼吸
+ * ========================================================== */
+.ocean-backdrop__glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.ocean-backdrop__glow--primary {
+  width: 640px;
+  height: 640px;
+  top: -120px;
+  right: -80px;
+  background: radial-gradient(
+    circle,
+    rgba(111, 169, 190, 0.32) 0%,
+    rgba(111, 169, 190, 0) 70%
+  );
+  animation: ocean-breathe-primary 32s var(--ocean-motion-easing) infinite alternate;
+}
+
+.ocean-backdrop__glow--secondary {
+  width: 520px;
+  height: 520px;
+  bottom: -100px;
+  left: -60px;
+  background: radial-gradient(
+    circle,
+    rgba(57, 185, 194, 0.18) 0%,
+    rgba(57, 185, 194, 0) 70%
+  );
+  animation: ocean-breathe-secondary 40s var(--ocean-motion-easing) infinite alternate;
+}
+
+/* 背景呼吸：极低振幅，不能影响阅读 */
+@keyframes ocean-breathe-primary {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: translate3d(20px, 16px, 0) scale(1.06);
+    opacity: 0.6;
+  }
+}
+
+@keyframes ocean-breathe-secondary {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.42;
+  }
+  100% {
+    transform: translate3d(-16px, -12px, 0) scale(1.05);
+    opacity: 0.52;
+  }
+}
+
+/* ============================================================
+ * 装饰层：背景大字（透明度 ≤ 4%，不穿过正文笔画）
+ * ========================================================== */
+.ocean-backdrop__decoration {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ============================================================
+ * 透明面板材质
+ * ========================================================== */
+.ocean-panel {
+  background: var(--ocean-surface-default);
+  border: 1px solid var(--ocean-border-subtle);
+  border-radius: var(--ocean-radius-sm);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.ocean-panel--strong {
+  background: var(--ocean-surface-strong);
+  border: 1px solid var(--ocean-border-subtle);
+  border-radius: var(--ocean-radius-sm);
+  /* 稳定 surface：不使用实时 backdrop-filter，避免滚动卡顿 */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.ocean-panel--structural {
+  background: var(--ocean-surface-structural);
+  border: 1px solid var(--ocean-border-subtle);
+  border-radius: var(--ocean-radius-sm);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* ============================================================
+ * 结构线：用于导航、分区和层级区分
+ * ========================================================== */
+.ocean-structural-line {
+  background: var(--ocean-border-subtle);
+}
+
+/* ============================================================
+ * prefers-reduced-motion：关闭背景位移与漂浮
+ * ========================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .ocean-backdrop__glow--primary,
+  .ocean-backdrop__glow--secondary {
+    animation: none;
+  }
+}

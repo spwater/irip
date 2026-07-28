@@ -30,6 +30,7 @@ import {
   extractApiError,
   type EquipmentListItem,
 } from '@/api/client';
+import { ActionBar, DataTableShell } from '@/components/ui';
 
 /**
  * 设备仪器管理页面
@@ -357,38 +358,42 @@ export function EquipmentPage({
 
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Button type="primary" onClick={handleCreate}>
-          新建仪器或方法
-        </Button>
-        <Select
-          placeholder="状态筛选"
-          style={{ width: 140 }}
-          value={statusFilter ?? '__all__'}
-          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'active', label: '启用' },
-            { value: 'disabled', label: '禁用' },
-          ]}
-        />
-        <Select
-          placeholder="机构筛选"
-          style={{ width: 200 }}
-          value={deptFilter ?? '__all__'}
-          onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
-          options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-      </Space>
+      <ActionBar style={{ marginBottom: 16 }}>
+        <Space wrap>
+          <Button type="primary" onClick={handleCreate}>
+            新建仪器或方法
+          </Button>
+          <Select
+            placeholder="状态筛选"
+            style={{ width: 140 }}
+            value={statusFilter ?? '__all__'}
+            onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+            options={[
+              { value: '__all__', label: '全部' },
+              { value: 'active', label: '启用' },
+              { value: 'disabled', label: '禁用' },
+            ]}
+          />
+          <Select
+            placeholder="机构筛选"
+            style={{ width: 200 }}
+            value={deptFilter ?? '__all__'}
+            onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
+            options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
+          />
+        </Space>
+      </ActionBar>
 
-      <Table<EquipmentListItem>
-        columns={columns}
-        dataSource={items}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="middle"
-      />
+      <DataTableShell bodyPadding={0}>
+        <Table<EquipmentListItem>
+          columns={columns}
+          dataSource={items}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+          size="middle"
+        />
+      </DataTableShell>
 
       {/* 创建/编辑 Modal */}
       <Modal
@@ -460,7 +465,7 @@ export function EquipmentPage({
           </Form.Item>
         </Form>
         {editingItem && (
-          <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+          <div style={{ marginTop: 16, borderTop: '1px solid var(--ocean-border-subtle)', paddingTop: 12 }}>
             <Popconfirm
               title="确定删除该仪器？"
               description="将同时删除仪器及其关联，此操作不可撤销。"

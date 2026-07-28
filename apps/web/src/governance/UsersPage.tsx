@@ -27,6 +27,7 @@ import {
   type UserListItem,
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
+import { ActionBar, DataTableShell } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -344,7 +345,7 @@ export function UsersPage(): JSX.Element {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <ActionBar style={{ marginBottom: 16 }}>
         <Select
           placeholder="状态筛选"
           style={{ width: 140 }}
@@ -359,16 +360,18 @@ export function UsersPage(): JSX.Element {
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
           新建账号
         </Button>
-      </div>
+      </ActionBar>
 
-      <Table<UserListItem>
-        columns={columns}
-        dataSource={items}
-        rowKey="id"
-        loading={isLoading}
-        pagination={{ pageSize: 20, showSizeChanger: false }}
-        size="middle"
-      />
+      <DataTableShell bodyPadding={0}>
+        <Table<UserListItem>
+          columns={columns}
+          dataSource={items}
+          rowKey="id"
+          loading={isLoading}
+          pagination={{ pageSize: 20, showSizeChanger: false }}
+          size="middle"
+        />
+      </DataTableShell>
 
       {/* 编辑角色 Modal */}
       <Modal

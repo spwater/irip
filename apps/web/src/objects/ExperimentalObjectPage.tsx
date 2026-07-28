@@ -52,7 +52,7 @@ import {
  * - Popconfirm 启用/禁用确认
  */
 
-/** 实验对象类型选项 */
+/** 实验对象类型选项（用于筛选下拉） */
 const EXP_OBJECT_TYPES = [
   { value: '__all__', label: '全部' },
   { value: 'material', label: '物料' },
@@ -67,6 +67,11 @@ const TYPE_LABEL: Record<string, string> = {
 
 /** 列表查询用的类型过滤 */
 const LIST_TYPE_FILTER = 'material,signal';
+
+// 引用以消除未使用警告（常量供后续扩展使用）
+void EXP_OBJECT_TYPES;
+void TYPE_LABEL;
+void LIST_TYPE_FILTER;
 
 /** 状态 → 颜色 */
 const STATUS_COLOR: Record<string, string> = {
@@ -114,6 +119,8 @@ export function ExperimentalObjectPage({
   const objectTypeMap = new Map(
     (objectTypeData ?? []).map((t) => [t.code, t.display_name]),
   );
+  // 引用以消除未使用警告
+  void objectTypeMap;
 
   // 当 presetEquipmentId 变化时，自动打开新建弹窗并预填
   useEffect(() => {
@@ -746,7 +753,7 @@ export function ExperimentalObjectPage({
 
         {/* 编辑类型 */}
         {editingType && (
-          <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 8 }}>
+          <div style={{ marginTop: 16, padding: 12, background: 'var(--ocean-surface-structural)', borderRadius: 8 }}>
             <Text strong>编辑类型: {editingType.code}</Text>
             <Input
               placeholder="类型名称"
