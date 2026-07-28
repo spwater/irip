@@ -480,7 +480,7 @@ export function ExperimentalObjectPage({
               type="link"
               size="small"
               onClick={() => {
-                void navigate({ to: '/lab-ops', search: { tab: 'components', prefill_object: record.code } });
+                void navigate({ to: '/standards', search: { tab: 'components', prefill_object: record.code } });
               }}
             >
               +接口

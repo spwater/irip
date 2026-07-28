@@ -77,6 +77,10 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/standards',
     component: StandardsPageV1,
+    validateSearch: (search: Record<string, unknown>): { tab?: string; prefill_object?: string } => ({
+      tab: typeof search.tab === 'string' ? search.tab : undefined,
+      prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
+    }),
   });
 
   const objectsRoute = createRoute({
@@ -169,9 +173,8 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/lab-ops',
     component: LabOpsPage,
-    validateSearch: (search: Record<string, unknown>): { tab?: string; prefill_object?: string } => ({
+    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
-      prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
     }),
   });
 
