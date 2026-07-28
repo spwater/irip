@@ -419,16 +419,25 @@ export function FlowDetail(): JSX.Element {
       if (node) {
         const prefix = `${node.node_id}__`;
         for (const key of Object.keys(node.params ?? {})) {
+          if (key === 'experimental_object_code') continue;
           const formKey = `${prefix}${key}`;
-          const formValue = values[formKey];
-          // 优先用 artifactMap（上传文件后的 artifact:xxx），其次用表单值
+          // 优先用 artifactMap（上传文件后的 artifact:xxx）
           const artifactVal = artifactMapRef.current[formKey];
           if (artifactVal) {
             inputs[key] = artifactVal;
-          } else if (formValue !== undefined && formValue !== '') {
+            continue;
+          }
+          // 其次用表单值
+          const formValue = values[formKey];
+          if (formValue !== undefined && formValue !== '') {
             inputs[key] = formValue;
           }
         }
+      }
+      console.log('[FlowDetail] submit inputs:', JSON.stringify(inputs), 'artifactMap:', JSON.stringify(artifactMapRef.current));
+      if (Object.keys(inputs).length === 0 || !inputs.path) {
+        message.warning('请上传实验报告文件或输入文件路径');
+        return;
       }
       createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
     } catch (err) {
@@ -1141,17 +1150,16 @@ export function FlowDetail(): JSX.Element {
                   if (isPath) {
                     return (
                       <Form.Item key={formKey} label={label}>
-                        <Space.Compact style={{ width: '100%' }}>
-                          <Form.Item name={formKey} noStyle initialValue={defaultVal || ''}>
+                        <Input.Group compact style={{ display: 'flex' }}>
+                          <Form.Item name={formKey} noStyle>
                             <Input
                               style={{ flex: 1 }}
-                              placeholder="上传文件或输入路径"
+                              placeholder="上传文件后自动填充，或手动输入路径"
                             />
                           </Form.Item>
                           <Button
                             loading={uploadLoading === formKey}
                             onClick={() => {
-                              // 记录当前 formKey 到 ref，供 onChange 回调使用
                               if (fileInputRef.current) {
                                 fileInputRef.current.dataset.formkey = formKey;
                                 fileInputRef.current.click();
@@ -1160,7 +1168,7 @@ export function FlowDetail(): JSX.Element {
                           >
                             上传
                           </Button>
-                        </Space.Compact>
+                        </Input.Group>
                       </Form.Item>
                     );
                   }
@@ -1288,7 +1296,7 @@ export function FlowDetail(): JSX.Element {
             const res = await apiUploadFile(file);
             runForm.setFieldValue(formKey, file.name);
             artifactMapRef.current[formKey] = `artifact:${res.artifact_id}`;
-            message.success(`文件已上传: ${file.name}`);
+            message.success(`文件已上传: ${file.name} (artifact:${res.artifact_id})`);
           } catch (err) {
             message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
           } finally {
