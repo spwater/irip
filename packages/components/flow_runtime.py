@@ -1191,8 +1191,15 @@ class FlowRuntimeService:
                 )
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
             # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
+            # 但允许 artifact: 前缀的值通过（用户上传文件的合法引用）
             for key, val in input_snapshot.items():
-                if val and key not in inputs and key not in PROTECTED_PARAMS:
+                if not val:
+                    continue
+                if key in PROTECTED_PARAMS:
+                    if isinstance(val, str) and val.startswith("artifact:"):
+                        inputs[key] = val
+                    continue
+                if key not in inputs:
                     inputs[key] = val
 
             # 执行节点
@@ -1484,8 +1491,15 @@ class FlowRuntimeService:
                 )
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
             # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
+            # 但允许 artifact: 前缀的值通过（用户上传文件的合法引用）
             for key, val in input_snapshot.items():
-                if val and key not in inputs and key not in PROTECTED_PARAMS:
+                if not val:
+                    continue
+                if key in PROTECTED_PARAMS:
+                    if isinstance(val, str) and val.startswith("artifact:"):
+                        inputs[key] = val
+                    continue
+                if key not in inputs:
                     inputs[key] = val
 
             # 执行节点

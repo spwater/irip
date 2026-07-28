@@ -695,10 +695,16 @@ async def create_run(
         )
 
     # 安全约束（F-13）：过滤掉文件路径类受保护参数，防止 inputs 覆盖节点路径配置
-    safe_inputs: dict[str, Any] = {
-        k: v for k, v in body.inputs.items()
-        if k not in PROTECTED_PARAMS
-    }
+    # 但允许 artifact: 前缀的值通过（用户上传文件的合法引用）
+    safe_inputs: dict[str, Any] = {}
+    for k, v in body.inputs.items():
+        if k in PROTECTED_PARAMS:
+            # 允许 artifact:xxx 格式的值通过
+            if isinstance(v, str) and v.startswith("artifact:"):
+                safe_inputs[k] = v
+            # 否则过滤掉
+        else:
+            safe_inputs[k] = v
 
     run = await service.create_run(
         flow_version_id=version.id,
