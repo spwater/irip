@@ -3,7 +3,6 @@ import {
   Button,
   Col,
   Descriptions,
-  Drawer,
   Form,
   Input,
   Modal,
@@ -56,13 +55,6 @@ function fmtTime(v: string | null | undefined): string {
 }
 
 const { Title, Text } = Typography;
-
-/** 组件状态 → 颜色 */
-const STATUS_COLOR: Record<string, string> = {
-  draft: 'blue',
-  published: 'green',
-  deprecated: 'default',
-};
 
 /** 组件状态 → 中文标签 */
 const STATUS_LABEL: Record<string, string> = {
@@ -1126,9 +1118,7 @@ function ComponentDetailPanel({
         </Descriptions.Item>
         <Descriptions.Item label="版本">{detail.version}</Descriptions.Item>
         <Descriptions.Item label="状态">
-          <Tag color={STATUS_COLOR[detail.status] ?? 'default'}>
-            {STATUS_LABEL[detail.status] ?? detail.status}
-          </Tag>
+          <StatusMark tone={COMPONENT_STATUS_TONE[detail.status] ?? 'neutral'} label={STATUS_LABEL[detail.status] ?? detail.status} />
         </Descriptions.Item>
         <Descriptions.Item label="发布时间">
           {fmtTime(detail.published_at)}

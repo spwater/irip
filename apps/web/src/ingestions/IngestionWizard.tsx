@@ -6,7 +6,6 @@ import {
   Progress,
   Result,
   Spin,
-  Steps,
   Table,
   Tag,
   Typography,
@@ -27,6 +26,17 @@ import {
 } from '@/api/client';
 
 const { Text } = Typography;
+
+/** 摄入向导步骤定义 */
+const INGESTION_STEPS = [
+  { key: 'upload', label: '上传文件' },
+  { key: 'preview', label: '数据预览' },
+  { key: 'mapping', label: '字段映射' },
+  { key: 'validation', label: '质量校验' },
+  { key: 'submit', label: '提交' },
+  { key: 'progress', label: '进度' },
+  { key: 'result', label: '结果' },
+] as const;
 
 /** 质量等级 → 颜色 */
 const QUALITY_COLOR: Record<string, string> = {
@@ -238,19 +248,44 @@ export function IngestionWizard(): JSX.Element {
 
   return (
     <Card>
-      <Steps
-        current={currentStep}
-        items={[
-          { title: '上传文件' },
-          { title: '数据预览' },
-          { title: '字段映射' },
-          { title: '质量校验' },
-          { title: '提交' },
-          { title: '进度' },
-          { title: '结果' },
-        ]}
-        style={{ marginBottom: 24 }}
-      />
+      <nav aria-label="数据摄入步骤">
+        <ol className="ocean-ingestion-steps" style={{ display: 'flex', listStyle: 'none', gap: 0, padding: 0, margin: '0 0 24px 0' }}>
+          {INGESTION_STEPS.map((step, index) => (
+            <li
+              key={step.key}
+              aria-current={index === currentStep ? 'step' : undefined}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 16px',
+                fontSize: 14,
+                color: index === currentStep ? '#1686AE' : index < currentStep ? '#52c41a' : '#999',
+                fontWeight: index === currentStep ? 600 : 400,
+                borderBottom: index === currentStep ? '2px solid #1686AE' : '2px solid transparent',
+                transition: 'all 0.2s',
+              }}
+            >
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  fontSize: 12,
+                  background: index === currentStep ? '#1686AE' : index < currentStep ? '#52c41a' : '#f0f0f0',
+                  color: index === currentStep || index < currentStep ? '#fff' : '#999',
+                }}
+              >
+                {index < currentStep ? '\u2713' : index + 1}
+              </span>
+              {step.label}
+            </li>
+          ))}
+        </ol>
+      </nav>
 
       {/* Step 0: 上传文件 */}
       {currentStep === 0 && (

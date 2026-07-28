@@ -50,10 +50,8 @@ import { FactModal } from './flow/FactModal';
 import {
   fmtTime,
   parseManifest,
-  RUN_STATUS_COLOR,
   RUN_STATUS_LABEL,
   RUN_STATUS_TONE,
-  STATUS_COLOR,
   STATUS_LABEL,
 } from './flow/shared';
 

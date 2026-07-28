@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   Button,
   Input,
@@ -341,7 +341,7 @@ export function FactsPage(): JSX.Element {
   ];
 
   // ---- 渲染表格主体 ----
-  const tableContent: React.ReactNode = (() => {
+  const tableContent: ReactNode = (() => {
     if (isLoading) {
       return <FeedbackState kind="loading" title="正在加载实验记录..." rows={5} />;
     }
