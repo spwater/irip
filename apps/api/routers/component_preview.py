@@ -58,7 +58,8 @@ class ExtractPreviewRequest(BaseModel):
     """数据抽取预览请求。"""
     artifact_id: str = Field(..., description="预加载文件的 artifact ID")
     filename: str = Field(..., description="原始文件名（用于推断后缀）")
-    prompt: str = Field(..., description="当前 LLM 提示词")
+    prompt: str = Field("", description="当前 LLM 提示词（xrd_tool 模式下可空）")
+    tool_type: str = Field("llm", description="解析工具类型：llm 或 xrd_tool")
 
 
 class ExtractPreviewResponse(BaseModel):
@@ -192,18 +193,78 @@ async def recommend_prompt(
     # 构建大模型请求：让 AI 分析文件并生成提示词
     is_image_mode = isinstance(content, list)
     meta_prompt = (
-        "你是一个工业数据分析助手。请分析以下文件内容，"
-        "生成一段最优的数据提取提示词（LLM prompt），用于指导另一个大模型从类似文件中提取结构化数据。\n\n"
-        "要求：\n"
-        "1. 提取报告头部信息（分析类型、分析日期、样品名、文件名等）\n"
-        "2. 提取所有检测结果（编号、组分、单位、结果等）\n"
-        '3. 返回 JSON 格式：{"metadata": {...}, "data": [...]}\n'
-        "4. 只返回提示词本身，不要解释\n\n"
-        "参考模板：\n"
-        "根据用户提供的报告内容，提取头部信息和所有检测结果。"
-        '返回JSON格式：{"metadata": {"analysis_type": "...", "analysis_date": "...", '
-        '"sample_name": "...", "file_name": "..."}, "data": [{"No.": 1, "组分": "...", '
-        '"单位": "...", "结果": 0.0}]}。只返回JSON，不要解释。'
+        "你是一个工业数据分析助手。请阅读上传文件的实际内容，"
+        "并生成一段可直接使用的数据提取提示词，"
+        "用于指导另一个大模型从该文件及同类文件中提取结构化数据。\n\n"
+        f"文件名：{body.filename}\n\n"
+        "文件名可能反映报告类型，但只能作为辅助判断依据。"
+        "必须优先根据文件中的工作表、表头、字段名、合并单元格、数据分组和实际内容确定提取策略，"
+        "不得套用固定报告模板。\n\n"
+        "生成提示词前，应先识别：\n\n"
+        "1. 文件包含哪些工作表、数据区域或独立表格；\n"
+        "2. 哪些字段属于报告级公共信息；\n"
+        "3. 哪些字段属于单值检测指标；\n"
+        "4. 哪些数据属于连续多行、重复测量、分布曲线或成组结果；\n"
+        "5. 是否存在合并单元格、空白继承、横向宽表、纵向长表、重复表头、单位列或单位写在字段名中的情况；\n"
+        "6. 是否存在文本、空值、异常字符或数字与文本混合的结果。\n\n"
+        "你生成的提示词必须包含以下内容：\n\n"
+        "一、角色设定\n"
+        "明确其为工业检测报告结构化数据抽取助手，要求忠实提取，不臆造、不修正源文件数据。\n\n"
+        "二、结构识别与提取规则\n"
+        "要求另一个模型根据当前文件实际结构执行以下分类：\n\n"
+        "* metadata：仅存放报告级单值信息，例如委托单号、样品名称、客户名称、申请日期、检测日期、"
+        "设备、试验员、检查项目、文件名等。\n"
+        '* points：存放独立的单值检测指标，每项格式为：\n'
+        '  {"name": "实际指标名称", "value": 实际值, "unit": "实际单位或空字符串"}\n'
+        "* series：存放具有多行、多列、重复测量、连续序列或分组关系的数据，每项格式为：\n"
+        '  {"name": "实际序列名称", "columns": ["实际列名"], "rows": [[实际值]]}\n\n'
+        "分类时必须遵守：\n\n"
+        "1. 所有检测结果必须进入 points 或 series，不得放入 metadata。\n"
+        "2. 一个指标只有一个结果时，通常放入 points。\n"
+        "3. 同一指标对应多个连续结果、多个测点、多个时间点或多次重复测量时，"
+        "应整体放入 series，不得拆成互不相关的单值。\n"
+        "4. 多行表格、粒径分布、元素含量、时间序列、曲线数据、工况数据及成组试验结果均放入 series。\n"
+        "5. 若多个连续结果由合并的\"检测项名称\"或分组标签共同标识，应向下继承该名称，并保留原始顺序。\n"
+        "6. 若一组数据只有一个结果列，也应作为单列序列提取，不得因缺少第二列而丢弃。\n"
+        "7. 若表格为横向宽表，应根据字段对应关系转换为合理的点或序列，但不得改变数据含义。\n"
+        "8. 文件中存在多个独立表格或多个工作表时，应分别生成多个 series，不得强行合并。\n"
+        "9. 字段名、指标名、序列名和列名应优先使用源文件实际名称，不得根据示例臆造。\n"
+        "10. 单位只能从源文件的单位列、字段名、表头或明确文本中提取；"
+        "未出现单位时使用空字符串，不得推测。\n"
+        "11. 数值保持数字类型和原始精度；文本保持原始字符串。\n"
+        "12. 对空值、异常字符、数字与文本混合结果应原样保留，"
+        "不得擅自删除、修正、补零或猜测含义。\n"
+        "13. 必须保留原始数据顺序，不得排序、去重、汇总或只提取部分代表值。\n"
+        "14. 合并单元格中的公共信息和分组名称，应应用到其覆盖的全部数据行。\n"
+        "15. 若某些数据无法可靠判断属于单值还是序列，"
+        "应优先依据其在文件中的分组结构和结果数量判断，而不是仅凭指标名称判断。\n\n"
+        "三、输出格式要求\n"
+        "要求返回合法 JSON，固定结构为：\n\n"
+        "{\n"
+        '"metadata": {},\n'
+        '"points": [],\n'
+        '"series": []\n'
+        "}\n\n"
+        "三类字段必须始终存在：\n\n"
+        "* 无元数据时，metadata 为 {}；\n"
+        "* 无单值指标时，points 为 []；\n"
+        "* 无序列数据时，series 为 []。\n\n"
+        "生成的提示词中应根据当前文件实际出现的字段和数据结构，"
+        "给出简短、针对性的 JSON 示例。"
+        "示例不得加入源文件中不存在的字段、指标或单位，也不得将示例值描述为真实结果。\n\n"
+        "四、完整性要求\n"
+        "要求另一个模型检查所有工作表和数据区域，确保：\n\n"
+        "* 报告级信息未被误放入检测结果；\n"
+        "* 检测结果未被误放入 metadata；\n"
+        "* 单值指标未遗漏；\n"
+        "* 多行序列未被拆散；\n"
+        "* 合并单元格对应的数据未丢失；\n"
+        "* 文本型或异常结果未被忽略；\n"
+        "* 不因空白单元格、重复字段或格式差异而漏行。\n\n"
+        "五、收尾要求\n"
+        "生成的提示词必须明确要求：\n\n"
+        "只返回最终 JSON，不要 Markdown 代码块，不要解释、前言、注释或后缀。\n\n"
+        "最终只返回你生成的数据提取提示词本身，不要解释，不要添加任何额外说明。"
     )
 
     if is_image_mode:
@@ -238,8 +299,26 @@ async def extract_preview(
 ) -> ExtractPreviewResponse:
     """用当前提示词对预加载文件进行数据抽取预览。
 
-    下载文件 → 提取文本 → 用用户提示词调用大模型 → 返回抽取结果。
+    tool_type=llm：下载文件 → 提取文本 → 用用户提示词调用大模型 → 返回抽取结果。
+    tool_type=xrd_tool：下载文件 → 调用 XRD 确定性解析器 → 返回 JSON 结果。
     """
+    # XRD 工具模式：直接调 Python 解析器，不走 LLM
+    if body.tool_type == "xrd_tool":
+        file_path = await _download_artifact(
+            artifact_service, body.artifact_id, body.filename
+        )
+        try:
+            import asyncio
+            import json
+            from packages.components.builtin.ingestion.xrd_converter.convert import (
+                convert_xrd_file_to_json,
+            )
+            result = await asyncio.to_thread(convert_xrd_file_to_json, str(file_path))
+            return ExtractPreviewResponse(result=json.dumps(result, ensure_ascii=False, indent=2))
+        finally:
+            file_path.unlink(missing_ok=True)
+
+    # LLM 模式
     config = await get_active_ai_config()
     if config is None or not config.get("base_url") or not config.get("api_key"):
         raise AppError(

@@ -69,7 +69,7 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
         });
       }
     } else {
-      const first = groupFacts[0];
+      const last = groupFacts[groupFacts.length - 1];
       const children: TreeNode[] = groupFacts.map((f) => ({
         key: `fact-${f.fact_id}`,
         fact_id: f.fact_id,
@@ -85,9 +85,9 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
       tree.push({
         key: `task-${taskCode}`,
         task_code: taskCode,
-        task_name: first.task_name,
-        department_name: first.department_name,
-        operator: first.operator,
+        task_name: last.task_name,
+        department_name: last.department_name,
+        operator: last.operator,
         isGroup: true,
         totalCount: groupCounts[taskCode] ?? groupFacts.length,
         children,
@@ -333,7 +333,7 @@ export function FactsPage(): JSX.Element {
         pagination={false}
         size="middle"
         expandable={{
-          defaultExpandAllRows: true,
+          defaultExpandAllRows: false,
           rowExpandable: (record) => record.isGroup,
         }}
         onRow={(record) => ({

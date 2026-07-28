@@ -81,6 +81,17 @@ class S3Repository:
         """返回默认 bucket 名称。"""
         return self._bucket
 
+    def delete_object(self, key: str) -> None:
+        """删除 S3 对象（幂等，不存在时静默返回）。
+
+        Args:
+            key: S3 object key。
+        """
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=key)
+        except ClientError:
+            pass
+
     def ensure_bucket(self) -> None:
         """幂等创建默认 bucket。
 

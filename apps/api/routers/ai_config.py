@@ -151,23 +151,25 @@ async def update_ai_config(
     - base_url 提交时校验目标地址（SSRF 防护），不允许内网地址。
     """
     # SSRF 防护：校验 base_url 不指向内网地址
-    try:
-        parsed = httpx.URL(body.base_url)
-        if parsed.scheme not in ("http", "https"):
+    # 本地开发环境可通过 IRIP_ALLOW_PRIVATE_NETWORK=1 跳过私网校验
+    if os.environ.get("IRIP_ALLOW_PRIVATE_NETWORK") != "1":
+        try:
+            parsed = httpx.URL(body.base_url)
+            if parsed.scheme not in ("http", "https"):
+                raise AppError(
+                    code="ssrf_blocked",
+                    message=f"AI base_url 协议不允许: {parsed.scheme}（仅支持 http/https）",
+                    retryable=False,
+                    fields={"base_url": body.base_url},
+                )
+            validate_url_host(str(parsed.host), parsed.port)
+        except ValueError as exc:
             raise AppError(
                 code="ssrf_blocked",
-                message=f"AI base_url 协议不允许: {parsed.scheme}（仅支持 http/https）",
+                message=f"AI base_url 安全校验失败: {exc}",
                 retryable=False,
                 fields={"base_url": body.base_url},
-            )
-        validate_url_host(str(parsed.host), parsed.port)
-    except ValueError as exc:
-        raise AppError(
-            code="ssrf_blocked",
-            message=f"AI base_url 安全校验失败: {exc}",
-            retryable=False,
-            fields={"base_url": body.base_url},
-        ) from exc
+            ) from exc
 
     clock = SystemClock()
     now = clock.now()
@@ -227,19 +229,21 @@ async def test_ai_connection(
     - 测试前校验 base_url 不指向内网地址。
     """
     # SSRF 防护：校验 base_url 不指向内网地址
-    try:
-        parsed = httpx.URL(body.base_url)
-        if parsed.scheme not in ("http", "https"):
+    # 本地开发环境可通过 IRIP_ALLOW_PRIVATE_NETWORK=1 跳过私网校验
+    if os.environ.get("IRIP_ALLOW_PRIVATE_NETWORK") != "1":
+        try:
+            parsed = httpx.URL(body.base_url)
+            if parsed.scheme not in ("http", "https"):
+                return AITestResponse(
+                    success=False,
+                    message=f"协议不允许: {parsed.scheme}（仅支持 http/https）",
+                )
+            validate_url_host(str(parsed.host), parsed.port)
+        except ValueError as exc:
             return AITestResponse(
                 success=False,
-                message=f"协议不允许: {parsed.scheme}（仅支持 http/https）",
+                message=f"SSRF 防护阻断: {exc}",
             )
-        validate_url_host(str(parsed.host), parsed.port)
-    except ValueError as exc:
-        return AITestResponse(
-            success=False,
-            message=f"SSRF 防护阻断: {exc}",
-        )
 
     try:
         async with SafeHTTPClient(timeout=15.0, max_size=1024 * 1024) as client:

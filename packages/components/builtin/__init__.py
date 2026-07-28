@@ -32,6 +32,7 @@ from packages.components.builtin.ingestion.excel_reader import ExcelReader
 from packages.components.builtin.ingestion.json_reader import JSONReader
 from packages.components.builtin.ingestion.ez_scan_extractor import EZScanExtractor
 from packages.components.builtin.ingestion.minio_object import MinioObject
+from packages.components.builtin.ingestion.xrd_tool_component import XrdToolComponent
 from packages.components.builtin.ingestion.pdf_table_reader import (
     PDFTableReader,
 )
@@ -88,6 +89,7 @@ _BUILTIN_COMPONENTS: dict[str, tuple[str, type]] = {
     "ez_scan_extractor": ("1.3.1", EZScanExtractor),
     "aez_scan_extractor": ("1.4.0", EZScanExtractor),
     "xrf_ez_extractor": ("1.4.4", EZScanExtractor),
+    "xrd_tool": ("1.0.0", XrdToolComponent),
     # transform
     "field_mapper": ("1.0.0", FieldMapper),
     "unit_converter": ("1.0.0", UnitConverter),
@@ -129,6 +131,7 @@ _YAML_FILES: dict[str, str] = {
     "ez_scan_extractor": "ez-scan-extractor.yaml",
     "aez_scan_extractor": "ez-scan-extractor.yaml",
     "xrf_ez_extractor": "ez-scan-extractor.yaml",
+    "xrd_tool": "xrd-tool.yaml",
     "field_mapper": "field-mapper.yaml",
     "unit_converter": "unit-converter.yaml",
     "missing_values": "missing-values.yaml",

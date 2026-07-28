@@ -201,8 +201,8 @@ export function AssistantPage(): JSX.Element {
         const fact = (factsData?.items ?? []).find((f: FactSummary) => f.fact_id === factId);
         const label = fact?.subject_id ?? factId;
         labels.push(label);
-        // 只传 metadata + data，去掉 task_info 和 source_file 减少体积
-        const compact = { metadata: data.metadata, data: data.data };
+        // 传完整的 metadata + points + series
+        const compact = { metadata: data.metadata, points: data.points, series: data.series };
         allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\``);
       }
       const context = `以下是实验数据，请基于此数据回答用户的问题：\n\n${allData.join('\n\n')}`;

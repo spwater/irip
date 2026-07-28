@@ -127,6 +127,7 @@ class ComponentListItemResponse(BaseModel):
     manifest_sha256: str
     published_at: datetime | None
     created_at: datetime
+    prompt: str | None = None
 
 
 class ComponentListResponse(BaseModel):
@@ -145,6 +146,7 @@ class ComponentDetailResponse(BaseModel):
     kind: str
     runtime: str
     status: str
+    active_version_id: str | None = None
     experimental_object_code: str | None = None
     manifest_sha256: str
     manifest_yaml: str
@@ -192,6 +194,25 @@ def _parse_experimental_object_code(manifest_yaml: str) -> str:
         re.MULTILINE | re.DOTALL,
     )
     return match.group(1) if match else ""
+
+
+def _parse_prompt_from_yaml(manifest_yaml: str) -> str | None:
+    """从 manifest YAML 提取 prompt 参数的默认值。"""
+    import yaml as _yaml
+
+    try:
+        manifest = _yaml.safe_load(manifest_yaml)
+    except Exception:
+        return None
+    if not isinstance(manifest, dict):
+        return None
+    props = manifest.get("parameters", {}).get("properties", {})
+    prompt_prop = props.get("prompt", {})
+    if isinstance(prompt_prop, dict):
+        val = prompt_prop.get("default")
+        if isinstance(val, str):
+            return val
+    return None
 
 
 # ---- 端点 ----
@@ -337,6 +358,7 @@ async def list_components(
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
                 created_at=ver.created_at,
+                prompt=_parse_prompt_from_yaml(ver.manifest_yaml),
             )
             for comp, ver in items
         ]
@@ -373,6 +395,7 @@ async def get_component(
         kind=comp.kind,
         runtime=ver.runtime,
         status=comp.status,
+        active_version_id=str(comp.active_version_id) if comp.active_version_id else None,
         experimental_object_code=ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml),
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,

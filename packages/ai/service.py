@@ -981,30 +981,29 @@ class AIService:
                     organization_id=org_id,
                     limit=20,
                 )
-                items = [
-                    {
+                items = []
+                for r in (results or [])[:20]:
+                    item = {
                         "id": str(r.get("id", "")),
                         "subject_id": str(r.get("subject_id", "")),
                         "fact_type": str(r.get("fact_type", "")),
+                        "data_summary": str(r.get("data_summary", "")),
                     }
-                    for r in (results or [])[:20]
-                ]
+                    items.append(item)
                 return {
                     "summary": f"搜索到 {len(items)} 条事实",
                     "data": {"count": len(items), "results": items},
                 }
             except Exception as exc:
-                return {
-                    "summary": f"事实搜索失败: {exc}",
-                    "data": {"error": str(exc)},
-                }
+                # fact_service.search 参数不匹配时走数据库 fallback
+                pass
 
-        # 无 fact_service 时直接查数据库
+        # 直接查数据库（含 data_summary）
         async with self._factory() as session:
             stmt = sa.select(
-                sa.text("id, subject_id, fact_type")
-            ).select_from(sa.text("fact"))
-            conditions = [sa.text("organization_id = :org_id")]
+                sa.text("f.id, fr.subject_id, fr.fact_type, fr.data_summary")
+            ).select_from(sa.text("fact f JOIN fact_revision fr ON fr.fact_id = f.id"))
+            conditions = [sa.text("f.organization_id = :org_id")]
             params: dict[str, Any] = {"org_id": org_id}
             if query:
                 conditions.append(sa.text("subject_id ILIKE :query"))
@@ -1016,7 +1015,7 @@ class AIService:
             result = await session.execute(stmt, params)
             rows = result.fetchall()
             items = [
-                {"id": str(r[0]), "subject_id": str(r[1]), "fact_type": str(r[2])}
+                {"id": str(r[0]), "subject_id": str(r[1]), "fact_type": str(r[2]), "data_summary": str(r[3] or "")}
                 for r in rows
             ]
             return {
@@ -1152,6 +1151,8 @@ class AIService:
                             {
                                 "id": str(f.get("id", "")),
                                 "subject_id": str(f.get("subject_id", "")),
+                                "fact_type": str(f.get("fact_type", "")),
+                                "data_summary": str(f.get("data_summary", "")),
                             }
                             for f in facts
                         ],

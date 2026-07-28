@@ -856,7 +856,7 @@ class PersistFactRequest(BaseModel):
 
     object_id: UUID
     template_version_id: UUID | None = None
-    custom_data: dict | None = None  # 可选：编辑后的自定义数据 {metadata: {...}, data: [...]}
+    custom_data: dict | None = None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}
 
 
 class PersistFactResponse(BaseModel):
@@ -882,8 +882,8 @@ async def persist_run_as_fact(
 ) -> PersistFactResponse:
     """将流程执行结果写入实验事实。
 
-    从成功的节点执行中提取数据（all_rows + header），
-    创建 Fact 记录，每行作为一条 raw observation。
+    从成功的节点执行中提取三类数据（points + series + header），
+    创建 Fact 记录，每个 point 作为一条 raw observation。
     如果执行时传了 path 且是 PDF 文件，同时上传 PDF 到 artifact 存储。
     """
     from packages.facts.service import FactService, CreateFactCommand
@@ -903,48 +903,58 @@ async def persist_run_as_fact(
             retryable=False,
         )
 
-    # 2. 从节点输出提取数据
-    all_rows: list[dict[str, Any]] = []
+    # 2. 从节点输出提取三类数据（points + series），兼容旧 data/all_rows/preview_rows 格式
+    points: list[dict[str, Any]] = []
+    series: list[dict[str, Any]] = []
     header: dict[str, Any] = {}
     source_path: str = ""
     for exec_record in succeeded_nodes:
         meta = exec_record.output_summary.get("_metadata", {})
-        if meta.get("data"):
-            all_rows = meta["data"]
-            header = meta.get("metadata", {})
-            # 向后兼容：旧格式用 header/rows
-            if not header and meta.get("header"):
-                header = meta["header"]
-            if not all_rows and meta.get("rows"):
-                all_rows = meta["rows"]
-            break
-        # 向后兼容旧格式
-        if meta.get("all_rows"):
-            all_rows = meta["all_rows"]
-            header = meta.get("header", {})
-            break
-        if meta.get("preview_rows"):
-            all_rows = meta["preview_rows"]
-            header = meta.get("header", {})
+        # 三类数据结构：points + series + header
+        if meta.get("points") or meta.get("series"):
+            points = meta.get("points") or []
+            series = meta.get("series") or []
+            header = meta.get("header", meta.get("metadata", {}))
             break
 
-    if not all_rows:
+    if not points and not series:
         raise AppError(
             code="validation_failed",
-            message="执行结果中无可用的数据行",
+            message="执行结果中无可用的数据",
             retryable=False,
         )
 
     # 2a. 如果传入了编辑后的自定义数据，覆盖提取的数据
     if body.custom_data:
-        if isinstance(body.custom_data.get("data"), list):
-            all_rows = body.custom_data["data"]
+        if isinstance(body.custom_data.get("points"), list):
+            points = body.custom_data["points"]
+        if isinstance(body.custom_data.get("series"), list):
+            series = body.custom_data["series"]
         if isinstance(body.custom_data.get("metadata"), dict):
             header = body.custom_data["metadata"]
 
     # 3. 从 input_snapshot 获取源文件路径
     input_snapshot = run.input_snapshot or {}
     source_path = str(input_snapshot.get("path", ""))
+
+    # 3a. 解析源文件名（优先从 artifact 查文件名，用于入库命名）
+    source_filename: str = ""
+    if source_path.startswith("artifact:"):
+        try:
+            import sqlalchemy as sa
+            from packages.common.artifacts import Artifact
+            from packages.common.database import session_scope as _session_scope
+            _art_id = UUID(source_path[len("artifact:"):])
+            async with _session_scope(service.session_factory) as sess:
+                _art = await sess.scalar(
+                    sa.select(Artifact).where(Artifact.id == _art_id)
+                )
+                if _art and _art.filename:
+                    source_filename = _art.filename
+        except Exception:
+            pass
+    elif source_path:
+        source_filename = Path(source_path).name
 
     # 4. 上传原始 PDF + 提取数据 JSON 到 artifact 存储
     pdf_artifact_id: UUID | None = None
@@ -972,9 +982,9 @@ async def persist_run_as_fact(
                 )
                 pdf_artifact_id = pdf_ref.artifact_id
 
-        # 4b. 上传提取的数据（整个 all_rows + header 作为 JSON）
+        # 4b. 上传提取的数据（metadata + points + series 作为 JSON）
         export_payload = json.dumps(
-            {"metadata": header, "data": all_rows},
+            {"metadata": header, "points": points, "series": series},
             ensure_ascii=False,
             indent=2,
         ).encode("utf-8")
@@ -1004,6 +1014,7 @@ async def persist_run_as_fact(
     # 6. 查询任务信息快照（入库时保存，避免后续反查 JOIN）
     task_code: str | None = None
     task_name: str | None = None
+    project_name: str | None = None
     department_name: str | None = None
     operator: str | None = None
     try:
@@ -1020,6 +1031,7 @@ async def persist_run_as_fact(
                 if fd:
                     task_code = fd.code
                     task_name = fd.display_name
+                    project_name = fd.project_name
                     operator = fd.operator
                     if fd.department_id:
                         dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
@@ -1040,12 +1052,17 @@ async def persist_run_as_fact(
         aid for aid in [pdf_artifact_id, data_artifact_id] if aid is not None
     )
 
+    # 入库命名：统一用 任务名-文件名(去后缀) 作为子项名，任务名作为分组名
+    file_stem = Path(source_filename).stem if source_filename else ''
+    subject_id = f"{task_name or ''}-{file_stem}" if file_stem else (task_name or str(run_id))
+    group_name = task_name or ''
+
     command = CreateFactCommand(
         fact_type="experiment_run",
         template_version_id=body.template_version_id,
         organization_id=service.organization_id,
         object_id=body.object_id,
-        subject_id=f"{task_name or ''}-{header.get('sample_name') or header.get('subject_id') or str(run_id)}",
+        subject_id=subject_id,
         started_at=run.started_at or run.created_at,
         ended_at=run.completed_at,
         method_version_id=None,
@@ -1055,7 +1072,7 @@ async def persist_run_as_fact(
         idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
         created_by=current_user.user_id,
         task_code=task_code,
-        task_name=task_name,
+        task_name=group_name,
         department_name=department_name,
         operator=operator,
         flow_run_id=run_id,
@@ -1071,28 +1088,29 @@ async def persist_run_as_fact(
         from packages.common.ids import new_id
 
         index_rows = []
-        for row_idx, row in enumerate(all_rows):
-            if not isinstance(row, dict):
+        for row_idx, point in enumerate(points):
+            if not isinstance(point, dict):
                 continue
-            for key, value in row.items():
-                # 数值存 value_number，其他存 value_text
-                val_num = None
-                val_text = None
-                if isinstance(value, (int, float)):
-                    val_num = float(value)
-                    val_text = str(value)
-                elif value is not None:
-                    val_text = str(value)
-                else:
-                    continue
-                index_rows.append({
-                    "id": new_id(),
-                    "fact_revision_id": __import__('uuid').UUID(ref.revision_id),
-                    "row_index": row_idx,
-                    "key": str(key),
-                    "value_text": val_text,
-                    "value_number": val_num,
-                })
+            key = point.get("name", f"item_{row_idx}")
+            value = point.get("value")
+            # 数值存 value_number，其他存 value_text
+            val_num = None
+            val_text = None
+            if isinstance(value, (int, float)):
+                val_num = float(value)
+                val_text = str(value)
+            elif value is not None:
+                val_text = str(value)
+            else:
+                continue
+            index_rows.append({
+                "id": new_id(),
+                "fact_revision_id": __import__('uuid').UUID(ref.revision_id),
+                "row_index": row_idx,
+                "key": str(key),
+                "value_text": val_text,
+                "value_number": val_num,
+            })
 
         if index_rows:
             async with session_scope(service.session_factory) as sess:
@@ -1108,7 +1126,7 @@ async def persist_run_as_fact(
         fact_id=str(ref.fact_id),
         revision=ref.revision,
         subject_id=ref.subject_id,
-        raw_count=len(all_rows),
+        raw_count=len(points) + sum(len(s.get("rows", [])) for s in series),
         artifact_id=data_artifact_id,
     )
 

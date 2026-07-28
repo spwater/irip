@@ -13,6 +13,7 @@
 """
 
 import ipaddress
+import os
 import socket
 from typing import Any
 
@@ -119,6 +120,7 @@ class SafeHTTPClient:
         self,
         timeout: float = 30.0,
         max_size: int = 10 * 1024 * 1024,
+        allow_private: bool = False,
         **kwargs: Any,
     ) -> None:
         """初始化安全 HTTP 客户端。
@@ -126,8 +128,10 @@ class SafeHTTPClient:
         Args:
             timeout: 请求超时秒数。
             max_size: 响应体最大字节数（默认 10 MiB）。
+            allow_private: 允许私网/保留地址（本地开发用，生产环境禁用）。
             **kwargs: 传递给 httpx.AsyncClient 的额外参数。
         """
+        self._allow_private = allow_private or os.environ.get("IRIP_ALLOW_PRIVATE_NETWORK") == "1"
         self._client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=False,
@@ -209,14 +213,15 @@ class SafeHTTPClient:
                 f"(only http/https allowed)"
             )
 
-        # 2. DNS 解析后校验 IP
-        validate_url_host(str(parsed.host), parsed.port)
+        # 2. DNS 解析后校验 IP（allow_private 时跳过）
+        if not self._allow_private:
+            validate_url_host(str(parsed.host), parsed.port)
 
         # 3. 发起请求（follow_redirects=False 已在构造时设置）
         response = await self._client.request(method, url, **kwargs)
 
         # 4. 禁止重定向
-        if response.is_redirect or response.is_permanent_redirect:
+        if response.is_redirect:
             location = response.headers.get("location", "")
             raise ValueError(
                 f"Redirect blocked: {response.status_code} -> {location}"

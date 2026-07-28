@@ -388,6 +388,54 @@ class ArtifactService:
         )
         return data
 
+    async def delete_artifact(self, artifact_id: UUID) -> None:
+        """删除工件：删 S3 对象 + 删 artifact/artifact_blob 数据库记录。
+
+        如果该 blob 被多个 artifact 共享（内容寻址去重），只删当前 artifact 记录，
+        当 blob 无其他 artifact 引用时才删 S3 对象和 blob 记录。
+
+        Args:
+            artifact_id: 工件 UUID。
+        """
+        async with self._factory() as session:
+            row = (
+                await session.execute(
+                    sa.select(Artifact, ArtifactBlob).where(
+                        Artifact.id == artifact_id,
+                        Artifact.organization_id == self._org_id,
+                        ArtifactBlob.sha256 == Artifact.sha256,
+                    )
+                )
+            ).first()
+            if row is None:
+                return
+            artifact: Artifact = row[0]
+            blob: ArtifactBlob = row[1]
+            sha256: str = artifact.sha256
+            object_key: str = blob.object_key
+
+            # 删 artifact 记录
+            await session.execute(
+                sa.delete(Artifact).where(Artifact.id == artifact_id)
+            )
+            await session.flush()
+
+            # 检查是否还有其他 artifact 引用同一 blob
+            ref_count = (
+                await session.execute(
+                    sa.select(sa.func.count()).where(
+                        Artifact.sha256 == sha256
+                    )
+                )
+            ).scalar() or 0
+
+            if ref_count == 0:
+                # 无其他引用，删 S3 对象 + blob 记录
+                await session.execute(
+                    sa.delete(ArtifactBlob).where(ArtifactBlob.sha256 == sha256)
+                )
+                await asyncio.to_thread(self._s3.delete_object, object_key)
+
     def presign_upload(self, sha256: str, expires: int = 3600) -> str:
         """生成预签名上传 URL（基于内容寻址 key）。
 

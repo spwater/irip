@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button,
+  Card,
   Col,
   Descriptions,
   Drawer,
@@ -89,6 +90,7 @@ const FORM_FIELD_NAMES = [
   'description',
   'prompt',
   'experimental_object_code',
+  'tool_type',
 ] as const;
 
 /** 表单模式的初始（清空）状态：其余为空 */
@@ -97,6 +99,7 @@ const FRESH_FORM_VALUES: Record<string, string | undefined> = {
   description: undefined,
   prompt: undefined,
   experimental_object_code: undefined,
+  tool_type: 'llm',
 };
 
 /** 表单模式提交时的字段值 */
@@ -105,6 +108,7 @@ interface ComponentFormValues {
   description: string;
   prompt: string;
   experimental_object_code: string;
+  tool_type: string;
 }
 
 /**
@@ -134,6 +138,7 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const expCode = v.experimental_object_code ?? '';
+  const toolType = v.tool_type ?? 'llm';
   const nameLine = originalName
     ? `name: ${originalName}`
     : 'name: iface_ffffffff  # 自动生成，无需修改';
@@ -165,6 +170,10 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
     '      type: string',
     '      description: "关联实验对象编码"',
     `      default: "${yamlEscapeDouble(expCode)}"`,
+    '    tool_type:',
+    '      type: string',
+    '      description: "解析工具类型：llm（LLM 提取）或 xrd_tool（XRD 确定性解析）"',
+    `      default: "${yamlEscapeDouble(toolType)}"`,
     'timeout_seconds: 300',
   ];
   return lines.join('\n');
@@ -204,6 +213,10 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
   const eocMatch = yaml.match(/experimental_object_code:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
   if (eocMatch) result.experimental_object_code = eocMatch[1];
 
+  // tool_type 的 default 值
+  const ttMatch = yaml.match(/tool_type:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
+  if (ttMatch) result.tool_type = ttMatch[1];
+
   return result;
 }
 
@@ -232,6 +245,7 @@ function ComponentFormFields({
 
   // 监听关联实验对象变化，自动填充所属单位 + 组件名称默认值
   const watchedExpCode = Form.useWatch('experimental_object_code', formInstance);
+  const watchedToolType = Form.useWatch('tool_type', formInstance);
   const inheritedDeptName = (() => {
     if (!watchedExpCode) return null;
     const deptId = objectCodeToDeptId.get(watchedExpCode);
@@ -322,6 +336,14 @@ function ComponentFormFields({
       >
         <Input placeholder="组件描述（可选）" />
       </Form.Item>
+      <Form.Item name="tool_type" label="解析工具">
+        <Select
+          options={[
+            { value: 'llm', label: 'LLM 提取（摩登）' },
+            { value: 'xrd_tool', label: 'XRD 解析工具（确定性）' },
+          ]}
+        />
+      </Form.Item>
       <Form.Item label="文件预加载">
         <Space direction="vertical" style={{ width: '100%' }}>
           <Space>
@@ -353,12 +375,12 @@ function ComponentFormFields({
         </Space>
       </Form.Item>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <Text>LLM 提示词</Text>
+        <Text>{watchedToolType === 'xrd_tool' ? 'LLM 提示词（XRD 工具无需填写）' : 'LLM 提示词'}</Text>
         <Space>
           <Button
             type="link"
             size="small"
-            disabled={!uploadedFile}
+            disabled={!uploadedFile || watchedToolType === 'xrd_tool'}
             loading={recommending}
             onClick={async () => {
               if (!uploadedFile) return;
@@ -391,10 +413,12 @@ function ComponentFormFields({
               setPreviewOpen(true);
               try {
                 const currentPrompt = formInstance.getFieldValue('prompt') as string ?? '';
+                const currentToolType = formInstance.getFieldValue('tool_type') as string ?? 'llm';
                 const res = await apiExtractPreview({
                   artifact_id: uploadedFile.artifactId,
                   filename: uploadedFile.name,
                   prompt: currentPrompt,
+                  tool_type: currentToolType,
                 });
                 setPreviewResult(res.result);
               } catch (err: unknown) {
@@ -412,9 +436,9 @@ function ComponentFormFields({
         name="prompt"
         labelCol={{ span: 0 }}
         wrapperCol={{ span: 24 }}
-        rules={[{ required: true, message: '请输入 LLM 提示词' }]}
+        rules={[{ required: false, message: '请输入 LLM 提示词' }]}
       >
-        <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
+        <Input.TextArea rows={6} placeholder={watchedToolType === 'xrd_tool' ? 'XRD 工具不需要提示词' : '请输入 LLM 提示词，支持多行'} />
       </Form.Item>
       <Modal
         title="数据抽取预览"
@@ -428,12 +452,83 @@ function ComponentFormFields({
             <Spin tip="正在调用大模型抽取数据..." />
           </div>
         ) : previewResult ? (
-          <Input.TextArea
-            value={previewResult}
-            readOnly
-            rows={20}
-            style={{ fontFamily: 'monospace', fontSize: 13 }}
-          />
+          (() => {
+            try {
+              const parsed = JSON.parse(previewResult);
+              const meta = parsed.metadata ?? {};
+              const pts: { name: string; value: unknown; unit: string | null }[] = parsed.points ?? [];
+              const srs: { name: string; columns: string[]; rows: unknown[][] }[] = parsed.series ?? [];
+              return (
+                <div style={{ maxHeight: 600, overflow: 'auto' }}>
+                  {/* 元数据区 */}
+                  <Text strong>元数据（Metadata）</Text>
+                  <Descriptions
+                    bordered
+                    column={1}
+                    size="small"
+                    style={{ marginTop: 8, marginBottom: 16 }}
+                  >
+                    {Object.keys(meta).length > 0 ? (
+                      Object.entries(meta).map(([k, v]) => (
+                        <Descriptions.Item key={k} label={k}>{String(v)}</Descriptions.Item>
+                      ))
+                    ) : (
+                      <Descriptions.Item label="（空）">无元数据</Descriptions.Item>
+                    )}
+                  </Descriptions>
+                  {/* 单点数据区 */}
+                  <Text strong>单点数据（Points，{pts.length} 项）</Text>
+                  <Table
+                    size="small"
+                    style={{ marginTop: 8, marginBottom: 16 }}
+                    pagination={false}
+                    rowKey={(_, idx) => String(idx)}
+                    dataSource={pts}
+                    columns={[
+                      { title: '名称', dataIndex: 'name', key: 'name' },
+                      { title: '值', dataIndex: 'value', key: 'value' },
+                      { title: '单位', dataIndex: 'unit', key: 'unit' },
+                    ]}
+                  />
+                  {/* 序列数据区 */}
+                  <Text strong>序列数据（Series，{srs.length} 组）</Text>
+                  {srs.length > 0 ? (
+                    srs.map((s, i) => (
+                      <Card key={i} size="small" title={s.name ?? `序列 ${i + 1}`} style={{ marginTop: 8, marginBottom: 8 }}>
+                        <Table
+                          size="small"
+                          pagination={false}
+                          rowKey={(_, idx) => String(idx)}
+                          dataSource={s.rows.map((r, ri) => {
+                            const obj: Record<string, unknown> = { _key: ri };
+                            (s.columns ?? []).forEach((c, ci) => { obj[c] = r[ci]; });
+                            return obj;
+                          })}
+                          columns={(s.columns ?? []).map((c) => ({
+                            title: c,
+                            dataIndex: c,
+                            key: c,
+                            ellipsis: true,
+                          }))}
+                        />
+                      </Card>
+                    ))
+                  ) : (
+                    <Text type="secondary">无序列数据</Text>
+                  )}
+                </div>
+              );
+            } catch {
+              return (
+                <Input.TextArea
+                  value={previewResult}
+                  readOnly
+                  rows={20}
+                  style={{ fontFamily: 'monospace', fontSize: 13 }}
+                />
+              );
+            }
+          })()
         ) : null}
       </Modal>
     </>
@@ -660,6 +755,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
+        tool_type: (formValues.tool_type as string) ?? 'llm',
       });
       form.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
     } else {
@@ -672,6 +768,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         description: parsed.description,
         prompt: parsed.prompt,
         experimental_object_code: parsed.experimental_object_code,
+        tool_type: parsed.tool_type ?? 'llm',
         manifest_yaml: undefined,
       });
     }
@@ -693,6 +790,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           description: values.description as string,
           prompt: values.prompt as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
+          tool_type: (values.tool_type as string) ?? 'llm',
         });
         publishMutation.mutate({
           manifest_yaml: yaml,
@@ -705,14 +803,14 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
   };
 
   const handleOpenEdit = async (record?: ComponentSummary): Promise<void> => {
-    // 如果传了 record，直接用它；否则用已加载的 detail
-    let compDetail = detail;
-    if (!compDetail && record) {
-      try {
-        compDetail = await apiGetComponent(record.id);
-      } catch {
-        return;
-      }
+    // 总是重新请求最新数据，避免回滚后用缓存
+    let compDetail;
+    const targetId = record?.id ?? detailId;
+    if (!targetId) return;
+    try {
+      compDetail = await apiGetComponent(targetId);
+    } catch {
+      return;
     }
     if (!compDetail) return;
     // 版本号由后端自动管理，前端不需要处理
@@ -728,6 +826,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       description: parsed.description,
       prompt: parsed.prompt,
       experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
+      tool_type: parsed.tool_type ?? 'llm',
     });
     // 编辑默认表单模式
     setEditAdvancedMode(false);
@@ -748,6 +847,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
+        tool_type: (formValues.tool_type as string) ?? 'llm',
       }, editOriginalName);
       editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
     } else {
@@ -760,6 +860,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
         description: parsed.description,
         prompt: parsed.prompt,
         experimental_object_code: parsed.experimental_object_code,
+        tool_type: parsed.tool_type ?? 'llm',
         manifest_yaml: undefined,
       });
     }
@@ -778,6 +879,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           description: values.description as string,
           prompt: values.prompt as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
+          tool_type: (values.tool_type as string) ?? 'llm',
         }, editOriginalName);
         publishMutation.mutate({ manifest_yaml: yaml });
       }
@@ -1146,11 +1248,16 @@ function ComponentDetailPanel({
   const rollbackMutation = useMutation({
     mutationFn: async (versionId: string) => {
       await apiActivateVersion(versionId);
+      return versionId;
     },
-    onSuccess: () => {
+    onSuccess: (versionId: string) => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      void queryClient.invalidateQueries({ queryKey: ['component', detailId] });
       void queryClient.invalidateQueries({ queryKey: ['component-versions', detailId] });
-      void queryClient.refetchQueries({ queryKey: ['component-versions', detailId] });
+      // 切换 detailId 到回滚后的版本，详情和编辑窗口会自动加载该版本数据
+      setDetailId(versionId);
+      void queryClient.refetchQueries({ queryKey: ['component', versionId] });
+      void queryClient.refetchQueries({ queryKey: ['component-versions', versionId] });
       message.success('已回滚到该版本');
     },
     onError: (err: unknown) => {
@@ -1213,7 +1320,7 @@ function ComponentDetailPanel({
       ) : versions && versions.length > 0 ? (
         <div style={{ maxHeight: 300, overflow: 'auto' }}>
           {versions.map((v: ComponentVersionItem, idx: number) => {
-            const isCurrent = idx === 0;
+            const isCurrent = detail.active_version_id ? v.id === detail.active_version_id : idx === 0;
             return (
               <div
                 key={v.id}

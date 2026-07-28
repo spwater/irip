@@ -68,6 +68,11 @@ class Component(Base):
         default=0,
         server_default=sa.text("0"),
     )
+    active_version_id: Mapped[UUID | None] = mapped_column(
+        GUID,
+        nullable=True,
+        default=None,
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         server_default=sa.func.now(),
@@ -350,6 +355,7 @@ class ComponentRegistryService:
             await session.flush()
 
             # 5. 更新组件主记录
+            component.active_version_id = version.id
             component.status = "published"
             component.updated_at = now
             component.lock_version += 1
@@ -399,6 +405,69 @@ class ComponentRegistryService:
                     message=f"组件版本不存在: {name}@{version}",
                     retryable=False,
                     fields={"name": name, "version": version},
+                )
+
+            return version_row
+
+    async def get_latest(
+        self, name: str
+    ) -> ComponentVersion:
+        """按 name 查询组件的当前活跃版本。
+
+        优先取 component.active_version_id 指定的版本（支持回滚），
+        无 active_version_id 时取最新 published 版本。
+
+        Args:
+            name: 组件名称。
+
+        Returns:
+            ComponentVersion: 当前活跃版本记录。
+
+        Raises:
+            AppError: code="not_found"，当组件不存在或无已发布版本。
+        """
+        async with session_scope(self._factory) as session:
+            component: Component | None = await session.scalar(
+                sa.select(Component).where(
+                    Component.organization_id == self._org_id,
+                    Component.name == name,
+                )
+            )
+            if component is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"组件不存在: {name}",
+                    retryable=False,
+                    fields={"name": name},
+                )
+
+            # 优先取 active_version_id 指定的版本
+            if component.active_version_id is not None:
+                version_row: ComponentVersion | None = await session.scalar(
+                    sa.select(ComponentVersion).where(
+                        ComponentVersion.id == component.active_version_id,
+                        ComponentVersion.status == "published",
+                    )
+                )
+                if version_row is not None:
+                    return version_row
+
+            # 回退：取最新 published 版本
+            version_row = await session.scalar(
+                sa.select(ComponentVersion)
+                .where(
+                    ComponentVersion.component_id == component.id,
+                    ComponentVersion.status == "published",
+                )
+                .order_by(ComponentVersion.created_at.desc())
+                .limit(1)
+            )
+            if version_row is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"组件无已发布版本: {name}",
+                    retryable=False,
+                    fields={"name": name},
                 )
 
             return version_row
@@ -462,38 +531,46 @@ class ComponentRegistryService:
                 组件 + 最新版本记录列表。
         """
         async with session_scope(self._factory) as session:
-            # 子查询：每个组件 created_at 最新的版本 id
-            latest_version_subq = (
-                sa.select(
-                    ComponentVersion.component_id,
-                    sa.func.max(ComponentVersion.created_at).label("max_created"),
-                )
-                .group_by(ComponentVersion.component_id)
-                .subquery()
-            )
+            # 优先用 active_version_id 关联，没有才取 created_at 最新的版本
             query = (
                 sa.select(Component, ComponentVersion)
-                .join(
+                .outerjoin(
                     ComponentVersion,
-                    ComponentVersion.component_id == Component.id,
-                )
-                .join(
-                    latest_version_subq,
                     sa.and_(
-                        latest_version_subq.c.component_id == ComponentVersion.component_id,
-                        latest_version_subq.c.max_created == ComponentVersion.created_at,
+                        ComponentVersion.id == Component.active_version_id,
                     ),
                 )
-                .where(Component.organization_id == self._org_id)
             )
-            if kind is not None:
-                query = query.where(Component.kind == kind)
-            if status is not None:
-                query = query.where(Component.status == status)
+            rows = (await session.execute(query)).all()
+            # 过滤掉没有版本的，对没有 active_version_id 的用 created_at 最新
+            result: list[tuple[Component, ComponentVersion]] = []
+            no_active = [row for row in rows if row[1] is None]
+            for comp, ver in rows:
+                if ver is not None:
+                    result.append((comp, ver))
+            if no_active:
+                # 对没有 active_version_id 的组件取最新 published 版本
+                for comp, _ in no_active:
+                    fallback = await session.scalar(
+                        sa.select(ComponentVersion)
+                        .where(
+                            ComponentVersion.component_id == comp.id,
+                            ComponentVersion.status == "published",
+                        )
+                        .order_by(ComponentVersion.created_at.desc())
+                        .limit(1)
+                    )
+                    if fallback:
+                        result.append((comp, fallback))
 
-            query = query.order_by(Component.name)
-            result = await session.execute(query)
-            return [(row[0], row[1]) for row in result.all()]
+            # 过滤 kind 和 status
+            filtered = [(c, v) for c, v in result if c.organization_id == self._org_id]
+            if kind is not None:
+                filtered = [(c, v) for c, v in filtered if c.kind == kind]
+            if status is not None:
+                filtered = [(c, v) for c, v in filtered if c.status == status]
+            filtered.sort(key=lambda x: x[0].name)
+            return filtered
 
     async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:
         """列出指定组件的所有版本（按版本创建时间降序）。
@@ -620,8 +697,7 @@ class ComponentRegistryService:
                 )
             )
             if component is not None:
-                # 通过修改组件主表的 current_version_id 指针实现回滚
-                # 如果 component 表没有 current_version_id 列，则通过 status 标记
+                component.active_version_id = version.id
                 component.status = "published"
                 component.updated_at = now
                 component.lock_version += 1

@@ -148,13 +148,10 @@ export function FlowDetail(): JSX.Element {
     queryKey: ['components-for-flow-list'],
     queryFn: () => apiListComponents(),
   });
-  // component_name → ComponentSummary（取最新版本）
+  // component_name → ComponentSummary（后端已返回当前活跃版本）
   const compMap = new Map<string, ComponentSummary>();
   for (const c of compListData?.items ?? []) {
-    const existing = compMap.get(c.name);
-    if (!existing || c.version > existing.version) {
-      compMap.set(c.name, c);
-    }
+    compMap.set(c.name, c);
   }
 
   const { data: objListData } = useQuery({
@@ -450,14 +447,17 @@ export function FlowDetail(): JSX.Element {
       try {
         // 1. 上传文件
         const uploadRes = await apiUploadFile(file);
-        // 2. 构建 inputs
+        // 2. 构建 inputs（prompt 用组件当前活跃版本的值，不用 flow 快照）
         const inputs: Record<string, unknown> = {};
+        const comp = node?.component_name ? compMap.get(node.component_name) : undefined;
         if (node) {
           for (const key of Object.keys(node.params ?? {})) {
             if (key === 'path') {
               inputs[key] = `artifact:${uploadRes.artifact_id}`;
             } else if (key === 'experimental_object_code') {
               inputs[key] = (node.params as Record<string, unknown>)?.experimental_object_code ?? '';
+            } else if (key === 'prompt' && comp?.prompt) {
+              inputs[key] = comp.prompt;
             } else {
               const defaultVal = (node.params as Record<string, unknown>)?.[key];
               inputs[key] = defaultVal ?? '';
@@ -762,13 +762,18 @@ export function FlowDetail(): JSX.Element {
                 onClick={() => {
                   runForm.resetFields();
                   artifactMapRef.current = {};
-                  // 手动设置初始值（resetFields 后 initialValue 不生效，需要 setFieldsValue）
+                  // 手动设置初始值，prompt 用组件当前活跃版本的值
                   if (runNode && runParamEntries.length > 0) {
+                    const comp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
                     const initialValues: Record<string, unknown> = {};
                     for (const [key, defaultVal] of runParamEntries) {
                       const formKey = `${runNode.node_id}__${key}`;
                       if (key === 'experimental_object_code') continue;
-                      initialValues[formKey] = defaultVal || '';
+                      if (key === 'prompt' && comp?.prompt) {
+                        initialValues[formKey] = comp.prompt;
+                      } else {
+                        initialValues[formKey] = defaultVal || '';
+                      }
                     }
                     runForm.setFieldsValue(initialValues);
                   }
@@ -800,10 +805,26 @@ export function FlowDetail(): JSX.Element {
                   if (!v) return '-';
                   const out = record.output_summary;
                   const meta = (out?._metadata ?? {}) as Record<string, unknown>;
-                  const header = (meta.header ?? {}) as Record<string, unknown>;
-                  const previewText = Object.keys(header).length > 0
-                    ? JSON.stringify(header, null, 2)
-                    : '';
+                  const header = (meta.header ?? meta.metadata ?? {}) as Record<string, unknown>;
+                  const points = (meta.points ?? []) as { name: string; value: unknown; unit: string | null }[];
+                  const seriesList = (meta.series ?? []) as { name: string; columns: string[]; rows: unknown[][] }[];
+                  // 构建预览内容：标头 + 前3个指标 + 序列概要
+                  const parts: string[] = [];
+                  if (Object.keys(header).length > 0) {
+                    parts.push('=== 标头 ===');
+                    parts.push(JSON.stringify(header, null, 2));
+                  }
+                  if (points.length > 0) {
+                    parts.push('=== 指标（前 3 个） ===');
+                    parts.push(JSON.stringify(points.slice(0, 3), null, 2));
+                  }
+                  if (seriesList.length > 0) {
+                    parts.push(`=== 序列（${seriesList.length} 组） ===`);
+                    for (const s of seriesList.slice(0, 2)) {
+                      parts.push(`${s.name}: ${s.rows?.length ?? 0} 行`);
+                    }
+                  }
+                  const previewText = parts.join('\n');
                   return (
                     <Tooltip
                       title={previewText ? (
@@ -819,9 +840,9 @@ export function FlowDetail(): JSX.Element {
                   );
                 },
               },
-              { title: '数据接口', key: 'component', width: 200,
+              { title: '数据接口', key: 'component', width: 220,
                 render: () => {
-                  const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string; component_version?: string } | undefined;
+                  const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
                   if (!node?.component_name) return <Text type="secondary">-</Text>;
                   const comp = compMap.get(node.component_name);
                   return (
@@ -829,8 +850,8 @@ export function FlowDetail(): JSX.Element {
                       <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                         {comp?.display_name ?? node.component_name}
                       </Tag>
-                      {node.component_version && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>v{node.component_version}</Text>
+                      {comp?.version && (
+                        <Text type="secondary" style={{ fontSize: 12 }}>v{comp.version}</Text>
                       )}
                     </Space>
                   );
@@ -868,13 +889,6 @@ export function FlowDetail(): JSX.Element {
                         }}
                       >
                         数据入库
-                      </Button>
-                    )}
-                    {record.status === 'pending' && (
-                      <Button type="link" size="small"
-                        loading={resumeMutation.isPending}
-                        onClick={() => resumeMutation.mutate(record.id)}>
-                        执行
                       </Button>
                     )}
                     {record.status === 'failed' && (
@@ -1116,6 +1130,20 @@ export function FlowDetail(): JSX.Element {
         width={600}
       >
         <Form form={runForm} layout="vertical">
+          {runNode && (() => {
+            const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
+            return runComp ? (
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6 }}>
+                <Space size={6}>
+                  <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
+                  <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                    {runComp.display_name ?? runNode.component_name}
+                  </Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>v{runComp.version}</Text>
+                </Space>
+              </div>
+            ) : null;
+          })()}
           {runNode && runParamEntries.length > 0 && (
             <div key={runNode.node_id}>
               {runParamEntries.map(([key, defaultVal]) => {
@@ -1165,13 +1193,16 @@ export function FlowDetail(): JSX.Element {
                     );
                   }
 
-                  // 其余参数（含 prompt）
+                  // 其余参数（含 prompt）—— prompt 用当前活跃组件版本的值，不用 flow 快照
+                  const displayVal = key === 'prompt' && runNode?.component_name
+                    ? (compMap.get(runNode.component_name)?.prompt ?? defaultVal)
+                    : defaultVal;
                   return (
                     <Form.Item
                       key={formKey}
                       name={formKey}
                       label={label}
-                      initialValue={defaultVal || ''}
+                      initialValue={displayVal || ''}
                     >
                       <Input.TextArea
                         rows={key === 'prompt' ? 6 : 1}
@@ -1226,6 +1257,20 @@ export function FlowDetail(): JSX.Element {
           </div>
         ) : (
           <>
+            {runNode && (() => {
+              const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
+              return runComp ? (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: '#f5f5f5', borderRadius: 6 }}>
+                  <Space size={6}>
+                    <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
+                    <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                      {runComp.display_name ?? runNode.component_name}
+                    </Tag>
+                    <Text type="secondary" style={{ fontSize: 12 }}>v{runComp.version}</Text>
+                  </Space>
+                </div>
+              ) : null;
+            })()}
             <input
               type="file"
               multiple

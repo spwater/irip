@@ -201,6 +201,7 @@ export function ExperimentalObjectPage({
     mutationFn: apiCreateObject,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
+      void queryClient.invalidateQueries({ queryKey: ['objects'] });
       setModalOpen(false);
       form.resetFields();
       message.success('实验对象创建成功');
@@ -225,6 +226,7 @@ export function ExperimentalObjectPage({
     }) => apiUpdateObject(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
+      void queryClient.invalidateQueries({ queryKey: ['objects'] });
       setModalOpen(false);
       setEditingItem(null);
       form.resetFields();
@@ -243,6 +245,7 @@ export function ExperimentalObjectPage({
     }) => apiUpdateObjectStatus(params.id, params.body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
+      void queryClient.invalidateQueries({ queryKey: ['objects'] });
       message.success('状态更新成功');
     },
     onError: (err: unknown) => {
@@ -255,6 +258,7 @@ export function ExperimentalObjectPage({
     mutationFn: apiDeleteObject,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
+      void queryClient.invalidateQueries({ queryKey: ['objects'] });
       setModalOpen(false);
       setEditingItem(null);
       form.resetFields();

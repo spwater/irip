@@ -75,18 +75,19 @@ export function FactModal({
     (n) => n.status === 'succeeded' && n.output_summary,
   );
   const meta = (succeededNode?.output_summary?._metadata ?? {}) as Record<string, unknown>;
-  const allRows = (meta.data ?? meta.all_rows ?? meta.preview_rows ?? meta.rows ?? []) as Record<string, unknown>[];
   const header = (meta.metadata ?? meta.header ?? {}) as Record<string, unknown>;
+  const points = (meta.points ?? []) as { name: string; value: unknown; unit: string | null }[];
+  const series = (meta.series ?? []) as { name: string; columns: string[]; rows: unknown[][] }[];
 
   // 可编辑的数据
   const [headerText, setHeaderText] = useState('');
   const [dataText, setDataText] = useState('');
 
-  // 数据加载后初始化编辑框
+  // 数据加载后初始化编辑框（有 points 或 series 就初始化）
   useEffect(() => {
-    if (open && runDetail && allRows.length > 0) {
+    if (open && runDetail && (points.length > 0 || series.length > 0)) {
       setHeaderText(JSON.stringify(header, null, 2));
-      setDataText(JSON.stringify(allRows, null, 2));
+      setDataText(JSON.stringify({ points, series }, null, 2));
     }
   }, [open, runDetail]);  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -94,11 +95,13 @@ export function FactModal({
   const persistFactMutation = useMutation({
     mutationFn: () => {
       // 解析编辑后的数据
-      let customData: { metadata: Record<string, unknown>; data: Record<string, unknown>[] } | undefined;
+      let customData: { metadata: Record<string, unknown>; points: unknown[]; series: unknown[] } | undefined;
       try {
         const parsedHeader = JSON.parse(headerText);
         const parsedData = JSON.parse(dataText);
-        customData = { metadata: parsedHeader, data: parsedData };
+        if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
+          customData = { metadata: parsedHeader, points: parsedData.points ?? [], series: parsedData.series ?? [] };
+        }
       } catch {
         // 解析失败用原始数据
       }
@@ -180,7 +183,7 @@ export function FactModal({
 
       {/* 全部数据区域 */}
       <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
-        <Text strong>数据（可编辑）</Text>
+        <Text strong>数据（points + series，可编辑）</Text>
         <Button
           size="small"
           onClick={() => {

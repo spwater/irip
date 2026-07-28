@@ -23,10 +23,12 @@
 """
 
 import asyncio
+import io
 import json
 import os
 import re
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -50,6 +52,15 @@ class EZScanExtractor:
         params: dict[str, Any],
     ) -> ComponentResult:
         """读取文件 → 提取文本 → 调用 LLM → 返回 ObservationTable。"""
+        # 检查是否指定了专用解析工具
+        tool_type: str = params.get("tool_type", "llm")
+        if tool_type == "xrd_tool":
+            # 委托给 XRD 确定性解析组件
+            from packages.components.builtin.ingestion.xrd_tool_component import (
+                XrdToolComponent,
+            )
+            return await XrdToolComponent().execute(context, params)
+
         path_str: str = params["path"]
         prompt: str = params.get("prompt", "")
         engine: str = params.get("file_engine", "auto")
@@ -160,11 +171,28 @@ class EZScanExtractor:
                 retryable=True,
             )
         except httpx.HTTPError as exc:
-            raise AppError(
-                code="ai_request_failed",
-                message=f"LLM 请求失败：{str(exc)[:200]}",
-                retryable=True,
-            )
+            # Server disconnected 等连接错误，自动重试一次
+            err_msg = str(exc)[:200]
+            if "disconnected" in err_msg.lower() or "remote" in err_msg.lower():
+                import asyncio as _aio
+                await _aio.sleep(2)
+                try:
+                    async with httpx.AsyncClient(
+                        timeout=float(timeout + 120), proxy=None
+                    ) as client2:
+                        resp = await client2.post(url, headers=headers, json=request_body)
+                except httpx.HTTPError as exc2:
+                    raise AppError(
+                        code="ai_request_failed",
+                        message=f"LLM 请求失败（重试后）：{str(exc2)[:200]}",
+                        retryable=True,
+                    )
+            else:
+                raise AppError(
+                    code="ai_request_failed",
+                    message=f"LLM 请求失败：{err_msg}",
+                    retryable=True,
+                )
 
         if resp.status_code != 200:
             raise AppError(
@@ -185,16 +213,17 @@ class EZScanExtractor:
         llm_content: str = choices[0]["message"]["content"]
 
         extracted_data: dict[str, Any] = _parse_llm_json(llm_content)
-        raw_rows: list[dict[str, Any]] = extracted_data.get("data", [])
         header: dict[str, Any] = extracted_data.get("metadata", {})
+        points: list[dict[str, Any]] = extracted_data.get("points", [])
+        series: list[dict[str, Any]] = extracted_data.get("series", [])
 
-        # 7. 从 LLM 返回的数据中自动推断列名
-        if not raw_rows:
+        # 7. 从 points 推断列名（固定为 name, value, unit）
+        if not points:
             columns: tuple[str, ...] = ()
             converted_rows: list[dict[str, Any]] = []
         else:
-            columns = tuple(raw_rows[0].keys())
-            converted_rows = raw_rows
+            columns = ("name", "value", "unit")
+            converted_rows = points
 
         # 8. 构建 source_locations
         source_locs: list[dict[str, Any]] = [
@@ -211,12 +240,12 @@ class EZScanExtractor:
 
         return ComponentResult(
             outputs={"observations": table},
-            summary=f"提取 {table.row_count()} 行数据",
+            summary=f"提取 {len(points)} 个指标，{len(series)} 组序列",
             metadata={
-                "row_count": table.row_count(),
+                "row_count": len(points),
                 "header": header,
-                "preview_rows": converted_rows[:5],
-                "all_rows": converted_rows,
+                "points": points,
+                "series": series,
             },
         )
 
@@ -424,7 +453,17 @@ def _extract_docx(file_path: Path) -> str:
         from docx import Document
 
         doc = Document(str(file_path))
-        return "\n".join(p.text for p in doc.paragraphs)
+        parts: list[str] = []
+        # 提取段落文本
+        for p in doc.paragraphs:
+            if p.text.strip():
+                parts.append(p.text)
+        # 提取表格文本（按行按单元格）
+        for table in doc.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                parts.append("\t".join(cells))
+        return "\n".join(parts)
     except ImportError:
         raise AppError(
             code="validation_failed",
@@ -517,6 +556,17 @@ def _guess_suffix(data: bytes) -> str:
     if data[:2] == b"\xff\xd8":
         return ".jpg"
     # Office Open XML (xlsx/docx) — ZIP 格式，魔数 PK\x03\x04
+    # 通过检查 ZIP 内部目录区分 docx（含 word/）和 xlsx（含 xl/）
     if data[:4] == b"PK\x03\x04":
-        return ".xlsx"
+        try:
+            import zipfile
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                names = zf.namelist()
+                if any(n.startswith("word/") for n in names):
+                    return ".docx"
+                if any(n.startswith("xl/") for n in names):
+                    return ".xlsx"
+        except Exception:
+            pass
+        return ".xlsx"  # 默认当 xlsx
     return ""

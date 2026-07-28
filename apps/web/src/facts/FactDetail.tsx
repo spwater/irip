@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Button,
   Card,
@@ -9,6 +9,7 @@ import {
   Row,
   Spin,
   Table,
+  Tabs,
   Tag,
   Typography,
   message,
@@ -53,34 +54,28 @@ export function FactDetail(): JSX.Element {
     enabled: !!factId,
   });
 
-  const allData: Record<string, unknown>[] = factData?.data ?? [];
+  const metadata: Record<string, unknown> = factData?.metadata ?? {};
+  const allPoints: { name: string; value: unknown; unit: string | null }[] = factData?.points ?? [];
+  const seriesList: { name: string; columns: string[]; rows: unknown[][] }[] = factData?.series ?? [];
   const taskInfo = factData?.task_info;
   const sourceFile = factData?.source_file;
 
-  // 通用表格列：从所有行的 key 并集提取，保持首次出现顺序
-  const tableColumns: ColumnsType<Record<string, unknown>> = useMemo(() => {
-    const keySet = new Set<string>();
-    const orderedKeys: string[] = [];
-    for (const row of allData) {
-      for (const key of Object.keys(row)) {
-        if (!keySet.has(key)) {
-          keySet.add(key);
-          orderedKeys.push(key);
-        }
-      }
-    }
-    return orderedKeys.map((key) => ({
-      title: key,
-      dataIndex: key,
-      key,
-      ellipsis: true,
+  // 单点数据表格列
+  const pointColumns: ColumnsType<{ name: string; value: unknown; unit: string | null }> = [
+    { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
+    {
+      title: '值', dataIndex: 'value', key: 'value', ellipsis: true,
       render: (val: unknown) => {
         if (val === null || val === undefined) return '-';
         if (typeof val === 'number') return val;
         return String(val);
       },
-    }));
-  }, [allData]);
+    },
+    {
+      title: '单位', dataIndex: 'unit', key: 'unit', ellipsis: true,
+      render: (val: unknown) => (val === null || val === undefined ? '-' : String(val)),
+    },
+  ];
 
   if (factLoading) {
     return (
@@ -185,7 +180,7 @@ export function FactDetail(): JSX.Element {
         {/* 右侧：导入数据详情 */}
         <Col span={14}>
           <Card
-            title={`导入数据详情（${allData.length} 条）`}
+            title={`导入数据详情（${allPoints.length} 个指标，${seriesList.length} 组序列）`}
             extra={
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <Radio.Group
@@ -203,7 +198,8 @@ export function FactDetail(): JSX.Element {
                   onClick={() => {
                     const fullData = {
                       metadata: factData?.metadata ?? {},
-                      data: allData,
+                      points: allPoints,
+                      series: seriesList,
                     };
                     const blob = new Blob([JSON.stringify(fullData, null, 2)], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
@@ -219,14 +215,75 @@ export function FactDetail(): JSX.Element {
               </div>
             }
           >
-            {viewMode === 'table' && allData.length > 0 ? (
-              <Table<Record<string, unknown>>
-                columns={tableColumns}
-                dataSource={allData}
-                rowKey={(_, idx) => String(idx)}
-                size="small"
-                pagination={false}
-                scroll={{ y: 540 }}
+            {viewMode === 'table' ? (
+              <Tabs
+                defaultActiveKey="points"
+                items={[
+                  {
+                    key: 'metadata',
+                    label: '元数据',
+                    children: Object.keys(metadata).length > 0 ? (
+                      <Descriptions bordered column={1} size="small">
+                        {Object.entries(metadata).map(([k, v]) => (
+                          <Descriptions.Item key={k} label={k}>
+                            {v === null || v === undefined ? '-' : String(v)}
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                    ) : (
+                      <Text type="secondary">暂无元数据</Text>
+                    ),
+                  },
+                  {
+                    key: 'points',
+                    label: `单点数据（${allPoints.length}）`,
+                    children: allPoints.length > 0 ? (
+                      <Table
+                        columns={pointColumns}
+                        dataSource={allPoints}
+                        rowKey={(_, idx) => String(idx)}
+                        size="small"
+                        pagination={false}
+                        scroll={{ y: 400 }}
+                      />
+                    ) : (
+                      <Text type="secondary">暂无单点数据</Text>
+                    ),
+                  },
+                  {
+                    key: 'series',
+                    label: `序列数据（${seriesList.length}）`,
+                    children: seriesList.length > 0 ? (
+                      seriesList.map((s, i) => (
+                        <Card key={i} size="small" title={s.name ?? `序列 ${i + 1}`} style={{ marginBottom: 12 }}>
+                          <Table
+                            size="small"
+                            pagination={false}
+                            rowKey={(_, idx) => String(idx)}
+                            dataSource={s.rows.map((r, ri) => {
+                              const obj: Record<string, unknown> = { _key: ri };
+                              (s.columns ?? []).forEach((c, ci) => { obj[c] = r[ci]; });
+                              return obj;
+                            })}
+                            columns={(s.columns ?? []).map((c) => ({
+                              title: c,
+                              dataIndex: c,
+                              key: c,
+                              ellipsis: true,
+                              render: (val: unknown) => {
+                                if (val === null || val === undefined) return '-';
+                                if (typeof val === 'number') return val;
+                                return String(val);
+                              },
+                            }))}
+                          />
+                        </Card>
+                      ))
+                    ) : (
+                      <Text type="secondary">暂无序列数据</Text>
+                    ),
+                  },
+                ]}
               />
             ) : (
               <pre
@@ -243,11 +300,8 @@ export function FactDetail(): JSX.Element {
                   margin: 0,
                 }}
               >
-                {JSON.stringify({ metadata: factData?.metadata ?? {}, data: allData }, null, 2)}
+                {JSON.stringify({ metadata: factData?.metadata ?? {}, points: allPoints, series: seriesList }, null, 2)}
               </pre>
-            )}
-            {allData.length === 0 && (
-              <Text type="secondary">暂无数据</Text>
             )}
           </Card>
         </Col>

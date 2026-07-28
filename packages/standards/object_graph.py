@@ -241,12 +241,9 @@ class ObjectGraphService:
             return obj
 
     async def delete_object(self, object_id: UUID) -> None:
-        """归档工业对象（tombstone，不物理删除）。
+        """物理删除工业对象。
 
-        技术设计文档 F-03 §8.3：删除对象时不级联删除事实和修订
-        （不可变表，不允许 DELETE），改为标记对象 status='archived'。
-
-        前置条件：对象没有活跃的关系（作为 source 或 target）。
+        前置条件：对象没有活跃的关系和子对象。
 
         Args:
             object_id: 对象 UUID。
@@ -292,11 +289,8 @@ class ObjectGraphService:
                     fields={"object_id": str(object_id)},
                 )
 
-            # 不级联删除事实和修订（不可变表，不允许 DELETE）
-            # 仅标记对象为 archived（tombstone 模式）
-            obj.status = "archived"
-            obj.updated_at = datetime.now(UTC)
-            obj.lock_version += 1
+            # 物理删除
+            await session.delete(obj)
             await session.flush()
 
     async def get_object_by_code(

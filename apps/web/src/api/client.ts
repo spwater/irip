@@ -1151,7 +1151,12 @@ export type TaskInfo = {
 
 export type FactData = {
   metadata: Record<string, unknown>;
-  data: Record<string, unknown>[];
+  /** 新格式：单点数据 */
+  points?: { name: string; value: unknown; unit: string | null }[];
+  /** 新格式：序列数据 */
+  series?: { name: string; columns: string[]; rows: unknown[][] }[];
+  /** 旧格式兼容：多行数据（旧数据存为 data，新数据存为 points + series） */
+  data?: Record<string, unknown>[];
   task_info?: TaskInfo;
   source_file?: {
     filename: string;
@@ -1490,11 +1495,13 @@ export type ComponentSummary = {
   manifest_sha256: string;
   published_at: string | null;
   created_at: string;
+  prompt?: string | null;
 };
 
 /** 组件详情（含 manifest 全文 + 可选解析字段）。 */
 export type ComponentDetail = ComponentSummary & {
   manifest_yaml: string;
+  active_version_id?: string | null;
   /** 清单中声明的参数（从 manifest_yaml 解析；后端可能不直接返回）。 */
   parameters?: Record<string, unknown>;
   /** 清单中声明的输入端口（从 manifest_yaml 解析；后端可能不直接返回）。 */
@@ -1572,7 +1579,7 @@ export async function apiPersistRunAsFact(
   body: {
     object_id: string;
     template_version_id?: string | null;
-    custom_data?: { metadata: Record<string, unknown>; data: Record<string, unknown>[] } | null;
+    custom_data?: { metadata: Record<string, unknown>; points?: { name: string; value: unknown; unit: string | null }[]; series?: unknown[]; data?: Record<string, unknown>[] } | null;
   },
 ): Promise<PersistFactResult> {
   const res = await http.post<PersistFactResult>(
@@ -2790,6 +2797,7 @@ export async function apiExtractPreview(body: {
   artifact_id: string;
   filename: string;
   prompt: string;
+  tool_type?: string;
 }): Promise<{ result: string }> {
   const res = await http.post<{ result: string }>(
     '/component-preview/extract-preview',

@@ -1280,13 +1280,22 @@ class FlowRuntimeService:
             )
 
         try:
-            # 获取组件 manifest
-            version_row: ComponentVersion = await self._registry.get(
-                node.component_name, node.component_version
+            # 获取组件 manifest（始终取最新发布版本，而非 flow 版本中记录的版本号）
+            version_row: ComponentVersion = await self._registry.get_latest(
+                node.component_name
             )
             manifest: ComponentManifest = _build_manifest_from_version(
                 version_row
             )
+
+            # 从组件 manifest 的参数中动态加载 prompt 和 tool_type，覆盖 flow 版本中的快照
+            props = manifest.parameters.get("properties", {})
+            manifest_prompt = props.get("prompt", {}).get("default")
+            if manifest_prompt and "prompt" in node.params:
+                node.params["prompt"] = manifest_prompt
+            manifest_tool_type = props.get("tool_type", {}).get("default")
+            if manifest_tool_type:
+                node.params["tool_type"] = manifest_tool_type
 
             # 构建 ComponentContext
             context: ComponentContext = ComponentContext(
@@ -1435,8 +1444,9 @@ class FlowRuntimeService:
                 ).scalars().all()
             )
 
-            # 更新状态为 running
+            # 更新状态为 running，重置 started_at（重新计时）
             run.status = "running"
+            run.started_at = self._clock.now()
             await session.flush()
 
         # 拓扑排序
