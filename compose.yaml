@@ -10,6 +10,8 @@ services:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
       POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
       POSTGRES_DB: ${IRIP_DATABASE_NAME:-irip}
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,6 +23,8 @@ services:
 
   redis:
     image: docker.m.daocloud.io/redis:7-alpine
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
