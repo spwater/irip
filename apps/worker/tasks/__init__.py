@@ -56,26 +56,67 @@ def _register_handlers(executor: JobExecutor) -> None:
     技术设计文档 F-04：显式注册 flow、ingestion、model、backup、restore、
     audit_export 全部 handler，确保 JobExecutor 能处理所有已注册的作业类型。
     未知 kind 直接失败（禁止 echo fallback）。
+
+    注意：JobExecutor 调用 handler(job) 传单个 Job ORM 对象，
+    但各业务 handler 签名是 (job_id: str, payload: dict)，
+    因此用适配器拆包 job.id 和 job.payload。
     """
-    from apps.worker.tasks.flows import execute_flow_job, resume_flow_job
-    from apps.worker.tasks.ingestion import process_ingestion_job
+    from apps.worker.tasks.flows import execute_flow_job, resume_flow_job, _execute_flow_async, _resume_flow_async, _mark_job_failed
+    from apps.worker.tasks.ingestion import process_ingestion_job, _process_ingestion_async
     from apps.worker.tasks.models import (
         predict_model_job,
         publish_model_job,
         train_model_job,
     )
 
-    # Flow handler
-    executor.register_handler("flow_execute", execute_flow_job)
-    executor.register_handler("flow_resume", resume_flow_job)
+    async def _flow_execute_adapter(job):
+        """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。"""
+        job_id = str(job.id)
+        payload = job.payload or {}
+        run_id = str(payload.get("run_id", ""))
+        if not run_id:
+            return {"error": "payload missing run_id", "job_id": job_id}
+        try:
+            return await _execute_flow_async(run_id, payload)
+        except Exception as exc:
+            try:
+                await _mark_job_failed(job_id, str(exc))
+            except Exception:
+                pass
+            return {"error": str(exc), "job_id": job_id, "run_id": run_id}
+
+    async def _flow_resume_adapter(job):
+        """适配 flow_resume。"""
+        job_id = str(job.id)
+        payload = job.payload or {}
+        try:
+            return await _resume_flow_async(payload)
+        except Exception as exc:
+            try:
+                await _mark_job_failed(job_id, str(exc))
+            except Exception:
+                pass
+            return {"error": str(exc), "job_id": job_id}
+
+    def _adapt(handler):
+        """适配 (job_id, payload) 签名的同步 handler 为 async (job) 签名。
+        用于非 flow handler（它们内部用 asyncio.run，不在嵌套 async 上下文中）。
+        """
+        async def _wrapper(job):
+            return handler(str(job.id), job.payload or {})
+        return _wrapper
+
+    # Flow handler（用 async 适配器避免 asyncio.run 嵌套）
+    executor.register_handler("flow_execute", _flow_execute_adapter)
+    executor.register_handler("flow_resume", _flow_resume_adapter)
 
     # Ingestion handler
-    executor.register_handler("ingestion", process_ingestion_job)
+    executor.register_handler("ingestion", _adapt(process_ingestion_job))
 
     # Model handler
-    executor.register_handler("model_train", train_model_job)
-    executor.register_handler("model_predict", predict_model_job)
-    executor.register_handler("model_publish", publish_model_job)
+    executor.register_handler("model_train", _adapt(train_model_job))
+    executor.register_handler("model_predict", _adapt(predict_model_job))
+    executor.register_handler("model_publish", _adapt(publish_model_job))
 
     # Backup / Restore / Audit Export handler（F-04 §8.5）
     executor.register_handler("backup", _backup_handler)
