@@ -104,6 +104,7 @@ class CreateObjectRequest(BaseModel):
     ] = Field(..., description="对象类型")
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    category: str | None = Field(None, max_length=100, description="上层类别（如生料、水泥）")
     parent_id: UUID | None = Field(None, description="父对象 ID")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
     department_id: str | None = Field(None, description="所属部门 UUID")
@@ -142,6 +143,7 @@ class ObjectResponse(BaseModel):
     code: str
     display_name: str
     description: str | None
+    category: str | None
     parent_id: str | None
     equipment_id: str | None
     department_id: str | None
@@ -160,6 +162,7 @@ class ObjectListItem(BaseModel):
     code: str
     display_name: str
     description: str | None
+    category: str | None
     parent_id: str | None
     equipment_id: str | None
     department_id: str | None
@@ -226,6 +229,7 @@ async def create_object(
         code=gen_code("obj"),
         display_name=body.display_name,
         description=body.description,
+        category=body.category,
         parent_id=body.parent_id,
         equipment_id=body.equipment_id,
         department_id=UUID(body.department_id) if body.department_id else None,
@@ -323,6 +327,7 @@ class UpdateObjectRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
+    category: str | None = Field(None, max_length=100, description="上层类别")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
     department_id: str | None = Field(None, description="新所属部门 UUID（None 表示不修改）")
     visible_departments: list[str] | None = Field(
@@ -365,6 +370,7 @@ async def update_object(
         object_id=object_id,
         display_name=body.display_name,
         description=body.description,
+        category=body.category,
         equipment_id=body.equipment_id,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,
@@ -559,6 +565,7 @@ def _object_to_response(obj: object) -> ObjectResponse:
         code=obj.code,  # type: ignore[attr-defined]
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
+        category=getattr(obj, "category", None),
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]
@@ -578,6 +585,7 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         code=obj.code,  # type: ignore[attr-defined]
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
+        category=getattr(obj, "category", None),
         parent_id=str(obj.parent_id) if obj.parent_id else None,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]

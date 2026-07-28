@@ -79,6 +79,7 @@ class ObjectGraphService:
         code: str,
         display_name: str,
         description: str | None = None,
+        category: str | None = None,
         parent_id: UUID | None = None,
         equipment_id: UUID | None = None,
         department_id: UUID | None = None,
@@ -144,6 +145,7 @@ class ObjectGraphService:
                 code=code,
                 display_name=display_name,
                 description=description,
+                category=category,
                 parent_id=parent_id,
                 equipment_id=equipment_id,
                 department_id=department_id,
@@ -178,6 +180,7 @@ class ObjectGraphService:
         object_id: UUID,
         display_name: str,
         description: str | None = None,
+        category: str | None = None,
         equipment_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
@@ -202,6 +205,7 @@ class ObjectGraphService:
             obj = await self._get_and_check_org(session, object_id)
             obj.display_name = display_name
             obj.description = description
+            obj.category = category
             obj.equipment_id = equipment_id
             if department_id is not None:
                 obj.department_id = department_id

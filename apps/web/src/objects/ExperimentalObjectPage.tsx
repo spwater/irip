@@ -327,6 +327,7 @@ export function ExperimentalObjectPage({
       display_name: detail.display_name,
       object_type: record.object_type,
       description: detail.description ?? '',
+      category: detail.category ?? '',
       equipment_id: detail.equipment_id ?? undefined,
       department_id: detail.department_id ?? undefined,
       visible_departments: detail.visible_departments ?? [],
@@ -343,6 +344,7 @@ export function ExperimentalObjectPage({
           body: {
             display_name: values.display_name,
             description: values.description ?? null,
+            category: values.category || null,
             equipment_id: values.equipment_id || null,
             department_id: values.department_id,
             visible_departments: values.visible_departments ?? [],
@@ -353,6 +355,7 @@ export function ExperimentalObjectPage({
           display_name: values.display_name,
           object_type: values.object_type,
           description: values.description,
+          category: values.category || undefined,
           equipment_id: values.equipment_id || undefined,
           department_id: values.department_id,
           visible_departments: values.visible_departments ?? [],
@@ -393,6 +396,13 @@ export function ExperimentalObjectPage({
           </Space>
         </Tooltip>
       ),
+    },
+    {
+      title: '类别',
+      dataIndex: 'category',
+      key: 'category',
+      width: 100,
+      render: (cat: string | null) => cat ? <Tag color="blue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{cat}</Tag> : <Text type="secondary">-</Text>,
     },
     {
       title: '类型',
@@ -626,6 +636,9 @@ export function ExperimentalObjectPage({
               rows={3}
               maxLength={2000}
             />
+          </Form.Item>
+          <Form.Item name="category" label="上层类别">
+            <Input placeholder="如：生料、水泥" maxLength={100} />
           </Form.Item>
           <Form.Item name="equipment_id" label="关联设备">
             <Select
