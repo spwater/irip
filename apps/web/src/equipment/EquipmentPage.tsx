@@ -482,7 +482,7 @@ export function EquipmentPage({
           </Form.Item>
         </Form>
         {editingItem && (
-          <div style={{ marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 12 }}>
+          <div style={{ marginTop: 16, borderTop: '1px solid rgba(24, 102, 133, 0.16)', paddingTop: 12 }}>
             <Popconfirm
               title="确定删除该仪器？"
               description="将同时删除仪器及其关联，此操作不可撤销。"

@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:theme": "node scripts/check-theme-literals.mjs src",
     "e2e": "playwright test"
   },
   "dependencies": {

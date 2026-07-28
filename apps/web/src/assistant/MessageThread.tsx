@@ -231,9 +231,9 @@ const ROLE_AVATAR_TEXT: Record<string, string> = {
  * 消息角色 → 头像颜色
  */
 const ROLE_COLOR: Record<string, string> = {
-  user: '#1677ff',
-  assistant: '#52c41a',
-  tool: '#fa8c16',
+  user: '#1686AE',
+  assistant: '#14765E',
+  tool: '#9A6818',
 };
 
 /**
@@ -294,7 +294,7 @@ export function MessageThread({
             <Avatar
               size={36}
               style={{
-                backgroundColor: ROLE_COLOR[msg.role] ?? '#1677ff',
+                backgroundColor: ROLE_COLOR[msg.role] ?? '#1686AE',
                 flexShrink: 0,
                 fontSize: 14,
                 fontWeight: 600,

@@ -1166,7 +1166,7 @@ function ComponentDetailPanel({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '8px 12px',
-                  borderBottom: '1px solid #f0f0f0',
+                  borderBottom: '1px solid rgba(24, 102, 133, 0.16)',
                   background: isCurrent ? '#f6ffed' : 'transparent',
                 }}
               >

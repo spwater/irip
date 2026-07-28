@@ -275,7 +275,7 @@ export function IngestionWizard(): JSX.Element {
                   height: 24,
                   borderRadius: '50%',
                   fontSize: 12,
-                  background: index === currentStep ? '#1686AE' : index < currentStep ? '#52c41a' : '#f0f0f0',
+                  background: index === currentStep ? '#1686AE' : index < currentStep ? '#14765E' : 'rgba(142, 191, 208, 0.46)',
                   color: index === currentStep || index < currentStep ? '#fff' : '#999',
                 }}
               >

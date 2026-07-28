@@ -1287,7 +1287,7 @@ export function FlowDetail(): JSX.Element {
               {batchFiles.length > 0 && (
                 <div style={{ marginTop: 8, textAlign: 'left', maxHeight: 200, overflow: 'auto' }}>
                   {batchFiles.map((f, i) => (
-                    <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
+                    <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid rgba(24, 102, 133, 0.16)' }}>
                       <Text style={{ fontSize: 13 }}>{f.name}</Text>
                       <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
                         ({(f.size / 1024).toFixed(0)} KB)

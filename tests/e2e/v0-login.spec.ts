@@ -4,32 +4,18 @@
  * 验收场景（docs/arch-v0.md §8.3 第 839 行）：
  *   浏览器登录 → 成功进入工作台；F5 刷新 → 会话保持
  *
- * 使用中文标签定位元素（LoginPage.tsx 使用 Ant Design 中文 Form）：
- *   - 标题：IRIP 控制台
- *   - 邮箱字段：label="邮箱"
- *   - 密码字段：label="密码"
- *   - 登录按钮：text="登录"
+ * Phase 6: the success scenario now reuses the shared loginAsAdmin helper.
+ * The failure scenario remains inline to verify the error path explicitly.
  *
  * 前置：bootstrap 已创建 admin@irip.local 用户，前端 dev server 已启动。
  */
 
 import { test, expect } from '@playwright/test';
+import { loginAsAdmin } from './helpers/auth';
 
 test('管理员登录成功并进入工作台', async ({ page }) => {
-  // 访问登录页
-  await page.goto('/login');
-
-  // 确认登录页标题
-  await expect(page.getByText('IRIP 控制台')).toBeVisible();
-
-  // 填写邮箱（Ant Design Form label="邮箱"）
-  await page.getByLabel('邮箱').fill('admin@irip.local');
-
-  // 填写密码（Ant Design Form label="密码"）
-  await page.getByLabel('密码').fill('Admin-IRIP-2026');
-
-  // 点击登录按钮
-  await page.getByRole('button', { name: '登录' }).click();
+  // Reuse the shared helper — if this succeeds the workbench is visible
+  await loginAsAdmin(page);
 
   // 验证已跳转到工作台
   await expect(page).toHaveURL(/\/workbench/);
