@@ -85,7 +85,7 @@ async def create_object_type(
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
     from packages.common.ids import gen_code
-    code = gen_code("obtype_")
+    code = gen_code("obtype")
     async with session_scope(_get_session_factory()) as session:
         existing = await session.execute(
             sa.select(ObjectTypeDict).where(ObjectTypeDict.display_name == body.display_name)
