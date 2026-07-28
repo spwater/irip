@@ -69,7 +69,7 @@ export function FlowDetail(): JSX.Element {
   const [factModalOpen, setFactModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadLoading, setUploadLoading] = useState<string | null>(null);
-  const [artifactMap, setArtifactMap] = useState<Record<string, string>>({});
+  const artifactMapRef = useRef<Record<string, string>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [flowPageSize, setFlowPageSize] = useState(10);
   const [runPageSize, setRunPageSize] = useState(10);
@@ -421,9 +421,12 @@ export function FlowDetail(): JSX.Element {
         for (const key of Object.keys(node.params ?? {})) {
           const formKey = `${prefix}${key}`;
           const formValue = values[formKey];
-          if (formValue !== undefined && formValue !== '') {
-            // 如果是上传的文件，用真实 artifact 值替换显示的文件名
-            inputs[key] = artifactMap[formKey] ?? formValue;
+          // 优先用 artifactMap（上传文件后的 artifact:xxx），其次用表单值
+          const artifactVal = artifactMapRef.current[formKey];
+          if (artifactVal) {
+            inputs[key] = artifactVal;
+          } else if (formValue !== undefined && formValue !== '') {
+            inputs[key] = formValue;
           }
         }
       }
@@ -757,6 +760,7 @@ export function FlowDetail(): JSX.Element {
                 disabled={!canExecute}
                 onClick={() => {
                   runForm.resetFields();
+                  artifactMapRef.current = {};
                   // 手动设置初始值（resetFields 后 initialValue 不生效，需要 setFieldsValue）
                   if (runNode && runParamEntries.length > 0) {
                     const initialValues: Record<string, unknown> = {};
@@ -1136,47 +1140,27 @@ export function FlowDetail(): JSX.Element {
 
                   if (isPath) {
                     return (
-                      <Form.Item
-                        key={formKey}
-                        name={formKey}
-                        label={label}
-                        initialValue={defaultVal || ''}
-                      >
-                        <Input.Group compact style={{ display: 'flex' }}>
-                          <Form.Item name={formKey} noStyle>
+                      <Form.Item key={formKey} label={label}>
+                        <Space.Compact style={{ width: '100%' }}>
+                          <Form.Item name={formKey} noStyle initialValue={defaultVal || ''}>
                             <Input
                               style={{ flex: 1 }}
-                              placeholder={defaultVal ? String(defaultVal) : `输入 ${key}`}
+                              placeholder="上传文件或输入路径"
                             />
                           </Form.Item>
                           <Button
                             loading={uploadLoading === formKey}
-                            onClick={() => fileInputRef.current?.click()}
+                            onClick={() => {
+                              // 记录当前 formKey 到 ref，供 onChange 回调使用
+                              if (fileInputRef.current) {
+                                fileInputRef.current.dataset.formkey = formKey;
+                                fileInputRef.current.click();
+                              }
+                            }}
                           >
                             上传
                           </Button>
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            style={{ display: 'none' }}
-                            onChange={async (e) => {
-                              const file = e.target.files?.[0];
-                              if (!file) return;
-                              setUploadLoading(formKey);
-                              try {
-                                const res = await apiUploadFile(file);
-                                runForm.setFieldValue(formKey, file.name);
-                                setArtifactMap((prev) => ({ ...prev, [formKey]: `artifact:${res.artifact_id}` }));
-                                message.success(`文件已上传: ${file.name}`);
-                              } catch (err) {
-                                message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
-                              } finally {
-                                setUploadLoading(null);
-                                if (fileInputRef.current) fileInputRef.current.value = '';
-                              }
-                            }}
-                          />
-                        </Input.Group>
+                        </Space.Compact>
                       </Form.Item>
                     );
                   }
@@ -1288,6 +1272,34 @@ export function FlowDetail(): JSX.Element {
           </>
         )}
       </Modal>
+
+      {/* 隐藏的文件上传 input（供执行弹窗的 path 字段使用） */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const formKey = fileInputRef.current?.dataset.formkey;
+          if (!formKey) return;
+          setUploadLoading(formKey);
+          try {
+            const res = await apiUploadFile(file);
+            runForm.setFieldValue(formKey, file.name);
+            artifactMapRef.current[formKey] = `artifact:${res.artifact_id}`;
+            message.success(`文件已上传: ${file.name}`);
+          } catch (err) {
+            message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
+          } finally {
+            setUploadLoading(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+              delete fileInputRef.current.dataset.formkey;
+            }
+          }
+        }}
+      />
     </div>
   );
 }
