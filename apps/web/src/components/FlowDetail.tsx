@@ -975,17 +975,17 @@ export function FlowDetail(): JSX.Element {
                 const tsDisplay = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 createForm.setFieldsValue({
                   code: `${value}_${ts}`,
-                  display_name: `${value} 流程 ${tsDisplay}`,
+                  display_name: `${value}_${ts}`,
                 });
               }}
             />
           </Form.Item>
           <Form.Item
             name="display_name"
-            label="流程名称"
-            rules={[{ required: true, message: '请输入流程名称' }]}
+            label="任务名称"
+            rules={[{ required: true, message: '请输入任务名称' }]}
           >
-            <Input placeholder="如：篦冷机分析流程" maxLength={200} />
+            <Input placeholder="如：篦冷机分析任务" maxLength={200} />
           </Form.Item>
           <Form.Item
             name="operator"
@@ -1066,10 +1066,10 @@ export function FlowDetail(): JSX.Element {
         <Form form={editForm} layout="vertical">
           <Form.Item
             name="display_name"
-            label="流程名称"
-            rules={[{ required: true, message: '请输入流程名称' }]}
+            label="任务名称"
+            rules={[{ required: true, message: '请输入任务名称' }]}
           >
-            <Input placeholder="请输入流程名称" maxLength={200} />
+            <Input placeholder="请输入任务名称" maxLength={200} />
           </Form.Item>
           <Form.Item name="department_id" label="所属单位">
             <Select
