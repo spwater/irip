@@ -126,12 +126,13 @@ export function ExperimentalObjectPage({
     }
   }, [presetEquipmentId]);
 
-  // ---- 数据查询 ----
+  // ---- 数据查询：始终拿全部类型的数据，前端按 typeFilter 过滤 ----
+  const allTypeCodes = (objectTypeData ?? []).map(t => t.code).join(',') || 'material,signal';
   const { data, isLoading } = useQuery({
-    queryKey: ['exp-objects', typeFilter],
+    queryKey: ['exp-objects', allTypeCodes],
     queryFn: () =>
       apiListObjects({
-        object_type: typeFilter ? typeFilter : (objectTypeData ?? []).map(t => t.code).join(',') || 'material,signal',
+        object_type: allTypeCodes,
         page_size: 100,
       }),
   });
@@ -342,8 +343,10 @@ export function ExperimentalObjectPage({
       typeMap.set(item.object_type, list);
     }
     const tree: TreeRow[] = [];
-    // 按 objectTypeData 的顺序构建类型行
+    // 按 objectTypeData 的顺序构建类型行，应用类型筛选
     for (const typeItem of objectTypeData ?? []) {
+      // 如果选了类型筛选，只显示选中的类型
+      if (typeFilter && typeItem.code !== typeFilter) continue;
       const objs = typeMap.get(typeItem.code);
       if (objs && objs.length > 0) {
         tree.push({
