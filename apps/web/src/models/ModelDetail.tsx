@@ -5,7 +5,6 @@ import {
   Descriptions,
   Form,
   Input,
-  Modal,
   Select,
   Space,
   Table,
@@ -24,7 +23,7 @@ import {
   extractApiError,
   type ModelVersionSummary,
 } from '@/api/client';
-import { DataHero, DetailSection, StatusMark, FeedbackState } from '@/components/ui';
+import { DataHero, DetailSection, FocusModal, StatusMark, FeedbackState } from '@/components/ui';
 import type { StatusTone } from '@/theme/tokens';
 
 const { Text } = Typography;
@@ -377,7 +376,7 @@ export function ModelDetail(): JSX.Element {
       </DetailSection>
 
       {/* 提交验证 Modal */}
-      <Modal
+      <FocusModal
         title="提交版本验证"
         open={validateModalOpen}
         onOk={handleValidate}
@@ -420,10 +419,10 @@ export function ModelDetail(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 发布版本 Modal */}
-      <Modal
+      <FocusModal
         title="发布模型版本"
         open={publishModalOpen}
         onOk={handlePublish}
@@ -452,10 +451,10 @@ export function ModelDetail(): JSX.Element {
             message="发布后该版本将成为当前发布版本，可用于预测。"
           />
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 回滚 Modal */}
-      <Modal
+      <FocusModal
         title="回滚模型"
         open={rollbackModalOpen}
         onOk={handleRollback}
@@ -484,7 +483,7 @@ export function ModelDetail(): JSX.Element {
             message="回滚将把发布指针移动到所选版本。"
           />
         </Form>
-      </Modal>
+      </FocusModal>
     </div>
   );
 }

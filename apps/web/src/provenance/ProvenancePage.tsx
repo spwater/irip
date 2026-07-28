@@ -3,7 +3,6 @@ import {
   Button,
   Form,
   Input,
-  Modal,
   Segmented,
   Select,
   Space,
@@ -32,7 +31,7 @@ import {
   type ProvenanceNode,
   type Recipe,
 } from '@/api/client';
-import { DetailSection, DataTableShell, StatusMark } from '@/components/ui';
+import { DetailSection, DataTableShell, FocusModal, StatusMark } from '@/components/ui';
 import type { StatusTone } from '@/theme/tokens';
 
 const { Text } = Typography;
@@ -583,7 +582,7 @@ export function ProvenancePage(): JSX.Element {
       />
 
       {/* 证据集创建 Modal */}
-      <Modal
+      <FocusModal
         title="新建证据集"
         open={evidenceModalOpen}
         onOk={handleEvidenceSubmit}
@@ -604,10 +603,10 @@ export function ProvenancePage(): JSX.Element {
             <Input placeholder="如：材料性能证据集" />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 配方创建 Modal */}
-      <Modal
+      <FocusModal
         title="新建配方"
         open={recipeModalOpen}
         onOk={handleRecipeSubmit}
@@ -641,10 +640,10 @@ export function ProvenancePage(): JSX.Element {
             <Input placeholder="如：屈服强度推导配方" maxLength={256} />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 推导运行创建 Modal */}
-      <Modal
+      <FocusModal
         title="新建推导运行"
         open={runModalOpen}
         onOk={handleRunSubmit}
@@ -672,7 +671,7 @@ export function ProvenancePage(): JSX.Element {
             <Input placeholder="如：550e8400-e29b-41d4-a716-446655440000" />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
     </div>
   );
 }

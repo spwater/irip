@@ -3,7 +3,6 @@ import {
   Button,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -35,6 +34,7 @@ import {
   ActionBar,
   DataTableShell,
   FeedbackState,
+  FocusModal,
   StatusMark,
 } from '@/components/ui';
 
@@ -563,7 +563,7 @@ export function ExperimentalObjectPage({
       </DataTableShell>
 
       {/* 创建/编辑 Modal */}
-      <Modal
+      <FocusModal
         title={editingItem ? '编辑实验对象' : '新建实验对象'}
         open={modalOpen}
         onCancel={() => {
@@ -674,10 +674,10 @@ export function ExperimentalObjectPage({
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 批量导入弹窗 */}
-      <Modal
+      <FocusModal
         title="批量导入实验对象"
         open={batchOpen}
         onCancel={() => { setBatchOpen(false); setBatchText(''); }}
@@ -711,7 +711,7 @@ export function ExperimentalObjectPage({
             提示：也可从 Excel 复制多行数据直接粘贴（需先将列用逗号分隔）
           </Text>
         </div>
-      </Modal>
+      </FocusModal>
     </section>
   );
 }

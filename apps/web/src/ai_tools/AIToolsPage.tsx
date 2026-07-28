@@ -83,6 +83,7 @@ export function AIToolsPage(): JSX.Element {
         : `确定禁用工具「${tool.display_name}」吗？禁用后小艾将无法调用此工具，进行中的对话也会立即生效。`,
       okText: '确定',
       cancelText: '取消',
+      className: 'ocean-focus-modal',
       okButtonProps: { danger: !newEnabled },
       onOk: () => {
         toggleMutation.mutate({

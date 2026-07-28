@@ -5,7 +5,6 @@ import {
   Checkbox,
   Input,
   List,
-  Modal,
   Popconfirm,
   Space,
   Switch,
@@ -36,6 +35,7 @@ import {
   type ConversationSummary,
   type FactSummary,
 } from '@/api/client';
+import { FocusModal } from '@/components/ui';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
@@ -684,7 +684,7 @@ export function AssistantPage(): JSX.Element {
       </section>
 
       {/* 载入实验数据 Modal（命名 region） */}
-      <Modal
+      <FocusModal
         title="载入实验数据"
         open={factModalOpen}
         onOk={handleInsertFact}
@@ -804,7 +804,7 @@ export function AssistantPage(): JSX.Element {
             )}
           </div>
         </div>
-      </Modal>
+      </FocusModal>
     </div>
   );
 }

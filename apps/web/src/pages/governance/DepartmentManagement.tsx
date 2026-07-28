@@ -4,7 +4,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -31,6 +30,7 @@ import {
   ActionBar,
   DataTableShell,
   FeedbackState,
+  FocusModal,
   StatusMark,
 } from '@/components/ui';
 
@@ -447,7 +447,7 @@ export function DepartmentManagement({
         />
       </DataTableShell>
 
-      <Modal
+      <FocusModal
         title={editingDept ? '编辑组织机构' : '新建组织机构'}
         open={modalOpen}
         onCancel={() => {
@@ -552,7 +552,7 @@ export function DepartmentManagement({
             <InputNumber min={0} style={{ width: '100%' }} placeholder="默认 0" />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {memberDrawerDept && (
         <MemberDrawer

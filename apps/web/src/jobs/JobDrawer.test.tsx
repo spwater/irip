@@ -24,11 +24,17 @@ vi.mock('@/api/client', async () => {
 
 import { renderApp } from '@/test/setup';
 import { runningJobApi, runningJob } from '@/test/mockApi';
+import { JOB_STATUS_VIEW } from '@/jobs/jobPresentation';
 
 describe('JobDrawer', () => {
   it('restores an unfinished job after reload', async () => {
     renderApp({ storedJobs: [runningJob], api: runningJobApi });
 
+    // Stage text
     expect(await screen.findByText('正在解析实验文件')).toBeVisible();
+    // Progress value (rendered as "42%")
+    expect(screen.getByText('42%')).toBeVisible();
+    // Running StatusMark label (from shared JOB_STATUS_VIEW)
+    expect(screen.getByText(JOB_STATUS_VIEW['running'].label)).toBeVisible();
   });
 });

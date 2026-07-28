@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   Button,
-  Drawer,
   Input,
   List,
   Popconfirm,
@@ -18,6 +17,7 @@ import {
   type DepartmentListItem,
   type DepartmentUser,
 } from '@/api/client';
+import { FocusDrawer } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -31,7 +31,7 @@ interface MemberDrawerProps {
 }
 
 /**
- * 成员管理抽屉（P1）
+ * 成员管理抽屉
  *
  * 从右滑出（宽 480px），展示实验室下用户列表，
  * 支持添加/移除用户（调用 PUT /api/v1/users/{id}/departments）。
@@ -120,7 +120,7 @@ export function MemberDrawer({
   };
 
   return (
-    <Drawer
+    <FocusDrawer
       title={`成员管理 — ${department.display_name}`}
       open={open}
       onClose={onClose}
@@ -177,7 +177,7 @@ export function MemberDrawer({
                 }
                 description={
                   <Text type="secondary" style={{ fontSize: 12 }}>
-                    {user.email} · {user.user_id}
+                    {user.email} · <span className="ocean-tech">{user.user_id}</span>
                   </Text>
                 }
               />
@@ -185,7 +185,7 @@ export function MemberDrawer({
           )}
         />
       </Space>
-    </Drawer>
+    </FocusDrawer>
   );
 }
 

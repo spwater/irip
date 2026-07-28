@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Button,
-  Card,
   Form,
   Input,
   Switch,
@@ -12,8 +11,9 @@ import {
 } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { http, extractApiError } from '@/api/client';
+import { DetailSection } from '@/components/ui';
 
-const { Title, Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 /** AI 配置类型 */
 type AIConfig = {
@@ -115,15 +115,13 @@ export function AIConfigPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={5}>大模型配置</Title>
-      <Paragraph type="secondary">
-        配置 OpenAI 兼容的 API 地址和密钥。配置启用后，小艾将使用真实模型进行对话。
-        未配置或未启用时，小艾使用离线模拟模式。
-      </Paragraph>
-
-      {config && (
-        <Card size="small" style={{ marginBottom: 16 }}>
-          <Space size="large">
+      <DetailSection title="大模型配置">
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          配置 OpenAI 兼容的 API 地址和密钥。配置启用后，小艾将使用真实模型进行对话。
+          未配置或未启用时，小艾使用离线模拟模式。
+        </Typography.Paragraph>
+        {config && (
+          <Space size="large" style={{ marginBottom: 16 }}>
             <Text>当前状态: </Text>
             <Tag color={config.enabled ? 'green' : 'default'}>
               {config.enabled ? '已启用' : '未启用'}
@@ -135,45 +133,45 @@ export function AIConfigPage(): JSX.Element {
               </>
             )}
           </Space>
-        </Card>
-      )}
+        )}
 
-      <Form form={form} layout="vertical" style={{ maxWidth: 600 }}>
-        <Form.Item
-          name="base_url"
-          label="API 地址"
-          rules={[{ required: true, message: '请输入 API 地址' }]}
-        >
-          <Input placeholder="https://api.openai.com/v1" />
-        </Form.Item>
-        <Form.Item
-          name="api_key"
-          label="API 密钥"
-          rules={[{ required: true, message: '请输入 API 密钥' }]}
-        >
-          <Input.Password placeholder="sk-..." />
-        </Form.Item>
-        <Form.Item
-          name="model_name"
-          label="模型名称"
-          rules={[{ required: true, message: '请输入模型名称' }]}
-        >
-          <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
-        </Form.Item>
-        <Form.Item name="enabled" label="启用" valuePropName="checked">
-          <Switch />
-        </Form.Item>
-        <Form.Item>
-          <Space>
-            <Button type="primary" onClick={handleSave} loading={saveMutation.isPending}>
-              保存配置
-            </Button>
-            <Button onClick={handleTest} loading={testLoading}>
-              测试连接
-            </Button>
-          </Space>
-        </Form.Item>
-      </Form>
+        <Form form={form} layout="vertical" style={{ maxWidth: 600 }}>
+          <Form.Item
+            name="base_url"
+            label="API 地址"
+            rules={[{ required: true, message: '请输入 API 地址' }]}
+          >
+            <Input placeholder="https://api.openai.com/v1" />
+          </Form.Item>
+          <Form.Item
+            name="api_key"
+            label="API 密钥"
+            rules={[{ required: true, message: '请输入 API 密钥' }]}
+          >
+            <Input.Password placeholder="sk-..." />
+          </Form.Item>
+          <Form.Item
+            name="model_name"
+            label="模型名称"
+            rules={[{ required: true, message: '请输入模型名称' }]}
+          >
+            <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用" valuePropName="checked">
+            <Switch />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" onClick={handleSave} loading={saveMutation.isPending}>
+                保存配置
+              </Button>
+              <Button onClick={handleTest} loading={testLoading}>
+                测试连接
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </DetailSection>
     </div>
   );
 }

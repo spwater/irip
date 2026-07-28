@@ -4,7 +4,6 @@ import {
   Form,
   Input,
   message,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -27,6 +26,7 @@ import {
   type UserListItem,
 } from '@/api/client';
 import { useAuthStore } from '@/auth/AuthProvider';
+import { ActionBar, DataTableShell, StatusMark, FeedbackState, FocusModal } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -39,13 +39,22 @@ const ROLE_OPTIONS = [
   { value: 'lab_viewer', label: '实验室成员（只读）' },
 ];
 
+/** 用户状态 → StatusMark tone 映射 */
+function userStatusMark(status: string): JSX.Element {
+  if (status === 'active') {
+    return <StatusMark tone="success" label="启用" />;
+  }
+  return <StatusMark tone="neutral" label="禁用" />;
+}
+
 /**
  * 用户管理页面 — 仅管理员可见
  *
  * 功能：
  * - Table: 用户列表（ID / 邮箱 / 显示名 / 角色 / 状态）
- * - 角色分配操作（Modal + Select 多选）
+ * - 角色分配操作（FocusModal + Select 多选）
  * - 启用/禁用操作（Popconfirm）
+ * - 新建账号（FocusModal + Form）
  */
 export function UsersPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -60,7 +69,7 @@ export function UsersPage(): JSX.Element {
   const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
 
   // ---- 数据查询：用户列表 ----
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['governance', 'users', statusFilter],
     queryFn: () => apiListUsers({ status: statusFilter, limit: 100 }),
     enabled: isAdmin,
@@ -84,7 +93,6 @@ export function UsersPage(): JSX.Element {
 
   const items: UserListItem[] = data?.items ?? [];
 
-  // ---- 编辑用户 Mutation ----
   // ---- 新建用户 Mutation ----
   const createMutation = useMutation({
     mutationFn: (params: { email: string; display_name: string; password: string; roles: string[]; department_id?: string }) =>
@@ -213,9 +221,10 @@ export function UsersPage(): JSX.Element {
   // ---- 权限检查 ----
   if (!isAdmin) {
     return (
-      <div>
-        <Text type="danger">仅平台管理员可访问此页面。</Text>
-      </div>
+      <FeedbackState
+        kind="forbidden"
+        title="仅平台管理员可访问此页面"
+      />
     );
   }
 
@@ -267,15 +276,8 @@ export function UsersPage(): JSX.Element {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
-      render: (status: string) =>
-        status === 'active' ? (
-          <Tag color="green">启用</Tag>
-        ) : (
-          <Tag color="default" style={{ opacity: 0.5 }}>
-            禁用
-          </Tag>
-        ),
+      width: 120,
+      render: (status: string) => userStatusMark(status),
     },
     {
       title: '实验室',
@@ -342,9 +344,10 @@ export function UsersPage(): JSX.Element {
     },
   ];
 
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+  // ---- 工具栏 ----
+  const toolbar = (
+    <ActionBar
+      filters={
         <Select
           placeholder="状态筛选"
           style={{ width: 140 }}
@@ -356,11 +359,30 @@ export function UsersPage(): JSX.Element {
             { value: 'disabled', label: '禁用' },
           ]}
         />
+      }
+      actions={
         <Button type="primary" onClick={() => setCreateModalOpen(true)}>
           新建账号
         </Button>
-      </div>
+      }
+    />
+  );
 
+  // ---- 表格内容 ----
+  const tableContent: JSX.Element = (() => {
+    if (isLoading) {
+      return <FeedbackState kind="loading" title="正在加载用户列表..." rows={5} />;
+    }
+    if (isError && items.length === 0) {
+      return (
+        <FeedbackState
+          kind="error"
+          title="用户列表加载失败"
+          onRetry={() => void refetch()}
+        />
+      );
+    }
+    return (
       <Table<UserListItem>
         columns={columns}
         dataSource={items}
@@ -369,9 +391,21 @@ export function UsersPage(): JSX.Element {
         pagination={{ pageSize: 20, showSizeChanger: false }}
         size="middle"
       />
+    );
+  })();
 
-      {/* 编辑角色 Modal */}
-      <Modal
+  return (
+    <section aria-label="用户目录">
+      <DataTableShell
+        title="用户管理"
+        description="管理平台用户、角色分配和状态。"
+        toolbar={toolbar}
+      >
+        {tableContent}
+      </DataTableShell>
+
+      {/* 编辑角色 FocusModal */}
+      <FocusModal
         title={assignTarget ? `编辑角色 — ${assignTarget.display_name}` : '编辑角色'}
         open={!!assignTarget}
         onOk={handleAssignSubmit}
@@ -432,10 +466,10 @@ export function UsersPage(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
-      {/* 新建账号 Modal */}
-      <Modal
+      {/* 新建账号 FocusModal */}
+      <FocusModal
         title="新建账号"
         open={createModalOpen}
         onOk={handleCreateSubmit}
@@ -506,7 +540,7 @@ export function UsersPage(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
-    </div>
+      </FocusModal>
+    </section>
   );
 }

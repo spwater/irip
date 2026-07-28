@@ -149,6 +149,7 @@ export function ToolEditDrawer({
           '将工具切换为"候选"后，AI 不会自动执行此工具，仅返回建议供人工审批。确认切换？',
         okText: '确认切换',
         cancelText: '取消',
+        className: 'ocean-focus-modal',
         onOk: () => {
           form.setFieldsValue({ candidate: true });
         },

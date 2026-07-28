@@ -4,7 +4,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -34,6 +33,7 @@ import {
   ActionBar,
   DataTableShell,
   FeedbackState,
+  FocusModal,
   StatusMark,
 } from '@/components/ui';
 
@@ -413,7 +413,7 @@ export function EquipmentPage({
       </DataTableShell>
 
       {/* 创建/编辑 Modal */}
-      <Modal
+      <FocusModal
         title={editingItem ? '编辑仪器或方法' : '新建仪器或方法'}
         open={modalOpen}
         onOk={handleSubmit}
@@ -505,7 +505,7 @@ export function EquipmentPage({
             </Popconfirm>
           </div>
         )}
-      </Modal>
+      </FocusModal>
 
       {/* 物理量管理 Drawer */}
     </section>

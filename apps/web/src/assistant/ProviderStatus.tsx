@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Tag, Typography } from 'antd';
+import { Tag, Typography } from 'antd';
 import {
   useQuery,
 } from '@tanstack/react-query';
@@ -7,7 +7,7 @@ import {
   apiGetProviderStatus,
   type ToolInfo,
 } from '@/api/client';
-import { StatusMark, DetailSection, FeedbackState } from '@/components/ui';
+import { StatusMark, DetailSection, FeedbackState, FocusModal } from '@/components/ui';
 import type { StatusTone } from '@/theme/tokens';
 
 const { Text } = Typography;
@@ -62,7 +62,7 @@ export function ProviderStatus(): JSX.Element {
         />
       </div>
 
-      <Modal
+      <FocusModal
         title="中材小艾详情"
         open={detailOpen}
         onCancel={() => setDetailOpen(false)}
@@ -97,7 +97,7 @@ export function ProviderStatus(): JSX.Element {
             onRetry={() => setDetailOpen(false)}
           />
         )}
-      </Modal>
+      </FocusModal>
     </>
   );
 }

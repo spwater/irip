@@ -3,7 +3,6 @@ import {
   Button,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -343,7 +342,7 @@ export function ModelsPage(): JSX.Element {
       </FocusModal>
 
       {/* 发布版本 Modal */}
-      <Modal
+      <FocusModal
         title={`发布模型版本 — ${publishModel?.display_name ?? ''}`}
         open={!!publishModel}
         onOk={handlePublish}
@@ -367,10 +366,10 @@ export function ModelsPage(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 回滚 Modal */}
-      <Modal
+      <FocusModal
         title={`回滚模型 — ${rollbackModel?.display_name ?? ''}`}
         open={!!rollbackModel}
         onOk={handleRollback}
@@ -394,7 +393,7 @@ export function ModelsPage(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
     </div>
   );
 }

@@ -5,7 +5,6 @@ import {
   Descriptions,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Row,
   Select,
@@ -43,7 +42,7 @@ import {
   type IndustrialObject,
 } from '@/api/client';
 import type { UploadProps } from 'antd';
-import { ActionBar, DataTableShell, StatusMark, FocusDrawer } from '@/components/ui';
+import { ActionBar, DataTableShell, StatusMark, FocusDrawer, FocusModal } from '@/components/ui';
 import type { StatusTone } from '@/theme/tokens';
 
 /** 把 UTC 时间字符串转成本地时间显示 */
@@ -379,7 +378,7 @@ function ComponentFormFields({
       >
         <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
       </Form.Item>
-      <Modal
+      <FocusModal
         title="数据抽取预览"
         open={previewOpen}
         onCancel={() => setPreviewOpen(false)}
@@ -398,7 +397,7 @@ function ComponentFormFields({
             style={{ fontFamily: 'monospace', fontSize: 13 }}
           />
         ) : null}
-      </Modal>
+      </FocusModal>
     </>
   );
 }
@@ -948,7 +947,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       </DataTableShell>
 
       {/* 新建接口 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
-      <Modal
+      <FocusModal
         title="新建接口"
         open={modalOpen}
         onOk={handlePublish}
@@ -992,7 +991,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
             <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} />
           )}
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 组件详情 Drawer */}
       <FocusDrawer
@@ -1013,7 +1012,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
       </FocusDrawer>
 
       {/* 编辑组件 Modal（双模式：默认高级模式，可切换到表单模式）*/}
-      <Modal
+      <FocusModal
         title="编辑组件"
         open={editModalOpen}
         onOk={handleEditPublish}
@@ -1069,7 +1068,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
             </>
           )}
         </Form>
-      </Modal>
+      </FocusModal>
     </section>
   );
 }

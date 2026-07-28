@@ -6,7 +6,6 @@ import {
   Select,
   Space,
   Table,
-  Tag,
   Tooltip,
   Typography,
   message,
@@ -22,43 +21,15 @@ import {
   type JobListItem,
   type JobStatus,
 } from '@/api/client';
+import { ActionBar, DataTableShell, StatusMark, FeedbackState } from '@/components/ui';
+import {
+  JOB_STATUS_VIEW,
+  TERMINAL_STATUSES,
+  CANCELLABLE_STATUSES,
+  jobStatusView,
+} from './jobPresentation';
 
 const { Text } = Typography;
-
-/** 状态 → 颜色映射 */
-const STATUS_COLOR: Record<string, string> = {
-  accepted: 'default',
-  queued: 'blue',
-  running: 'processing',
-  retry_wait: 'orange',
-  succeeded: 'success',
-  failed: 'error',
-  cancel_requested: 'warning',
-  cancelled: 'default',
-};
-
-/** 状态 → 中文标签映射 */
-const STATUS_LABEL: Record<string, string> = {
-  accepted: '已接受',
-  queued: '排队中',
-  running: '运行中',
-  retry_wait: '等待重试',
-  succeeded: '已完成',
-  failed: '已失败',
-  cancel_requested: '取消请求中',
-  cancelled: '已取消',
-};
-
-/** 终态集合 */
-const TERMINAL_STATUSES: string[] = ['succeeded', 'failed', 'cancelled'];
-
-/** 可取消状态集合 */
-const CANCELLABLE_STATUSES: string[] = [
-  'accepted',
-  'queued',
-  'running',
-  'retry_wait',
-];
 
 /**
  * 作业列表页面
@@ -68,6 +39,7 @@ const CANCELLABLE_STATUSES: string[] = [
  * - 状态和类型筛选
  * - 重试/取消操作
  * - 点击行跳转到作业详情页
+ * - 使用共享 JOB_STATUS_VIEW 状态映射
  */
 export function JobsPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -76,7 +48,7 @@ export function JobsPage(): JSX.Element {
   const [kindFilter, setKindFilter] = useState<string | undefined>(undefined);
 
   // ---- 数据查询：作业列表 ----
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['jobs', 'list', statusFilter, kindFilter],
     queryFn: () =>
       apiListJobs({ status: statusFilter, kind: kindFilter, limit: 100 }),
@@ -118,12 +90,13 @@ export function JobsPage(): JSX.Element {
       ellipsis: true,
       render: (val: string) => (
         <Tooltip title={val}>
-          <Text
-            style={{ fontSize: 12, cursor: 'pointer', color: '#1677ff' }}
+          <span
+            className="ocean-tech"
+            style={{ cursor: 'pointer', color: '#1686AE' }}
             onClick={() => void navigate({ to: '/jobs/$jobId', params: { jobId: val } })}
           >
             {val.slice(0, 16)}…
-          </Text>
+          </span>
         </Tooltip>
       ),
     },
@@ -132,17 +105,17 @@ export function JobsPage(): JSX.Element {
       dataIndex: 'kind',
       key: 'kind',
       width: 160,
+      render: (val: string) => <span className="ocean-tech">{val}</span>,
     },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 120,
-      render: (status: string) => (
-        <Tag color={STATUS_COLOR[status] ?? 'default'}>
-          {STATUS_LABEL[status as JobStatus] ?? status}
-        </Tag>
-      ),
+      render: (status: string) => {
+        const view = jobStatusView(status);
+        return <StatusMark tone={view.tone} label={view.label} />;
+      },
     },
     {
       title: '阶段',
@@ -163,15 +136,19 @@ export function JobsPage(): JSX.Element {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
-      render: (val: string) => new Date(val).toLocaleString(),
+      render: (val: string) => (
+        <span className="ocean-tabular-number" style={{ fontSize: 12 }}>
+          {new Date(val).toLocaleString('zh-CN', { hour12: false })}
+        </span>
+      ),
     },
     {
       title: '操作',
       key: 'action',
       width: 160,
       render: (_: unknown, record: JobListItem) => {
-        const canCancel = CANCELLABLE_STATUSES.includes(record.status);
-        const canRetry = TERMINAL_STATUSES.includes(record.status);
+        const canCancel = CANCELLABLE_STATUSES.includes(record.status as JobStatus);
+        const canRetry = TERMINAL_STATUSES.includes(record.status as JobStatus);
         return (
           <Space size="small">
             <Button
@@ -216,35 +193,57 @@ export function JobsPage(): JSX.Element {
     },
   ];
 
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Select
-          placeholder="状态筛选"
-          style={{ width: 160 }}
-          value={statusFilter ?? '__all__'}
-          onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            ...Object.entries(STATUS_LABEL).map(([value, label]) => ({ value, label })),
-          ]}
-        />
-        <Select
-          placeholder="类型筛选"
-          style={{ width: 200 }}
-          value={kindFilter ?? '__all__'}
-          onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
-          options={[
-            { value: '__all__', label: '全部' },
-            { value: 'echo', label: 'echo' },
-            { value: 'parse_excel', label: 'parse_excel' },
-            { value: 'audit_export', label: 'audit_export' },
-            { value: 'ingestion', label: 'ingestion' },
-            { value: 'derivation', label: 'derivation' },
-          ]}
-        />
-      </Space>
+  // ---- 工具栏 ----
+  const toolbar = (
+    <ActionBar
+      filters={
+        <>
+          <Select
+            placeholder="状态筛选"
+            style={{ width: 160 }}
+            value={statusFilter ?? '__all__'}
+            onChange={(val: string) => setStatusFilter(val === '__all__' ? undefined : val)}
+            options={[
+              { value: '__all__', label: '全部' },
+              ...(Object.entries(JOB_STATUS_VIEW) as [string, { label: string; tone: string }][]).map(
+                ([value, view]) => ({ value, label: view.label }),
+              ),
+            ]}
+          />
+          <Select
+            placeholder="类型筛选"
+            style={{ width: 200 }}
+            value={kindFilter ?? '__all__'}
+            onChange={(val: string) => setKindFilter(val === '__all__' ? undefined : val)}
+            options={[
+              { value: '__all__', label: '全部' },
+              { value: 'echo', label: 'echo' },
+              { value: 'parse_excel', label: 'parse_excel' },
+              { value: 'audit_export', label: 'audit_export' },
+              { value: 'ingestion', label: 'ingestion' },
+              { value: 'derivation', label: 'derivation' },
+            ]}
+          />
+        </>
+      }
+    />
+  );
 
+  // ---- 表格内容 ----
+  const tableContent: JSX.Element = (() => {
+    if (isLoading) {
+      return <FeedbackState kind="loading" title="正在加载作业列表..." rows={5} />;
+    }
+    if (isError && items.length === 0) {
+      return (
+        <FeedbackState
+          kind="error"
+          title="作业列表加载失败"
+          onRetry={() => void refetch()}
+        />
+      );
+    }
+    return (
       <Table<JobListItem>
         columns={columns}
         dataSource={items}
@@ -253,6 +252,18 @@ export function JobsPage(): JSX.Element {
         pagination={{ pageSize: 20, showSizeChanger: true }}
         size="middle"
       />
-    </div>
+    );
+  })();
+
+  return (
+    <section aria-label="作业目录">
+      <DataTableShell
+        title="作业中心"
+        description="查看和管理平台异步作业，支持取消和重试。"
+        toolbar={toolbar}
+      >
+        {tableContent}
+      </DataTableShell>
+    </section>
   );
 }

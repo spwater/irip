@@ -3,7 +3,6 @@ import {
   Button,
   Form,
   Input,
-  Modal,
   Popconfirm,
   Select,
   Space,
@@ -44,7 +43,7 @@ import {
   type FlowSummary,
   type IndustrialObject,
 } from '@/api/client';
-import { DataTableShell, OceanPanel, StatusMark, FeedbackState } from '@/components/ui';
+import { DataTableShell, FocusModal, OceanPanel, StatusMark, FeedbackState } from '@/components/ui';
 import type { StatusTone } from '@/theme/tokens';
 import { FactModal } from './flow/FactModal';
 import {
@@ -945,7 +944,7 @@ export function FlowDetail(): JSX.Element {
       </section>
 
       {/* 新建任务 Modal */}
-      <Modal
+      <FocusModal
         title="新建任务"
         open={createModalOpen}
         onOk={handleCreate}
@@ -1009,10 +1008,10 @@ export function FlowDetail(): JSX.Element {
             <Input placeholder="可选" maxLength={200} />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 编辑任务 Modal */}
-      <Modal
+      <FocusModal
         title="编辑任务"
         open={editModalOpen}
         onOk={async () => {
@@ -1110,10 +1109,10 @@ export function FlowDetail(): JSX.Element {
             />
           </Form.Item>
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 创建执行 Modal */}
-      <Modal
+      <FocusModal
         title="创建流程执行"
         open={runModalOpen}
         onOk={handleCreateRun}
@@ -1215,10 +1214,10 @@ export function FlowDetail(): JSX.Element {
             </div>
           )}
         </Form>
-      </Modal>
+      </FocusModal>
 
       {/* 批量执行 Modal */}
-      <Modal
+      <FocusModal
         title="批量执行"
         open={batchModalOpen}
         onCancel={() => {
@@ -1303,7 +1302,7 @@ export function FlowDetail(): JSX.Element {
             </Text>
           </>
         )}
-      </Modal>
+      </FocusModal>
     </div>
   );
 }

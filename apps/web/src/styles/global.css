@@ -88,3 +88,31 @@ body {
 .ocean-focus {
   transition: box-shadow 320ms ease;
 }
+
+/* Governance config grid — 两列布局，1280px 以下堆叠为单列 */
+.ocean-gov-config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 1279px) {
+  .ocean-gov-config-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 焦点覆盖层共享样式 — 供 Modal.confirm 等静态 API 使用 */
+.ocean-focus-error {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: rgba(165, 61, 82, 0.08);
+  color: #a53d52;
+  font-size: 13px;
+}
+.ocean-focus-body {
+  min-height: 0;
+}
+.ocean-focus-modal .ant-modal-header {
+  border-bottom: 1px solid rgba(24, 102, 133, 0.16);
+}

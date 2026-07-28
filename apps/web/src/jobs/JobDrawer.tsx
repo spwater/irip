@@ -1,39 +1,17 @@
 import { useEffect } from 'react';
-import { Button, Drawer, Empty, Progress, Spin, Tag, Typography } from 'antd';
+import { Button, Empty, Progress, Spin, Tag, Typography } from 'antd';
 import { useJobStore, ACTIVE_STATUSES } from './useJobStore';
-import type { JobStatus } from '@/api/client';
+import { FocusDrawer, StatusMark } from '@/components/ui';
+import { jobStatusView } from './jobPresentation';
 
 const { Text } = Typography;
-
-/** 状态 → 颜色映射 */
-const STATUS_COLOR: Record<JobStatus, string> = {
-  accepted: 'default',
-  queued: 'blue',
-  running: 'processing',
-  retry_wait: 'orange',
-  succeeded: 'success',
-  failed: 'error',
-  cancel_requested: 'warning',
-  cancelled: 'default',
-};
-
-/** 状态 → 中文标签映射 */
-const STATUS_LABEL: Record<JobStatus, string> = {
-  accepted: '已接受',
-  queued: '排队中',
-  running: '运行中',
-  retry_wait: '等待重试',
-  succeeded: '已完成',
-  failed: '已失败',
-  cancel_requested: '取消请求中',
-  cancelled: '已取消',
-};
 
 /**
  * 全局作业进度抽屉
  * - 持久化 job ID 到 localStorage（只存 ID，不存状态）
  * - 从 API 刷新权威状态
  * - 显示作业进度、状态、重试信息
+ * - 使用共享 JOB_STATUS_VIEW 状态映射
  */
 export function JobDrawer(): JSX.Element {
   const jobs = useJobStore((s) => s.jobs);
@@ -49,7 +27,7 @@ export function JobDrawer(): JSX.Element {
   const activeCount = jobs.filter((j) => ACTIVE_STATUSES.includes(j.status)).length;
 
   return (
-    <Drawer
+    <FocusDrawer
       title="作业进度"
       open={drawerOpen}
       onClose={() => setDrawerOpen(false)}
@@ -65,27 +43,30 @@ export function JobDrawer(): JSX.Element {
         <Empty description="暂无作业" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {jobs.map((job) => (
-            <div
-              key={job.id}
-              style={{
-                padding: 16,
-                border: '1px solid #f0f0f0',
-                borderRadius: 8,
-                background: '#fafafa',
-              }}
-            >
-              <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-                <Text strong>{job.stage}</Text>
-                <Tag color={STATUS_COLOR[job.status]}>{STATUS_LABEL[job.status]}</Tag>
+          {jobs.map((job) => {
+            const view = jobStatusView(job.status);
+            return (
+              <div
+                key={job.id}
+                style={{
+                  padding: 16,
+                  border: '1px solid rgba(24, 102, 133, 0.16)',
+                  borderRadius: 6,
+                  background: 'rgba(240, 250, 251, 0.72)',
+                }}
+              >
+                <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text strong>{job.stage}</Text>
+                  <StatusMark tone={view.tone} label={view.label} />
+                </div>
+                <Progress percent={job.progress} size="small" />
+                <div style={{ marginTop: 8, fontSize: 12, color: '#6F8D9C' }}>
+                  类型: <span className="ocean-tech">{job.kind}</span>
+                  {job.retryable && <Tag color="orange" style={{ marginLeft: 8 }}>可重试</Tag>}
+                </div>
               </div>
-              <Progress percent={job.progress} size="small" />
-              <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
-                类型: {job.kind}
-                {job.retryable && <Tag color="orange" style={{ marginLeft: 8 }}>可重试</Tag>}
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {activeCount > 0 && (
             <Text type="secondary" style={{ fontSize: 12 }}>
               {activeCount} 个作业进行中…
@@ -93,7 +74,7 @@ export function JobDrawer(): JSX.Element {
           )}
         </div>
       )}
-    </Drawer>
+    </FocusDrawer>
   );
 }
 
