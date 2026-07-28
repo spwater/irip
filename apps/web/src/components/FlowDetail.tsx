@@ -413,7 +413,6 @@ export function FlowDetail(): JSX.Element {
     if (!selectedFlowId) return;
     try {
       const values = await runForm.validateFields();
-      // 从表单收集参数值，构建 inputs
       const inputs: Record<string, unknown> = {};
       const node = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
       if (node) {
@@ -421,23 +420,16 @@ export function FlowDetail(): JSX.Element {
         for (const key of Object.keys(node.params ?? {})) {
           if (key === 'experimental_object_code') continue;
           const formKey = `${prefix}${key}`;
-          // 优先用 artifactMap（上传文件后的 artifact:xxx）
           const artifactVal = artifactMapRef.current[formKey];
           if (artifactVal) {
             inputs[key] = artifactVal;
             continue;
           }
-          // 其次用表单值
           const formValue = values[formKey];
           if (formValue !== undefined && formValue !== '') {
             inputs[key] = formValue;
           }
         }
-      }
-      console.log('[FlowDetail] submit inputs:', JSON.stringify(inputs), 'artifactMap:', JSON.stringify(artifactMapRef.current));
-      if (Object.keys(inputs).length === 0 || !inputs.path) {
-        message.warning('请上传实验报告文件或输入文件路径');
-        return;
       }
       createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
     } catch (err) {
@@ -1296,7 +1288,7 @@ export function FlowDetail(): JSX.Element {
             const res = await apiUploadFile(file);
             runForm.setFieldValue(formKey, file.name);
             artifactMapRef.current[formKey] = `artifact:${res.artifact_id}`;
-            message.success(`文件已上传: ${file.name} (artifact:${res.artifact_id})`);
+            message.success(`文件已上传: ${file.name}`);
           } catch (err) {
             message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
           } finally {
