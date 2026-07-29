@@ -35,9 +35,7 @@ class AuthRepository:
         Returns:
             AppUser | None: 找到返回用户实体，否则返回 None。
         """
-        result = await session.execute(
-            sa.select(AppUser).where(AppUser.email == email)
-        )
+        result = await session.execute(sa.select(AppUser).where(AppUser.email == email))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -54,9 +52,7 @@ class AuthRepository:
         Returns:
             AppUser | None: 找到返回用户实体，否则返回 None。
         """
-        result = await session.execute(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        result = await session.execute(sa.select(AppUser).where(AppUser.id == user_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -118,9 +114,7 @@ class AuthRepository:
             RefreshSession | None: 找到返回会话实体，否则返回 None。
         """
         result = await session.execute(
-            sa.select(RefreshSession).where(
-                RefreshSession.token_digest == digest
-            )
+            sa.select(RefreshSession).where(RefreshSession.token_digest == digest)
         )
         return result.scalar_one_or_none()
 
@@ -142,9 +136,7 @@ class AuthRepository:
             RefreshSession | None: 找到返回会话实体（已锁定），否则返回 None。
         """
         result = await session.execute(
-            sa.select(RefreshSession)
-            .where(RefreshSession.token_digest == digest)
-            .with_for_update()
+            sa.select(RefreshSession).where(RefreshSession.token_digest == digest).with_for_update()
         )
         return result.scalar_one_or_none()
 

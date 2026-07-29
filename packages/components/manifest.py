@@ -154,21 +154,13 @@ class ManifestValidator:
             ) from exc
 
         # ---- 3. SHA-256 摘要 ----
-        sha256: str = hashlib.sha256(
-            yaml_text.encode("utf-8")
-        ).hexdigest()
+        sha256: str = hashlib.sha256(yaml_text.encode("utf-8")).hexdigest()
 
         # ---- 4. 构建 ComponentManifest ----
-        inputs: tuple[PortSpec, ...] = _parse_port_specs(
-            raw.get("inputs")
-        )
-        outputs: tuple[PortSpec, ...] = _parse_port_specs(
-            raw.get("outputs")
-        )
+        inputs: tuple[PortSpec, ...] = _parse_port_specs(raw.get("inputs"))
+        outputs: tuple[PortSpec, ...] = _parse_port_specs(raw.get("outputs"))
         dependencies_raw: list[str] | None = raw.get("dependencies")
-        dependencies: tuple[str, ...] = (
-            tuple(dependencies_raw) if dependencies_raw else ()
-        )
+        dependencies: tuple[str, ...] = tuple(dependencies_raw) if dependencies_raw else ()
         parameters: dict[str, Any] = raw.get("parameters", {}) or {}
 
         return ComponentManifest(

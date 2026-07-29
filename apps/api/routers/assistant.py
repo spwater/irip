@@ -28,7 +28,6 @@ from packages.ai.service import AIService
 from packages.common.database import session_scope as _ai_session_scope
 from packages.common.errors import AppError
 
-
 # session_factory 由 main.py 注入
 _ai_factory: Any = None
 
@@ -44,15 +43,12 @@ def _get_ai_factory() -> Any:
         raise RuntimeError("AI session factory not set")
     return _ai_factory
 
+
 #: 路由实例。
-assistant_router = APIRouter(
-    prefix="/api/v1/assistant", tags=["assistant"]
-)
+assistant_router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
 #: 需 assistant:use 权限的当前用户依赖。
-AssistantUserDep = Annotated[
-    CurrentUser, Depends(require_permission("assistant:use"))
-]
+AssistantUserDep = Annotated[CurrentUser, Depends(require_permission("assistant:use"))]
 
 
 def get_ai_service() -> AIService:
@@ -60,9 +56,7 @@ def get_ai_service() -> AIService:
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例。
     """
-    raise NotImplementedError(
-        "get_ai_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_ai_service must be overridden via dependency_overrides")
 
 
 #: AIService 依赖类型别名。
@@ -82,9 +76,7 @@ async def _resolve_org_id(current_user: CurrentUser) -> UUID:
         from packages.auth.entities import AppUser
 
         async with _ai_session_scope(_get_ai_factory()) as session:
-            user = await session.scalar(
-                sa.select(AppUser).where(AppUser.id == user_id)
-            )
+            user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
             if user is not None and user.organization_id is not None:
                 return user.organization_id
     except Exception:
@@ -111,23 +103,15 @@ class CreateConversationRequest(BaseModel):
     """创建对话请求。"""
 
     title: str = Field("", max_length=200, description="对话标题")
-    provider_mode: str = Field(
-        "offline", max_length=64, description="Provider 模式"
-    )
+    provider_mode: str = Field("offline", max_length=64, description="Provider 模式")
 
 
 class SendMessageRequest(BaseModel):
     """发送消息请求。"""
 
-    question: str = Field(
-        ..., min_length=1, max_length=8000, description="用户问题"
-    )
-    provider_name: str = Field(
-        "offline", max_length=64, description="Provider 名称"
-    )
-    thinking_enabled: bool = Field(
-        False, description="是否启用思考模式"
-    )
+    question: str = Field(..., min_length=1, max_length=8000, description="用户问题")
+    provider_name: str = Field("offline", max_length=64, description="Provider 名称")
+    thinking_enabled: bool = Field(False, description="是否启用思考模式")
     system_context: str | None = Field(
         None, max_length=100000, description="系统上下文（如实验数据JSON）"
     )
@@ -321,7 +305,7 @@ async def toggle_pin(
     service: AIServiceDep,
 ) -> ConversationResponse:
     """切换对话置顶状态。"""
-    new_pinned = await service.toggle_pin(
+    await service.toggle_pin(
         conversation_id=conversation_id,
         user_id=current_user.user_id,
     )
@@ -356,7 +340,7 @@ async def toggle_archive(
     service: AIServiceDep,
 ) -> ConversationResponse:
     """切换对话归档状态。"""
-    new_archived = await service.toggle_archive(
+    await service.toggle_archive(
         conversation_id=conversation_id,
         user_id=current_user.user_id,
     )
@@ -463,9 +447,7 @@ async def send_message(
                 label=str(c.get("label", "")),
                 href=str(c.get("href", "")),
             )
-            for c in (
-                [ct.to_dict() if hasattr(ct, "to_dict") else ct for ct in response.citations]
-            )
+            for c in ([ct.to_dict() if hasattr(ct, "to_dict") else ct for ct in response.citations])
         ],
         uncertainty=response.uncertainty,
         provider_mode=response.provider_mode,
@@ -509,9 +491,7 @@ async def list_messages(
                 tool_calls=[
                     ToolCallSummary(
                         tool=str(tc.get("tool", "")),
-                        args=tc.get("args", {})
-                        if isinstance(tc.get("args"), dict)
-                        else {},
+                        args=tc.get("args", {}) if isinstance(tc.get("args"), dict) else {},
                         summary=str(tc.get("summary", "")),
                         status=str(tc.get("status", "")),
                     )

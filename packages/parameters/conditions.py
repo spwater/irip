@@ -24,7 +24,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Union
 
 from packages.common.errors import AppError
 
@@ -106,11 +105,11 @@ class ConditionBranch:
     """
 
     op: str
-    children: tuple["ConditionNode", ...]
+    children: tuple[ConditionNode, ...]
 
 
 #: 条件 AST 节点（叶子或分支）。
-ConditionNode = Union[ConditionLeaf, ConditionBranch]
+ConditionNode = ConditionLeaf | ConditionBranch  # noqa: UP007
 
 
 class ConditionEngine:
@@ -161,9 +160,7 @@ class ConditionEngine:
                     retryable=False,
                     fields={branch_op: "must_be_list"},
                 )
-            children: tuple[ConditionNode, ...] = tuple(
-                self.parse(child) for child in children_raw
-            )
+            children: tuple[ConditionNode, ...] = tuple(self.parse(child) for child in children_raw)
             return ConditionBranch(op=branch_op, children=children)
 
         # 叶子节点（字段比较）
@@ -204,9 +201,7 @@ class ConditionEngine:
 
         if op_key is None:
             # 检查是否有未知操作符
-            unknown_keys = [
-                k for k in json_condition if k != "field"
-            ]
+            unknown_keys = [k for k in json_condition if k != "field"]
             raise AppError(
                 code="validation_failed",
                 message=(
@@ -269,9 +264,7 @@ class ConditionEngine:
         node: ConditionNode = self.parse(condition)
         return self._eval_node(node, context)
 
-    def _eval_node(
-        self, node: ConditionNode, context: dict[str, object]
-    ) -> bool:
+    def _eval_node(self, node: ConditionNode, context: dict[str, object]) -> bool:
         """递归评估 AST 节点。
 
         Args:
@@ -285,20 +278,12 @@ class ConditionEngine:
             return self._eval_leaf(node, context)
         if isinstance(node, ConditionBranch):
             if node.op == ConditionOperator.AND.value:
-                return all(
-                    self._eval_node(child, context)
-                    for child in node.children
-                )
+                return all(self._eval_node(child, context) for child in node.children)
             # OR
-            return any(
-                self._eval_node(child, context)
-                for child in node.children
-            )
+            return any(self._eval_node(child, context) for child in node.children)
         return False
 
-    def _eval_leaf(
-        self, leaf: ConditionLeaf, context: dict[str, object]
-    ) -> bool:
+    def _eval_leaf(self, leaf: ConditionLeaf, context: dict[str, object]) -> bool:
         """评估叶子节点（字段比较）。
 
         Args:

@@ -16,10 +16,8 @@
 
 import asyncio
 from decimal import Decimal
-from uuid import UUID
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
@@ -27,7 +25,6 @@ from packages.common.errors import AppError
 from packages.standards.repository import StandardsRepository
 from packages.standards.service import StandardService
 from packages.standards.state_machine import assert_transition
-from packages.standards.variables import Variable, VariableVersion
 
 
 class TestStateMachine:
@@ -76,9 +73,7 @@ class TestVariableLifecycle:
     """标准变量生命周期测试（需数据库）。"""
 
     @pytest.mark.asyncio
-    async def test_create_variable_draft(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_create_variable_draft(self, standard_service: StandardService) -> None:
         """创建变量 → status=draft, version_count=0。"""
         variable = await standard_service.create_variable(
             code="particle_size_d50",
@@ -112,9 +107,7 @@ class TestVariableLifecycle:
         assert len(variable.valid_range) == 2
 
     @pytest.mark.asyncio
-    async def test_create_duplicate_code_conflict(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_create_duplicate_code_conflict(self, standard_service: StandardService) -> None:
         """重复编码抛出 AppError(conflict)。"""
         await standard_service.create_variable(
             code="dup_code",
@@ -130,9 +123,7 @@ class TestVariableLifecycle:
         assert exc_info.value.code == "conflict"
 
     @pytest.mark.asyncio
-    async def test_submit_creates_version(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_submit_creates_version(self, standard_service: StandardService) -> None:
         """提交审核 → 创建 version 1, status=in_review。"""
         variable = await standard_service.create_variable(
             code="submit_test",
@@ -155,9 +146,7 @@ class TestVariableLifecycle:
         assert detail["latest_version"]["status"] == "in_review"
 
     @pytest.mark.asyncio
-    async def test_publish_sets_published_at(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_publish_sets_published_at(self, standard_service: StandardService) -> None:
         """发布 → version status=published, published_at 已设置。"""
         variable = await standard_service.create_variable(
             code="publish_test",
@@ -203,9 +192,7 @@ class TestVariableLifecycle:
             assert exc_info.value.code == "published_version_immutable"
 
     @pytest.mark.asyncio
-    async def test_deprecate_published_variable(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_deprecate_published_variable(self, standard_service: StandardService) -> None:
         """弃用已发布变量 → status=deprecated。"""
         variable = await standard_service.create_variable(
             code="deprecate_test",
@@ -224,9 +211,7 @@ class TestVariableLifecycle:
         assert detail["status"] == "deprecated"
 
     @pytest.mark.asyncio
-    async def test_reject_sets_reason(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_reject_sets_reason(self, standard_service: StandardService) -> None:
         """拒绝 → status=rejected, 含拒绝原因。"""
         variable = await standard_service.create_variable(
             code="reject_test",
@@ -234,9 +219,7 @@ class TestVariableLifecycle:
             data_type="number",
         )
         await standard_service.submit_for_review(variable.id)
-        version = await standard_service.reject_variable(
-            variable.id, reason="数据类型不正确"
-        )
+        version = await standard_service.reject_variable(variable.id, reason="数据类型不正确")
 
         assert version.status == "rejected"
         assert version.rejection_reason == "数据类型不正确"
@@ -246,9 +229,7 @@ class TestVariableLifecycle:
         assert detail["latest_version"]["rejection_reason"] == "数据类型不正确"
 
     @pytest.mark.asyncio
-    async def test_resubmit_creates_new_version(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_resubmit_creates_new_version(self, standard_service: StandardService) -> None:
         """重提交 → status=in_review, 创建新版本。"""
         variable = await standard_service.create_variable(
             code="resubmit_test",
@@ -287,9 +268,7 @@ class TestVariableLifecycle:
         assert exc_info.value.code == "invalid_transition"
 
     @pytest.mark.asyncio
-    async def test_submit_non_draft_invalid(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_submit_non_draft_invalid(self, standard_service: StandardService) -> None:
         """非 draft 状态提交抛出 AppError(invalid_transition)。"""
         variable = await standard_service.create_variable(
             code="non_draft_submit",
@@ -304,9 +283,7 @@ class TestVariableLifecycle:
         assert exc_info.value.code == "invalid_transition"
 
     @pytest.mark.asyncio
-    async def test_get_variable_not_found(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_get_variable_not_found(self, standard_service: StandardService) -> None:
         """查询不存在的变量抛出 AppError(not_found)。"""
         from packages.common.ids import new_id
 
@@ -315,18 +292,14 @@ class TestVariableLifecycle:
         assert exc_info.value.code == "not_found"
 
     @pytest.mark.asyncio
-    async def test_add_alias_and_find(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_add_alias_and_find(self, standard_service: StandardService) -> None:
         """添加别名并通过别名查找。"""
         variable = await standard_service.create_variable(
             code="alias_test",
             display_name="别名测试",
             data_type="number",
         )
-        alias = await standard_service.add_alias(
-            variable.id, alias="粒径D50", language="zh"
-        )
+        alias = await standard_service.add_alias(variable.id, alias="粒径D50", language="zh")
         assert alias.alias == "粒径D50"
         assert alias.language == "zh"
 
@@ -335,9 +308,7 @@ class TestVariableLifecycle:
         assert detail["aliases"][0]["alias"] == "粒径D50"
 
     @pytest.mark.asyncio
-    async def test_add_duplicate_alias_conflict(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_add_duplicate_alias_conflict(self, standard_service: StandardService) -> None:
         """重复别名抛出 AppError(conflict)。"""
         variable = await standard_service.create_variable(
             code="dup_alias_test",
@@ -350,9 +321,7 @@ class TestVariableLifecycle:
         assert exc_info.value.code == "conflict"
 
     @pytest.mark.asyncio
-    async def test_list_variables_pagination(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_list_variables_pagination(self, standard_service: StandardService) -> None:
         """分页查询变量列表。"""
         for i in range(5):
             await standard_service.create_variable(
@@ -361,9 +330,7 @@ class TestVariableLifecycle:
                 data_type="number",
             )
 
-        items, next_cursor = await standard_service.list_variables(
-            page_size=3
-        )
+        items, next_cursor = await standard_service.list_variables(page_size=3)
         assert len(items) == 3
         assert next_cursor is not None
 
@@ -374,9 +341,7 @@ class TestVariableLifecycle:
         assert next_cursor2 is None
 
     @pytest.mark.asyncio
-    async def test_full_lifecycle(
-        self, standard_service: StandardService
-    ) -> None:
+    async def test_full_lifecycle(self, standard_service: StandardService) -> None:
         """完整生命周期：创建 → 提交 → 发布 → 弃用。"""
         variable = await standard_service.create_variable(
             code="lifecycle_test",
@@ -417,9 +382,7 @@ class TestVariableLifecycle:
         v1 = await standard_service.submit_for_review(variable.id)
         assert v1.version == 1
 
-        v1_rej = await standard_service.reject_variable(
-            variable.id, reason="需补充描述"
-        )
+        v1_rej = await standard_service.reject_variable(variable.id, reason="需补充描述")
         assert v1_rej.status == "rejected"
 
         v2 = await standard_service.resubmit(variable.id)

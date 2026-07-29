@@ -1,7 +1,6 @@
 """实验对象类型字典 ORM。"""
 
 from datetime import datetime
-
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -25,9 +24,7 @@ class ObjectTypeDict(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    sort_order: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False, server_default=sa.text("0")
-    )
+    sort_order: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

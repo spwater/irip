@@ -155,9 +155,7 @@ class S3Repository:
         Raises:
             ClientError: 对象不存在时抛出 404。
         """
-        result: dict[str, Any] = self._client.head_object(
-            Bucket=self._bucket, Key=key
-        )
+        result: dict[str, Any] = self._client.head_object(Bucket=self._bucket, Key=key)
         return result
 
     def object_exists(self, key: str) -> bool:
@@ -192,7 +190,9 @@ class S3Repository:
             region_name=self._region,
         )
 
-    def presigned_put(self, key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
+    def presigned_put(
+        self, key: str, expires: int = 3600, endpoint_override: str | None = None
+    ) -> str:  # noqa: E501
         """生成预签名 PUT URL。
 
         Args:
@@ -211,7 +211,9 @@ class S3Repository:
         )
         return url
 
-    def presigned_get(self, key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
+    def presigned_get(
+        self, key: str, expires: int = 3600, endpoint_override: str | None = None
+    ) -> str:  # noqa: E501
         """生成预签名 GET URL。
 
         Args:

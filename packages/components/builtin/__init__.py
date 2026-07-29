@@ -29,15 +29,15 @@ from typing import Any
 
 from packages.components.builtin.ingestion.csv_reader import CSVReader
 from packages.components.builtin.ingestion.excel_reader import ExcelReader
-from packages.components.builtin.ingestion.json_reader import JSONReader
 from packages.components.builtin.ingestion.ez_scan_extractor import EZScanExtractor
+from packages.components.builtin.ingestion.json_reader import JSONReader
 from packages.components.builtin.ingestion.minio_object import MinioObject
-from packages.components.builtin.ingestion.xrd_tool_component import XrdToolComponent
 from packages.components.builtin.ingestion.pdf_table_reader import (
     PDFTableReader,
 )
 from packages.components.builtin.ingestion.postgres_query import PostgresQuery
 from packages.components.builtin.ingestion.rest_fetch import RESTFetch
+from packages.components.builtin.ingestion.xrd_tool_component import XrdToolComponent
 from packages.components.builtin.model.applicability import (
     ModelApplicabilityComponent,
 )
@@ -71,7 +71,7 @@ from packages.components.builtin.transform.steady_window import SteadyWindow
 from packages.components.builtin.transform.time_alignment import TimeAlignment
 from packages.components.builtin.transform.unit_converter import UnitConverter
 from packages.components.manifest import ComponentManifest, ManifestValidator
-from packages.components.sdk import Component
+from packages.components.sdk import Component  # noqa: F401
 
 #: 内置组件清单目录。
 _MANIFEST_DIR: Path = Path(__file__).parent.parent.parent.parent / "schemas" / "component-manifest"
@@ -172,9 +172,7 @@ def _load_manifest(name: str) -> ComponentManifest:
     """
     yaml_path = _MANIFEST_DIR / _YAML_FILES[name]
     yaml_text = yaml_path.read_text(encoding="utf-8")
-    validator = ManifestValidator(
-        _MANIFEST_DIR.parent / "component-manifest" / "v1.schema.json"
-    )
+    validator = ManifestValidator(_MANIFEST_DIR.parent / "component-manifest" / "v1.schema.json")
     return validator.validate(yaml_text)
 
 

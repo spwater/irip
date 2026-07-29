@@ -28,7 +28,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.facts.entities import Fact, FactRevision
 from packages.parameters.entities import (
     Parameter,
     ParameterCandidate,
@@ -157,10 +156,7 @@ class ParameterService:
             if existing is not None:
                 raise AppError(
                     code="conflict",
-                    message=(
-                        f"参数已存在: variable_code={variable_code}, "
-                        f"object_id={object_id}"
-                    ),
+                    message=(f"参数已存在: variable_code={variable_code}, object_id={object_id}"),
                     retryable=False,
                     fields={
                         "variable_code": variable_code,
@@ -240,10 +236,7 @@ class ParameterService:
             if run.status != "succeeded":
                 raise AppError(
                     code="derivation_not_succeeded",
-                    message=(
-                        f"推导运行未成功，当前状态: {run.status}，"
-                        f"无法创建参数候选"
-                    ),
+                    message=(f"推导运行未成功，当前状态: {run.status}，无法创建参数候选"),
                     retryable=False,
                     fields={
                         "derivation_run_id": str(derivation_run_id),
@@ -270,8 +263,7 @@ class ParameterService:
             existing_candidate = await session.scalar(
                 sa.select(ParameterCandidate).where(
                     ParameterCandidate.parameter_id == parameter_id,
-                    ParameterCandidate.derivation_run_id
-                    == derivation_run_id,
+                    ParameterCandidate.derivation_run_id == derivation_run_id,
                 )
             )
             if existing_candidate is not None:
@@ -344,9 +336,7 @@ class ParameterService:
         """
         async with self._factory() as session:
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(
-                    ParameterCandidate.id == candidate_id
-                )
+                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
             if candidate is None:
                 raise AppError(
@@ -366,9 +356,7 @@ class ParameterService:
                 "status": candidate.status,
             }
 
-    async def approve(
-        self, candidate_id: UUID, reviewer: UUID
-    ) -> ParameterVersionRef:
+    async def approve(self, candidate_id: UUID, reviewer: UUID) -> ParameterVersionRef:
         """审批通过候选，创建不可变参数版本。
 
         流程：
@@ -398,9 +386,7 @@ class ParameterService:
         async with session_scope(self._factory) as session:
             # 1. 加载候选
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(
-                    ParameterCandidate.id == candidate_id
-                )
+                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
             if candidate is None:
                 raise AppError(
@@ -413,10 +399,7 @@ class ParameterService:
             if candidate.status != "pending_review":
                 raise AppError(
                     code="candidate_not_pending",
-                    message=(
-                        f"候选不在 pending_review 状态，"
-                        f"当前状态: {candidate.status}"
-                    ),
+                    message=(f"候选不在 pending_review 状态，当前状态: {candidate.status}"),
                     retryable=False,
                     fields={
                         "candidate_id": str(candidate_id),
@@ -446,24 +429,15 @@ class ParameterService:
             if run is None:
                 raise AppError(
                     code="not_found",
-                    message=(
-                        f"推导运行不存在: {candidate.derivation_run_id}"
-                    ),
+                    message=(f"推导运行不存在: {candidate.derivation_run_id}"),
                     retryable=False,
-                    fields={
-                        "derivation_run_id": str(
-                            candidate.derivation_run_id
-                        )
-                    },
+                    fields={"derivation_run_id": str(candidate.derivation_run_id)},
                 )
 
             if run.status != "succeeded":
                 raise AppError(
                     code="derivation_not_succeeded",
-                    message=(
-                        f"推导运行未成功，当前状态: {run.status}，"
-                        f"无法审批参数候选"
-                    ),
+                    message=(f"推导运行未成功，当前状态: {run.status}，无法审批参数候选"),
                     retryable=False,
                     fields={
                         "derivation_run_id": str(run.id),
@@ -536,23 +510,17 @@ class ParameterService:
             # 9. 为证据集中所有事实修订创建 staleness 跟踪条目
             ev_version = await session.scalar(
                 sa.select(EvidenceSetVersion).where(
-                    EvidenceSetVersion.id
-                    == run.evidence_set_version_id
+                    EvidenceSetVersion.id == run.evidence_set_version_id
                 )
             )
             if ev_version is not None:
                 members_list: list = ev_version.members or []
                 for member in members_list:
-                    if (
-                        member.get("decision") == "included"
-                        and member.get("fact_revision_id")
-                    ):
+                    if member.get("decision") == "included" and member.get("fact_revision_id"):
                         staleness_entry = ParameterStaleness(
                             id=new_id(),
                             parameter_version_id=version_id,
-                            fact_revision_id=UUID(
-                                str(member["fact_revision_id"])
-                            ),
+                            fact_revision_id=UUID(str(member["fact_revision_id"])),
                             review_state="current",
                             last_checked_at=now,
                         )
@@ -562,9 +530,7 @@ class ParameterService:
 
             # 加载参数以获取 variable_code
             param = await session.scalar(
-                sa.select(Parameter).where(
-                    Parameter.id == candidate.parameter_id
-                )
+                sa.select(Parameter).where(Parameter.id == candidate.parameter_id)
             )
             variable_code: str = param.variable_code if param else ""
 
@@ -581,9 +547,7 @@ class ParameterService:
                 published_at=now,
             )
 
-    async def reject(
-        self, candidate_id: UUID, reviewer: UUID, comment: str
-    ) -> dict:
+    async def reject(self, candidate_id: UUID, reviewer: UUID, comment: str) -> dict:
         """拒绝候选。
 
         流程：
@@ -607,9 +571,7 @@ class ParameterService:
         """
         async with session_scope(self._factory) as session:
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(
-                    ParameterCandidate.id == candidate_id
-                )
+                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
             if candidate is None:
                 raise AppError(
@@ -622,10 +584,7 @@ class ParameterService:
             if candidate.status != "pending_review":
                 raise AppError(
                     code="candidate_not_pending",
-                    message=(
-                        f"候选不在 pending_review 状态，"
-                        f"当前状态: {candidate.status}"
-                    ),
+                    message=(f"候选不在 pending_review 状态，当前状态: {candidate.status}"),
                     retryable=False,
                     fields={
                         "candidate_id": str(candidate_id),
@@ -716,18 +675,10 @@ class ParameterService:
                 "variable_code": param.variable_code,
                 "object_id": param.object_id,
                 "status": param.status,
-                "current_version": (
-                    latest_version.version if latest_version else None
-                ),
-                "current_version_id": (
-                    latest_version.id if latest_version else None
-                ),
-                "value": (
-                    latest_version.value if latest_version else None
-                ),
-                "unit": (
-                    latest_version.unit if latest_version else None
-                ),
+                "current_version": (latest_version.version if latest_version else None),
+                "current_version_id": (latest_version.id if latest_version else None),
+                "value": (latest_version.value if latest_version else None),
+                "unit": (latest_version.unit if latest_version else None),
             }
 
     async def get_version(
@@ -782,10 +733,7 @@ class ParameterService:
             if pv is None:
                 raise AppError(
                     code="not_found",
-                    message=(
-                        f"参数版本不存在: parameter_id={parameter_id}, "
-                        f"version={version}"
-                    ),
+                    message=(f"参数版本不存在: parameter_id={parameter_id}, version={version}"),
                     retryable=False,
                     fields={
                         "parameter_id": str(parameter_id),
@@ -835,13 +783,9 @@ class ParameterService:
 
             # 应用过滤条件
             if filters.get("variable_code"):
-                stmt = stmt.where(
-                    Parameter.variable_code == filters["variable_code"]
-                )
+                stmt = stmt.where(Parameter.variable_code == filters["variable_code"])
             if filters.get("object_id"):
-                stmt = stmt.where(
-                    Parameter.object_id == UUID(str(filters["object_id"]))
-                )
+                stmt = stmt.where(Parameter.object_id == UUID(str(filters["object_id"])))
             if filters.get("status"):
                 stmt = stmt.where(Parameter.status == filters["status"])
 
@@ -850,9 +794,7 @@ class ParameterService:
                 try:
                     raw = base64.urlsafe_b64decode(cursor.encode("ascii"))
                     payload = json.loads(raw)
-                    cursor_time = datetime.fromisoformat(
-                        str(payload["v"])
-                    )
+                    cursor_time = datetime.fromisoformat(str(payload["v"]))
                     cursor_id = UUID(str(payload["id"]))
                     stmt = stmt.where(
                         sa.or_(
@@ -935,9 +877,7 @@ class ParameterService:
                 for c in candidates
             ]
 
-    async def check_staleness(
-        self, parameter_version_id: UUID
-    ) -> str:
+    async def check_staleness(self, parameter_version_id: UUID) -> str:
         """检查参数版本的过期状态。
 
         查询所有关联的事实修订，检查是否有新修订。
@@ -983,10 +923,7 @@ class ParameterService:
             if param.status != ParameterStatus.PUBLISHED.value:
                 raise AppError(
                     code="invalid_transition",
-                    message=(
-                        f"参数当前状态为 {param.status}，"
-                        f"仅 published 状态可弃用"
-                    ),
+                    message=(f"参数当前状态为 {param.status}，仅 published 状态可弃用"),
                     retryable=False,
                     fields={
                         "parameter_id": str(parameter_id),

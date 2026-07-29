@@ -47,8 +47,7 @@ def _read_excel_sync(
 
         # 表头
         header = [
-            str(c).strip() if c is not None else f"col_{i}"
-            for i, c in enumerate(all_rows[0])
+            str(c).strip() if c is not None else f"col_{i}" for i, c in enumerate(all_rows[0])
         ]
         columns: tuple[str, ...] = tuple(header)
 
@@ -59,7 +58,7 @@ def _read_excel_sync(
             if all(cell is None for cell in row):
                 continue
             record: dict[str, Any] = {}
-            for col_name, cell in zip(columns, row):
+            for col_name, cell in zip(columns, row, strict=False):
                 record[col_name] = cell
             data_rows.append(record)
             source_locs.append(
@@ -68,7 +67,7 @@ def _read_excel_sync(
                     "sheet": ws.title,
                     "row": idx,
                 }
-                )
+            )
         return columns, data_rows, source_locs, ws.title
     finally:
         wb.close()
@@ -86,19 +85,15 @@ class ExcelReader:
         path_str: str = params["path"]
         sheet_name: str | None = params.get("sheet_name")
         header_row: int = int(params.get("header_row", 1))
-        data_start_row: int = int(
-            params.get("data_start_row", header_row + 1)
-        )
+        data_start_row: int = int(params.get("data_start_row", header_row + 1))
 
         # F-21: 同步文件 I/O 放 asyncio.to_thread() 避免阻塞事件循环
-        columns, data_rows, source_locs, sheet_title = (
-            await asyncio.to_thread(
-                _read_excel_sync,
-                path_str,
-                sheet_name,
-                header_row,
-                data_start_row,
-            )
+        columns, data_rows, source_locs, sheet_title = await asyncio.to_thread(
+            _read_excel_sync,
+            path_str,
+            sheet_name,
+            header_row,
+            data_start_row,
         )
 
         if sheet_title is None:

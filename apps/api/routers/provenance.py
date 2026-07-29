@@ -30,19 +30,13 @@ from packages.provenance.graph import ProvenanceGraph, ProvenanceGraphService
 from packages.provenance.recipes import RecipeService, RecipeVersion
 
 #: 需 provenance:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("provenance:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("provenance:write"))]
 
 #: 需 provenance:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("provenance:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("provenance:read"))]
 
 #: 需 provenance:publish 权限的当前用户依赖。
-PublishUserDep = Annotated[
-    CurrentUser, Depends(require_permission("provenance:publish"))
-]
+PublishUserDep = Annotated[CurrentUser, Depends(require_permission("provenance:publish"))]
 
 
 # ---- DI 占位 ----
@@ -50,23 +44,17 @@ PublishUserDep = Annotated[
 
 def get_evidence_service() -> EvidenceService:
     """获取 EvidenceService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_evidence_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_evidence_service must be overridden via dependency_overrides")
 
 
 def get_recipe_service() -> RecipeService:
     """获取 RecipeService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_recipe_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_recipe_service must be overridden via dependency_overrides")
 
 
 def get_derivation_service() -> DerivationService:
     """获取 DerivationService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_derivation_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_derivation_service must be overridden via dependency_overrides")
 
 
 def get_provenance_graph_service() -> ProvenanceGraphService:
@@ -78,19 +66,13 @@ def get_provenance_graph_service() -> ProvenanceGraphService:
 
 EvidenceServiceDep = Annotated[EvidenceService, Depends(get_evidence_service)]
 RecipeServiceDep = Annotated[RecipeService, Depends(get_recipe_service)]
-DerivationServiceDep = Annotated[
-    DerivationService, Depends(get_derivation_service)
-]
-GraphServiceDep = Annotated[
-    ProvenanceGraphService, Depends(get_provenance_graph_service)
-]
+DerivationServiceDep = Annotated[DerivationService, Depends(get_derivation_service)]
+GraphServiceDep = Annotated[ProvenanceGraphService, Depends(get_provenance_graph_service)]
 
 
 # ---- 路由实例 ----
 
-provenance_router = APIRouter(
-    prefix="/api/v1/provenance", tags=["provenance"]
-)
+provenance_router = APIRouter(prefix="/api/v1/provenance", tags=["provenance"])
 
 
 # ---- 请求模型 ----
@@ -105,9 +87,7 @@ class CreateEvidenceSetRequest(BaseModel):
 class FreezeEvidenceSetRequest(BaseModel):
     """冻结证据集请求。"""
 
-    fact_filter: dict | None = Field(
-        None, description="过滤条件，如 {'quality': 'passed'}"
-    )
+    fact_filter: dict | None = Field(None, description="过滤条件，如 {'quality': 'passed'}")
 
 
 class CreateRecipeRequest(BaseModel):
@@ -345,9 +325,7 @@ async def freeze_evidence_set(
     service: EvidenceServiceDep,
 ) -> EvidenceSetVersionResponse:
     """冻结证据集：创建不可变版本。"""
-    ref: EvidenceSetRef = await service.freeze(
-        set_id, fact_filter=body.fact_filter
-    )
+    ref: EvidenceSetRef = await service.freeze(set_id, fact_filter=body.fact_filter)
     return EvidenceSetVersionResponse(
         set_id=str(ref.set_id),
         version=ref.version,
@@ -357,9 +335,7 @@ async def freeze_evidence_set(
     )
 
 
-@provenance_router.get(
-    "/evidence-sets/{set_id}", response_model=EvidenceSetResponse
-)
+@provenance_router.get("/evidence-sets/{set_id}", response_model=EvidenceSetResponse)
 async def get_evidence_set(
     set_id: UUID,
     current_user: ReadUserDep,
@@ -389,17 +365,13 @@ async def list_evidence_members(
 ) -> ListMembersResponse:
     """列出证据集版本的成员。"""
     members = await service.list_members(set_id, version=version)
-    return ListMembersResponse(
-        members=[_member_to_response(m) for m in members]
-    )
+    return ListMembersResponse(members=[_member_to_response(m) for m in members])
 
 
 # ---- 配方端点 ----
 
 
-@provenance_router.post(
-    "/recipes", response_model=RecipeCreatedResponse, status_code=201
-)
+@provenance_router.post("/recipes", response_model=RecipeCreatedResponse, status_code=201)
 async def create_recipe(
     body: CreateRecipeRequest,
     current_user: WriteUserDep,
@@ -447,9 +419,7 @@ async def publish_recipe_version(
     )
 
 
-@provenance_router.get(
-    "/recipes", response_model=RecipeListResponse
-)
+@provenance_router.get("/recipes", response_model=RecipeListResponse)
 async def list_recipes(
     current_user: ReadUserDep,
     service: RecipeServiceDep,
@@ -457,9 +427,7 @@ async def list_recipes(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> RecipeListResponse:
     """分页列出配方。"""
-    items, next_cursor = await service.list_recipes(
-        cursor=cursor, page_size=page_size
-    )
+    items, next_cursor = await service.list_recipes(cursor=cursor, page_size=page_size)
     return RecipeListResponse(
         items=[
             RecipeResponse(
@@ -475,9 +443,7 @@ async def list_recipes(
     )
 
 
-@provenance_router.get(
-    "/recipes/{recipe_id}", response_model=RecipeResponse
-)
+@provenance_router.get("/recipes/{recipe_id}", response_model=RecipeResponse)
 async def get_recipe(
     recipe_id: UUID,
     current_user: ReadUserDep,
@@ -529,9 +495,7 @@ async def replay_derivation_run(
     return _run_to_response(ref)
 
 
-@provenance_router.get(
-    "/derivation-runs/{run_id}", response_model=DerivationRunResponse
-)
+@provenance_router.get("/derivation-runs/{run_id}", response_model=DerivationRunResponse)
 async def get_derivation_run(
     run_id: UUID,
     current_user: ReadUserDep,
@@ -542,9 +506,7 @@ async def get_derivation_run(
     return _run_to_response(ref)
 
 
-@provenance_router.get(
-    "/derivation-runs", response_model=DerivationRunListResponse
-)
+@provenance_router.get("/derivation-runs", response_model=DerivationRunListResponse)
 async def list_derivation_runs(
     current_user: ReadUserDep,
     service: DerivationServiceDep,
@@ -552,9 +514,7 @@ async def list_derivation_runs(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> DerivationRunListResponse:
     """分页列出推导运行。"""
-    refs, next_cursor = await service.list_runs(
-        cursor=cursor, page_size=page_size
-    )
+    refs, next_cursor = await service.list_runs(cursor=cursor, page_size=page_size)
     return DerivationRunListResponse(
         items=[_run_to_response(r) for r in refs],
         next_cursor=next_cursor,

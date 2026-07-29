@@ -11,34 +11,33 @@
   POST   /api/v1/facts/{id}/revise           — 创建新修订（fact:write）
 """
 
+import logging
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
-from sqlalchemy import func
+_logger = logging.getLogger(__name__)
 
-from apps.api.dependencies.auth import CurrentUser
-from apps.api.dependencies.authorization import require_permission
-from apps.api.dependencies.dept_scope import should_filter_by_department
-from packages.common.errors import AppError
-from packages.facts.observations import (
+from fastapi import APIRouter, Depends, Query  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
+from sqlalchemy import func  # noqa: E402
+
+from apps.api.dependencies.auth import CurrentUser  # noqa: E402
+from apps.api.dependencies.authorization import require_permission  # noqa: E402
+from apps.api.dependencies.dept_scope import should_filter_by_department  # noqa: E402
+from packages.common.errors import AppError  # noqa: E402
+from packages.facts.observations import (  # noqa: E402
     FactRevisionRef,
     NormalizedObservation,
     RawObservation,
 )
-from packages.facts.service import CreateFactCommand, FactService
+from packages.facts.service import CreateFactCommand, FactService  # noqa: E402
 
 #: 需 fact:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("fact:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("fact:write"))]
 
 #: 需 fact:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("fact:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("fact:read"))]
 
 
 # ---- DI 占位 ----
@@ -46,9 +45,7 @@ ReadUserDep = Annotated[
 
 def get_fact_service() -> FactService:
     """获取 FactService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_fact_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_fact_service must be overridden via dependency_overrides")
 
 
 FactServiceDep = Annotated[FactService, Depends(get_fact_service)]
@@ -77,9 +74,7 @@ class NormalizedObservationItem(BaseModel):
     """标准化观察值请求项。"""
 
     variable_version_id: UUID
-    raw_observation_id: UUID | None = Field(
-        None, description="原始观察值 ID（必须非空）"
-    )
+    raw_observation_id: UUID | None = Field(None, description="原始观察值 ID（必须非空）")
     value: str = Field(..., min_length=1)
     unit: str | None = Field(None, max_length=64)
 
@@ -87,9 +82,7 @@ class NormalizedObservationItem(BaseModel):
 class CreateFactRequest(BaseModel):
     """创建事实请求。"""
 
-    fact_type: Literal[
-        "experiment_run", "simulation_run", "document_record", "model_execution"
-    ]
+    fact_type: Literal["experiment_run", "simulation_run", "document_record", "model_execution"]
     template_version_id: UUID
     object_id: UUID
     subject_id: str = Field(..., min_length=1, max_length=256)
@@ -220,9 +213,7 @@ def _normalized_to_response(
 # ---- 端点 ----
 
 
-@facts_router.post(
-    "", response_model=FactRevisionResponse, status_code=201
-)
+@facts_router.post("", response_model=FactRevisionResponse, status_code=201)
 async def create_fact(
     body: CreateFactRequest,
     current_user: WriteUserDep,
@@ -280,7 +271,7 @@ async def list_facts(
     current_user: ReadUserDep,
     service: FactServiceDep,
     fact_type: str | None = Query(None, description="按事实类型过滤"),
-    object_id: UUID | None = Query(None, description="按工业对象过滤"),
+    object_id: UUID | None = Query(None, description="按工业对象过滤"),  # noqa: B008
     status: str | None = Query(None, description="按状态过滤"),
     cursor: str | None = Query(None, description="分页游标"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -311,8 +302,10 @@ async def list_facts(
     if items:
         import sqlalchemy as sa
         from sqlalchemy import func
+
         from packages.facts.entities import FactRevision
-        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
+
+        revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
         async with service.session_factory() as session:
             # 实验室级数据隔离：通过 flow_run_id 链路过滤事实
             # FactRevision.flow_run_id → FlowRun → FlowDefinitionVersionORM
@@ -323,6 +316,7 @@ async def list_facts(
                     FlowDefinitionVersionORM,
                     FlowRun,
                 )
+
                 dept_stmt = (
                     sa.select(FactRevision.id)
                     .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
@@ -332,8 +326,7 @@ async def list_facts(
                     )
                     .join(
                         FlowDefinition,
-                        FlowDefinitionVersionORM.flow_definition_id
-                        == FlowDefinition.id,
+                        FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
                         FactRevision.id.in_(revision_ids),
@@ -342,24 +335,22 @@ async def list_facts(
                 )
                 dept_result = await session.execute(dept_stmt)
                 allowed_ids = {str(row[0]) for row in dept_result}
-                items = [
-                    item for item in items if item.revision_id in allowed_ids
-                ]
-                revision_ids = [
-                    __import__('uuid').UUID(item.revision_id)
-                    for item in items
-                ]
+                items = [item for item in items if item.revision_id in allowed_ids]
+                revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
                 if not items:
-                    return FactListResponse(
-                        items=[], next_cursor=None, group_counts={}
-                    )
+                    return FactListResponse(items=[], next_cursor=None, group_counts={})
 
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
                 FlowDefinition as _FD,
+            )
+            from packages.components.flow_runtime import (
                 FlowDefinitionVersionORM as _FV,
+            )
+            from packages.components.flow_runtime import (
                 FlowRun as _FR,
             )
+
             snap_stmt = (
                 sa.select(
                     FactRevision.id,
@@ -399,8 +390,7 @@ async def list_facts(
                     )
                     .join(
                         FlowDefinition,
-                        FlowDefinitionVersionORM.flow_definition_id
-                        == FlowDefinition.id,
+                        FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
                         FactRevision.task_code.isnot(None),
@@ -410,7 +400,9 @@ async def list_facts(
                 )
             else:
                 count_stmt = (
-                    sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
+                    sa.select(
+                        FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id))
+                    )  # noqa: E501
                     .where(FactRevision.task_code.isnot(None))
                     .group_by(FactRevision.task_code)
                 )
@@ -419,9 +411,10 @@ async def list_facts(
 
             # 查数据摘要（从 artifact JSON 取前3行）
             import json as json_mod
-            from packages.facts.entities import FactArtifact
-            from packages.common.artifacts import Artifact, ArtifactService
+
             from apps.api.main import _build_s3_repo
+            from packages.common.artifacts import Artifact, ArtifactService
+            from packages.facts.entities import FactArtifact
 
             s3_repo = _build_s3_repo()
             artifact_svc = ArtifactService(
@@ -435,7 +428,8 @@ async def list_facts(
                     fa_stmt = (
                         sa.select(FactArtifact.artifact_id)
                         .where(
-                            FactArtifact.fact_revision_id == __import__('uuid').UUID(item.revision_id),
+                            FactArtifact.fact_revision_id
+                            == __import__("uuid").UUID(item.revision_id),  # noqa: E501
                             FactArtifact.artifact_id == Artifact.id,
                             Artifact.media_type == "application/json",
                         )
@@ -448,11 +442,15 @@ async def list_facts(
                         parsed = json_mod.loads(data_bytes.decode("utf-8"))
                         pts = parsed.get("points", [])[:3]
                         if pts:
-                            pairs = [f"{p.get('name','')}={p.get('value','')}" for p in pts[:3]]
+                            pairs = [f"{p.get('name', '')}={p.get('value', '')}" for p in pts[:3]]
                             total = len(parsed.get("points", []))
-                            item.data_summary = f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
+                            item.data_summary = (
+                                f"共{total}个指标："
+                                + "，".join(pairs)
+                                + ("..." if total > 3 else "")
+                            )  # noqa: E501
                 except Exception:
-                    pass
+                    _logger.warning("生成 data_summary 失败", exc_info=True)
 
     return FactListResponse(
         items=items,
@@ -467,7 +465,7 @@ async def search_facts(
     service: FactServiceDep,
     q: str = Query(..., min_length=1, description="搜索查询"),
     fact_type: str | None = Query(None, description="按事实类型过滤"),
-    object_id: UUID | None = Query(None, description="按工业对象过滤"),
+    object_id: UUID | None = Query(None, description="按工业对象过滤"),  # noqa: B008
     status: str | None = Query(None, description="按状态过滤"),
     cursor: str | None = Query(None, description="分页游标"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -490,15 +488,22 @@ async def search_facts(
     items = [_ref_to_response(r) for r in refs]
     if items:
         import sqlalchemy as sa
+
         from packages.facts.entities import FactRevision
-        revision_ids = [__import__('uuid').UUID(item.revision_id) for item in items]
+
+        revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
         async with service.session_factory() as session:
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
                 FlowDefinition as _FD,
+            )
+            from packages.components.flow_runtime import (
                 FlowDefinitionVersionORM as _FV,
+            )
+            from packages.components.flow_runtime import (
                 FlowRun as _FR,
             )
+
             snap_stmt = (
                 sa.select(
                     FactRevision.id,
@@ -558,6 +563,7 @@ async def search_facts_by_data(
     - 数值范围：key=结果&min_value=5 → 匹配 key="结果" AND value_number >= 5
     """
     import sqlalchemy as sa
+
     from packages.facts.entities import FactDataIndex, FactRevision
 
     # 构建 WHERE 条件
@@ -603,9 +609,14 @@ async def search_facts_by_data(
         # 查这些 revision 的快照信息（JOIN FlowDefinition 拿当前 display_name）
         from packages.components.flow_runtime import (
             FlowDefinition as _FD,
+        )
+        from packages.components.flow_runtime import (
             FlowDefinitionVersionORM as _FV,
+        )
+        from packages.components.flow_runtime import (
             FlowRun as _FR,
         )
+
         snap_stmt = (
             sa.select(
                 FactRevision.id,
@@ -627,18 +638,20 @@ async def search_facts_by_data(
 
         items: list[FactRevisionResponse] = []
         for row in snap_result:
-            items.append(FactRevisionResponse(
-                fact_id=str(row[1]),
-                revision=row[2],
-                revision_id=str(row[0]),
-                fact_type=row[3],
-                subject_id=row[4],
-                status="active",  # status 在 Fact 表，这里统一返回 active
-                task_code=row[5],
-                task_name=row[6],
-                department_name=row[7],
-                operator=row[8],
-            ))
+            items.append(
+                FactRevisionResponse(
+                    fact_id=str(row[1]),
+                    revision=row[2],
+                    revision_id=str(row[0]),
+                    fact_type=row[3],
+                    subject_id=row[4],
+                    status="active",  # status 在 Fact 表，这里统一返回 active
+                    task_code=row[5],
+                    task_name=row[6],
+                    department_name=row[7],
+                    operator=row[8],
+                )
+            )
 
         # 查 group_counts
         count_stmt = (
@@ -654,10 +667,10 @@ async def search_facts_by_data(
 
         # 查 data_summary（从 artifact JSON 取前3行）
         import json as json_mod
-        from packages.facts.entities import FactArtifact
-        from packages.common.artifacts import Artifact
+
         from apps.api.main import _build_s3_repo
-        from packages.common.artifacts import ArtifactService
+        from packages.common.artifacts import Artifact, ArtifactService
+        from packages.facts.entities import FactArtifact
 
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
@@ -672,7 +685,7 @@ async def search_facts_by_data(
                     sa.select(FactArtifact.artifact_id)
                     .join(Artifact, FactArtifact.artifact_id == Artifact.id)
                     .where(
-                        FactArtifact.fact_revision_id == __import__('uuid').UUID(item.revision_id),
+                        FactArtifact.fact_revision_id == __import__("uuid").UUID(item.revision_id),
                         Artifact.media_type == "application/json",
                     )
                     .limit(1)
@@ -684,11 +697,13 @@ async def search_facts_by_data(
                     parsed = json_mod.loads(data_bytes.decode("utf-8"))
                     pts = parsed.get("points", [])[:3]
                     if pts:
-                        pairs = [f"{p.get('name','')}={p.get('value','')}" for p in pts[:3]]
+                        pairs = [f"{p.get('name', '')}={p.get('value', '')}" for p in pts[:3]]
                         total = len(parsed.get("points", []))
-                        item.data_summary = f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
+                        item.data_summary = (
+                            f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
+                        )  # noqa: E501
             except Exception:
-                pass
+                _logger.warning("生成 data_summary 失败", exc_info=True)
 
     return FactListResponse(
         items=items,
@@ -708,9 +723,7 @@ async def get_fact(
     return _ref_to_response(ref)
 
 
-@facts_router.get(
-    "/{fact_id}/revisions", response_model=FactListResponse
-)
+@facts_router.get("/{fact_id}/revisions", response_model=FactListResponse)
 async def list_revisions(
     fact_id: UUID,
     current_user: ReadUserDep,
@@ -739,9 +752,7 @@ async def get_revision(
     return _ref_to_response(ref)
 
 
-@facts_router.get(
-    "/{fact_id}/observations", response_model=ObservationsResponse
-)
+@facts_router.get("/{fact_id}/observations", response_model=ObservationsResponse)
 async def get_observations(
     fact_id: UUID,
     current_user: ReadUserDep,
@@ -767,10 +778,12 @@ async def get_fact_data(
     返回 {"metadata": {...}, "points": [...], "series": [...]} 格式的干净数据。
     """
     import json as json_mod
+
     import sqlalchemy as sa
-    from packages.facts.entities import FactArtifact, FactRevision
-    from packages.common.artifacts import ArtifactService
+
     from apps.api.main import _build_s3_repo
+    from packages.common.artifacts import ArtifactService
+    from packages.facts.entities import FactArtifact, FactRevision
 
     # 获取最新修订
     fact = await service.get(fact_id)
@@ -779,6 +792,7 @@ async def get_fact_data(
     async with service.session_factory() as session:
         # 查 fact_artifact + artifact，找 JSON 类型的（提取数据）
         from packages.common.artifacts import Artifact
+
         result = await session.execute(
             sa.select(FactArtifact, Artifact)
             .where(
@@ -826,26 +840,50 @@ async def get_fact_data(
                 }
                 # 通过 flow_run_id 外键补查 project_name, data_interface 和 created_at
                 if rev_record.flow_run_id:
-                    from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+                    from packages.components.flow_runtime import (
+                        FlowDefinition,
+                        FlowDefinitionVersionORM,
+                        FlowRun,
+                    )
+
                     run_stmt = sa.select(FlowRun).where(FlowRun.id == rev_record.flow_run_id)
                     run_record = (await session.execute(run_stmt)).scalar_one_or_none()
                     if run_record:
-                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
+                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(
+                            FlowDefinitionVersionORM.id == run_record.flow_version_id
+                        )  # noqa: E501
                         fv = (await session.execute(fv_stmt)).scalar_one_or_none()
                         if fv:
-                            fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                            fd_stmt = sa.select(FlowDefinition).where(
+                                FlowDefinition.id == fv.flow_definition_id
+                            )  # noqa: E501
                             fd = (await session.execute(fd_stmt)).scalar_one_or_none()
                             if fd:
                                 nodes = fv.nodes_json or []
-                                comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+                                comp_names = list(
+                                    {
+                                        n.get("component_name", "")
+                                        for n in nodes
+                                        if n.get("component_name")
+                                    }
+                                )  # noqa: E501
                                 task_info["project_name"] = fd.project_name
-                                task_info["created_at"] = fd.created_at.isoformat() if fd.created_at else None
+                                task_info["created_at"] = (
+                                    fd.created_at.isoformat() if fd.created_at else None
+                                )  # noqa: E501
                                 # 查所属单位名称
                                 if fd.department_id:
                                     from packages.departments.entities import Department
-                                    dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
-                                    dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
-                                    task_info["department_name"] = dept_record.display_name if dept_record else None
+
+                                    dept_stmt = sa.select(Department).where(
+                                        Department.id == fd.department_id
+                                    )  # noqa: E501
+                                    dept_record = (
+                                        await session.execute(dept_stmt)
+                                    ).scalar_one_or_none()  # noqa: E501
+                                    task_info["department_name"] = (
+                                        dept_record.display_name if dept_record else None
+                                    )  # noqa: E501
                                 else:
                                     task_info["department_name"] = None
                                 # 查每个组件的实验对象→设备→部门链路
@@ -853,11 +891,18 @@ async def get_fact_data(
                                 for comp_name in comp_names:
                                     ds: dict = {"component": comp_name}
                                     # 查组件的 display_name 和 experimental_object_code
-                                    from packages.components.registry import ComponentVersion, Component
                                     import yaml as yaml_lib
+
+                                    from packages.components.registry import (
+                                        Component,
+                                        ComponentVersion,
+                                    )
+
                                     cv_stmt = (
                                         sa.select(ComponentVersion)
-                                        .join(Component, ComponentVersion.component_id == Component.id)
+                                        .join(
+                                            Component, ComponentVersion.component_id == Component.id
+                                        )  # noqa: E501
                                         .where(Component.name == comp_name)
                                         .order_by(ComponentVersion.created_at.desc())
                                         .limit(1)
@@ -866,64 +911,107 @@ async def get_fact_data(
                                     if cv:
                                         try:
                                             manifest = yaml_lib.safe_load(cv.manifest_yaml)
-                                            ds["component_display_name"] = manifest.get("display_name", comp_name)
+                                            ds["component_display_name"] = manifest.get(
+                                                "display_name", comp_name
+                                            )  # noqa: E501
                                         except Exception:
                                             ds["component_display_name"] = comp_name
                                     if cv and cv.experimental_object_code:
                                         ds["experimental_object_code"] = cv.experimental_object_code
                                         from packages.standards.objects import IndustrialObject
-                                        obj_stmt = sa.select(IndustrialObject).where(IndustrialObject.code == cv.experimental_object_code)
+
+                                        obj_stmt = sa.select(IndustrialObject).where(
+                                            IndustrialObject.code == cv.experimental_object_code
+                                        )  # noqa: E501
                                         obj = (await session.execute(obj_stmt)).scalar_one_or_none()
                                         if obj:
                                             ds["object_name"] = obj.display_name
                                             if obj.equipment_id:
                                                 from packages.equipment.entities import Equipment
-                                                eq_stmt = sa.select(Equipment).where(Equipment.id == obj.equipment_id)
-                                                eq = (await session.execute(eq_stmt)).scalar_one_or_none()
+
+                                                eq_stmt = sa.select(Equipment).where(
+                                                    Equipment.id == obj.equipment_id
+                                                )  # noqa: E501
+                                                eq = (
+                                                    await session.execute(eq_stmt)
+                                                ).scalar_one_or_none()  # noqa: E501
                                                 if eq:
                                                     ds["equipment_name"] = eq.display_name
                                                     if eq.department_id:
-                                                        from packages.departments.entities import Department
-                                                        dept_stmt = sa.select(Department).where(Department.id == eq.department_id)
-                                                        dept = (await session.execute(dept_stmt)).scalar_one_or_none()
+                                                        from packages.departments.entities import (
+                                                            Department,
+                                                        )
+
+                                                        dept_stmt = sa.select(Department).where(
+                                                            Department.id == eq.department_id
+                                                        )  # noqa: E501
+                                                        dept = (
+                                                            await session.execute(dept_stmt)
+                                                        ).scalar_one_or_none()  # noqa: E501
                                                         if dept:
-                                                            ds["department_name"] = dept.display_name
+                                                            ds["department_name"] = (
+                                                                dept.display_name
+                                                            )  # noqa: E501
                                     data_source_list.append(ds)
-                                task_info["data_interface"] = ", ".join(comp_names) if comp_names else None
+                                task_info["data_interface"] = (
+                                    ", ".join(comp_names) if comp_names else None
+                                )  # noqa: E501
                                 task_info["data_source_list"] = data_source_list
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning(f"Failed to query data_source_list: {e}")
 
         # 快照没命中，fallback 到通过 flow_run_id 外键反查（兼容旧数据）
         if not task_info:
             try:
-                from packages.components.flow_runtime import FlowRun, FlowDefinitionVersionORM, FlowDefinition
+                from packages.components.flow_runtime import (
+                    FlowDefinition,
+                    FlowDefinitionVersionORM,
+                    FlowRun,
+                )
 
                 # 优先用 flow_run_id 外键（不再解析 source_path 字符串）
-                rev_stmt2 = sa.select(FactRevision.flow_run_id).where(FactRevision.id == revision_id)
+                rev_stmt2 = sa.select(FactRevision.flow_run_id).where(
+                    FactRevision.id == revision_id
+                )  # noqa: E501
                 flow_run_id = (await session.execute(rev_stmt2)).scalar_one_or_none()
 
                 if flow_run_id:
                     run_stmt = sa.select(FlowRun).where(FlowRun.id == flow_run_id)
                     run_record = (await session.execute(run_stmt)).scalar_one_or_none()
                     if run_record:
-                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run_record.flow_version_id)
+                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(
+                            FlowDefinitionVersionORM.id == run_record.flow_version_id
+                        )  # noqa: E501
                         fv = (await session.execute(fv_stmt)).scalar_one_or_none()
                         if fv:
-                            fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                            fd_stmt = sa.select(FlowDefinition).where(
+                                FlowDefinition.id == fv.flow_definition_id
+                            )  # noqa: E501
                             fd = (await session.execute(fd_stmt)).scalar_one_or_none()
                             if fd:
                                 dept_name = None
                                 if fd.department_id:
                                     from packages.departments.entities import Department
-                                    dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
-                                    dept_record = (await session.execute(dept_stmt)).scalar_one_or_none()
+
+                                    dept_stmt = sa.select(Department).where(
+                                        Department.id == fd.department_id
+                                    )  # noqa: E501
+                                    dept_record = (
+                                        await session.execute(dept_stmt)
+                                    ).scalar_one_or_none()  # noqa: E501
                                     if dept_record:
                                         dept_name = dept_record.display_name
 
                                 nodes = fv.nodes_json or []
-                                comp_names = list({n.get("component_name", "") for n in nodes if n.get("component_name")})
+                                comp_names = list(
+                                    {
+                                        n.get("component_name", "")
+                                        for n in nodes
+                                        if n.get("component_name")
+                                    }
+                                )  # noqa: E501
 
                                 task_info = {
                                     "task_name": fd.display_name,
@@ -931,11 +1019,16 @@ async def get_fact_data(
                                     "project_name": fd.project_name,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
-                                    "created_at": fd.created_at.isoformat() if fd.created_at else None,
+                                    "created_at": fd.created_at.isoformat()
+                                    if fd.created_at
+                                    else None,  # noqa: E501
                                 }
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning(f"Failed to query task info for fact {fact_id}: {e}")
+
+                logging.getLogger(__name__).warning(
+                    f"Failed to query task info for fact {fact_id}: {e}"
+                )  # noqa: E501
 
         # 把任务信息附加到返回结果
         if task_info:
@@ -965,6 +1058,7 @@ async def get_fact_data(
             else:
                 # 方式2：从 raw_observation.source_name 提取 artifact:xxx
                 from packages.facts.entities import RawObservation
+
                 raw_name_stmt = (
                     sa.select(RawObservation.source_name)
                     .where(RawObservation.fact_revision_id == revision_id)
@@ -973,9 +1067,11 @@ async def get_fact_data(
                 raw_name_result = await session.execute(raw_name_stmt)
                 source_name = raw_name_result.scalar_one_or_none()
                 if source_name and source_name.startswith("artifact:"):
-                    artifact_id_str = source_name[len("artifact:"):]
+                    artifact_id_str = source_name[len("artifact:") :]
                     # 查 artifact 详情
-                    art_stmt = sa.select(Artifact).where(Artifact.id == __import__('uuid').UUID(artifact_id_str))
+                    art_stmt = sa.select(Artifact).where(
+                        Artifact.id == __import__("uuid").UUID(artifact_id_str)
+                    )  # noqa: E501
                     art_result = await session.execute(art_stmt)
                     art_record = art_result.scalar_one_or_none()
                     if art_record:
@@ -985,7 +1081,7 @@ async def get_fact_data(
                             "artifact_id": str(art_record.id),
                         }
         except Exception:
-            pass
+            _logger.warning("删除 artifact 文件失败", exc_info=True)
 
         return result_data
 
@@ -1015,6 +1111,7 @@ async def archive_fact(
         AppError: code="not_found"，当事实不存在时。
     """
     import sqlalchemy as sa
+
     from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
@@ -1045,10 +1142,11 @@ async def delete_fact(
 ) -> None:
     """物理删除实验事实。"""
     import sqlalchemy as sa
-    from packages.facts.entities import Fact, FactRevision, FactDataIndex, FactArtifact
-    from packages.common.database import session_scope
-    from packages.common.artifacts import ArtifactService, Artifact
+
     from apps.api.main import _build_s3_repo
+    from packages.common.artifacts import ArtifactService
+    from packages.common.database import session_scope
+    from packages.facts.entities import Fact, FactArtifact, FactRevision
 
     # 先查出关联的 artifact_id 列表，用于删 MinIO 文件
     async with service.session_factory() as session:
@@ -1074,17 +1172,13 @@ async def delete_fact(
             for aid in artifact_ids:
                 await artifact_svc.delete_artifact(aid)
         except Exception:
-            pass
+            _logger.warning("删除 artifact 文件失败", exc_info=True)
 
     async with session_scope(service.session_factory) as session:
         # 删除关联的 FactRevision
-        await session.execute(
-            sa.delete(FactRevision).where(FactRevision.fact_id == fact_id)
-        )
+        await session.execute(sa.delete(FactRevision).where(FactRevision.fact_id == fact_id))
         # 删除 Fact
-        await session.execute(
-            sa.delete(Fact).where(Fact.id == fact_id)
-        )
+        await session.execute(sa.delete(Fact).where(Fact.id == fact_id))
         await session.flush()
 
 
@@ -1096,15 +1190,18 @@ async def delete_facts_by_task(
 ) -> None:
     """按任务编码批量删除事实。"""
     import sqlalchemy as sa
-    from packages.facts.entities import Fact, FactRevision, FactArtifact
-    from packages.common.database import session_scope
-    from packages.common.artifacts import ArtifactService
+
     from apps.api.main import _build_s3_repo
+    from packages.common.artifacts import ArtifactService
+    from packages.common.database import session_scope
+    from packages.facts.entities import Fact, FactArtifact, FactRevision
 
     # 先查出关联的 fact_id 和 artifact_id
     async with service.session_factory() as session:
         result = await session.execute(
-            sa.select(FactRevision.fact_id, FactRevision.id).where(FactRevision.task_code == task_code)
+            sa.select(FactRevision.fact_id, FactRevision.id).where(
+                FactRevision.task_code == task_code
+            )  # noqa: E501
         )
         rows = result.all()
         fact_ids = list({row[0] for row in rows})
@@ -1130,22 +1227,16 @@ async def delete_facts_by_task(
             for aid in artifact_ids:
                 await artifact_svc.delete_artifact(aid)
         except Exception:
-            pass
+            _logger.warning("删除 artifact 文件失败", exc_info=True)
 
     if fact_ids:
         async with session_scope(service.session_factory) as session:
-            await session.execute(
-                sa.delete(FactRevision).where(FactRevision.fact_id.in_(fact_ids))
-            )
-            await session.execute(
-                sa.delete(Fact).where(Fact.id.in_(fact_ids))
-            )
+            await session.execute(sa.delete(FactRevision).where(FactRevision.fact_id.in_(fact_ids)))
+            await session.execute(sa.delete(Fact).where(Fact.id.in_(fact_ids)))
             await session.flush()
 
 
-@facts_router.post(
-    "/{fact_id}/revise", response_model=FactRevisionResponse
-)
+@facts_router.post("/{fact_id}/revise", response_model=FactRevisionResponse)
 async def revise_fact(
     fact_id: UUID,
     body: ReviseFactRequest,

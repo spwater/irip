@@ -51,19 +51,23 @@ class RelationCompleteness:
         for idx, row in enumerate(table.rows):
             fk_val = row.get(foreign_key)
             if fk_val is None:
-                row_annotations.append({
-                    "row_index": idx,
-                    "status": "fail",
-                    "detail": f"foreign_key_null:{foreign_key}",
-                })
+                row_annotations.append(
+                    {
+                        "row_index": idx,
+                        "status": "fail",
+                        "detail": f"foreign_key_null:{foreign_key}",
+                    }
+                )
                 fail_count += 1
             elif fk_val not in parent_keys:
-                row_annotations.append({
-                    "row_index": idx,
-                    "status": "fail",
-                    "detail": f"foreign_key_not_found:{fk_val}",
-                    "value": fk_val,
-                })
+                row_annotations.append(
+                    {
+                        "row_index": idx,
+                        "status": "fail",
+                        "detail": f"foreign_key_not_found:{fk_val}",
+                        "value": fk_val,
+                    }
+                )
                 fail_count += 1
 
         report = DiagnosticReport(

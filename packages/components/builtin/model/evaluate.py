@@ -41,9 +41,7 @@ class ModelEvaluateComponent:
         version_id_raw = params.get("version_id")
         dataset_artifact_id_raw = params.get("dataset_artifact_id")
         metrics: dict[str, Any] | None = params.get("metrics")
-        applicability_domain: dict[str, Any] | None = params.get(
-            "applicability_domain"
-        )
+        applicability_domain: dict[str, Any] | None = params.get("applicability_domain")
 
         if model_id_raw is None:
             raise AppError(

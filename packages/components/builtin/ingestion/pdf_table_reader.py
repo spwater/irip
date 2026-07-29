@@ -35,11 +35,7 @@ def _read_pdf_tables_sync(
     with pdfplumber.open(Path(path_str)) as pdf:
         pages = pdf.pages
         if page_numbers:
-            pages = [
-                pages[p - 1]
-                for p in page_numbers
-                if 1 <= p <= len(pages)
-            ]
+            pages = [pages[p - 1] for p in page_numbers if 1 <= p <= len(pages)]
 
         for page in pages:
             tables = page.extract_tables()
@@ -51,10 +47,7 @@ def _read_pdf_tables_sync(
                 continue
 
             # 第一行作为表头
-            header = [
-                str(c).strip() if c else f"col_{i}"
-                for i, c in enumerate(table[0])
-            ]
+            header = [str(c).strip() if c else f"col_{i}" for i, c in enumerate(table[0])]
             if not columns:
                 columns = tuple(header)
 
@@ -62,7 +55,7 @@ def _read_pdf_tables_sync(
                 if all(c is None or c == "" for c in row):
                     continue
                 record: dict[str, Any] = {}
-                for col_name, cell in zip(columns, row):
+                for col_name, cell in zip(columns, row, strict=False):
                     record[col_name] = cell
                 all_rows.append(record)
                 source_locs.append(

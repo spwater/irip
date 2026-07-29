@@ -128,12 +128,8 @@ async def security_setup(
     - A 不能访问 Y，B 不能访问 X（直接 ID 访问拒绝）。
     """
     org = new_id()
-    user_a = SecurityTestUser(
-        user_id=new_id(), email="user-a@irip.local", roles=["researcher"]
-    )
-    user_b = SecurityTestUser(
-        user_id=new_id(), email="user-b@irip.local", roles=["researcher"]
-    )
+    user_a = SecurityTestUser(user_id=new_id(), email="user-a@irip.local", roles=["researcher"])
+    user_b = SecurityTestUser(user_id=new_id(), email="user-b@irip.local", roles=["researcher"])
     obj_x = new_id()
     obj_y = new_id()
 
@@ -315,27 +311,19 @@ def sec_api_client(
     # 覆盖认证依赖
     app.dependency_overrides[get_auth_service] = lambda: sec_auth_service
     app.dependency_overrides[get_token_secret] = lambda: token_secret
-    app.dependency_overrides[get_me_session_factory] = (
-        lambda: async_session_factory
-    )
+    app.dependency_overrides[get_me_session_factory] = lambda: async_session_factory
 
     # 覆盖工件服务：使用 Mock 避免 MinIO 依赖
     class _MockArtifactService:
         """Mock 工件服务（仅返回虚拟 URL，不访问 S3）。"""
 
-        def presign_upload_for_key(
-            self, object_key: str, expires: int = 3600
-        ) -> str:
+        def presign_upload_for_key(self, object_key: str, expires: int = 3600) -> str:
             return f"http://mock-s3.local/{object_key}"
 
-        async def presign_download(
-            self, artifact_id, expires: int = 3600
-        ) -> str:
+        async def presign_download(self, artifact_id, expires: int = 3600) -> str:
             return f"http://mock-s3.local/download/{artifact_id}"
 
-    app.dependency_overrides[get_artifact_service] = (
-        lambda: _MockArtifactService()
-    )
+    app.dependency_overrides[get_artifact_service] = lambda: _MockArtifactService()
 
     # AppError → JSON 统一错误响应
     _STATUS_MAP: dict[str, int] = {
@@ -354,9 +342,7 @@ def sec_api_client(
     }
 
     @app.exception_handler(AppError)
-    async def handle_app_error(
-        request: Request, exc: AppError
-    ) -> JSONResponse:
+    async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         status = _STATUS_MAP.get(exc.code, 500)
         return JSONResponse(
             status_code=status,

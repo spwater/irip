@@ -190,15 +190,11 @@ async def provenance_setup(
     with sync_engine.connect() as conn:
         # L2.5: 溯源与推导
         conn.execute(
-            sa.text(
-                "DELETE FROM provenance_edge WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM derivation_run WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM derivation_run WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
@@ -210,10 +206,7 @@ async def provenance_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM transformation_recipe "
-                "WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
@@ -224,9 +217,7 @@ async def provenance_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM evidence_set WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM evidence_set WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         # L2: 事实
@@ -641,17 +632,14 @@ class TestProvenanceGraph:
 
         # 9. 边连通 derivation_run → fact_revision → observation
         # 验证存在 selected_from 边
-        selected_from_edges = [
-            e for e in graph.edges if e.edge_type == "selected_from"
-        ]
+        selected_from_edges = [e for e in graph.edges if e.edge_type == "selected_from"]
         assert len(selected_from_edges) >= 1
 
         # 验证 derivation_run → fact_revision 边
         dr_to_fr_edges = [
             e
             for e in graph.edges
-            if e.source_type == "derivation_run"
-            and e.target_type == "fact_revision"
+            if e.source_type == "derivation_run" and e.target_type == "fact_revision"
         ]
         assert len(dr_to_fr_edges) >= 1
 
@@ -659,8 +647,7 @@ class TestProvenanceGraph:
         fr_to_obs_edges = [
             e
             for e in graph.edges
-            if e.source_type == "fact_revision"
-            and e.target_type == "observation"
+            if e.source_type == "fact_revision" and e.target_type == "observation"
         ]
         assert len(fr_to_obs_edges) >= 1
 
@@ -684,14 +671,10 @@ class TestProvenanceGraph:
             visited.add(current)
             for neighbor in adjacency.get(current, []):
                 # 检查是否为 observation 节点
-                neighbor_node = next(
-                    (n for n in graph.nodes if n.id == neighbor), None
-                )
+                neighbor_node = next((n for n in graph.nodes if n.id == neighbor), None)
                 if neighbor_node and neighbor_node.node_type == "observation":
                     reached_observations.add(neighbor)
                 if neighbor not in visited:
                     queue.append(neighbor)
 
-        assert len(reached_observations) >= 1, (
-            "溯源图应从推导运行可达观察值节点"
-        )
+        assert len(reached_observations) >= 1, "溯源图应从推导运行可达观察值节点"

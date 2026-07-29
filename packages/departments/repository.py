@@ -18,7 +18,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.departments.entities import AppUserDepartment, Department
+from packages.departments.entities import Department
 
 
 class DepartmentRepository:
@@ -43,9 +43,7 @@ class DepartmentRepository:
         return dept
 
     @staticmethod
-    async def select_by_id(
-        session: AsyncSession, department_id: UUID
-    ) -> Department | None:
+    async def select_by_id(session: AsyncSession, department_id: UUID) -> Department | None:
         """按 ID 查询实验室。
 
         Args:
@@ -55,9 +53,7 @@ class DepartmentRepository:
         Returns:
             Department | None: 实验室实体，不存在返回 None。
         """
-        result = await session.execute(
-            sa.select(Department).where(Department.id == department_id)
-        )
+        result = await session.execute(sa.select(Department).where(Department.id == department_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -197,13 +193,9 @@ class DepartmentRepository:
         for row in rows:
             dept = row[0]
             children = int(row[1])
-            count_result = await session.execute(
-                recursive_sql, {"dept_id": dept.id}
-            )
+            count_result = await session.execute(recursive_sql, {"dept_id": dept.id})
             count_row = count_result.one()
-            output.append(
-                (dept, int(count_row[0]), children, int(count_row[1]))
-            )
+            output.append((dept, int(count_row[0]), children, int(count_row[1])))
         return output
 
     @staticmethod
@@ -311,7 +303,5 @@ class DepartmentRepository:
         Returns:
             bool: 是否删除成功（影响行数 > 0）。
         """
-        result = await session.execute(
-            sa.delete(Department).where(Department.id == department_id)
-        )
+        result = await session.execute(sa.delete(Department).where(Department.id == department_id))
         return result.rowcount > 0

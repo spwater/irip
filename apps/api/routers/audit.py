@@ -201,8 +201,8 @@ async def list_audit_events(
     object_type: str | None = Query(None, description="按对象类型过滤"),
     user_id: str | None = Query(None, description="按操作者 ID 过滤"),
     action: str | None = Query(None, description="按动作过滤"),
-    start_date: datetime | None = Query(None, description="起始日期（ISO 8601）"),
-    end_date: datetime | None = Query(None, description="截止日期（ISO 8601）"),
+    start_date: datetime | None = Query(None, description="起始日期（ISO 8601）"),  # noqa: B008
+    end_date: datetime | None = Query(None, description="截止日期（ISO 8601）"),  # noqa: B008
     cursor: str | None = Query(None, description="分页游标（上一页最后一条的 occurred_at）"),
     limit: int = Query(50, ge=1, le=AUDIT_QUERY_MAX_PAGE_SIZE, description="每页数量（最大 100）"),
 ) -> AuditEventListResponse:

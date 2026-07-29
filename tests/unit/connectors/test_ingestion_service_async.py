@@ -11,14 +11,11 @@ import hashlib
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from packages.connectors.ingestion_service import (
     _compute_sha256,
     _parse_csv,
     _parse_json,
 )
-
 
 # ---- _compute_sha256 功能正确性 ----
 
@@ -158,9 +155,9 @@ class TestIngestionServiceAsyncWrapper:
     def test_source_uses_to_thread_for_sha256(self, tmp_path: Path):
         """验证 ingest_file 中 _compute_sha256 被 asyncio.to_thread 调用。
 
-        通过检查源码中包含 to_thread(_compute_sha256) 来验证。
-        这里用 patch 验证：如果 to_thread 被调用且第一个参数是 _compute_sha256，
-       则说明包装正确。
+         通过检查源码中包含 to_thread(_compute_sha256) 来验证。
+         这里用 patch 验证：如果 to_thread 被调用且第一个参数是 _compute_sha256，
+        则说明包装正确。
         """
         import packages.connectors.ingestion_service as mod
 
@@ -168,9 +165,7 @@ class TestIngestionServiceAsyncWrapper:
         path.write_bytes(b"test")
 
         with patch.object(mod, "asyncio") as mock_asyncio:
-            mock_asyncio.to_thread = patch(
-                "asyncio.to_thread", wraps=asyncio.to_thread
-            ).__enter__()
+            mock_asyncio.to_thread = patch("asyncio.to_thread", wraps=asyncio.to_thread).__enter__()
             # 不会真正调用 ingest_file（需要 DB），只验证函数引用
             assert hasattr(mod, "_compute_sha256")
             assert hasattr(mod, "_parse_file")

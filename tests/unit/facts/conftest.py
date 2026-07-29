@@ -9,7 +9,6 @@
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -315,9 +314,7 @@ async def fact_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM fact_template WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM fact_template WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(

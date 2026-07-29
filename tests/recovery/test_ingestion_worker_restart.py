@@ -8,7 +8,6 @@
 - 第二次尝试成功
 """
 
-import asyncio
 from uuid import uuid4
 
 import pytest
@@ -75,9 +74,7 @@ async def test_ingestion_retains_first_attempt_logs(
 
     # 记录首次尝试的 lease_owner
     async with session_scope(job_harness._factory) as session:
-        job_record = await session.scalar(
-            sa.select(Job).where(Job.id == job.job_id)
-        )
+        job_record = await session.scalar(sa.select(Job).where(Job.id == job.job_id))
         assert job_record is not None
         first_lease_owner = job_record.lease_owner
         assert first_lease_owner == "crashed-worker"

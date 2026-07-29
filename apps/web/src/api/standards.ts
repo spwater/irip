@@ -18,7 +18,7 @@ export {
   type StandardStatus,
   type QualityLevel,
   type PreviewTable,
-} from './client';
+} from './types';
 
 // Variables API
 export {
@@ -33,7 +33,7 @@ export {
   apiResubmitVariable,
   apiAddVariableAlias,
   apiConvertUnits,
-} from './client';
+} from './standards-objects';
 
 // Objects API
 export {
@@ -48,7 +48,7 @@ export {
   apiListObjectRelations,
   apiGetObjectRelations,
   apiGetObjectDescendants,
-} from './client';
+} from './standards-objects';
 
 // Templates API
 export {
@@ -60,7 +60,7 @@ export {
   apiRejectTemplate,
   apiDeprecateTemplate,
   apiAddObservationRequirement,
-} from './client';
+} from './standards-objects';
 
 // Methods API
 export {
@@ -69,7 +69,7 @@ export {
   apiGetMethod,
   apiSubmitMethod,
   apiPublishMethod,
-} from './client';
+} from './standards-objects';
 
 // Packages API
 export {
@@ -80,4 +80,4 @@ export {
   apiSubmitPackage,
   apiPublishPackage,
   apiRejectPackage,
-} from './client';
+} from './standards-objects';

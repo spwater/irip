@@ -73,12 +73,8 @@ class Equipment(Base):
         default=list,
         server_default=sa.text("'[]'::jsonb"),
     )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
-    sort_order: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False, server_default=sa.text("0")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
+    sort_order: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -89,11 +85,7 @@ class Equipment(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
 
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_equipment_org_code"
-        ),
-    )
+    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_equipment_org_code"),)
 
     def __repr__(self) -> str:
         return (

@@ -63,9 +63,7 @@ async def lookup_org_id(
     from packages.auth.entities import AppUser
 
     async with session_factory() as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
                 code="forbidden",

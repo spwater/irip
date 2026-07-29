@@ -8,10 +8,10 @@ export {
   type ComponentSummary,
   type ComponentDetail,
   type ComponentVersionItem,
-} from './client';
+} from './equipment-flows';
 
 export {
   apiPublishComponent,
   apiListComponents,
   apiGetComponent,
-} from './client';
+} from './equipment-flows';

@@ -18,9 +18,7 @@ def get_department_service() -> DepartmentService:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_department_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_department_service must be overridden via dependency_overrides")
 
 
 def get_user_department_service() -> UserDepartmentService:

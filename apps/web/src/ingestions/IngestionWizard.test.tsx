@@ -3,14 +3,12 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
-import type { SourcePreview, MappingRankResponse } from '@/api/client';
-import { apiPreviewIngestion, apiRankMappings } from '@/api/client';
+import type { SourcePreview, MappingRankResponse } from '@/api/types';
+import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
 import { IngestionWizard } from '@/ingestions/IngestionWizard';
 
 // vi.mock 必须在 import 之前（vitest 会自动提升）
 vi.mock('@/api/client', () => ({
-  apiPreviewIngestion: vi.fn(),
-  apiRankMappings: vi.fn(),
   apiCreateJob: vi.fn().mockResolvedValue({ job_id: 'job-001' }),
   apiGetJob: vi.fn().mockResolvedValue({
     id: 'job-001',
@@ -20,6 +18,14 @@ vi.mock('@/api/client', () => ({
     progress: 100,
     retryable: false,
   }),
+}));
+
+vi.mock('@/api/standards-objects', () => ({
+  apiPreviewIngestion: vi.fn(),
+  apiRankMappings: vi.fn(),
+}));
+
+vi.mock('@/api/types', () => ({
   extractApiError: (err: unknown) =>
     err instanceof Error ? err.message : '操作失败',
 }));

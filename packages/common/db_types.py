@@ -39,9 +39,7 @@ class UTCDateTime(TypeDecorator[datetime]):
         if value is None:
             return None
         if value.tzinfo is None:
-            raise ValueError(
-                "naive datetime is not allowed; pass a timezone-aware datetime"
-            )
+            raise ValueError("naive datetime is not allowed; pass a timezone-aware datetime")
         return value
 
     def process_result_value(

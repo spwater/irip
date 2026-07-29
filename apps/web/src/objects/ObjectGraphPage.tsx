@@ -21,10 +21,8 @@ import {
   apiGetObjectDescendants,
   apiListObjectRelations,
   apiListObjects,
-  extractApiError,
-  type IndustrialObject,
-  type ObjectRelation,
-} from '@/api/client';
+} from '@/api/standards-objects';
+import { extractApiError, type IndustrialObject, type ObjectRelation } from '@/api/types';
 
 const { Title, Text } = Typography;
 

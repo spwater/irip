@@ -36,9 +36,12 @@ class ExperimentComparison:
 
         if not experiments:
             return ComponentResult(
-                outputs={"comparison_table": [], "diagnostics": DiagnosticReport(
-                    component="experiment_comparison",
-                )},
+                outputs={
+                    "comparison_table": [],
+                    "diagnostics": DiagnosticReport(
+                        component="experiment_comparison",
+                    ),
+                },
                 summary="无实验数据",
                 metadata={"experiment_count": 0},
             )
@@ -80,19 +83,11 @@ class ExperimentComparison:
 
         # 生成对照列名
         comparison_columns: tuple[str, ...] = tuple(
-            [key_column]
-            + [
-                f"{label}.{col}"
-                for label in labels
-                for col in value_columns
-            ]
+            [key_column] + [f"{label}.{col}" for label in labels for col in value_columns]
         )
 
         # 生成文本对照表
-        table_data = [
-            [row.get(col) for col in comparison_columns]
-            for row in comparison_rows
-        ]
+        table_data = [[row.get(col) for col in comparison_columns] for row in comparison_rows]
         text_table = tabulate(
             table_data,
             headers=list(comparison_columns),
@@ -101,9 +96,7 @@ class ExperimentComparison:
 
         report = DiagnosticReport(
             component="experiment_comparison",
-            input_rows=sum(
-                len(exp["observations"].rows) for exp in experiments
-            ),
+            input_rows=sum(len(exp["observations"].rows) for exp in experiments),
             output_rows=len(comparison_rows),
             warnings=tuple(warnings),
             row_annotations=(),

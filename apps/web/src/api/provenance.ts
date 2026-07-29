@@ -17,6 +17,9 @@ export {
   type ParameterDetail,
   type ParameterVersion,
   type ParameterCandidate,
+} from './types';
+
+export {
   apiCreateEvidenceSet,
   apiListEvidenceSets,
   apiFreezeEvidenceSet,
@@ -42,4 +45,4 @@ export {
   apiRejectCandidate,
   apiCheckStaleness,
   apiDeprecateParameter,
-} from './client';
+} from './facts-provenance';

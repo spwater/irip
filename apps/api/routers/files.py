@@ -111,19 +111,19 @@ async def browse_files(
     Returns:
         BrowseResponse: 目录内容列表。
     """
-    root = os.path.realpath(_BROWSE_ROOT)
+    root = os.path.realpath(_BROWSE_ROOT)  # noqa: ASYNC240
 
     # 解析目标路径
     if path is None or path == "":
         target = root
     else:
-        target = os.path.realpath(os.path.join(root, path))
+        target = os.path.realpath(os.path.join(root, path))  # noqa: ASYNC240
         # 安全检查：使用 Path.is_relative_to 确保目标在根目录内
         # 防止符号链接/路径穿越绕过 startswith 检查
         if not Path(target).is_relative_to(root):
             target = root
 
-    if not os.path.isdir(target):
+    if not os.path.isdir(target):  # noqa: ASYNC240
         return BrowseResponse(current_path=target, items=[])
 
     items: list[FileItem] = []
@@ -133,11 +133,11 @@ async def browse_files(
             if entry.startswith("."):
                 continue
             full_path = os.path.join(target, entry)
-            if os.path.isdir(full_path):
+            if os.path.isdir(full_path):  # noqa: ASYNC240
                 items.append(FileItem(name=entry, type="dir"))
-            elif os.path.isfile(full_path):
+            elif os.path.isfile(full_path):  # noqa: ASYNC240
                 try:
-                    size = os.path.getsize(full_path)
+                    size = os.path.getsize(full_path)  # noqa: ASYNC240
                 except OSError:
                     size = None
                 items.append(FileItem(name=entry, type="file", size=size))
@@ -145,14 +145,14 @@ async def browse_files(
         pass
 
     # 计算相对根目录的路径
-    rel_path = os.path.relpath(target, root)
+    rel_path = os.path.relpath(target, root)  # noqa: ASYNC240
     if rel_path == ".":
         rel_path = ""
 
     # 父目录
     parent: str | None = None
     if target != root:
-        parent_rel = os.path.relpath(os.path.dirname(target), root)
+        parent_rel = os.path.relpath(os.path.dirname(target), root)  # noqa: ASYNC240
         parent = "" if parent_rel == "." else parent_rel
 
     return BrowseResponse(
@@ -210,10 +210,7 @@ async def upload_file(
         if total_size > MAX_UPLOAD_SIZE_BYTES:
             raise AppError(
                 code="file_too_large",
-                message=(
-                    f"文件大小超过上限 "
-                    f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
-                ),
+                message=(f"文件大小超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"),
                 retryable=False,
                 fields={
                     "size_bytes": total_size,

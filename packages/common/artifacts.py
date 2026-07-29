@@ -28,16 +28,18 @@ from packages.common.ids import new_id
 from packages.common.s3_repository import S3Repository
 
 #: 允许的媒体类型白名单。
-ALLOWED_MEDIA_TYPES: frozenset[str] = frozenset({
-    "text/plain",
-    "text/csv",
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "image/png",
-    "image/jpeg",
-    "application/json",
-})
+ALLOWED_MEDIA_TYPES: frozenset[str] = frozenset(
+    {
+        "text/plain",
+        "text/csv",
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/png",
+        "image/jpeg",
+        "application/json",
+    }
+)
 
 #: 最大上传大小（字节），100 MiB。
 MAX_UPLOAD_SIZE_BYTES: int = 100 * 1024 * 1024
@@ -93,9 +95,7 @@ class ArtifactBlob(Base):
     __tablename__ = "artifact_blob"
 
     sha256: Mapped[str] = mapped_column(sa.Text, primary_key=True)
-    object_key: Mapped[str] = mapped_column(
-        sa.Text, unique=True, nullable=False
-    )
+    object_key: Mapped[str] = mapped_column(sa.Text, unique=True, nullable=False)
     size_bytes: Mapped[int] = mapped_column(sa.BigInteger, nullable=False)
     media_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -103,10 +103,7 @@ class ArtifactBlob(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"ArtifactBlob(sha256={self.sha256[:12]}..., "
-            f"size_bytes={self.size_bytes})"
-        )
+        return f"ArtifactBlob(sha256={self.sha256[:12]}..., size_bytes={self.size_bytes})"
 
 
 class Artifact(Base):
@@ -147,10 +144,7 @@ class Artifact(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"Artifact(id={self.id!r}, filename={self.filename!r}, "
-            f"sha256={self.sha256[:12]}...)"
-        )
+        return f"Artifact(id={self.id!r}, filename={self.filename!r}, sha256={self.sha256[:12]}...)"
 
 
 class ArtifactService:
@@ -231,9 +225,7 @@ class ArtifactService:
             )
             if existing_blob is None:
                 # 上传到 S3（同步操作，包装为异步）
-                await asyncio.to_thread(
-                    self._s3.put_object, object_key, data, media_type
-                )
+                await asyncio.to_thread(self._s3.put_object, object_key, data, media_type)
                 blob = ArtifactBlob(
                     sha256=sha256,
                     object_key=object_key,
@@ -294,16 +286,12 @@ class ArtifactService:
                 )
 
             blob: ArtifactBlob | None = await session.scalar(
-                sa.select(ArtifactBlob).where(
-                    ArtifactBlob.sha256 == artifact.sha256
-                )
+                sa.select(ArtifactBlob).where(ArtifactBlob.sha256 == artifact.sha256)
             )
             if blob is None:
                 return False
 
-            data: bytes = await asyncio.to_thread(
-                self._s3.get_object, blob.object_key
-            )
+            data: bytes = await asyncio.to_thread(self._s3.get_object, blob.object_key)
             return sha256_bytes(data) == artifact.sha256
 
     async def get_artifact(self, artifact_id: UUID) -> ArtifactRef:
@@ -381,11 +369,9 @@ class ArtifactService:
                     retryable=False,
                     fields={"artifact_id": str(artifact_id)},
                 )
-            artifact: Artifact = row[0]
+            row[0]
             blob: ArtifactBlob = row[1]
-        data: bytes = await asyncio.to_thread(
-            self._s3.get_object, blob.object_key
-        )
+        data: bytes = await asyncio.to_thread(self._s3.get_object, blob.object_key)
         return data
 
     async def delete_artifact(self, artifact_id: UUID) -> None:
@@ -415,25 +401,17 @@ class ArtifactService:
             object_key: str = blob.object_key
 
             # 删 artifact 记录
-            await session.execute(
-                sa.delete(Artifact).where(Artifact.id == artifact_id)
-            )
+            await session.execute(sa.delete(Artifact).where(Artifact.id == artifact_id))
             await session.flush()
 
             # 检查是否还有其他 artifact 引用同一 blob
             ref_count = (
-                await session.execute(
-                    sa.select(sa.func.count()).where(
-                        Artifact.sha256 == sha256
-                    )
-                )
+                await session.execute(sa.select(sa.func.count()).where(Artifact.sha256 == sha256))
             ).scalar() or 0
 
             if ref_count == 0:
                 # 无其他引用，删 S3 对象 + blob 记录
-                await session.execute(
-                    sa.delete(ArtifactBlob).where(ArtifactBlob.sha256 == sha256)
-                )
+                await session.execute(sa.delete(ArtifactBlob).where(ArtifactBlob.sha256 == sha256))
                 await asyncio.to_thread(self._s3.delete_object, object_key)
 
     def presign_upload(self, sha256: str, expires: int = 3600) -> str:
@@ -449,7 +427,9 @@ class ArtifactService:
         object_key = _build_object_key(sha256)
         return self._s3.presigned_put(object_key, expires)
 
-    def presign_upload_for_key(self, object_key: str, expires: int = 3600, endpoint_override: str | None = None) -> str:
+    def presign_upload_for_key(
+        self, object_key: str, expires: int = 3600, endpoint_override: str | None = None
+    ) -> str:  # noqa: E501
         """生成预签名上传 URL（基于任意 key）。
 
         用于预签名上传流程：客户端先上传到临时 key，
@@ -503,9 +483,7 @@ class ArtifactService:
                 fields={"media_type": media_type},
             )
 
-        data: bytes = await asyncio.to_thread(
-            self._s3.get_object, temp_key
-        )
+        data: bytes = await asyncio.to_thread(self._s3.get_object, temp_key)
 
         actual_sha256: str = sha256_bytes(data)
         if actual_sha256 != expected_sha256:
@@ -530,7 +508,10 @@ class ArtifactService:
         return await self.put_bytes(data, media_type, filename)
 
     async def presign_download(
-        self, artifact_id: UUID, expires: int = 3600, endpoint_override: str | None = None,
+        self,
+        artifact_id: UUID,
+        expires: int = 3600,
+        endpoint_override: str | None = None,
     ) -> str:
         """异步生成预签名下载 URL。
 
@@ -570,6 +551,9 @@ class ArtifactService:
                 )
             object_key: str = row[0]
             url: str = await asyncio.to_thread(
-                self._s3.presigned_get, object_key, expires, endpoint_override,
+                self._s3.presigned_get,
+                object_key,
+                expires,
+                endpoint_override,
             )
             return url

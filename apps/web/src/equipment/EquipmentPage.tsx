@@ -20,16 +20,15 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateEquipment,
-  apiGetDepartmentNameMap,
   apiGetEquipment,
   apiDeleteEquipment,
-  apiListDepartments,
   apiListEquipment,
   apiUpdateEquipment,
   apiUpdateEquipmentStatus,
-  extractApiError,
   type EquipmentListItem,
-} from '@/api/client';
+} from '@/api/equipment-flows';
+import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
+import { extractApiError } from '@/api/types';
 import { ActionBar, DataTableShell } from '@/components/ui';
 
 /**

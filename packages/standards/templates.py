@@ -116,9 +116,7 @@ class FactTemplate(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     fact_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     version_count: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -133,9 +131,7 @@ class FactTemplate(Base):
     )
 
     __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_fact_template_org_code"
-        ),
+        sa.UniqueConstraint("organization_id", "code", name="uq_fact_template_org_code"),
     )
 
     def __repr__(self) -> str:
@@ -183,30 +179,16 @@ class FactTemplateVersion(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     fact_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    required_conditions: Mapped[list[str] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    observations: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    required_artifact_roles: Mapped[list[str] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    quality_rule_codes: Mapped[list[str] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    required_conditions: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    observations: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+    required_artifact_roles: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    quality_rule_codes: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     published_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    deprecated_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    deprecated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     deprecated_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    rejection_reason: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    rejection_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -270,34 +252,23 @@ class TemplateValidator:
             if var_version is None:
                 if required:
                     codes.append(f"missing_observation:{vv_id_str}")
-                    messages.append(
-                        f"必需观测引用的变量版本未发布: {vv_id_str}"
-                    )
+                    messages.append(f"必需观测引用的变量版本未发布: {vv_id_str}")
                 else:
                     codes.append(f"reference_not_published:{vv_id_str}")
-                    messages.append(
-                        f"观测引用的变量版本未发布: {vv_id_str}"
-                    )
+                    messages.append(f"观测引用的变量版本未发布: {vv_id_str}")
                 continue
 
             var_code = var_version.code
             seen_codes[var_code] = seen_codes.get(var_code, 0) + 1
 
-            if (
-                var_version.data_type == "number"
-                and not var_version.canonical_unit
-            ):
+            if var_version.data_type == "number" and not var_version.canonical_unit:
                 codes.append(f"missing_unit:{var_code}")
-                messages.append(
-                    f"数值型变量 '{var_code}' 缺少 canonical_unit"
-                )
+                messages.append(f"数值型变量 '{var_code}' 缺少 canonical_unit")
 
         for var_code, count in seen_codes.items():
             if count > 1:
                 codes.append(f"duplicate_observation:{var_code}")
-                messages.append(
-                    f"观测中存在重复的变量编码: {var_code}"
-                )
+                messages.append(f"观测中存在重复的变量编码: {var_code}")
 
         valid = len(codes) == 0
         return ValidationReport(
@@ -437,9 +408,7 @@ class TemplateService:
                     fields={"status": template.status},
                 )
 
-            draft_version = await self._get_or_create_draft_version(
-                session, template
-            )
+            draft_version = await self._get_or_create_draft_version(session, template)
 
             observations = draft_version.observations or []
             observations.append(
@@ -458,9 +427,7 @@ class TemplateService:
             await session.flush()
 
             result = await session.execute(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == draft_version.id
-                )
+                sa.select(FactTemplateVersion).where(FactTemplateVersion.id == draft_version.id)
             )
             return result.scalar_one()
 
@@ -529,9 +496,7 @@ class TemplateService:
             )
 
             result = await session.execute(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == draft.id
-                )
+                sa.select(FactTemplateVersion).where(FactTemplateVersion.id == draft.id)
             )
             return result.scalar_one()
 
@@ -589,15 +554,11 @@ class TemplateService:
             )
 
             result = await session.execute(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == latest.id
-                )
+                sa.select(FactTemplateVersion).where(FactTemplateVersion.id == latest.id)
             )
             return result.scalar_one()
 
-    async def reject_template(
-        self, template_id: UUID, reason: str
-    ) -> FactTemplateVersion:
+    async def reject_template(self, template_id: UUID, reason: str) -> FactTemplateVersion:
         """拒绝模板（IN_REVIEW → REJECTED，设置拒绝原因）。
 
         Args:
@@ -647,9 +608,7 @@ class TemplateService:
             )
 
             result = await session.execute(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == latest.id
-                )
+                sa.select(FactTemplateVersion).where(FactTemplateVersion.id == latest.id)
             )
             return result.scalar_one()
 
@@ -685,8 +644,7 @@ class TemplateService:
                 )
                 .where(
                     FactTemplateVersion.id == published.id,
-                    FactTemplateVersion.lock_version
-                    == published.lock_version,
+                    FactTemplateVersion.lock_version == published.lock_version,
                 )
             )
 
@@ -704,9 +662,7 @@ class TemplateService:
             )
 
             result = await session.execute(
-                sa.select(FactTemplateVersion).where(
-                    FactTemplateVersion.id == published.id
-                )
+                sa.select(FactTemplateVersion).where(FactTemplateVersion.id == published.id)
             )
             return result.scalar_one()
 
@@ -723,7 +679,7 @@ class TemplateService:
             AppError: code="not_found"，当模板不存在时。
         """
         async with self._factory() as session:
-            template = await self._get_and_check_org(session, template_id)
+            await self._get_and_check_org(session, template_id)
             draft = await self._get_draft_version(session, template_id)
             if draft is None:
                 return ValidationReport(
@@ -773,9 +729,7 @@ class TemplateService:
             "created_at": template.created_at,
             "updated_at": template.updated_at,
             "lock_version": template.lock_version,
-            "latest_version": _template_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _template_version_to_dict(latest) if latest else None,
         }
 
     async def get_template(self, template_id: UUID) -> dict:
@@ -805,9 +759,7 @@ class TemplateService:
             "created_at": template.created_at,
             "updated_at": template.updated_at,
             "lock_version": template.lock_version,
-            "latest_version": _template_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _template_version_to_dict(latest) if latest else None,
         }
 
     async def list_templates(
@@ -830,9 +782,7 @@ class TemplateService:
         query = (
             sa.select(FactTemplate)
             .where(FactTemplate.organization_id == self._org_id)
-            .order_by(
-                FactTemplate.created_at.asc(), FactTemplate.id.asc()
-            )
+            .order_by(FactTemplate.created_at.asc(), FactTemplate.id.asc())
             .limit(fetch_limit)
         )
 
@@ -866,9 +816,7 @@ class TemplateService:
                         "created_at": t.created_at,
                         "updated_at": t.updated_at,
                         "lock_version": t.lock_version,
-                        "latest_version": _template_version_to_dict(latest)
-                        if latest
-                        else None,
+                        "latest_version": _template_version_to_dict(latest) if latest else None,
                     }
                 )
 
@@ -912,7 +860,7 @@ class TemplateService:
             return draft
 
         new_version_number = template.version_count + 1
-        now = datetime.now(UTC)
+        datetime.now(UTC)
         draft = FactTemplateVersion(
             id=new_id(),
             template_id=template.id,
@@ -1023,13 +971,9 @@ def _template_version_to_dict(version: FactTemplateVersion) -> dict:
         "quality_rule_codes": version.quality_rule_codes or [],
         "status": version.status,
         "published_at": version.published_at,
-        "published_by": str(version.published_by)
-        if version.published_by
-        else None,
+        "published_by": str(version.published_by) if version.published_by else None,
         "deprecated_at": version.deprecated_at,
-        "deprecated_by": str(version.deprecated_by)
-        if version.deprecated_by
-        else None,
+        "deprecated_by": str(version.deprecated_by) if version.deprecated_by else None,
         "rejection_reason": version.rejection_reason,
         "created_at": version.created_at,
         "lock_version": version.lock_version,

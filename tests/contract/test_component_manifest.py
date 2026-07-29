@@ -18,13 +18,9 @@ import pytest
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 
-
 #: JSON Schema 路径（相对项目根目录）。
 SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[2]
-    / "schemas"
-    / "component-manifest"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[2] / "schemas" / "component-manifest" / "v1.schema.json"
 )
 
 #: 有效清单 YAML 模板。
@@ -66,9 +62,7 @@ def validator() -> ManifestValidator:
 class TestManifestValidation:
     """清单校验测试。"""
 
-    def test_valid_manifest_passes(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_valid_manifest_passes(self, validator: ManifestValidator) -> None:
         """有效清单通过验证。"""
         manifest = validator.validate(VALID_MANIFEST_YAML)
         assert manifest.name == "csv_ingestion"
@@ -84,9 +78,7 @@ class TestManifestValidation:
         assert manifest.dependencies == ("field_mapper@1.0.0",)
         assert manifest.raw_yaml == VALID_MANIFEST_YAML
 
-    def test_missing_name_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_missing_name_fails(self, validator: ManifestValidator) -> None:
         """缺少 name 时验证失败。"""
         yaml_text = """\
 version: 1.0.0
@@ -97,9 +89,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_missing_version_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_missing_version_fails(self, validator: ManifestValidator) -> None:
         """缺少 version 时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -110,9 +100,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_missing_kind_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_missing_kind_fails(self, validator: ManifestValidator) -> None:
         """缺少 kind 时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -123,9 +111,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_missing_runtime_defaults_to_python(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_missing_runtime_defaults_to_python(self, validator: ManifestValidator) -> None:
         """缺少 runtime 时默认为 python。"""
         yaml_text = """\
 name: test_component
@@ -135,9 +121,7 @@ kind: ingestion
         manifest = validator.validate(yaml_text)
         assert manifest.runtime == "python"
 
-    def test_invalid_kind_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_invalid_kind_fails(self, validator: ManifestValidator) -> None:
         """kind 不在枚举中时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -149,9 +133,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_invalid_runtime_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_invalid_runtime_fails(self, validator: ManifestValidator) -> None:
         """runtime 不在枚举中时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -163,9 +145,7 @@ runtime: javascript
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_invalid_name_pattern_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_invalid_name_pattern_fails(self, validator: ManifestValidator) -> None:
         """name 不符合命名模式时验证失败。"""
         yaml_text = """\
 name: Invalid-Name
@@ -177,9 +157,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_name_starts_with_digit_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_name_starts_with_digit_fails(self, validator: ManifestValidator) -> None:
         """name 以数字开头时验证失败。"""
         yaml_text = """\
 name: 1component
@@ -191,9 +169,7 @@ runtime: python
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_port_missing_name_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_port_missing_name_fails(self, validator: ManifestValidator) -> None:
         """端口缺少 name 时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -207,9 +183,7 @@ inputs:
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_port_missing_data_type_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_port_missing_data_type_fails(self, validator: ManifestValidator) -> None:
         """端口缺少 data_type 时验证失败。"""
         yaml_text = """\
 name: test_component
@@ -223,9 +197,7 @@ inputs:
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_empty_inputs_outputs(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_empty_inputs_outputs(self, validator: ManifestValidator) -> None:
         """无输入/输出端口时为空元组。"""
         yaml_text = """\
 name: test_component
@@ -237,9 +209,7 @@ runtime: python
         assert manifest.inputs == ()
         assert manifest.outputs == ()
 
-    def test_port_required_defaults_true(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_port_required_defaults_true(self, validator: ManifestValidator) -> None:
         """端口 required 默认为 True。"""
         yaml_text = """\
 name: test_component
@@ -257,9 +227,7 @@ outputs:
         assert manifest.inputs[0].required is True
         assert manifest.outputs[0].required is True
 
-    def test_port_explicit_required_false(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_port_explicit_required_false(self, validator: ManifestValidator) -> None:
         """端口显式设置 required=False。"""
         yaml_text = """\
 name: test_component
@@ -277,9 +245,7 @@ outputs:
         manifest = validator.validate(yaml_text)
         assert manifest.inputs[0].required is False
 
-    def test_port_schema_preserved(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_port_schema_preserved(self, validator: ManifestValidator) -> None:
         """端口的 schema 字段被保留。"""
         yaml_text = """\
 name: test_component
@@ -302,18 +268,14 @@ outputs:
         assert manifest.inputs[0].schema is not None
         assert manifest.inputs[0].schema["type"] == "object"
 
-    def test_invalid_yaml_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_invalid_yaml_fails(self, validator: ManifestValidator) -> None:
         """非法 YAML 语法验证失败。"""
         yaml_text = "name: [unclosed"
         with pytest.raises(AppError) as exc_info:
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
 
-    def test_non_mapping_root_fails(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_non_mapping_root_fails(self, validator: ManifestValidator) -> None:
         """根节点非对象时验证失败。"""
         yaml_text = "- item1\n- item2"
         with pytest.raises(AppError) as exc_info:
@@ -342,12 +304,7 @@ class TestSemanticVersioning:
         version: str,
     ) -> None:
         """有效语义化版本通过。"""
-        yaml_text = (
-            f"name: test_component\n"
-            f"version: {version}\n"
-            f"kind: ingestion\n"
-            f"runtime: python\n"
-        )
+        yaml_text = f"name: test_component\nversion: {version}\nkind: ingestion\nruntime: python\n"
         manifest = validator.validate(yaml_text)
         assert manifest.version == version
 
@@ -361,12 +318,7 @@ class TestSemanticVersioning:
         version: str,
     ) -> None:
         """无效语义化版本失败。"""
-        yaml_text = (
-            f"name: test_component\n"
-            f"version: {version}\n"
-            f"kind: ingestion\n"
-            f"runtime: python\n"
-        )
+        yaml_text = f"name: test_component\nversion: {version}\nkind: ingestion\nruntime: python\n"
         with pytest.raises(AppError) as exc_info:
             validator.validate(yaml_text)
         assert exc_info.value.code == "invalid_manifest"
@@ -375,40 +327,28 @@ class TestSemanticVersioning:
 class TestSha256Digest:
     """SHA-256 摘要一致性测试。"""
 
-    def test_sha256_matches_manual_hash(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_sha256_matches_manual_hash(self, validator: ManifestValidator) -> None:
         """SHA-256 摘要与手动计算一致。"""
         yaml_text = VALID_MANIFEST_YAML
         manifest = validator.validate(yaml_text)
-        expected = hashlib.sha256(
-            yaml_text.encode("utf-8")
-        ).hexdigest()
+        expected = hashlib.sha256(yaml_text.encode("utf-8")).hexdigest()
         assert manifest.sha256 == expected
         assert len(manifest.sha256) == 64
 
-    def test_same_content_same_digest(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_same_content_same_digest(self, validator: ManifestValidator) -> None:
         """相同内容产生相同摘要。"""
         manifest1 = validator.validate(VALID_MANIFEST_YAML)
         manifest2 = validator.validate(VALID_MANIFEST_YAML)
         assert manifest1.sha256 == manifest2.sha256
 
-    def test_different_content_different_digest(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_different_content_different_digest(self, validator: ManifestValidator) -> None:
         """不同内容产生不同摘要。"""
         manifest1 = validator.validate(VALID_MANIFEST_YAML)
-        modified = VALID_MANIFEST_YAML.replace(
-            "csv_ingestion", "json_ingestion"
-        )
+        modified = VALID_MANIFEST_YAML.replace("csv_ingestion", "json_ingestion")
         manifest2 = validator.validate(modified)
         assert manifest1.sha256 != manifest2.sha256
 
-    def test_raw_yaml_preserved(
-        self, validator: ManifestValidator
-    ) -> None:
+    def test_raw_yaml_preserved(self, validator: ManifestValidator) -> None:
         """原始 YAML 文本被完整保存。"""
         manifest = validator.validate(VALID_MANIFEST_YAML)
         assert manifest.raw_yaml == VALID_MANIFEST_YAML

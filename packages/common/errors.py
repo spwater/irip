@@ -8,7 +8,7 @@ HTTP 状态与 code 对照由 ``packages/common/error_codes.py`` 中的
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Union
+from typing import Any
 
 from packages.common.error_codes import ErrorCode
 
@@ -25,7 +25,7 @@ class AppError(Exception):
         fields: 字段级错误明细（用于表单回显），无错字段时为 {}。
     """
 
-    code: Union[str, ErrorCode]
+    code: str | ErrorCode
     message: str
     retryable: bool = False
     fields: dict[str, Any] = field(default_factory=dict)

@@ -13,14 +13,9 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { ColumnsType } from 'antd/es/table';
-import {
-  apiCancelJob,
-  apiListJobs,
-  apiRetryJob,
-  extractApiError,
-  type JobListItem,
-  type JobStatus,
-} from '@/api/client';
+import { apiCancelJob, type JobStatus } from '@/api/client';
+import { apiListJobs, apiRetryJob, type JobListItem } from '@/api/governance';
+import { extractApiError } from '@/api/types';
 import { ActionBar, DataTableShell, StatusMark } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 

@@ -29,7 +29,7 @@ def _linear(x: Any, a: float, b: float) -> Any:
 
 def _polynomial(x: Any, *coeffs: float) -> Any:
     """多项式模型。"""
-    return sum(c * x ** i for i, c in enumerate(coeffs))
+    return sum(c * x**i for i, c in enumerate(coeffs))
 
 
 def _exponential(x: Any, a: float, b: float) -> Any:
@@ -113,9 +113,7 @@ class CurveFit:
         try:
             if model == "polynomial":
                 p0 = [1.0] * (degree + 1)
-                popt, pcov = curve_fit(
-                    func, x_arr, y_arr, p0=p0, maxfev=10000
-                )
+                popt, pcov = curve_fit(func, x_arr, y_arr, p0=p0, maxfev=10000)
                 param_names = [f"c{i}" for i in range(degree + 1)]
             elif model == "linear":
                 popt, pcov = curve_fit(func, x_arr, y_arr, maxfev=10000)

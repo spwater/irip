@@ -45,15 +45,11 @@ def get_equipment_service() -> EquipmentService:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_equipment_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_equipment_service must be overridden via dependency_overrides")
 
 
 #: EquipmentService 依赖类型别名。
-EquipmentServiceDep = Annotated[
-    EquipmentService, Depends(get_equipment_service)
-]
+EquipmentServiceDep = Annotated[EquipmentService, Depends(get_equipment_service)]
 
 
 # ---- 请求模型 ----
@@ -65,9 +61,7 @@ class CreateEquipmentBody(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     department_id: str = Field(..., description="所属部门 UUID")
-    visible_departments: list[str] = Field(
-        default_factory=list, description="可见单位 UUID 列表"
-    )
+    visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")
     sort_order: int = Field(0, ge=0)
 
 
@@ -132,6 +126,7 @@ class EquipmentListResponse(BaseModel):
     next_cursor: str | None
     has_more: bool
 
+
 # ---- 辅助函数 ----
 
 
@@ -169,10 +164,16 @@ async def _check_ownership(
     if equipment_department_id is None:
         return  # 设备无所属单位，允许操作
     if current_user.department_id is None:
-        raise AppError(code="forbidden", message="只有所属单位的成员才能编辑/删除设备", retryable=False, fields={})
+        raise AppError(
+            code="forbidden",
+            message="只有所属单位的成员才能编辑/删除设备",
+            retryable=False,
+            fields={},
+        )  # noqa: E501
 
     # 获取用户实验室及其所有后代实验室 ID
     from apps.api.dependencies.dept_scope import get_visible_department_ids
+
     factory = service._factory  # type: ignore[attr-defined]
     visible_ids = await get_visible_department_ids(current_user, factory)
     if equipment_department_id not in visible_ids:
@@ -209,6 +210,7 @@ async def create_equipment(
         AppError: code="conflict"，当编码已存在时。
     """
     from packages.common.ids import gen_code
+
     equipment = await service.create(
         department_id=UUID(body.department_id),
         code=gen_code("equip"),
@@ -350,9 +352,7 @@ async def update_equipment(
     return _to_response(equipment)
 
 
-@equipment_router.patch(
-    "/{equipment_id}/status", response_model=EquipmentResponse
-)
+@equipment_router.patch("/{equipment_id}/status", response_model=EquipmentResponse)
 async def update_equipment_status(
     equipment_id: UUID,
     body: UpdateEquipmentStatusBody,

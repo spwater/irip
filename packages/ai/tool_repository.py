@@ -166,9 +166,7 @@ class ToolRepository:
         Returns:
             list[AIToolRow]: 全部工具行。
         """
-        result = await session.execute(
-            sa.select(AITool).order_by(AITool.name)
-        )
+        result = await session.execute(sa.select(AITool).order_by(AITool.name))
         entities = result.scalars().all()
         return [_to_row(e) for e in entities]
 
@@ -186,9 +184,7 @@ class ToolRepository:
         Returns:
             AIToolRow | None: 找到返回领域对象，不存在返回 None。
         """
-        result = await session.execute(
-            sa.select(AITool).where(AITool.name == name)
-        )
+        result = await session.execute(sa.select(AITool).where(AITool.name == name))
         entity = result.scalar_one_or_none()
         if entity is None:
             return None
@@ -265,9 +261,7 @@ class ToolRepository:
             AppError: code="not_found"，当工具不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
         """
-        result = await session.execute(
-            sa.select(AITool).where(AITool.name == name)
-        )
+        result = await session.execute(sa.select(AITool).where(AITool.name == name))
         entity = result.scalar_one_or_none()
         if entity is None:
             raise AppError(
@@ -321,9 +315,7 @@ class ToolRepository:
             AppError: code="not_found"，当工具不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
         """
-        result = await session.execute(
-            sa.select(AITool).where(AITool.name == name)
-        )
+        result = await session.execute(sa.select(AITool).where(AITool.name == name))
         entity = result.scalar_one_or_none()
         if entity is None:
             raise AppError(

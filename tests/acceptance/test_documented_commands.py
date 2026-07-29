@@ -117,9 +117,7 @@ def test_readme_contains_install_commands() -> None:
     """验证 README 包含安装命令。"""
     content = _read_file(README_PATH)
     assert "docker compose up" in content, "README 缺少 docker compose up 命令"
-    assert "docker compose run --rm bootstrap" in content, (
-        "README 缺少 bootstrap 命令"
-    )
+    assert "docker compose run --rm bootstrap" in content, "README 缺少 bootstrap 命令"
     assert ".env" in content, "README 缺少环境变量配置说明"
 
 
@@ -144,9 +142,7 @@ def test_readme_contains_stop_start_commands() -> None:
 def test_readme_contains_test_commands() -> None:
     """验证 README 包含测试命令。"""
     content = _read_file(README_PATH)
-    assert "make lint" in content or "ruff check" in content, (
-        "README 缺少 lint 命令"
-    )
+    assert "make lint" in content or "ruff check" in content, "README 缺少 lint 命令"
     assert "pytest" in content, "README 缺少 pytest 命令"
     assert "release-gate.sh" in content, "README 缺少发布门脚本引用"
 
@@ -175,9 +171,7 @@ def test_readme_contains_sample_data_commands() -> None:
     """验证 README 包含示例数据加载命令。"""
     content = _read_file(README_PATH)
     assert "examples" in content, "README 缺少示例数据说明"
-    assert "particle-size" in content or "grate-cooler-rom" in content, (
-        "README 缺少示例场景引用"
-    )
+    assert "particle-size" in content or "grate-cooler-rom" in content, "README 缺少示例场景引用"
 
 
 # ---------------------------------------------------------------------------
@@ -265,9 +259,7 @@ def test_install_upgrade_doc_contains_docker_commands() -> None:
 def test_install_upgrade_doc_contains_rollback() -> None:
     """验证安装升级指南包含回滚程序。"""
     content = _read_file("docs/operations/install-upgrade.md")
-    assert "回滚" in content or "rollback" in content.lower(), (
-        "安装指南缺少回滚程序说明"
-    )
+    assert "回滚" in content or "rollback" in content.lower(), "安装指南缺少回滚程序说明"
 
 
 @pytest.mark.acceptance
@@ -276,9 +268,7 @@ def test_backup_restore_doc_exists_and_has_content() -> None:
     content = _read_file("docs/operations/backup-restore.md")
     assert "备份" in content, "备份恢复文档缺少备份说明"
     assert "恢复" in content, "备份恢复文档缺少恢复说明"
-    assert "SHA-256" in content or "sha256" in content.lower(), (
-        "备份恢复文档缺少完整性校验说明"
-    )
+    assert "SHA-256" in content or "sha256" in content.lower(), "备份恢复文档缺少完整性校验说明"
 
 
 @pytest.mark.acceptance
@@ -289,9 +279,7 @@ def test_particle_size_doc_contains_full_workflow() -> None:
     assert "事实" in content, "粒度指南缺少事实说明"
     assert "证据集" in content, "粒度指南缺少证据集说明"
     assert "推导" in content, "粒度指南缺少推导说明"
-    assert "参数" in content and "审批" in content, (
-        "粒度指南缺少参数审批说明"
-    )
+    assert "参数" in content and "审批" in content, "粒度指南缺少参数审批说明"
 
 
 @pytest.mark.acceptance
@@ -320,12 +308,8 @@ def test_model_adapter_doc_contains_protocol() -> None:
     """验证模型上线指南包含 ModelAdapter 协议说明。"""
     content = _read_file("docs/model-onboarding/model-adapter.md")
     assert "ModelAdapter" in content, "模型上线指南缺少 ModelAdapter 协议"
-    assert "契约" in content or "contract" in content.lower(), (
-        "模型上线指南缺少模型契约说明"
-    )
-    assert "命令行" in content or "CLI" in content, (
-        "模型上线指南缺少命令行适配器说明"
-    )
+    assert "契约" in content or "contract" in content.lower(), "模型上线指南缺少模型契约说明"
+    assert "命令行" in content or "CLI" in content, "模型上线指南缺少命令行适配器说明"
 
 
 # ---------------------------------------------------------------------------
@@ -360,9 +344,7 @@ def test_release_gate_contains_cleanup() -> None:
 def test_release_gate_contains_compose_project_name() -> None:
     """验证发布门脚本使用隔离的 Compose 项目名。"""
     content = _read_file("scripts/release-gate.sh")
-    assert "COMPOSE_PROJECT_NAME" in content, (
-        "发布门脚本应使用隔离的 COMPOSE_PROJECT_NAME"
-    )
+    assert "COMPOSE_PROJECT_NAME" in content, "发布门脚本应使用隔离的 COMPOSE_PROJECT_NAME"
     assert "irip-release-gate" in content, "发布门脚本应使用 irip-release-gate 项目名"
 
 

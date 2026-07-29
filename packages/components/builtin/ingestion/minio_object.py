@@ -15,7 +15,6 @@ import io
 from typing import Any
 
 from packages.common.errors import AppError
-
 from packages.components.builtin.ingestion.csv_reader import _coerce
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
@@ -91,19 +90,14 @@ class MinioObject:
             },
         )
 
-    def _parse_json(
-        self, data: bytes, object_key: str, encoding: str
-    ) -> ObservationTable:
+    def _parse_json(self, data: bytes, object_key: str, encoding: str) -> ObservationTable:
         """解析 JSON 数据。"""
         import json
 
         parsed: Any = json.loads(data.decode(encoding))
         records: list[dict[str, Any]]
         if isinstance(parsed, list):
-            records = [
-                r if isinstance(r, dict) else {"value": r}
-                for r in parsed
-            ]
+            records = [r if isinstance(r, dict) else {"value": r} for r in parsed]
         elif isinstance(parsed, dict):
             records = [parsed]
         else:
@@ -142,11 +136,11 @@ class MinioObject:
 
         columns: tuple[str, ...] = tuple(all_rows[0])
         data_rows: list[dict[str, Any]] = []
-        for idx, row in enumerate(all_rows[1:], start=1):
+        for _idx, row in enumerate(all_rows[1:], start=1):
             if not row:
                 continue
             record: dict[str, Any] = {}
-            for col_name, cell in zip(columns, row):
+            for col_name, cell in zip(columns, row, strict=False):
                 record[col_name] = _coerce(cell)
             data_rows.append(record)
 
@@ -156,9 +150,7 @@ class MinioObject:
             source_locations=({"object_key": object_key},),
         )
 
-    async def _parse_excel(
-        self, data: bytes, object_key: str
-    ) -> ObservationTable:
+    async def _parse_excel(self, data: bytes, object_key: str) -> ObservationTable:
         """解析 Excel 数据。"""
         from openpyxl import load_workbook
 
@@ -173,15 +165,14 @@ class MinioObject:
                 return ObservationTable()
 
             columns: tuple[str, ...] = tuple(
-                str(c) if c is not None else f"col_{i}"
-                for i, c in enumerate(all_rows[0])
+                str(c) if c is not None else f"col_{i}" for i, c in enumerate(all_rows[0])
             )
             data_rows: list[dict[str, Any]] = []
             for row in all_rows[1:]:
                 if all(cell is None for cell in row):
                     continue
                 record: dict[str, Any] = {}
-                for col_name, cell in zip(columns, row):
+                for col_name, cell in zip(columns, row, strict=False):
                     record[col_name] = cell
                 data_rows.append(record)
 

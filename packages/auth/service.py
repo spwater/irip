@@ -155,9 +155,7 @@ class AuthService:
         replay_error: AppError | None = None
 
         async with session_scope(self._session_factory) as session:
-            old_session = await self._repository.find_session_by_digest_for_update(
-                session, digest
-            )
+            old_session = await self._repository.find_session_by_digest_for_update(session, digest)
             now = self._clock.now()
 
             if old_session is None:
@@ -170,9 +168,7 @@ class AuthService:
 
             if old_session.replaced_by is not None:
                 # 重放攻击：此令牌已被旋转过 → 整族撤销
-                await self._repository.revoke_family(
-                    session, old_session.family_id, now
-                )
+                await self._repository.revoke_family(session, old_session.family_id, now)
                 replay_error = AppError(
                     code="refresh_replayed",
                     message="刷新令牌已被使用，疑似重放攻击，已撤销该会话家族",
@@ -211,12 +207,8 @@ class AuthService:
                     created_ip=old_session.created_ip,
                     user_agent=old_session.user_agent,
                 )
-                await self._repository.rotate_session(
-                    session, old_session.id, new_session_id, now
-                )
-                user = await self._repository.find_user_by_id(
-                    session, old_session.user_id
-                )
+                await self._repository.rotate_session(session, old_session.id, new_session_id, now)
+                user = await self._repository.find_user_by_id(session, old_session.user_id)
                 if user is None:
                     raise AppError(
                         code="invalid_credentials",
@@ -259,10 +251,6 @@ class AuthService:
         """
         digest = compute_refresh_digest(refresh_token)
         async with session_scope(self._session_factory) as session:
-            old_session = await self._repository.find_session_by_digest(
-                session, digest
-            )
+            old_session = await self._repository.find_session_by_digest(session, digest)
             if old_session is not None and old_session.revoked_at is None:
-                await self._repository.revoke_session(
-                    session, old_session.id, self._clock.now()
-                )
+                await self._repository.revoke_session(session, old_session.id, self._clock.now())

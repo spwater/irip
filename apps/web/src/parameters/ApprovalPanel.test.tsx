@@ -2,13 +2,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
-import type { CurrentUser, ParameterCandidate } from '@/api/client';
+import type { CurrentUser } from '@/api/client';
+import type { ParameterCandidate } from '@/api/types';
 import { ApprovalPanel } from '@/parameters/ApprovalPanel';
 
 // vi.mock 必须在 import 之前（vitest 会自动提升）
-vi.mock('@/api/client', () => ({
+vi.mock('@/api/facts-provenance', () => ({
   apiApproveCandidate: vi.fn(),
   apiRejectCandidate: vi.fn(),
+}));
+
+vi.mock('@/api/types', () => ({
   extractApiError: (err: unknown) =>
     err instanceof Error ? err.message : '操作失败',
 }));

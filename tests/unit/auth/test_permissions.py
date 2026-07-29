@@ -39,22 +39,20 @@ from tests.unit.auth.conftest import AuthTestUser, DbHelper, KilnResource
 
 
 class TestRolePermissionMatrix:
-    """7 个内置角色的权限矩阵完整性测试。"""
+    """5 个内置角色的权限矩阵完整性测试。"""
 
-    def test_builtin_roles_has_seven_roles(self) -> None:
-        """BUILTIN_ROLES 包含且仅包含 7 个角色。"""
-        assert len(BUILTIN_ROLES) == 7
+    def test_builtin_roles_has_five_roles(self) -> None:
+        """BUILTIN_ROLES 包含且仅包含 5 个角色。"""
+        assert len(BUILTIN_ROLES) == 5
 
     def test_all_role_codes_present(self) -> None:
-        """7 个角色代码全部存在。"""
+        """5 个角色代码全部存在。"""
         expected_codes = {
             "platform_administrator",
-            "standard_owner",
-            "data_steward",
-            "researcher",
-            "model_engineer",
-            "reviewer",
-            "read_only_user",
+            "platform_auditor",
+            "lab_director",
+            "lab_member",
+            "lab_viewer",
         }
         assert set(BUILTIN_ROLES.keys()) == expected_codes
 
@@ -73,118 +71,62 @@ class TestRolePermissionMatrix:
         all_perms = set(Permission.all())
         assert admin_perms == all_perms
 
-    def test_standard_owner_permissions(self) -> None:
-        """标准负责人权限：standard:read/write/publish + department:read + equipment:manage/read + component:manage/read + flow:manage/read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["standard_owner"]["permissions"])  # type: ignore[arg-type]
+    def test_lab_director_permissions(self) -> None:
+        """实验室负责人权限：standard:read/write/publish + fact:read/write + artifact:read/upload/download
+        + job:read/submit/cancel + model:read/manage/write/publish/predict + parameter:read/write/review/approve/publish
+        + department:manage/read + equipment:manage/read + ingestion:read/write/publish
+        + provenance:read/write/publish + component:manage/read + flow:manage/execute/read + assistant:use。"""
+        perms = set(BUILTIN_ROLES["lab_director"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "standard:read",
-            "standard:write",
-            "standard:publish",
-            "department:read",
-            "equipment:manage",
-            "equipment:read",
-            "component:manage",
-            "component:read",
-            "flow:manage",
-            "flow:read",
+            "standard:read", "standard:write", "standard:publish",
+            "fact:read", "fact:write",
+            "artifact:read", "artifact:upload", "artifact:download",
+            "job:read", "job:submit", "job:cancel",
+            "model:read", "model:manage", "model:write", "model:publish", "model:predict",
+            "parameter:read", "parameter:write", "parameter:review", "parameter:approve", "parameter:publish",
+            "department:manage", "department:read",
+            "equipment:manage", "equipment:read",
+            "ingestion:read", "ingestion:write", "ingestion:publish",
+            "provenance:read", "provenance:write", "provenance:publish",
+            "component:manage", "component:read",
+            "flow:manage", "flow:execute", "flow:read",
             "assistant:use",
         }
 
-    def test_data_steward_permissions(self) -> None:
-        """数据管家权限：fact:read/write + artifact:read/upload/download + department:read + equipment:read + ingestion:read/write/publish + provenance:read/write/publish + parameter:read/write + component:read + flow:execute/read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["data_steward"]["permissions"])  # type: ignore[arg-type]
+    def test_lab_member_permissions(self) -> None:
+        """实验室成员权限：fact:read/write + artifact:read/upload/download + job:read/submit/cancel
+        + model:read/predict + parameter:read/write + department:read + equipment:read
+        + ingestion:read/write + provenance:read/write + component:read + flow:execute/read + assistant:use。"""
+        perms = set(BUILTIN_ROLES["lab_member"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "fact:read",
-            "fact:write",
-            "artifact:read",
-            "artifact:upload",
-            "artifact:download",
-            "department:read",
-            "equipment:read",
-            "ingestion:read",
-            "ingestion:write",
-            "ingestion:publish",
-            "provenance:read",
-            "provenance:write",
-            "provenance:publish",
-            "parameter:read",
-            "parameter:write",
-            "component:read",
-            "flow:execute",
-            "flow:read",
+            "fact:read", "fact:write",
+            "artifact:read", "artifact:upload", "artifact:download",
+            "job:read", "job:submit", "job:cancel",
+            "model:read", "model:predict",
+            "parameter:read", "parameter:write",
+            "department:read", "equipment:read",
+            "ingestion:read", "ingestion:write",
+            "provenance:read", "provenance:write",
+            "component:read", "flow:execute", "flow:read",
             "assistant:use",
         }
 
-    def test_researcher_permissions(self) -> None:
-        """研究员权限：fact:read + artifact:read/download + job:read/submit + department:read + equipment:read + provenance:read/write + parameter:read/write + component:read + flow:execute/read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["researcher"]["permissions"])  # type: ignore[arg-type]
+    def test_lab_viewer_permissions(self) -> None:
+        """实验室只读成员权限：standard:read + fact:read + artifact:read + job:read
+        + model:read + parameter:read + department:read + equipment:read
+        + ingestion:read + provenance:read + component:read + flow:read + assistant:use。"""
+        perms = set(BUILTIN_ROLES["lab_viewer"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "fact:read",
-            "artifact:read",
-            "artifact:download",
-            "job:read",
-            "job:submit",
-            "department:read",
-            "equipment:read",
-            "provenance:read",
-            "provenance:write",
-            "parameter:read",
-            "parameter:write",
-            "component:read",
-            "flow:execute",
-            "flow:read",
-            "assistant:use",
+            "standard:read", "fact:read", "artifact:read", "job:read",
+            "model:read", "parameter:read",
+            "department:read", "equipment:read",
+            "ingestion:read", "provenance:read",
+            "component:read", "flow:read", "assistant:use",
         }
 
-    def test_model_engineer_permissions(self) -> None:
-        """模型工程师权限：model:read/manage/write/publish/predict + department:read + equipment:read + component:manage/read + flow:manage/execute/read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["model_engineer"]["permissions"])  # type: ignore[arg-type]
-        assert perms == {
-            "model:read",
-            "model:manage",
-            "model:write",
-            "model:publish",
-            "model:predict",
-            "department:read",
-            "equipment:read",
-            "component:manage",
-            "component:read",
-            "flow:manage",
-            "flow:execute",
-            "flow:read",
-            "assistant:use",
-        }
-
-    def test_reviewer_permissions(self) -> None:
-        """审核员权限：parameter:read/review/approve/publish + department:read + equipment:read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["reviewer"]["permissions"])  # type: ignore[arg-type]
-        assert perms == {
-            "parameter:read",
-            "parameter:review",
-            "parameter:approve",
-            "parameter:publish",
-            "department:read",
-            "equipment:read",
-            "assistant:use",
-        }
-
-    def test_read_only_user_permissions(self) -> None:
-        """只读用户权限：fact:read + standard:read + parameter:read + department:read + equipment:read + component:read + flow:read + assistant:use。"""
-        perms = set(BUILTIN_ROLES["read_only_user"]["permissions"])  # type: ignore[arg-type]
-        assert perms == {
-            "fact:read",
-            "standard:read",
-            "parameter:read",
-            "department:read",
-            "equipment:read",
-            "component:read",
-            "flow:read",
-            "assistant:use",
-        }
-
-    def test_read_only_user_cannot_write(self) -> None:
-        """只读用户无任何写权限。"""
-        perms = BUILTIN_ROLES["read_only_user"]["permissions"]  # type: ignore[assignment]
+    def test_lab_viewer_cannot_write(self) -> None:
+        """实验室只读成员无任何写权限。"""
+        perms = BUILTIN_ROLES["lab_viewer"]["permissions"]  # type: ignore[assignment]
         for p in perms:  # type: ignore[union-attr]
             assert ":write" not in p
             assert ":publish" not in p
@@ -200,7 +142,7 @@ class TestRolePermissionMatrix:
 
     def test_get_role_permissions_returns_list(self) -> None:
         """get_role_permissions 返回权限列表。"""
-        perms = get_role_permissions("researcher")
+        perms = get_role_permissions("lab_member")
         assert "fact:read" in perms
         assert "job:submit" in perms
         assert isinstance(perms, list)
@@ -211,11 +153,11 @@ class TestRolePermissionMatrix:
 
     def test_has_role_permission_true(self) -> None:
         """已知角色+权限返回 True。"""
-        assert has_role_permission("researcher", "fact:read") is True
+        assert has_role_permission("lab_member", "fact:read") is True
 
     def test_has_role_permission_false(self) -> None:
         """角色无该权限返回 False。"""
-        assert has_role_permission("researcher", "fact:write") is False
+        assert has_role_permission("lab_viewer", "fact:write") is False
 
     def test_has_role_permission_unknown_role(self) -> None:
         """未知角色返回 False。"""
@@ -314,14 +256,14 @@ class TestObjectScopeAuthorization:
     async def test_child_object_is_visible_but_sibling_is_denied(
         self,
         authz: AuthorizationService,
-        researcher: AuthTestUser,
+        lab_member: AuthTestUser,
         kiln: KilnResource,
         cooler: ResourceRef,
     ) -> None:
         """计划骨架：子对象可见，兄弟拒绝。"""
-        await authz.require(researcher, "fact:read", kiln.child_measurement_point)
+        await authz.require(lab_member, "fact:read", kiln.child_measurement_point)
         with pytest.raises(AppError, match="无权访问"):
-            await authz.require(researcher, "fact:read", cooler)
+            await authz.require(lab_member, "fact:read", cooler)
 
     async def test_no_grant_is_denied(
         self,
@@ -337,11 +279,9 @@ class TestObjectScopeAuthorization:
             user = AuthTestUser(
                 user_id=new_id(),
                 email="noperm@irip.local",
-                roles=["researcher"],
+                roles=["lab_member"],
             )
-            resource = ResourceRef(
-                organization_id=org, object_id=new_id(), resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=new_id(), resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:read", resource)
             await session.rollback()
@@ -381,9 +321,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()
@@ -399,11 +337,11 @@ class TestObjectScopeAuthorization:
         """role grant 授权通过（无 user 直连 grant）。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="role-grant@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -422,9 +360,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()
@@ -439,12 +375,12 @@ class TestObjectScopeAuthorization:
         """过期 grant（effective_to 在过去）拒绝。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         past = datetime.now(UTC) - timedelta(hours=1)
         user = AuthTestUser(
             user_id=new_id(),
             email="expired@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -465,9 +401,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:read", resource)
             await session.rollback()
@@ -483,12 +417,12 @@ class TestObjectScopeAuthorization:
         """未生效 grant（effective_from 在未来）拒绝。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         future = datetime.now(UTC) + timedelta(hours=1)
         user = AuthTestUser(
             user_id=new_id(),
             email="future@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -509,9 +443,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:read", resource)
             await session.rollback()
@@ -526,11 +458,11 @@ class TestObjectScopeAuthorization:
     ) -> None:
         """object_root_id 为 NULL（全组织通配）时，任何对象均可访问。"""
         org = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="org-wide@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -567,11 +499,11 @@ class TestObjectScopeAuthorization:
         """resource_type="*" 通配符匹配任意资源类型。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="wildcard@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -590,9 +522,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="artifact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="artifact")
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()
@@ -608,11 +538,11 @@ class TestObjectScopeAuthorization:
         org_a = new_id()
         org_b = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="cross-org@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -631,9 +561,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org_b, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org_b, object_id=obj_id, resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:read", resource)
             await session.rollback()
@@ -649,11 +577,11 @@ class TestObjectScopeAuthorization:
         """action 不匹配的 grant 拒绝。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="wrong-action@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -672,9 +600,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:write", resource)
             await session.rollback()
@@ -689,11 +615,11 @@ class TestObjectScopeAuthorization:
     ) -> None:
         """object_id 为 None（组织级操作）时，只有全组织 grant 匹配。"""
         org = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="org-level@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -712,9 +638,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=None, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=None, resource_type="fact")
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()
@@ -729,11 +653,11 @@ class TestObjectScopeAuthorization:
         """object_id 为 None 时，特定对象 grant 不匹配。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         user = AuthTestUser(
             user_id=new_id(),
             email="org-level-denied@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -752,9 +676,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=None, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=None, resource_type="fact")
             with pytest.raises(AppError, match="无权访问"):
                 await service.require(user, "fact:read", resource)
             await session.rollback()
@@ -794,9 +716,7 @@ class TestObjectScopeAuthorization:
             session = async_session_factory()
             await session.begin()
             service = AuthorizationService(session=session, clock=SystemClock())
-            resource = ResourceRef(
-                organization_id=org, object_id=obj_id, resource_type="fact"
-            )
+            resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()
@@ -812,12 +732,12 @@ class TestObjectScopeAuthorization:
         """FixedClock 控制生效区间检查。"""
         org = new_id()
         obj_id = new_id()
-        role_id = db_helper.get_role_id_sync("researcher")
+        role_id = db_helper.get_role_id_sync("lab_member")
         base_time = datetime(2026, 1, 15, 12, 0, 0, tzinfo=UTC)
         user = AuthTestUser(
             user_id=new_id(),
             email="clock-test@irip.local",
-            roles=["researcher"],
+            roles=["lab_member"],
         )
         async with session_scope(async_session_factory) as session:
             grant = ScopeGrant(
@@ -834,16 +754,12 @@ class TestObjectScopeAuthorization:
             session.add(grant)
             await session.flush()
 
-        resource = ResourceRef(
-            organization_id=org, object_id=obj_id, resource_type="fact"
-        )
+        resource = ResourceRef(organization_id=org, object_id=obj_id, resource_type="fact")
         try:
             # 在生效区间内 → 允许
             session = async_session_factory()
             await session.begin()
-            service = AuthorizationService(
-                session=session, clock=FixedClock(base_time)
-            )
+            service = AuthorizationService(session=session, clock=FixedClock(base_time))
             await service.require(user, "fact:read", resource)
             await session.rollback()
             await session.close()

@@ -37,9 +37,7 @@ class ModelApplicabilityComponent:
             AppError: code="validation_failed"，当缺少必填参数时。
         """
         inputs: dict[str, Any] | None = params.get("inputs")
-        applicability_domain: dict[str, Any] | None = params.get(
-            "applicability_domain"
-        )
+        applicability_domain: dict[str, Any] | None = params.get("applicability_domain")
 
         if inputs is None:
             raise AppError(
@@ -64,17 +62,10 @@ class ModelApplicabilityComponent:
                 "valid": result.valid,
                 "errors": list(result.errors),
             },
-            summary=(
-                "适用域检查通过" if result.valid
-                else "适用域检查未通过"
-            ),
+            summary=("适用域检查通过" if result.valid else "适用域检查未通过"),
             metadata={
                 "valid": result.valid,
                 "error_count": len(result.errors),
             },
-            diagnostics=(
-                {"errors": list(result.errors)}
-                if result.errors
-                else None
-            ),
+            diagnostics=({"errors": list(result.errors)} if result.errors else None),
         )

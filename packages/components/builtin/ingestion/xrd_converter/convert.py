@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 XRD 转换工具入口 —— 供 IRIP 组件及外部调用的入口函数。
 
@@ -9,7 +8,7 @@ XRD 转换工具入口 —— 供 IRIP 组件及外部调用的入口函数。
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from packages.components.builtin.ingestion.xrd_converter.ras_raw_parser import parse_ras_raw
 from packages.components.builtin.ingestion.xrd_converter.validator import XRDConverterError
@@ -22,7 +21,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def convert_xrd_file_to_json(file_path: str) -> Dict[str, Any]:
+def convert_xrd_file_to_json(file_path: str) -> dict[str, Any]:
     """LLM Tool 入口：读取 XRD 原始文件，返回 {metadata, points, series} 结构化数据。
 
     本函数为确定性 Python 解析，不依赖 LLM 进行文件内容解析。
@@ -83,7 +82,10 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("用法: python -m packages.components.builtin.ingestion.xrd_converter.convert <RAS_RAW 文件路径>")
+        print(
+            "用法: python -m packages.components.builtin.ingestion.xrd_converter.convert"
+            " <RAS_RAW 文件路径>"
+        )
         sys.exit(1)
 
     file_path = sys.argv[1]

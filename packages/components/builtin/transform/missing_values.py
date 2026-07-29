@@ -35,11 +35,9 @@ class MissingValues:
 
         if strategy == "reject":
             new_rows = [
-                row for row in table.rows
-                if all(
-                    row.get(col) is not None and row.get(col) != ""
-                    for col in target_cols
-                )
+                row
+                for row in table.rows
+                if all(row.get(col) is not None and row.get(col) != "" for col in target_cols)
             ]
             removed = table.row_count() - len(new_rows)
             if removed > 0:
@@ -86,7 +84,7 @@ class MissingValues:
         )
         return ComponentResult(
             outputs={"observations": result_table},
-            summary=f"缺失值处理（{strategy}）: 输入 {table.row_count()} 行 → 输出 {result_table.row_count()} 行",
+            summary=f"缺失值处理（{strategy}）: 输入 {table.row_count()} 行 → 输出 {result_table.row_count()} 行",  # noqa: E501
             metadata={
                 "strategy": strategy,
                 "input_rows": table.row_count(),

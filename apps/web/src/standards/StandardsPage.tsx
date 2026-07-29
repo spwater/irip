@@ -4,26 +4,23 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { DepartmentManagement } from '@/pages/governance/DepartmentManagement';
 import { EquipmentPage } from '@/equipment/EquipmentPage';
-import { ComponentsPage } from '@/components/ComponentsPage';
 import { PageIntro } from '@/components/ui';
 
 /** 合法的 Tab key 集合。 */
-const VALID_TABS = ['departments', 'equipment', 'exp-objects', 'components'] as const;
+const VALID_TABS = ['departments', 'equipment', 'exp-objects'] as const;
 type StandardsTab = (typeof VALID_TABS)[number];
 
 /**
  * 实验室建设页面（设计文档第 10.4 节）
  *
- * 四个 Tab：组织机构 / 设备仪器 / 实验对象 / 数据接口
+ * 三个 Tab：组织机构 / 设备仪器 / 实验对象
  * PageIntro 下增加"组织机构 → 设备仪器 → 实验对象"建设链路提示。
+ * 数据接口 Tab 已移至平台应用页面。
  */
 export function StandardsPage(): JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const tabRaw = (search as Record<string, unknown>).tab;
-  const prefillObjectRaw = (search as Record<string, unknown>).prefill_object;
-  const prefillObject: string | undefined =
-    typeof prefillObjectRaw === 'string' ? prefillObjectRaw : undefined;
   const activeTab: StandardsTab = (
     VALID_TABS as readonly string[]
   ).includes(typeof tabRaw === 'string' ? tabRaw : '')
@@ -87,11 +84,6 @@ export function StandardsPage(): JSX.Element {
                 onPresetConsumed={() => setPresetEquipmentId(undefined)}
               />
             ),
-          },
-          {
-            key: 'components',
-            label: '数据接口',
-            children: <ComponentsPage prefillObject={prefillObject} />,
           },
         ]}
       />

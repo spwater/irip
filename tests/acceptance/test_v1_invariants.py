@@ -52,8 +52,14 @@ class AcceptanceDB:
                 )
             ).fetchall()
             return [
-                {"id": str(r[0]), "code": r[1], "version": r[2], "status": r[3],
-                 "value": r[4], "unit": r[5]}
+                {
+                    "id": str(r[0]),
+                    "code": r[1],
+                    "version": r[2],
+                    "status": r[3],
+                    "value": r[4],
+                    "unit": r[5],
+                }
                 for r in rows
             ]
 
@@ -79,19 +85,19 @@ class AcceptanceDB:
                 {"pid": parameter_id},
             ).fetchall()
             return [
-                {"derivation_run_id": str(r[0]) if r[0] else None,
-                 "derivation_succeeded": r[1] == "succeeded",
-                 "fact_revision": r[2] or 0,
-                 "raw_artifact_id": str(r[3]) if r[3] else None}
+                {
+                    "derivation_run_id": str(r[0]) if r[0] else None,
+                    "derivation_succeeded": r[1] == "succeeded",
+                    "fact_revision": r[2] or 0,
+                    "raw_artifact_id": str(r[3]) if r[3] else None,
+                }
                 for r in rows
             ]
 
     def count_facts_with_quality(self) -> tuple[int, int]:
         """统计有/无质量评估的事实数。"""
         with self._engine.connect() as conn:
-            total = conn.execute(
-                sa.text("SELECT COUNT(*) FROM fact")
-            ).scalar()
+            total = conn.execute(sa.text("SELECT COUNT(*) FROM fact")).scalar()
             with_quality = conn.execute(
                 sa.text(
                     "SELECT COUNT(DISTINCT f.id) FROM fact f "
@@ -162,12 +168,13 @@ def test_every_published_parameter_has_complete_raw_path(
         paths = acceptance_db.raw_evidence_paths(parameter["id"])
         assert paths, f"Parameter {parameter['code']} has no raw evidence paths"
         for path in paths:
-            assert path["derivation_succeeded"], \
+            assert path["derivation_succeeded"], (
                 f"Parameter {parameter['code']}: derivation not succeeded"
-            assert path["fact_revision"] > 0, \
+            )
+            assert path["fact_revision"] > 0, (
                 f"Parameter {parameter['code']}: invalid fact revision"
-            assert path["raw_artifact_id"], \
-                f"Parameter {parameter['code']}: missing raw artifact"
+            )
+            assert path["raw_artifact_id"], f"Parameter {parameter['code']}: missing raw artifact"
 
 
 @pytest.mark.acceptance
@@ -175,8 +182,9 @@ def test_fact_revisions_are_immutable(
     acceptance_db: AcceptanceDB,
 ) -> None:
     """事实修订不可变。"""
-    assert acceptance_db.check_fact_revision_immutability(), \
+    assert acceptance_db.check_fact_revision_immutability(), (
         "Fact revision immutability check failed"
+    )
 
 
 @pytest.mark.acceptance
@@ -184,8 +192,7 @@ def test_self_approval_is_forbidden(
     acceptance_db: AcceptanceDB,
 ) -> None:
     """提交者不能审批自己的候选。"""
-    assert acceptance_db.check_self_approval_forbidden(), \
-        "Self-approval forbidden check failed"
+    assert acceptance_db.check_self_approval_forbidden(), "Self-approval forbidden check failed"
 
 
 @pytest.mark.acceptance
@@ -197,5 +204,4 @@ def test_facts_have_quality_assessment(
     if total == 0:
         pytest.skip("No facts in acceptance DB; run seed first")
     assert with_quality > 0, "No facts have quality assessment"
-    assert with_quality / total >= 0.5, \
-        f"Only {with_quality}/{total} facts have quality assessment"
+    assert with_quality / total >= 0.5, f"Only {with_quality}/{total} facts have quality assessment"

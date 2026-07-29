@@ -22,37 +22,29 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.jobs.entities import JobRef, JobStatus, TERMINAL_STATUSES
+from packages.jobs.entities import TERMINAL_STATUSES, JobRef, JobStatus
 from packages.jobs.service import JobService
 
 #: 路由实例。
 jobs_router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
 
 #: 需 job:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("job:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("job:read"))]
 
 #: 需 job:submit 权限的当前用户依赖。
-SubmitUserDep = Annotated[
-    CurrentUser, Depends(require_permission("job:submit"))
-]
+SubmitUserDep = Annotated[CurrentUser, Depends(require_permission("job:submit"))]
 
 #: 需 job:cancel 权限的当前用户依赖。
-CancelUserDep = Annotated[
-    CurrentUser, Depends(require_permission("job:cancel"))
-]
+CancelUserDep = Annotated[CurrentUser, Depends(require_permission("job:cancel"))]
 
 
 def get_job_service() -> JobService:
     """获取 JobService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_job_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_job_service must be overridden via dependency_overrides")
 
 
 JobServiceDep = Annotated[JobService, Depends(get_job_service)]

@@ -33,17 +33,13 @@ def _build_session_factory() -> Any:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
     return build_session_factory(async_url)
 
 
-def _build_artifact_service(
-    factory: Any, organization_id: UUID, user_id: UUID
-) -> Any:
+def _build_artifact_service(factory: Any, organization_id: UUID, user_id: UUID) -> Any:
     """构建工件服务实例。
 
     Args:
@@ -75,9 +71,7 @@ def _build_artifact_service(
     )
 
 
-def _build_model_service(
-    factory: Any, organization_id: UUID, user_id: UUID
-) -> Any:
+def _build_model_service(factory: Any, organization_id: UUID, user_id: UUID) -> Any:
     """构建模型服务实例。
 
     注入 FactService 使模型预测结果写入溯源事实链（F-11）。
@@ -93,9 +87,7 @@ def _build_model_service(
     from packages.facts.service import FactService
     from packages.models.service import ModelService
 
-    artifact_service = _build_artifact_service(
-        factory, organization_id, user_id
-    )
+    artifact_service = _build_artifact_service(factory, organization_id, user_id)
     fact_service = FactService(
         session_factory=factory,
         organization_id=organization_id,
@@ -126,7 +118,6 @@ async def _train_model_async(payload: dict) -> dict:
     Returns:
         dict: 训练结果摘要。
     """
-    from packages.models.entities import ModelVersion
 
     organization_id = UUID(str(payload["organization_id"]))
     user_id = UUID(str(payload.get("user_id", payload["organization_id"])))
@@ -215,9 +206,7 @@ async def _publish_model_async(payload: dict) -> dict:
     return {
         "model_id": str(model.id),
         "current_version_id": (
-            str(model.current_version_id)
-            if model.current_version_id is not None
-            else None
+            str(model.current_version_id) if model.current_version_id is not None else None
         ),
         "status": model.status,
     }

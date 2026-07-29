@@ -9,10 +9,13 @@ export {
   type FileItem,
   type BrowseResponse,
   type UploadResponse,
-  type HealthCheck,
-  type SystemHealth,
   apiBrowseFiles,
   apiUploadFile,
   apiGetArtifactDownloadUrl,
+} from './models-ai';
+
+export {
+  type HealthCheck,
+  type SystemHealth,
   apiGetSystemHealth,
-} from './client';
+} from './governance';

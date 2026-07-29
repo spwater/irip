@@ -134,9 +134,7 @@ class StandardService:
         valid_range_json = _valid_range_to_json(valid_range)
 
         async with session_scope(self._factory) as session:
-            existing = await StandardsRepository.get_variable_by_code(
-                session, code, self._org_id
-            )
+            existing = await StandardsRepository.get_variable_by_code(session, code, self._org_id)
             if existing is not None:
                 raise AppError(
                     code="conflict",
@@ -230,9 +228,7 @@ class StandardService:
             variable = await self._get_and_check_org(session, variable_id)
             assert_transition(variable.status, StandardStatus.PUBLISHED)
 
-            latest = await StandardsRepository.get_latest_version(
-                session, variable_id
-            )
+            latest = await StandardsRepository.get_latest_version(session, variable_id)
             if latest is None:
                 raise AppError(
                     code="not_found",
@@ -295,9 +291,7 @@ class StandardService:
             variable = await self._get_and_check_org(session, variable_id)
             assert_transition(variable.status, StandardStatus.REJECTED)
 
-            latest = await StandardsRepository.get_latest_version(
-                session, variable_id
-            )
+            latest = await StandardsRepository.get_latest_version(session, variable_id)
             if latest is None:
                 raise AppError(
                     code="not_found",
@@ -360,9 +354,7 @@ class StandardService:
             variable = await self._get_and_check_org(session, variable_id)
             assert_transition(variable.status, StandardStatus.DEPRECATED)
 
-            published = await StandardsRepository.get_published_version(
-                session, variable_id
-            )
+            published = await StandardsRepository.get_published_version(session, variable_id)
             if published is None:
                 raise AppError(
                     code="not_found",
@@ -482,9 +474,7 @@ class StandardService:
         """
         async with session_scope(self._factory) as session:
             await self._get_and_check_org(session, variable_id)
-            return await StandardsRepository.add_alias(
-                session, variable_id, alias, language
-            )
+            return await StandardsRepository.add_alias(session, variable_id, alias, language)
 
     # ---- 查询 ----
 
@@ -501,9 +491,7 @@ class StandardService:
             AppError: code="not_found"，当变量不存在时。
         """
         async with self._factory() as session:
-            variable = await StandardsRepository.get_variable_by_code(
-                session, code, self._org_id
-            )
+            variable = await StandardsRepository.get_variable_by_code(session, code, self._org_id)
             if variable is None:
                 raise AppError(
                     code="not_found",
@@ -511,12 +499,8 @@ class StandardService:
                     retryable=False,
                     fields={"code": code},
                 )
-            latest = await StandardsRepository.get_latest_version(
-                session, variable.id
-            )
-            aliases = await StandardsRepository.list_aliases(
-                session, variable.id
-            )
+            latest = await StandardsRepository.get_latest_version(session, variable.id)
+            aliases = await StandardsRepository.list_aliases(session, variable.id)
 
         return {
             "id": str(variable.id),
@@ -533,9 +517,7 @@ class StandardService:
             "updated_at": variable.updated_at,
             "lock_version": variable.lock_version,
             "latest_version": _version_to_dict(latest) if latest else None,
-            "aliases": [
-                {"alias": a.alias, "language": a.language} for a in aliases
-            ],
+            "aliases": [{"alias": a.alias, "language": a.language} for a in aliases],
         }
 
     async def get_variable(self, variable_id: UUID) -> dict:
@@ -552,12 +534,8 @@ class StandardService:
         """
         async with self._factory() as session:
             variable = await self._get_and_check_org(session, variable_id)
-            latest = await StandardsRepository.get_latest_version(
-                session, variable_id
-            )
-            aliases = await StandardsRepository.list_aliases(
-                session, variable_id
-            )
+            latest = await StandardsRepository.get_latest_version(session, variable_id)
+            aliases = await StandardsRepository.list_aliases(session, variable_id)
 
         return {
             "id": str(variable.id),
@@ -574,9 +552,7 @@ class StandardService:
             "updated_at": variable.updated_at,
             "lock_version": variable.lock_version,
             "latest_version": _version_to_dict(latest) if latest else None,
-            "aliases": [
-                {"alias": a.alias, "language": a.language} for a in aliases
-            ],
+            "aliases": [{"alias": a.alias, "language": a.language} for a in aliases],
         }
 
     async def list_variables(
@@ -605,9 +581,7 @@ class StandardService:
 
             items: list[dict] = []
             for var in variables:
-                latest = await StandardsRepository.get_latest_version(
-                    session, var.id
-                )
+                latest = await StandardsRepository.get_latest_version(session, var.id)
                 items.append(
                     {
                         "id": str(var.id),
@@ -622,9 +596,7 @@ class StandardService:
                         "created_at": var.created_at,
                         "updated_at": var.updated_at,
                         "lock_version": var.lock_version,
-                        "latest_version": _version_to_dict(latest)
-                        if latest
-                        else None,
+                        "latest_version": _version_to_dict(latest) if latest else None,
                     }
                 )
 
@@ -676,9 +648,7 @@ def _version_to_dict(version: VariableVersion) -> dict:
         "published_at": version.published_at,
         "published_by": str(version.published_by) if version.published_by else None,
         "deprecated_at": version.deprecated_at,
-        "deprecated_by": str(version.deprecated_by)
-        if version.deprecated_by
-        else None,
+        "deprecated_by": str(version.deprecated_by) if version.deprecated_by else None,
         "rejection_reason": version.rejection_reason,
         "created_at": version.created_at,
         "lock_version": version.lock_version,

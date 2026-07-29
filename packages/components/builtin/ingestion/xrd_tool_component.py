@@ -50,9 +50,7 @@ class XrdToolComponent:
         # 支持 artifact:{artifact_id} 格式：从 MinIO 下载到临时文件
         # 兼容旧格式：直接使用文件系统路径
         if path_str.startswith("artifact:"):
-            file_path = await self._download_artifact(
-                context, path_str[len("artifact:"):]
-            )
+            file_path = await self._download_artifact(context, path_str[len("artifact:") :])
         else:
             file_path = Path(path_str)
 
@@ -63,9 +61,7 @@ class XrdToolComponent:
             convert_xrd_file_to_json,
         )
 
-        result: dict[str, Any] = await asyncio.to_thread(
-            convert_xrd_file_to_json, str(file_path)
-        )
+        result: dict[str, Any] = await asyncio.to_thread(convert_xrd_file_to_json, str(file_path))
 
         # 解析结果
         points: list[dict[str, Any]] = result.get("points", [])
@@ -82,8 +78,7 @@ class XrdToolComponent:
 
         # 构建 source_locations
         source_locs: list[dict[str, Any]] = [
-            {"file": file_path.name, "row": idx}
-            for idx in range(1, len(rows) + 1)
+            {"file": file_path.name, "row": idx} for idx in range(1, len(rows) + 1)
         ]
 
         table = ObservationTable(
@@ -94,7 +89,7 @@ class XrdToolComponent:
 
         return ComponentResult(
             outputs={"observations": table},
-            summary=f"XRD解析: {len(points)} 个指标, {len(series)} 组序列, metadata {len(header)} 项",
+            summary=f"XRD解析: {len(points)} 个指标, {len(series)} 组序列, metadata {len(header)} 项",  # noqa: E501
             metadata={
                 "row_count": len(points),
                 "header": header,

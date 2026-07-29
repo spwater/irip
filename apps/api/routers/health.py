@@ -73,9 +73,7 @@ def get_redis_url() -> str:
 
 def get_s3_repo() -> S3Repository:
     """获取 S3 客户端（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_s3_repo must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_s3_repo must be overridden via dependency_overrides")
 
 
 #: 依赖类型别名。
@@ -124,9 +122,7 @@ async def readiness(
     try:
         expected_heads = _get_expected_heads()
         async with session_factory() as session:
-            result = await session.execute(
-                sa.text("SELECT version_num FROM alembic_version")
-            )
+            result = await session.execute(sa.text("SELECT version_num FROM alembic_version"))
             version: str | None = result.scalar()
             if version not in expected_heads:
                 checks["database"] = {

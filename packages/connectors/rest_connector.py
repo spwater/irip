@@ -46,9 +46,7 @@ class RestConnector:
         """
         self._secret_store = secret_store
 
-    async def preview(
-        self, source: ConnectorSource, limit: int = 100
-    ) -> PreviewTable:
+    async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览 REST 端点响应前 limit 行。
 
         Args:
@@ -73,9 +71,7 @@ class RestConnector:
             row_count=len(rows),
         )
 
-    async def read(
-        self, source: ConnectorSource
-    ) -> AsyncIterator[SourceRecord]:
+    async def read(self, source: ConnectorSource) -> AsyncIterator[SourceRecord]:
         """流式读取 REST 端点全部响应记录。
 
         Args:

@@ -50,10 +50,7 @@ def redact(payload: dict[str, Any]) -> dict[str, Any]:
         elif isinstance(value, dict):
             result[key] = redact(value)
         elif isinstance(value, list):
-            result[key] = [
-                redact(item) if isinstance(item, dict) else item
-                for item in value
-            ]
+            result[key] = [redact(item) if isinstance(item, dict) else item for item in value]
         else:
             result[key] = value
     return result

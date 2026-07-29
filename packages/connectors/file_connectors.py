@@ -12,9 +12,9 @@
 安全约定：文件路径由调用方传入，连接器只读取不写入。
 """
 
+import asyncio
 import csv
 import json
-import asyncio
 from collections.abc import AsyncIterator
 
 from packages.common.errors import AppError
@@ -31,9 +31,7 @@ class FileConnector:
     无状态连接器，可安全共享。每次 preview/read 都重新打开文件。
     """
 
-    async def preview(
-        self, source: ConnectorSource, limit: int = 100
-    ) -> PreviewTable:
+    async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览文件前 limit 行。
 
         Args:
@@ -71,9 +69,7 @@ class FileConnector:
             row_count=len(rows),
         )
 
-    async def read(
-        self, source: ConnectorSource
-    ) -> AsyncIterator[SourceRecord]:
+    async def read(self, source: ConnectorSource) -> AsyncIterator[SourceRecord]:
         """流式读取文件全部记录。
 
         Args:
@@ -125,9 +121,7 @@ class FileConnector:
             fields={"format": fmt},
         )
 
-    async def _read_records(
-        self, path: str, fmt: str
-    ) -> list[SourceRecord]:
+    async def _read_records(self, path: str, fmt: str) -> list[SourceRecord]:
         """读取全部记录为 SourceRecord 列表。"""
         columns, rows = await self._read_rows(path, fmt, limit=10**9)
         records: list[SourceRecord] = []
@@ -142,9 +136,7 @@ class FileConnector:
     # ---- CSV ----
 
     @staticmethod
-    def _read_csv(
-        path: str, limit: int
-    ) -> tuple[tuple[str, ...], list[list]]:
+    def _read_csv(path: str, limit: int) -> tuple[tuple[str, ...], list[list]]:
         """读取 CSV 文件前 limit 行。"""
         with open(path, newline="", encoding="utf-8") as fh:
             reader = csv.reader(fh)
@@ -163,9 +155,7 @@ class FileConnector:
     # ---- XLSX ----
 
     @staticmethod
-    def _read_xlsx(
-        path: str, limit: int
-    ) -> tuple[tuple[str, ...], list[list]]:
+    def _read_xlsx(path: str, limit: int) -> tuple[tuple[str, ...], list[list]]:
         """读取 XLSX 文件首个工作表前 limit 行。
 
         Raises:
@@ -204,9 +194,7 @@ class FileConnector:
     # ---- JSON ----
 
     @staticmethod
-    def _read_json(
-        path: str, limit: int
-    ) -> tuple[tuple[str, ...], list[list]]:
+    def _read_json(path: str, limit: int) -> tuple[tuple[str, ...], list[list]]:
         """读取 JSON 文件（对象数组）前 limit 行。
 
         列名为首个对象的键的并集（保持首次出现顺序）。

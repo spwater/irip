@@ -81,17 +81,13 @@ class TestUnitConverter:
 
     def test_dimensionless_identity(self) -> None:
         """无量纲恒等变换：1 → 1。"""
-        result = UnitConverter.convert(
-            Decimal("1"), "dimensionless", "dimensionless"
-        )
+        result = UnitConverter.convert(Decimal("1"), "dimensionless", "dimensionless")
         assert result == Decimal("1")
 
     def test_dimensionless_preserves_value(self) -> None:
         """无量纲恒等变换：任意值保持不变。"""
         value = Decimal("42.75")
-        result = UnitConverter.convert(
-            value, "dimensionless", "dimensionless"
-        )
+        result = UnitConverter.convert(value, "dimensionless", "dimensionless")
         assert result == value
 
     def test_same_unit_identity(self) -> None:

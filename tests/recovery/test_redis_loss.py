@@ -136,9 +136,7 @@ async def test_outbox_preserves_events_through_redis_loss(
     # 3. 验证 outbox 事件存在
     async with async_session_factory() as session:
         result = await session.execute(
-            sa.select(OutboxEvent).where(
-                OutboxEvent.aggregate_id == ref.job_id
-            )
+            sa.select(OutboxEvent).where(OutboxEvent.aggregate_id == ref.job_id)
         )
         events = result.scalars().all()
         assert len(events) >= 1, "Outbox event should exist in DB"
@@ -149,9 +147,7 @@ async def test_outbox_preserves_events_through_redis_loss(
     # 5. 验证事件仍在 DB 中
     async with async_session_factory() as session:
         result = await session.execute(
-            sa.select(OutboxEvent).where(
-                OutboxEvent.aggregate_id == ref.job_id
-            )
+            sa.select(OutboxEvent).where(OutboxEvent.aggregate_id == ref.job_id)
         )
         events = result.scalars().all()
         assert len(events) >= 1, "Outbox events should survive Redis loss"

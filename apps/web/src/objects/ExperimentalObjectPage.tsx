@@ -22,10 +22,7 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateObject,
   apiDeleteObject,
-  apiGetDepartmentNameMap,
   apiGetObject,
-  apiListDepartments,
-  apiListEquipment,
   apiListObjects,
   apiListObjectTypes,
   apiCreateObjectType,
@@ -33,10 +30,11 @@ import {
   apiDeleteObjectType,
   apiUpdateObject,
   apiUpdateObjectStatus,
-  extractApiError,
-  type IndustrialObject,
   type ObjectTypeDictItem,
-} from '@/api/client';
+} from '@/api/standards-objects';
+import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
+import { apiListComponents, apiListEquipment, type ComponentSummary } from '@/api/equipment-flows';
+import { extractApiError, type IndustrialObject } from '@/api/types';
 
 /**
  * 实验对象管理页面（要素管理第 3 个 Tab）
@@ -173,6 +171,19 @@ export function ExperimentalObjectPage({
   const deptMap = new Map(
     (deptNameMapData ?? []).map((d) => [d.id, d.display_name]),
   );
+
+  // ---- 组件列表查询：构建 experimental_object_code → ComponentSummary 映射 ----
+  // 一个实验对象最多绑定一个接口，用于操作列展示"接口"/"+接口"按钮
+  const { data: componentsData } = useQuery({
+    queryKey: ['components-for-object-binding'],
+    queryFn: () => apiListComponents(),
+  });
+  const objectCodeToComponent = new Map<string, ComponentSummary>();
+  for (const comp of componentsData?.items ?? []) {
+    if (comp.experimental_object_code) {
+      objectCodeToComponent.set(comp.experimental_object_code, comp);
+    }
+  }
 
   // ---- 筛选逻辑 ----
   // 选了具体设备就按设备筛；否则选了单位就按单位下所有设备筛
@@ -498,10 +509,17 @@ export function ExperimentalObjectPage({
               type="link"
               size="small"
               onClick={() => {
-                void navigate({ to: '/standards', search: { tab: 'components', prefill_object: record.code } });
+                const boundComp = objectCodeToComponent.get(record.code);
+                if (boundComp) {
+                  // 已绑定接口：跳转到数据接口编辑页
+                  void navigate({ to: '/platform', search: { tab: 'components', edit_id: boundComp.id } });
+                } else {
+                  // 未绑定接口：跳转到数据接口新建页并预填实验对象
+                  void navigate({ to: '/platform', search: { tab: 'components', prefill_object: record.code } });
+                }
               }}
             >
-              +接口
+              {objectCodeToComponent.has(record.code) ? '接口' : '+接口'}
             </Button>
             <Popconfirm
               title={

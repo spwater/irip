@@ -17,9 +17,9 @@ import type { Dayjs } from 'dayjs';
 import {
   apiCreateAuditExport,
   apiListAuditEvents,
-  extractApiError,
   type AuditEventItem,
-} from '@/api/client';
+} from '@/api/governance';
+import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { ActionBar, DataTableShell } from '@/components/ui';
 

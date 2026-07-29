@@ -26,20 +26,15 @@ from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.common.errors import AppError
 from packages.standards.object_graph import ObjectGraphService
-from packages.standards.objects import ObjectType, RelationType
 
 #: 路由实例。
 objects_router = APIRouter(prefix="/api/v1/objects", tags=["objects"])
 
 #: 需 standard:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("standard:write"))]
 
 #: 需 standard:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("standard:read"))]
 
 
 def get_object_graph_service() -> ObjectGraphService:
@@ -54,9 +49,7 @@ def get_object_graph_service() -> ObjectGraphService:
 
 
 #: ObjectGraphService 依赖类型别名。
-ObjectGraphServiceDep = Annotated[
-    ObjectGraphService, Depends(get_object_graph_service)
-]
+ObjectGraphServiceDep = Annotated[ObjectGraphService, Depends(get_object_graph_service)]
 
 
 async def _check_object_ownership(
@@ -74,9 +67,15 @@ async def _check_object_ownership(
     if obj_department_id is None:
         return
     if current_user.department_id is None:
-        raise AppError(code="forbidden", message="只有所属单位的成员才能编辑/删除对象", retryable=False, fields={})
+        raise AppError(
+            code="forbidden",
+            message="只有所属单位的成员才能编辑/删除对象",
+            retryable=False,
+            fields={},
+        )  # noqa: E501
 
     from apps.api.dependencies.dept_scope import get_visible_department_ids
+
     visible_ids = await get_visible_department_ids(current_user, service._factory)  # type: ignore[attr-defined]
     if obj_department_id not in visible_ids:
         raise AppError(
@@ -99,17 +98,13 @@ class CreateObjectRequest(BaseModel):
     parent_id: UUID | None = Field(None, description="父对象 ID")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
     department_id: str | None = Field(None, description="所属部门 UUID")
-    visible_departments: list[str] = Field(
-        default_factory=list, description="可见单位 UUID 列表"
-    )
+    visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")
 
 
 class AddRelationRequest(BaseModel):
     """添加关系请求。"""
 
-    source_id: UUID | None = Field(
-        None, description="源对象 ID，留空时使用路径参数 {id}"
-    )
+    source_id: UUID | None = Field(None, description="源对象 ID，留空时使用路径参数 {id}")
     target_id: UUID = Field(..., description="目标对象 ID")
     relation_type: Literal[
         "contains",
@@ -213,6 +208,7 @@ async def create_object(
         AppError: code="not_found"，当父对象不存在时。
     """
     from packages.common.ids import gen_code
+
     obj = await service.add_object(
         object_type=body.object_type,
         code=gen_code("obj"),
@@ -230,7 +226,11 @@ async def create_object(
 async def list_objects(
     current_user: ReadUserDep,
     service: ObjectGraphServiceDep,
-    object_type: str | None = Query(None, alias="type", description="对象类型过滤，逗号分隔支持多类型（如 material,sample,product）"),
+    object_type: str | None = Query(
+        None,
+        alias="type",
+        description="对象类型过滤，逗号分隔支持多类型（如 material,sample,product）",
+    ),  # noqa: E501
     cursor: str | None = Query(None, description="分页游标"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> ObjectListResponse:
@@ -366,9 +366,7 @@ async def update_object(
     return _object_to_response(obj)
 
 
-@objects_router.patch(
-    "/{object_id}/status", response_model=ObjectResponse
-)
+@objects_router.patch("/{object_id}/status", response_model=ObjectResponse)
 async def update_object_status(
     object_id: UUID,
     body: UpdateObjectStatusRequest,
@@ -421,9 +419,7 @@ async def delete_object(
 # ---- 端点：关系管理 ----
 
 
-@objects_router.post(
-    "/{object_id}/relations", response_model=RelationResponse, status_code=201
-)
+@objects_router.post("/{object_id}/relations", response_model=RelationResponse, status_code=201)
 async def add_relation(
     object_id: UUID,
     body: AddRelationRequest,
@@ -463,7 +459,7 @@ async def remove_relation(
     object_id: UUID,
     current_user: WriteUserDep,
     service: ObjectGraphServiceDep,
-    target_id: UUID = Query(..., description="目标对象 ID"),
+    target_id: UUID = Query(..., description="目标对象 ID"),  # noqa: B008
     relation_type: str = Query(..., description="关系类型"),
 ) -> None:
     """移除对象间关系（标记 is_active=false）。
@@ -513,9 +509,7 @@ async def list_relations(
 # ---- 端点：后代遍历 ----
 
 
-@objects_router.get(
-    "/{object_id}/descendants", response_model=DescendantsResponse
-)
+@objects_router.get("/{object_id}/descendants", response_model=DescendantsResponse)
 async def get_descendants(
     object_id: UUID,
     current_user: ReadUserDep,

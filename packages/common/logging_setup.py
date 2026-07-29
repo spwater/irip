@@ -125,9 +125,7 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
             correlation_id = str(uuid.uuid4())
 
         # 注入 structlog contextvar
-        structlog.contextvars.bind_contextvars(
-            **{CORRELATION_ID_CONTEXT_KEY: correlation_id}
-        )
+        structlog.contextvars.bind_contextvars(**{CORRELATION_ID_CONTEXT_KEY: correlation_id})
 
         try:
             response: Response = await call_next(request)

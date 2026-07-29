@@ -31,10 +31,11 @@ COPY apps/ ./apps/
 COPY migrations/ ./migrations/
 COPY schemas/ ./schemas/
 
-# 安装 Python 依赖（清华源，交付版精简：不装 dev 测试依赖）
-# BuildKit 缓存挂载：pip 下载的包跨构建持久化，大包不用每次重新下载
+# 安装 Python 依赖（阿里云镜像，国内速度快）
+# BuildKit 缓存挂载：pip 下载的包跨构建持久化
+# --no-cache-dir 避免某些包的缓存哈希校验问题
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e .
+    pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com -e .
 
 # 复制部署脚本（bootstrap/backup/restore），放在 pip install 之后以利用层缓存
 COPY deployments/ ./deployments/

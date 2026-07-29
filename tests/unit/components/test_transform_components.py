@@ -22,7 +22,6 @@ from packages.components.builtin.transform.steady_window import SteadyWindow
 from packages.components.builtin.transform.time_alignment import TimeAlignment
 from packages.components.builtin.transform.unit_converter import UnitConverter
 from packages.components.builtin.types import ObservationTable
-
 from tests.unit.components.conftest import make_test_context
 
 
@@ -46,9 +45,7 @@ class TestFieldMapper:
 
     async def test_basic_mapping(self):
         """基本字段映射。"""
-        table = _make_table(
-            ("a", "b"), [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}]
-        )
+        table = _make_table(("a", "b"), [{"a": 1, "b": "x"}, {"a": 2, "b": "y"}])
         mapper = FieldMapper()
         ctx = make_test_context()
         result = await mapper.execute(
@@ -105,9 +102,7 @@ class TestUnitConverter:
 
     async def test_predefined_mm_to_um(self):
         """使用预定义因子 mm→um。"""
-        table = _make_table(
-            ("diameter",), [{"diameter": 1.5}, {"diameter": 2.0}]
-        )
+        table = _make_table(("diameter",), [{"diameter": 1.5}, {"diameter": 2.0}])
         converter = UnitConverter()
         ctx = make_test_context()
         result = await converter.execute(
@@ -137,9 +132,7 @@ class TestUnitConverter:
             ctx,
             {
                 "observations": table,
-                "conversions": [
-                    {"column": "val", "factor": 0.001}
-                ],
+                "conversions": [{"column": "val", "factor": 0.001}],
             },
         )
 
@@ -183,18 +176,14 @@ class TestMissingValues:
         )
         mv = MissingValues()
         ctx = make_test_context()
-        result = await mv.execute(
-            ctx, {"observations": table, "strategy": "reject"}
-        )
+        result = await mv.execute(ctx, {"observations": table, "strategy": "reject"})
 
         out = result.outputs["observations"]
         assert out.row_count() == 2
 
     async def test_constant_strategy(self):
         """constant 策略填充常量。"""
-        table = _make_table(
-            ("a",), [{"a": 1}, {"a": None}, {"a": 3}]
-        )
+        table = _make_table(("a",), [{"a": 1}, {"a": None}, {"a": 3}])
         mv = MissingValues()
         ctx = make_test_context()
         result = await mv.execute(
@@ -211,14 +200,10 @@ class TestMissingValues:
 
     async def test_forward_fill_strategy(self):
         """forward_fill 策略前向填充。"""
-        table = _make_table(
-            ("a",), [{"a": 10}, {"a": None}, {"a": None}, {"a": 40}]
-        )
+        table = _make_table(("a",), [{"a": 10}, {"a": None}, {"a": None}, {"a": 40}])
         mv = MissingValues()
         ctx = make_test_context()
-        result = await mv.execute(
-            ctx, {"observations": table, "strategy": "forward_fill"}
-        )
+        result = await mv.execute(ctx, {"observations": table, "strategy": "forward_fill"})
 
         out = result.outputs["observations"]
         assert out.rows[1]["a"] == 10
@@ -227,14 +212,10 @@ class TestMissingValues:
 
     async def test_null_strategy(self):
         """null 策略统一为 None。"""
-        table = _make_table(
-            ("a",), [{"a": 1}, {"a": ""}, {"a": 3}]
-        )
+        table = _make_table(("a",), [{"a": 1}, {"a": ""}, {"a": 3}])
         mv = MissingValues()
         ctx = make_test_context()
-        result = await mv.execute(
-            ctx, {"observations": table, "strategy": "null"}
-        )
+        result = await mv.execute(ctx, {"observations": table, "strategy": "null"})
 
         out = result.outputs["observations"]
         assert out.rows[1]["a"] is None
@@ -320,9 +301,7 @@ class TestResampler:
         out = result.outputs["observations"]
         assert out.row_count() >= 1
         # 第一个 1 分钟窗口均值 = (10+20)/2 = 15
-        assert any(
-            row.get("value") == 15.0 for row in out.rows
-        )
+        assert any(row.get("value") == 15.0 for row in out.rows)
 
     async def test_unsupported_aggregation(self):
         """不支持的聚合方法。"""
@@ -354,9 +333,7 @@ class TestMADOutliers:
     async def test_detect_outlier(self):
         """检测异常值并标记。"""
         values = [10, 11, 10, 12, 10, 11, 100]
-        table = _make_table(
-            ("value",), [{"value": v} for v in values]
-        )
+        table = _make_table(("value",), [{"value": v} for v in values])
         detector = MADOutliers()
         ctx = make_test_context()
         result = await detector.execute(
@@ -368,21 +345,15 @@ class TestMADOutliers:
 
         # 最后一行（100）应被标记为异常
         assert out.rows[-1]["value_outlier"] is True
-        assert any(
-            ann["status"] == "outlier" for ann in report.row_annotations
-        )
+        assert any(ann["status"] == "outlier" for ann in report.row_annotations)
 
     async def test_no_outliers(self):
         """无异常值时全部正常。"""
         values = [10, 11, 10, 11, 10]
-        table = _make_table(
-            ("value",), [{"value": v} for v in values]
-        )
+        table = _make_table(("value",), [{"value": v} for v in values])
         detector = MADOutliers()
         ctx = make_test_context()
-        result = await detector.execute(
-            ctx, {"observations": table, "columns": ["value"]}
-        )
+        result = await detector.execute(ctx, {"observations": table, "columns": ["value"]})
 
         out = result.outputs["observations"]
         assert all(row["value_outlier"] is False for row in out.rows)
@@ -392,9 +363,7 @@ class TestMADOutliers:
         table = _make_table(("value",), [{"value": 1}, {"value": 2}])
         detector = MADOutliers()
         ctx = make_test_context()
-        result = await detector.execute(
-            ctx, {"observations": table, "columns": ["value"]}
-        )
+        result = await detector.execute(ctx, {"observations": table, "columns": ["value"]})
 
         report = result.outputs["diagnostics"]
         assert len(report.warnings) > 0
@@ -409,9 +378,7 @@ class TestSteadyWindow:
     async def test_identify_steady_window(self):
         """识别稳态窗口。"""
         values = [10, 10.1, 9.9, 10.0, 10.1, 50, 60, 70]
-        table = _make_table(
-            ("value",), [{"value": v} for v in values]
-        )
+        table = _make_table(("value",), [{"value": v} for v in values])
         sw = SteadyWindow()
         ctx = make_test_context()
         result = await sw.execute(
@@ -434,9 +401,7 @@ class TestSteadyWindow:
     async def test_no_steady_window(self):
         """持续变化的数据无稳态窗口。"""
         values = [1, 2, 3, 4, 5, 6, 7, 8]
-        table = _make_table(
-            ("value",), [{"value": v} for v in values]
-        )
+        table = _make_table(("value",), [{"value": v} for v in values])
         sw = SteadyWindow()
         ctx = make_test_context()
         result = await sw.execute(

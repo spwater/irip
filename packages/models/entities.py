@@ -31,7 +31,6 @@ from packages.common.database import Base
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.ids import new_id
 
-
 #: 合法模型状态集合（生命周期状态机）。
 MODEL_STATUSES: tuple[str, ...] = (
     "draft",
@@ -73,9 +72,7 @@ class Model(Base):
         default="draft",
         server_default=sa.text("'draft'"),
     )
-    current_version_id: Mapped[UUID | None] = mapped_column(
-        GUID, nullable=True
-    )
+    current_version_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     lock_version: Mapped[int] = mapped_column(
         sa.Integer,
         nullable=False,
@@ -93,11 +90,7 @@ class Model(Base):
         nullable=False,
     )
 
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_model_org_code"
-        ),
-    )
+    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_model_org_code"),)
 
     def __repr__(self) -> str:
         return (
@@ -144,9 +137,7 @@ class ModelVersion(Base):
         default=dict,
         server_default=sa.text("'{}'::jsonb"),
     )
-    model_artifact_id: Mapped[UUID | None] = mapped_column(
-        GUID, nullable=True
-    )
+    model_artifact_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     metrics_json: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
@@ -159,15 +150,9 @@ class ModelVersion(Base):
         default=dict,
         server_default=sa.text("'{}'::jsonb"),
     )
-    code_hash: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
-    dependency_hash: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
-    model_hash: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    code_hash: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    dependency_hash: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    model_hash: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     status: Mapped[str] = mapped_column(
         sa.Text,
         nullable=False,
@@ -179,14 +164,10 @@ class ModelVersion(Base):
         server_default=sa.func.now(),
         nullable=False,
     )
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     __table_args__ = (
-        sa.UniqueConstraint(
-            "model_id", "version", name="uq_model_version_model_ver"
-        ),
+        sa.UniqueConstraint("model_id", "version", name="uq_model_version_model_ver"),
     )
 
     def __repr__(self) -> str:

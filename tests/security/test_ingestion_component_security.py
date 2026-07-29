@@ -8,6 +8,7 @@
 
 import pytest
 
+from packages.common.errors import AppError
 from packages.components.builtin.ingestion.postgres_query import (
     PostgresQuery,
     _validate_select_only,
@@ -17,10 +18,7 @@ from packages.components.builtin.ingestion.rest_fetch import (
     _check_ip_allowed,
     _resolve_and_check,
 )
-from packages.common.errors import AppError
-
 from tests.unit.components.conftest import make_test_context
-
 
 # ===== SQL 注入防护 =====
 
@@ -76,9 +74,7 @@ class TestSQLInjection:
     def test_multiple_statements_blocked(self):
         """多语句中包含非 SELECT 被拦截。"""
         with pytest.raises(AppError, match="仅允许 SELECT"):
-            _validate_select_only(
-                "SELECT * FROM users; DROP TABLE users"
-            )
+            _validate_select_only("SELECT * FROM users; DROP TABLE users")
 
     def test_empty_sql_blocked(self):
         """空 SQL 被拦截。"""
@@ -139,7 +135,6 @@ class TestSSRFProtection:
 
     def test_resolve_loopback_blocked(self):
         """解析主机名为环回地址时被拦截。"""
-        import socket
         from unittest.mock import patch
 
         mock_addrinfo = [(0, 0, 0, 0, ("127.0.0.1", 0))]
@@ -149,7 +144,6 @@ class TestSSRFProtection:
 
     def test_resolve_public_allowed(self):
         """解析主机名为公网 IP 时通过。"""
-        import socket
         from unittest.mock import patch
 
         mock_addrinfo = [(0, 0, 0, 0, ("93.184.216.34", 0))]
@@ -196,9 +190,7 @@ class TestCredentialLeakage:
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.cursor.return_value.__enter__ = MagicMock(
-            return_value=mock_cursor
-        )
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("psycopg.connect", return_value=mock_conn):
@@ -212,9 +204,7 @@ class TestCredentialLeakage:
                     "password": secret_password,
                 }
             )
-            result = await reader.execute(
-                ctx, {"query": "SELECT id FROM users"}
-            )
+            result = await reader.execute(ctx, {"query": "SELECT id FROM users"})
 
         # 检查输出中不包含密码
         result_str = str(result.outputs) + str(result.metadata) + str(result.summary)
@@ -245,8 +235,6 @@ class TestCredentialLeakage:
         """认证 token 不出现在输出中。"""
         from unittest.mock import AsyncMock, MagicMock, patch
 
-        secret_token = "Bearer secret_token_xyz_789"
-
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.headers = {}
@@ -263,18 +251,12 @@ class TestCredentialLeakage:
         mock_client.__aexit__.return_value = None
 
         with patch(
-            "packages.components.builtin.ingestion.rest_fetch."
-            "httpx.AsyncClient",
+            "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch."
-                "_resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
-                ctx = make_test_context(
-                    secrets={"api_token": "secret_token_xyz_789"}
-                )
+                ctx = make_test_context(secrets={"api_token": "secret_token_xyz_789"})
                 result = await reader.execute(
                     ctx,
                     {
@@ -298,19 +280,13 @@ class TestCredentialLeakage:
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.cursor.return_value.__enter__ = MagicMock(
-            return_value=mock_cursor
-        )
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("psycopg.connect", return_value=mock_conn):
             reader = PostgresQuery()
-            ctx = make_test_context(
-                secrets={"password": secret_password}
-            )
-            result = await reader.execute(
-                ctx, {"query": "SELECT id FROM users"}
-            )
+            ctx = make_test_context(secrets={"password": secret_password})
+            result = await reader.execute(ctx, {"query": "SELECT id FROM users"})
 
         if result.diagnostics:
             diag_str = str(result.diagnostics)

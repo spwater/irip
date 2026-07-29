@@ -159,8 +159,7 @@ class RobustParameterEstimator:
             for i, v in enumerate(float_values):
                 if v < lower_bound or v > upper_bound:
                     exclusion_reasons.append(
-                        f"value_{i}={v} 超出 IQR 范围 "
-                        f"[{lower_bound:.4f}, {upper_bound:.4f}]"
+                        f"value_{i}={v} 超出 IQR 范围 [{lower_bound:.4f}, {upper_bound:.4f}]"
                     )
                 else:
                     non_outlier_values.append(v)
@@ -195,23 +194,22 @@ class RobustParameterEstimator:
         rng: random.Random = random.Random(random_seed)
         bootstrap_medians: list[float] = []
 
-        sample_values: list[float] = (
-            non_outlier_values if non_outlier_values else float_values
-        )
+        sample_values: list[float] = non_outlier_values if non_outlier_values else float_values
         sample_n: int = len(sample_values)
 
         if sample_n > 0:
             for _ in range(bootstrap_samples):
                 # 有放回重采样
                 resampled: list[float] = [
-                    sample_values[rng.randint(0, sample_n - 1)]
-                    for _ in range(sample_n)
+                    sample_values[rng.randint(0, sample_n - 1)] for _ in range(sample_n)
                 ]
                 bootstrap_medians.append(statistics.median(resampled))
 
         # 置信度：1 - 变异系数（CV = std / |mean|），限制在 [0, 1]
         if bootstrap_medians and abs(point_estimate) > 1e-10:
-            bs_std: float = statistics.stdev(bootstrap_medians) if len(bootstrap_medians) > 1 else 0.0
+            bs_std: float = (
+                statistics.stdev(bootstrap_medians) if len(bootstrap_medians) > 1 else 0.0
+            )  # noqa: E501
             cv: float = bs_std / abs(point_estimate)
             confidence: float = max(0.0, min(1.0, 1.0 - cv))
         elif bootstrap_medians:

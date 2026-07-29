@@ -161,9 +161,7 @@ def reap_expired_leases() -> int:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -188,6 +186,7 @@ def retry_wait_jobs() -> int:
     import os
 
     import sqlalchemy as sa
+
     from packages.common.database import build_session_factory, session_scope
     from packages.jobs.entities import Job, JobStatus
 
@@ -196,9 +195,7 @@ def retry_wait_jobs() -> int:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -277,9 +274,7 @@ def run_worker_healthcheck_server(
         HTTPServer | None: 非阻塞模式返回 HTTPServer 实例，阻塞模式返回 None。
     """
     listen_port: int = port if port is not None else WORKER_HEALTHCHECK_PORT
-    server: HTTPServer = HTTPServer(
-        ("0.0.0.0", listen_port), _HealthcheckHandler
-    )
+    server: HTTPServer = HTTPServer(("0.0.0.0", listen_port), _HealthcheckHandler)
 
     if block:
         server.serve_forever()

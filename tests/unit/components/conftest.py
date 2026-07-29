@@ -33,7 +33,9 @@ def make_test_context(
     return ComponentContext(
         organization_id=uuid4(),
         user_id=uuid4(),
-        clock=FixedClock(__import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").UTC)),
+        clock=FixedClock(
+            __import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").UTC)
+        ),  # noqa: E501
         artifact_service=artifact_service,
         job_id=uuid4(),
         cancel_event=asyncio.Event(),

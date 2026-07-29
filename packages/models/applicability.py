@@ -66,12 +66,9 @@ class ApplicabilityChecker:
 
             numeric_value = float(value)
             if numeric_value < float(min_val) or numeric_value > float(max_val):
+                errors.append("outside_applicability_domain")
                 errors.append(
-                    "outside_applicability_domain"
-                )
-                errors.append(
-                    f"dimension '{dimension}' value "
-                    f"{numeric_value} outside [{min_val}, {max_val}]"
+                    f"dimension '{dimension}' value {numeric_value} outside [{min_val}, {max_val}]"
                 )
 
         if errors:

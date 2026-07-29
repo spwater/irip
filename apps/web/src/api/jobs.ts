@@ -7,12 +7,15 @@
 export {
   type JobStatus,
   type JobSummary,
-  type JobListResponse,
-  type JobDetail,
   apiGetJob,
   apiCreateJob,
   apiCancelJob,
+} from './client';
+
+export {
+  type JobListResponse,
+  type JobDetail,
   apiListJobs,
   apiGetJobDetail,
   apiRetryJob,
-} from './client';
+} from './governance';

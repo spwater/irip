@@ -22,9 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.equipment.entities import Equipment
 
 
-async def _get_descendant_dept_ids(
-    session: AsyncSession, dept_id: UUID
-) -> list[UUID]:
+async def _get_descendant_dept_ids(session: AsyncSession, dept_id: UUID) -> list[UUID]:
     """递归查询某部门及其所有后代部门的 ID 列表。
 
     使用 PostgreSQL WITH RECURSIVE 递归 CTE 遍历 parent_id 层级。
@@ -40,9 +38,7 @@ async def _get_descendant_dept_ids(
         SELECT id FROM dept_tree
         """
     )
-    result = await session.execute(
-        stmt.bindparams(root_id=str(dept_id))
-    )
+    result = await session.execute(stmt.bindparams(root_id=str(dept_id)))
     rows = result.fetchall()
     return [UUID(str(row[0])) for row in rows]
 
@@ -61,13 +57,9 @@ class EquipmentRepository:
         return equipment
 
     @staticmethod
-    async def select_by_id(
-        session: AsyncSession, equipment_id: UUID
-    ) -> Equipment | None:
+    async def select_by_id(session: AsyncSession, equipment_id: UUID) -> Equipment | None:
         """按 ID 查询设备。"""
-        result = await session.execute(
-            sa.select(Equipment).where(Equipment.id == equipment_id)
-        )
+        result = await session.execute(sa.select(Equipment).where(Equipment.id == equipment_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -142,9 +134,7 @@ class EquipmentRepository:
                 if dept_ids
                 else Equipment.department_id == department_id
             )
-            visible_condition = Equipment.visible_departments.contains(
-                [str(visible_dept_id)]
-            )
+            visible_condition = Equipment.visible_departments.contains([str(visible_dept_id)])
             query = query.where(sa.or_(dept_condition, visible_condition))
         elif department_id is not None:
             dept_ids = await _get_descendant_dept_ids(session, department_id)
@@ -153,9 +143,7 @@ class EquipmentRepository:
             else:
                 query = query.where(Equipment.department_id == department_id)
         elif visible_dept_id is not None:
-            query = query.where(
-                Equipment.visible_departments.contains([str(visible_dept_id)])
-            )
+            query = query.where(Equipment.visible_departments.contains([str(visible_dept_id)]))
 
         if status is not None:
             query = query.where(Equipment.status == status)
@@ -182,10 +170,7 @@ class EquipmentRepository:
 
         result = await session.execute(query)
         rows = result.all()
-        return [
-            (row[0], row[1] if row[1] is not None else "")
-            for row in rows
-        ]
+        return [(row[0], row[1] if row[1] is not None else "") for row in rows]
 
     @staticmethod
     async def update(

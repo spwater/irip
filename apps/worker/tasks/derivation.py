@@ -43,9 +43,7 @@ async def _process_derivation_async(
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -55,9 +53,7 @@ async def _process_derivation_async(
     organization_id = UUID(str(payload["organization_id"]))
     actor_id_str = payload.get("actor_id")
     actor_id = UUID(str(actor_id_str)) if actor_id_str else None
-    evidence_set_version_id = UUID(
-        str(payload["evidence_set_version_id"])
-    )
+    evidence_set_version_id = UUID(str(payload["evidence_set_version_id"]))
     recipe_version_id = UUID(str(payload["recipe_version_id"]))
 
     # 构建服务

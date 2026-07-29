@@ -18,9 +18,18 @@ from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
 
 #: 支持的聚合方法。
-_AGG_METHODS: frozenset[str] = frozenset({
-    "mean", "sum", "max", "min", "median", "count", "std", "var",
-})
+_AGG_METHODS: frozenset[str] = frozenset(
+    {
+        "mean",
+        "sum",
+        "max",
+        "min",
+        "median",
+        "count",
+        "std",
+        "var",
+    }
+)
 
 
 class Resampler:
@@ -67,10 +76,7 @@ class Resampler:
         df = df.set_index(time_column)
 
         if value_columns is None:
-            value_columns = [
-                c for c in df.columns
-                if pd.api.types.is_numeric_dtype(df[c])
-            ]
+            value_columns = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
 
         agg_df = df[value_columns].resample(frequency).agg(aggregation)
         agg_df = agg_df.dropna(how="all").reset_index()
@@ -86,9 +92,7 @@ class Resampler:
                 elif pd.isna(val):
                     record[col] = None
                 else:
-                    record[col] = (
-                        val.item() if hasattr(val, "item") else val
-                    )
+                    record[col] = val.item() if hasattr(val, "item") else val
             new_rows.append(record)
 
         result_table = ObservationTable(

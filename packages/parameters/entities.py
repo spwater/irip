@@ -26,13 +26,12 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.common.database import Base
-from packages.common.db_types import GUID, UTCDateTime
-from packages.common.ids import new_id
-
 # 导入被引用的 ORM 模型所在模块，确保 FK 目标表注册到 Base.metadata。
 import packages.facts.entities  # noqa: F401 — fact_revision table
 import packages.provenance.entities  # noqa: F401 — derivation_run table
+from packages.common.database import Base
+from packages.common.db_types import GUID, UTCDateTime
+from packages.common.ids import new_id
 
 
 class Parameter(Base):
@@ -131,18 +130,14 @@ class ParameterVersion(Base):
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     confidence: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    confidence_interval: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    confidence_interval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     derivation_run_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("derivation_run.id"),
         nullable=False,
     )
-    evidence_set_version_id: Mapped[UUID] = mapped_column(
-        GUID, nullable=False
-    )
+    evidence_set_version_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     recipe_version_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     status: Mapped[str] = mapped_column(
         sa.Text,
@@ -218,9 +213,7 @@ class ParameterCandidate(Base):
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     confidence: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    confidence_interval: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    confidence_interval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(
         sa.Text,
@@ -232,12 +225,8 @@ class ParameterCandidate(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     reviewed_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    review_decision: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    review_decision: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     review_comment: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False

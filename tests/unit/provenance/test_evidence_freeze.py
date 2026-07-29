@@ -12,7 +12,6 @@
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -49,15 +48,11 @@ async def evidence_service(
     # 清理证据集相关数据
     with sync_engine.connect() as conn:
         conn.execute(
-            sa.text(
-                "DELETE FROM provenance_edge WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM derivation_run WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM derivation_run WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
@@ -68,9 +63,7 @@ async def evidence_service(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM evidence_set WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM evidence_set WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -104,10 +97,7 @@ async def recipe_service(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM transformation_recipe "
-                "WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -230,7 +220,7 @@ class TestEvidenceFreeze:
                     "INSERT INTO quality_assessment "
                     "(fact_revision_id, overall_status, summary, results) "
                     "VALUES (:fr_id, 'passed', "
-                    "'{\"passed\": 1, \"warning\": 0, \"blocked\": 0}'::jsonb, "
+                    '\'{"passed": 1, "warning": 0, "blocked": 0}\'::jsonb, '
                     "'[]'::jsonb)"
                 ),
                 {"fr_id": ref.revision_id},
@@ -240,9 +230,7 @@ class TestEvidenceFreeze:
         create_result = await evidence_service.create_set("Quality Filter Set")
         set_id = create_result["set_id"]
 
-        ev_ref = await evidence_service.freeze(
-            set_id, fact_filter={"quality": "passed"}
-        )
+        ev_ref = await evidence_service.freeze(set_id, fact_filter={"quality": "passed"})
         assert ev_ref.status == "frozen"
         assert ev_ref.member_count >= 1
 

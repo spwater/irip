@@ -24,10 +24,8 @@ import json
 from typing import Any
 
 import httpx
-import sqlalchemy as sa
 
-from packages.ai.citations import Citation
-from packages.ai.providers import AIProvider, AIRequest, AIResponse
+from packages.ai.providers import AIRequest, AIResponse
 from packages.common.errors import AppError
 
 
@@ -141,7 +139,10 @@ class OpenAICompatibleProvider:
 
         if resp.status_code != 200:
             import logging
-            logging.getLogger(__name__).error(f"AI provider error {resp.status_code}: {resp.text[:500]}")
+
+            logging.getLogger(__name__).error(
+                f"AI provider error {resp.status_code}: {resp.text[:500]}"
+            )  # noqa: E501
             raise AppError(
                 code="ai_provider_error",
                 message=f"AI 服务返回错误状态码 {resp.status_code}: {resp.text[:200]}",
@@ -180,16 +181,17 @@ class OpenAICompatibleProvider:
             "line 类型加 smooth:true 可画平滑曲线，加 symbol:'circle' 显示数据点。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
-        system_context = request.user_context.get("system_context") if request.user_context else None
+        system_context = (
+            request.user_context.get("system_context") if request.user_context else None
+        )  # noqa: E501
         if system_context:
             system_content += "\n\n" + system_context
             # 日志：确认 system_context 传到了
             import logging
+
             logging.getLogger("irip.ai").info(f"system_context 已拼接, 长度={len(system_context)}")
 
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_content}
-        ]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
         # 加入历史消息和当前问题（不含 system role）
         # 第二轮 completion 时，messages 中可能包含 assistant 的 tool_calls
         # 和 tool 角色的结果消息，需要完整透传
@@ -223,9 +225,7 @@ class OpenAICompatibleProvider:
         payload["chat_template_kwargs"] = {"enable_thinking": self._thinking_enabled}
         return payload
 
-    def _parse_response(
-        self, data: dict[str, Any], request: AIRequest
-    ) -> AIResponse:
+    def _parse_response(self, data: dict[str, Any], request: AIRequest) -> AIResponse:
         """解析 OpenAI API 响应为 AIResponse。
 
         Args:

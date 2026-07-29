@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 类型转换模块 —— 将 RAS_RAW 文件中的原始字符串值转换为合适的 JSON 类型。
 
@@ -10,16 +9,15 @@
 """
 
 import re
-from typing import Optional, Union
 
 # 纯整数正则：可选负号 + 纯数字
-_INT_PATTERN = re.compile(r'^-?\d+$')
+_INT_PATTERN = re.compile(r"^-?\d+$")
 
 # 纯小数正则：可选负号 + 数字 + 小数点 + 数字
-_FLOAT_PATTERN = re.compile(r'^-?\d+\.\d+$')
+_FLOAT_PATTERN = re.compile(r"^-?\d+\.\d+$")
 
 
-def convert_value(raw: str) -> Optional[Union[int, float, str]]:
+def convert_value(raw: str) -> int | float | str | None:
     """将原始字符串值转换为合适的 JSON 类型。
 
     Args:

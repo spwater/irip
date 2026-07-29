@@ -101,9 +101,7 @@ class StandardsRepository:
         Returns:
             Variable | None: 变量实体，不存在返回 None。
         """
-        result = await session.execute(
-            sa.select(Variable).where(Variable.id == variable_id)
-        )
+        result = await session.execute(sa.select(Variable).where(Variable.id == variable_id))
         return result.scalar_one_or_none()
 
     @staticmethod

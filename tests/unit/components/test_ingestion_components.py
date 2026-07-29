@@ -10,15 +10,13 @@
 - MinioObject: S3 对象读取（mock artifact_service）
 """
 
-import asyncio
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from packages.components.builtin.types import ObservationTable
+from packages.common.errors import AppError
 from packages.components.builtin.ingestion.csv_reader import CSVReader
 from packages.components.builtin.ingestion.excel_reader import ExcelReader
 from packages.components.builtin.ingestion.json_reader import JSONReader
@@ -31,10 +29,8 @@ from packages.components.builtin.ingestion.postgres_query import (
     _validate_select_only,
 )
 from packages.components.builtin.ingestion.rest_fetch import RESTFetch
-from packages.common.errors import AppError
-
+from packages.components.builtin.types import ObservationTable
 from tests.unit.components.conftest import make_test_context
-
 
 # ---- ExcelReader ----
 
@@ -108,9 +104,7 @@ class TestCSVReader:
 
         reader = CSVReader()
         ctx = make_test_context()
-        result = await reader.execute(
-            ctx, {"path": str(path), "delimiter": "\t"}
-        )
+        result = await reader.execute(ctx, {"path": str(path), "delimiter": "\t"})
 
         table = result.outputs["observations"]
         assert table.columns == ("a", "b")
@@ -162,9 +156,7 @@ class TestJSONReader:
 
         reader = JSONReader()
         ctx = make_test_context()
-        result = await reader.execute(
-            ctx, {"path": str(path), "json_path": "data.records"}
-        )
+        result = await reader.execute(ctx, {"path": str(path), "json_path": "data.records"})
 
         table = result.outputs["observations"]
         assert table.row_count() == 2
@@ -260,9 +252,7 @@ class TestPostgresQuery:
         mock_conn = MagicMock()
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=False)
-        mock_conn.cursor.return_value.__enter__ = MagicMock(
-            return_value=mock_cursor
-        )
+        mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cursor)
         mock_conn.cursor.return_value.__exit__ = MagicMock(return_value=False)
 
         with patch("psycopg.connect", return_value=mock_conn):
@@ -276,9 +266,7 @@ class TestPostgresQuery:
                     "password": "pass",
                 }
             )
-            result = await reader.execute(
-                ctx, {"query": "SELECT id, name FROM users"}
-            )
+            result = await reader.execute(ctx, {"query": "SELECT id, name FROM users"})
 
         table = result.outputs["observations"]
         assert table.columns == ("id", "name")
@@ -310,14 +298,10 @@ class TestRESTFetch:
         mock_client.__aexit__.return_value = None
 
         with patch(
-            "packages.components.builtin.ingestion.rest_fetch."
-            "httpx.AsyncClient",
+            "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch."
-                "_resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
                 result = await reader.execute(
@@ -337,9 +321,7 @@ class TestRESTFetch:
         reader = RESTFetch()
         ctx = make_test_context()
         with pytest.raises(AppError, match="仅允许 HTTPS"):
-            await reader.execute(
-                ctx, {"url": "http://example.com/data"}
-            )
+            await reader.execute(ctx, {"url": "http://example.com/data"})
 
     async def test_ssrf_loopback_blocked(self):
         """SSRF 防护：环回地址被拦截。"""
@@ -347,9 +329,7 @@ class TestRESTFetch:
         ctx = make_test_context()
         with patch("socket.getaddrinfo", return_value=[(0, 0, 0, 0, ("127.0.0.1", 0))]):
             with pytest.raises(AppError, match="禁止访问"):
-                await reader.execute(
-                    ctx, {"url": "https://localhost/data", "allow_http": False}
-                )
+                await reader.execute(ctx, {"url": "https://localhost/data", "allow_http": False})
 
 
 # ---- MinioObject ----
@@ -369,9 +349,7 @@ class TestMinioObject:
 
         reader = MinioObject()
         ctx = make_test_context(artifact_service=mock_artifact_service)
-        result = await reader.execute(
-            ctx, {"object_key": "data/test.csv"}
-        )
+        result = await reader.execute(ctx, {"object_key": "data/test.csv"})
 
         table = result.outputs["observations"]
         assert table.columns == ("col1", "col2")
@@ -389,9 +367,7 @@ class TestMinioObject:
 
         reader = MinioObject()
         ctx = make_test_context(artifact_service=mock_artifact_service)
-        result = await reader.execute(
-            ctx, {"object_key": "data/test.json"}
-        )
+        result = await reader.execute(ctx, {"object_key": "data/test.json"})
 
         table = result.outputs["observations"]
         assert table.row_count() == 2

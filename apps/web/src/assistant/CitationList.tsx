@@ -1,6 +1,6 @@
 import { List, Tag, Typography } from 'antd';
 import { useNavigate } from '@tanstack/react-router';
-import type { Citation } from '@/api/client';
+import type { Citation } from '@/api/models-ai';
 
 const { Text, Link } = Typography;
 

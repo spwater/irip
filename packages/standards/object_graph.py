@@ -365,9 +365,7 @@ class ObjectGraphService:
             query = query.where(
                 sa.or_(
                     IndustrialObject.department_id == department_id,
-                    IndustrialObject.visible_departments.contains(
-                        [str(visible_dept_id)]
-                    ),
+                    IndustrialObject.visible_departments.contains([str(visible_dept_id)]),
                 )
             )
         elif department_id is not None:
@@ -437,7 +435,7 @@ class ObjectGraphService:
 
         async with session_scope(self._factory) as session:
             # 校验两对象存在且同组织
-            source_obj = await self._get_and_check_org(session, source_id)
+            await self._get_and_check_org(session, source_id)
             await self._get_and_check_org(session, target_id)
 
             # 查询是否已存在相同关系（活跃或不活跃）
@@ -610,9 +608,8 @@ class ObjectGraphService:
                 )
             )
 
-            query = (
-                sa.select(cte_recursive.c.descendant_id)
-                .order_by(cte_recursive.c.depth.asc(), cte_recursive.c.sort_key.asc())
+            query = sa.select(cte_recursive.c.descendant_id).order_by(
+                cte_recursive.c.depth.asc(), cte_recursive.c.sort_key.asc()
             )
             result = await session.execute(query)
             rows = result.fetchall()
@@ -695,9 +692,7 @@ class ObjectGraphService:
         )
 
         # 检查从 target 可达的节点中是否包含 source
-        query = sa.select(cte_recursive.c.node_id).where(
-            cte_recursive.c.node_id == source_id
-        )
+        query = sa.select(cte_recursive.c.node_id).where(cte_recursive.c.node_id == source_id)
         result = await session.execute(query)
         if result.fetchone() is not None:
             raise AppError(

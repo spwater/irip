@@ -13,7 +13,6 @@
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -26,12 +25,10 @@ from packages.facts.service import FactService
 from packages.parameters.entities import (
     Parameter,
     ParameterCandidate,
-    ParameterStaleness,
     ParameterVersion,
 )
 from packages.parameters.service import ParameterService
 from packages.provenance.entities import DerivationRun
-
 from tests.integration.parameters.conftest import _create_derivation_chain
 
 
@@ -54,9 +51,7 @@ class TestParameterCandidate:
         org_id = param_setup["organization_id"]
         actor_id = param_setup["actor_id"]
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -103,9 +98,7 @@ class TestParameterCandidate:
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()  # 不同的审核人
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -153,17 +146,13 @@ class TestParameterCandidate:
             assert pv.published_by == reviewer_id
 
             # 验证 parameter.status = published
-            param = await session.scalar(
-                sa.select(Parameter).where(Parameter.id == parameter_id)
-            )
+            param = await session.scalar(sa.select(Parameter).where(Parameter.id == parameter_id))
             assert param is not None
             assert param.status == "published"
 
             # 验证候选状态为 approved
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(
-                    ParameterCandidate.id == candidate_id
-                )
+                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
             assert candidate is not None
             assert candidate.status == "approved"
@@ -184,9 +173,7 @@ class TestParameterCandidate:
         org_id = param_setup["organization_id"]
         actor_id = param_setup["actor_id"]
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -234,12 +221,10 @@ class TestParameterCandidate:
         """
         org_id = param_setup["organization_id"]
         actor_id = param_setup["actor_id"]
-        reviewer_id = new_id()
+        new_id()
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
-        run_ref = chain["run_ref"]
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
+        chain["run_ref"]
         ev_ref = chain["ev_ref"]
         recipe_version = chain["recipe_version"]
 
@@ -304,9 +289,7 @@ class TestParameterCandidate:
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -342,18 +325,14 @@ class TestParameterCandidate:
         # 验证候选和参数状态
         async with async_session_factory() as session:
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(
-                    ParameterCandidate.id == candidate_id
-                )
+                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
             assert candidate is not None
             assert candidate.status == "rejected"
             assert candidate.reviewed_by == reviewer_id
             assert candidate.review_comment == "数据不可靠"
 
-            param = await session.scalar(
-                sa.select(Parameter).where(Parameter.id == parameter_id)
-            )
+            param = await session.scalar(sa.select(Parameter).where(Parameter.id == parameter_id))
             assert param is not None
             assert param.status == "rejected"
 
@@ -380,9 +359,7 @@ class TestParameterStaleness:
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=3
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
         run_ref = chain["run_ref"]
         fact_refs = chain["fact_refs"]
 

@@ -23,9 +23,9 @@ from apps.api.routers.ai_config import ai_config_router
 from apps.api.routers.ai_tools import ai_tools_router
 from apps.api.routers.assistant import assistant_router
 from apps.api.routers.audit import audit_router
-from apps.api.routers.component_preview import component_preview_router
 from apps.api.routers.auth import auth_router, me_router
 from apps.api.routers.backups import backups_router
+from apps.api.routers.component_preview import component_preview_router
 from apps.api.routers.components import components_router
 from apps.api.routers.departments import departments_router
 from apps.api.routers.equipment import equipment_router
@@ -42,8 +42,8 @@ from apps.api.routers.health import health_router
 from apps.api.routers.ingestions import ingestions_router
 from apps.api.routers.jobs import jobs_router
 from apps.api.routers.models import models_router
-from apps.api.routers.objects import objects_router
 from apps.api.routers.object_types import object_types_router
+from apps.api.routers.objects import objects_router
 from apps.api.routers.parameters import parameters_router
 from apps.api.routers.provenance import provenance_router
 from apps.api.routers.standards import standards_router
@@ -63,9 +63,7 @@ _STATUS_MAP: dict[str, int] = ErrorCode.to_status_map()
 def _to_async_url(url: str) -> str:
     """将同步 psycopg URL 转换为异步 psycopg_async URL。"""
     if url.startswith("postgresql+psycopg://"):
-        return url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        return url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     return url
 
 

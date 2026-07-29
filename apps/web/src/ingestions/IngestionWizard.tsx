@@ -18,13 +18,10 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateJob,
   apiGetJob,
-  apiPreviewIngestion,
-  apiRankMappings,
-  extractApiError,
   type JobSummary,
-  type MappingCandidate,
-  type SourcePreview,
 } from '@/api/client';
+import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
+import { extractApiError, type MappingCandidate, type SourcePreview } from '@/api/types';
 
 const { Text } = Typography;
 

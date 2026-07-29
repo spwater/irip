@@ -87,9 +87,7 @@ class TestAICredentialRedaction:
         service._authz_factory = None
         service._clock = None  # type: ignore
 
-        redacted = service._redact_credentials(
-            "API key: sk-1234567890abcdef1234567890abcdef"
-        )
+        redacted = service._redact_credentials("API key: sk-1234567890abcdef1234567890abcdef")
         assert "[REDACTED]" in redacted
         assert "sk-1234567890abcdef1234567890abcdef" not in redacted
 
@@ -220,10 +218,7 @@ class TestCandidateToolNotExecuted:
         registry = ToolRegistry()
         for spec in registry.list_candidate_tools():
             # 候选工具的权限应为 write/publish/manage 等写操作
-            assert any(
-                kw in spec.required_permission
-                for kw in ["write", "publish", "manage"]
-            )
+            assert any(kw in spec.required_permission for kw in ["write", "publish", "manage"])
 
 
 class TestUnknownToolRejection:

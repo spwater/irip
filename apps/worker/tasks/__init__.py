@@ -33,9 +33,7 @@ async def _execute_job_async(job_id: str) -> str:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -61,13 +59,7 @@ def _register_handlers(executor: JobExecutor) -> None:
     但各业务 handler 签名是 (job_id: str, payload: dict)，
     因此用适配器拆包 job.id 和 job.payload。
     """
-    from apps.worker.tasks.flows import execute_flow_job, resume_flow_job, _execute_flow_async, _resume_flow_async, _mark_job_failed
-    from apps.worker.tasks.ingestion import process_ingestion_job, _process_ingestion_async
-    from apps.worker.tasks.models import (
-        predict_model_job,
-        publish_model_job,
-        train_model_job,
-    )
+    from apps.worker.tasks.flows import _execute_flow_async, _mark_job_failed, _resume_flow_async
 
     async def _flow_execute_adapter(job):
         """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。"""
@@ -102,8 +94,10 @@ def _register_handlers(executor: JobExecutor) -> None:
         """适配 (job_id, payload) 签名的同步 handler 为 async (job) 签名。
         用于非 flow handler（它们内部用 asyncio.run，不在嵌套 async 上下文中）。
         """
+
         async def _wrapper(job):
             return handler(str(job.id), job.payload or {})
+
         return _wrapper
 
     # Flow handler（用 async 适配器避免 asyncio.run 嵌套）
@@ -193,6 +187,7 @@ async def _audit_export_handler(job: object) -> dict:
     from uuid import UUID
 
     import sqlalchemy as sa
+
     from packages.common.database import build_session_factory, session_scope
 
     payload: dict = getattr(job, "payload", None) or {}
@@ -205,16 +200,13 @@ async def _audit_export_handler(job: object) -> dict:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
     factory = build_session_factory(async_url)
 
     # 查询审计事件并导出
-    from uuid import UUID
 
     try:
         org_id = UUID(org_id_str) if org_id_str else None
@@ -240,9 +232,7 @@ async def _audit_export_handler(job: object) -> dict:
             params["end_date"] = end_date_str
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
-        query = sa.text(
-            f"SELECT count(*) FROM audit_event WHERE {where_clause}"
-        )
+        query = sa.text(f"SELECT count(*) FROM audit_event WHERE {where_clause}")
         count_result = await session.execute(query, params)
         count: int = count_result.scalar() or 0
 

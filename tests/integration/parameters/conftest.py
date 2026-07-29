@@ -8,7 +8,6 @@
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -208,22 +207,16 @@ async def param_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM parameter WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM parameter WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         # L2.5: 溯源与推导
         conn.execute(
-            sa.text(
-                "DELETE FROM provenance_edge WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM derivation_run WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM derivation_run WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
@@ -235,10 +228,7 @@ async def param_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM transformation_recipe "
-                "WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
@@ -249,9 +239,7 @@ async def param_setup(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM evidence_set WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM evidence_set WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         # L2: 事实

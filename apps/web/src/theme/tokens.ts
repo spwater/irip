@@ -69,7 +69,7 @@ export const tokens = {
     /** 状态语义 */
     status: {
       /** 成功、健康、已完成 */
-      success: '#14765E',
+      success: '#10B981',
       /** 待复核、警告、部分成功 */
       warning: '#9A6818',
       /** 失败、错误、危险操作 */

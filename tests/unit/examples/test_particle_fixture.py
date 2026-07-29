@@ -25,9 +25,7 @@ _SEED = 20260715
 
 def _load_generate_module():
     """Dynamically load the generate.py module from the examples directory."""
-    spec = importlib.util.spec_from_file_location(
-        "particle_generate", _GENERATE_PATH
-    )
+    spec = importlib.util.spec_from_file_location("particle_generate", _GENERATE_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["particle_generate"] = module
@@ -137,9 +135,7 @@ def test_moisture_warnings_labeled(tmp_path: Path) -> None:
     assert len(warnings) == 2
 
     for w in warnings:
-        assert w["moisture"] > 3.0, (
-            f"Warning {w['id']} has moisture {w['moisture']} <= 3.0"
-        )
+        assert w["moisture"] > 3.0, f"Warning {w['id']} has moisture {w['moisture']} <= 3.0"
 
 
 def test_total_file_count(tmp_path: Path) -> None:
@@ -162,9 +158,7 @@ def test_all_files_have_sha256(tmp_path: Path) -> None:
 
     for f in manifest["files"]:
         sha = f["sha256"]
-        assert len(sha) == 64, (
-            f"Invalid SHA-256 length for {f['path']}: {len(sha)}"
-        )
+        assert len(sha) == 64, f"Invalid SHA-256 length for {f['path']}: {len(sha)}"
         int(sha, 16)  # raises ValueError if not valid hex
 
     # Cross-check: recompute digest from the actual file bytes.

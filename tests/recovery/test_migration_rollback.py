@@ -53,9 +53,7 @@ def _get_current_revision(url: str) -> str | None:
     engine = create_engine(url)
     try:
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT version_num FROM alembic_version")
-            )
+            result = conn.execute(sa.text("SELECT version_num FROM alembic_version"))
             return result.scalar()
     finally:
         engine.dispose()
@@ -65,9 +63,7 @@ def _verify_app_works(engine: Engine) -> bool:
     """验证应用在当前数据库版本下可正常工作（可查询 app_user 表）。"""
     try:
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT COUNT(*) FROM app_user")
-            )
+            result = conn.execute(sa.text("SELECT COUNT(*) FROM app_user"))
             _count: int = result.scalar() or 0
             return True
     except Exception:
@@ -109,9 +105,7 @@ async def test_downgrade_to_previous_version_works(monkeypatch) -> None:
         assert prev_rev != original_rev, "Revision should change after downgrade"
 
         # 验证上一版本仍可正常工作
-        assert _verify_app_works(engine), (
-            "App should work at previous version after downgrade"
-        )
+        assert _verify_app_works(engine), "App should work at previous version after downgrade"
 
         # 恢复到原始版本
         command.upgrade(config, "head")
@@ -144,9 +138,7 @@ async def test_failed_migration_leaves_consistent_state(monkeypatch) -> None:
         # 尝试执行会失败的 DDL（创建已存在的表）
         with engine.connect() as conn:
             try:
-                conn.execute(
-                    sa.text("CREATE TABLE app_user (id INT)")
-                )
+                conn.execute(sa.text("CREATE TABLE app_user (id INT)"))
                 conn.commit()
                 pytest.fail("Creating duplicate table should have failed")
             except sa.exc.ProgrammingError:
@@ -155,14 +147,10 @@ async def test_failed_migration_leaves_consistent_state(monkeypatch) -> None:
 
         # 验证版本未变
         rev_after_failure = _get_current_revision(url)
-        assert rev_after_failure == original_rev, (
-            "Revision should not change after failed DDL"
-        )
+        assert rev_after_failure == original_rev, "Revision should not change after failed DDL"
 
         # 验证数据库仍可正常工作
-        assert _verify_app_works(engine), (
-            "Database should still work after failed DDL"
-        )
+        assert _verify_app_works(engine), "Database should still work after failed DDL"
     finally:
         engine.dispose()
 
@@ -255,17 +243,13 @@ async def test_manual_fix_then_continue_migration(monkeypatch) -> None:
         # 模拟手动修复：直接在数据库上执行必要的 DDL
         # （此处验证降级后数据库是可操作的）
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT COUNT(*) FROM app_user")
-            )
+            result = conn.execute(sa.text("SELECT COUNT(*) FROM app_user"))
             assert result.scalar() is not None
 
         # 继续迁移到 head
         command.upgrade(config, "head")
         final_rev = _get_current_revision(url)
-        assert final_rev == original_rev, (
-            f"Should be back at {original_rev}, got {final_rev}"
-        )
+        assert final_rev == original_rev, f"Should be back at {original_rev}, got {final_rev}"
 
         # 验证应用正常工作
         assert _verify_app_works(engine)
@@ -288,22 +272,16 @@ async def test_migration_version_table_integrity(monkeypatch) -> None:
     try:
         # 验证 alembic_version 表存在且只有一行
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT COUNT(*) FROM alembic_version")
-            )
+            result = conn.execute(sa.text("SELECT COUNT(*) FROM alembic_version"))
             count: int = result.scalar() or 0
-            assert count == 1, (
-                f"alembic_version should have exactly 1 row, got {count}"
-            )
+            assert count == 1, f"alembic_version should have exactly 1 row, got {count}"
 
         # 降级
         command.downgrade(config, "-1")
 
         # 验证仍只有一行
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT COUNT(*) FROM alembic_version")
-            )
+            result = conn.execute(sa.text("SELECT COUNT(*) FROM alembic_version"))
             count = result.scalar() or 0
             assert count == 1, (
                 f"alembic_version should still have 1 row after downgrade, got {count}"
@@ -313,9 +291,7 @@ async def test_migration_version_table_integrity(monkeypatch) -> None:
         command.upgrade(config, "head")
 
         with engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT COUNT(*) FROM alembic_version")
-            )
+            result = conn.execute(sa.text("SELECT COUNT(*) FROM alembic_version"))
             count = result.scalar() or 0
             assert count == 1
     finally:
@@ -344,9 +320,7 @@ async def test_can_query_all_tables_after_rollback(monkeypatch) -> None:
         tables_to_check = ["app_user", "alembic_version"]
         for table_name in tables_to_check:
             with engine.connect() as conn:
-                result = conn.execute(
-                    sa.text(f"SELECT COUNT(*) FROM {table_name}")
-                )
+                result = conn.execute(sa.text(f"SELECT COUNT(*) FROM {table_name}"))
                 assert result.scalar() is not None, (
                     f"Table {table_name} should be queryable after downgrade"
                 )

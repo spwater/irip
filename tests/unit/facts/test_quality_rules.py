@@ -5,7 +5,7 @@ MoistureRangeRule / ParticleQuantileOrderRule）以及 QualityEngine 的
 综合评估逻辑（overall_status 与 summary 统计）。
 """
 
-from packages.facts.quality import QualityAssessment, QualityLevel, QualityEngine
+from packages.facts.quality import QualityEngine, QualityLevel
 from packages.facts.quality_rules import (
     MoistureRangeRule,
     ParticleQuantileOrderRule,
@@ -103,9 +103,7 @@ class TestRequiredFieldRule:
     def test_required_field_rule_passes_all_present(self) -> None:
         """D10/D50/D90 全部存在 → passed。"""
         rule = RequiredFieldRule()
-        result = rule.evaluate(
-            {"d10_um": 1, "d50_um": 10, "d90_um": 100}
-        )
+        result = rule.evaluate({"d10_um": 1, "d50_um": 10, "d90_um": 100})
         assert result is not None
         assert result.status == "passed"
 
@@ -124,9 +122,7 @@ class TestPositiveValueRule:
     def test_positive_value_rule_blocks_negative(self) -> None:
         """D50=-1 → 负值，blocked。"""
         rule = PositiveValueRule()
-        result = rule.evaluate(
-            {"d10_um": 1, "d50_um": -1, "d90_um": 100}
-        )
+        result = rule.evaluate({"d10_um": 1, "d50_um": -1, "d90_um": 100})
         assert result is not None
         assert result.status == "blocked"
         assert result.code == "positive_value"
@@ -136,9 +132,7 @@ class TestPositiveValueRule:
     def test_positive_value_rule_passes_all_positive(self) -> None:
         """全为正值 → passed。"""
         rule = PositiveValueRule()
-        result = rule.evaluate(
-            {"d10_um": 1, "d50_um": 10, "d90_um": 100}
-        )
+        result = rule.evaluate({"d10_um": 1, "d50_um": 10, "d90_um": 100})
         assert result is not None
         assert result.status == "passed"
 

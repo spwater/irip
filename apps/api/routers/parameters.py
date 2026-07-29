@@ -23,30 +23,21 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.parameters.service import (
-    ParameterReviewState,
     ParameterService,
     ParameterVersionRef,
 )
 
 #: 需 parameter:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("parameter:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("parameter:read"))]
 
 #: 需 parameter:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("parameter:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("parameter:write"))]
 
 #: 需 parameter:approve 权限的当前用户依赖。
-ApproveUserDep = Annotated[
-    CurrentUser, Depends(require_permission("parameter:approve"))
-]
+ApproveUserDep = Annotated[CurrentUser, Depends(require_permission("parameter:approve"))]
 
 #: 需 parameter:publish 权限的当前用户依赖。
-PublishUserDep = Annotated[
-    CurrentUser, Depends(require_permission("parameter:publish"))
-]
+PublishUserDep = Annotated[CurrentUser, Depends(require_permission("parameter:publish"))]
 
 
 # ---- DI 占位 ----
@@ -54,21 +45,15 @@ PublishUserDep = Annotated[
 
 def get_parameter_service() -> ParameterService:
     """获取 ParameterService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_parameter_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_parameter_service must be overridden via dependency_overrides")
 
 
-ParameterServiceDep = Annotated[
-    ParameterService, Depends(get_parameter_service)
-]
+ParameterServiceDep = Annotated[ParameterService, Depends(get_parameter_service)]
 
 
 # ---- 路由实例 ----
 
-parameters_router = APIRouter(
-    prefix="/api/v1/parameters", tags=["parameters"]
-)
+parameters_router = APIRouter(prefix="/api/v1/parameters", tags=["parameters"])
 
 
 # ---- 请求模型 ----
@@ -244,15 +229,13 @@ async def create_parameter(
     )
 
 
-@parameters_router.get(
-    "", response_model=ParameterListResponse
-)
+@parameters_router.get("", response_model=ParameterListResponse)
 async def list_parameters(
     current_user: ReadUserDep,
     service: ParameterServiceDep,
     variable_code: str | None = Query(None, description="按变量代码过滤"),
     status: str | None = Query(None, description="按状态过滤"),
-    object_id: UUID | None = Query(None, description="按对象 ID 过滤"),
+    object_id: UUID | None = Query(None, description="按对象 ID 过滤"),  # noqa: B008
     cursor: str | None = Query(None, description="分页游标"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> ParameterListResponse:
@@ -284,9 +267,7 @@ async def list_parameters(
     )
 
 
-@parameters_router.get(
-    "/{parameter_id}", response_model=ParameterDetailResponse
-)
+@parameters_router.get("/{parameter_id}", response_model=ParameterDetailResponse)
 async def get_parameter(
     parameter_id: UUID,
     current_user: ReadUserDep,
@@ -301,18 +282,14 @@ async def get_parameter(
         status=result["status"],
         current_version=result.get("current_version"),
         current_version_id=(
-            str(result["current_version_id"])
-            if result.get("current_version_id")
-            else None
+            str(result["current_version_id"]) if result.get("current_version_id") else None
         ),
         value=result.get("value"),
         unit=result.get("unit"),
     )
 
 
-@parameters_router.get(
-    "/{parameter_id}/versions", response_model=VersionListResponse
-)
+@parameters_router.get("/{parameter_id}/versions", response_model=VersionListResponse)
 async def list_versions(
     parameter_id: UUID,
     current_user: ReadUserDep,
@@ -320,7 +297,7 @@ async def list_versions(
 ) -> VersionListResponse:
     """列出参数的所有版本。"""
     # 通过 get_version 获取最新版本，然后查询所有版本
-    candidates = await service.list_candidates(parameter_id)
+    await service.list_candidates(parameter_id)
     # 获取参数详情以确定是否有已发布版本
     param_detail = await service.get_parameter(parameter_id)
     versions: list[ParameterVersionResponse] = []

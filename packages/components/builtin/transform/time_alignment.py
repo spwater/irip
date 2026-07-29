@@ -19,11 +19,17 @@ from packages.components.sdk import ComponentContext, ComponentResult
 
 #: 频率别名映射。
 _FREQ_ALIASES: dict[str, str] = {
-    "1s": "1s", "s": "1s",
-    "1min": "1min", "min": "1min",
+    "1s": "1s",
+    "s": "1s",
+    "1min": "1min",
+    "min": "1min",
     "5min": "5min",
-    "1h": "1h", "h": "1h",
-    "1D": "1D", "D": "1D", "1d": "1D", "d": "1D",
+    "1h": "1h",
+    "h": "1h",
+    "1D": "1D",
+    "D": "1D",
+    "1d": "1D",
+    "d": "1D",
 }
 
 
@@ -65,9 +71,7 @@ class TimeAlignment:
         freq = _FREQ_ALIASES.get(frequency, frequency)
 
         if value_columns is None:
-            value_columns = [
-                c for c in df.columns if c != time_column
-            ]
+            value_columns = [c for c in df.columns if c != time_column]
 
         # 按频率重采样对齐
         resampled = df[value_columns].resample(freq)
@@ -91,9 +95,7 @@ class TimeAlignment:
                 elif pd.isna(val):
                     record[col] = None
                 else:
-                    record[col] = (
-                        val.item() if hasattr(val, "item") else val
-                    )
+                    record[col] = val.item() if hasattr(val, "item") else val
             new_rows.append(record)
 
         result_table = ObservationTable(

@@ -119,9 +119,7 @@ class IndustrialObject(Base):
         default=list,
         server_default=sa.text("'[]'::jsonb"),
     )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

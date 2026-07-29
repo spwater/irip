@@ -35,9 +35,7 @@ class TestParameterizedQuery:
             # 正常查询：按邮箱查找用户
             injection_email = "' OR '1'='1 --"
             result = await session.execute(
-                sa.text(
-                    "SELECT COUNT(*) FROM app_user WHERE email = :email"
-                ),
+                sa.text("SELECT COUNT(*) FROM app_user WHERE email = :email"),
                 {"email": injection_email},
             )
             count: int = result.scalar() or 0
@@ -52,9 +50,7 @@ class TestParameterizedQuery:
         async with async_session_factory() as session:
             injection = "1; SELECT * FROM app_user --"
             result = await session.execute(
-                sa.text(
-                    "SELECT COUNT(*) FROM app_user WHERE display_name = :name"
-                ),
+                sa.text("SELECT COUNT(*) FROM app_user WHERE display_name = :name"),
                 {"name": injection},
             )
             count: int = result.scalar() or 0
@@ -69,9 +65,7 @@ class TestParameterizedQuery:
 
         async with async_session_factory() as session:
             result = await session.execute(
-                sa.select(AppUser).where(
-                    AppUser.email == "admin'-- ; DROP TABLE app_user; --"
-                )
+                sa.select(AppUser).where(AppUser.email == "admin'-- ; DROP TABLE app_user; --")
             )
             users = result.scalars().all()
             assert len(users) == 0, "ORM query should be safe from injection"
@@ -83,10 +77,7 @@ class TestParameterizedQuery:
         """LIKE 查询中的通配符注入被参数化处理。"""
         async with async_session_factory() as session:
             result = await session.execute(
-                sa.text(
-                    "SELECT COUNT(*) FROM app_user "
-                    "WHERE email LIKE :pattern"
-                ),
+                sa.text("SELECT COUNT(*) FROM app_user WHERE email LIKE :pattern"),
                 {"pattern": "%'; DROP TABLE app_user; --%"},
             )
             count: int = result.scalar() or 0
@@ -111,16 +102,12 @@ class TestRoleSelectOnly:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
                 await conn.execute(sa.text("SET ROLE irip_app"))
-                result = await conn.execute(
-                    sa.text("SELECT COUNT(*) FROM audit_event")
-                )
+                result = await conn.execute(sa.text("SELECT COUNT(*) FROM audit_event"))
                 assert result.scalar() is not None
                 await conn.rollback()
         finally:
@@ -136,9 +123,7 @@ class TestRoleSelectOnly:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
@@ -162,10 +147,9 @@ class TestRoleSelectOnly:
                     await conn.commit()
                     pytest.fail("irip_readonly should not be able to INSERT")
                 except sa.exc.ProgrammingError as exc:
-                    assert (
-                        "permission" in str(exc).lower()
-                        or "denied" in str(exc).lower()
-                    ), f"Expected permission denied: {exc}"
+                    assert "permission" in str(exc).lower() or "denied" in str(exc).lower(), (
+                        f"Expected permission denied: {exc}"
+                    )
                 await conn.rollback()
         finally:
             await engine.dispose()
@@ -189,17 +173,13 @@ class TestDangerousStatementsBlocked:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
                 await conn.execute(sa.text("SET ROLE irip_app"))
                 try:
-                    await conn.execute(
-                        sa.text("DROP TABLE IF EXISTS audit_event")
-                    )
+                    await conn.execute(sa.text("DROP TABLE IF EXISTS audit_event"))
                     pytest.fail("DROP TABLE should be denied for irip_app")
                 except sa.exc.ProgrammingError as exc:
                     assert (
@@ -221,23 +201,16 @@ class TestDangerousStatementsBlocked:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
                 await conn.execute(sa.text("SET ROLE irip_app"))
                 try:
-                    await conn.execute(
-                        sa.text("DELETE FROM audit_event WHERE 1=0")
-                    )
+                    await conn.execute(sa.text("DELETE FROM audit_event WHERE 1=0"))
                     pytest.fail("DELETE should be denied for irip_app on audit_event")
                 except sa.exc.ProgrammingError as exc:
-                    assert (
-                        "permission" in str(exc).lower()
-                        or "denied" in str(exc).lower()
-                    )
+                    assert "permission" in str(exc).lower() or "denied" in str(exc).lower()
                 await conn.rollback()
         finally:
             await engine.dispose()
@@ -252,25 +225,16 @@ class TestDangerousStatementsBlocked:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
                 await conn.execute(sa.text("SET ROLE irip_app"))
                 try:
-                    await conn.execute(
-                        sa.text(
-                            "UPDATE audit_event SET action = action WHERE 1=0"
-                        )
-                    )
+                    await conn.execute(sa.text("UPDATE audit_event SET action = action WHERE 1=0"))
                     pytest.fail("UPDATE should be denied for irip_app on audit_event")
                 except sa.exc.ProgrammingError as exc:
-                    assert (
-                        "permission" in str(exc).lower()
-                        or "denied" in str(exc).lower()
-                    )
+                    assert "permission" in str(exc).lower() or "denied" in str(exc).lower()
                 await conn.rollback()
         finally:
             await engine.dispose()
@@ -291,9 +255,7 @@ class TestMultiStatementRejection:
         """``SELECT 1; DROP TABLE app_user`` 被拒绝。"""
         async with async_session_factory() as session:
             with pytest.raises(Exception) as exc_info:
-                await session.execute(
-                    sa.text("SELECT 1; DROP TABLE app_user")
-                )
+                await session.execute(sa.text("SELECT 1; DROP TABLE app_user"))
             # psycopg3 报错：不能在单个执行中发送多个语句
             error_msg = str(exc_info.value).lower()
             assert (

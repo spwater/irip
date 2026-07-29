@@ -85,9 +85,7 @@ def register(ctx: CompositionContext) -> None:
             actor_id=current_user.user_id,
         )
 
-    ctx.app.dependency_overrides[get_derivation_service] = (
-        _get_derivation_service_dep
-    )
+    ctx.app.dependency_overrides[get_derivation_service] = _get_derivation_service_dep
 
     # 溯源图服务
     async def _get_provenance_graph_service_dep(
@@ -99,6 +97,4 @@ def register(ctx: CompositionContext) -> None:
             organization_id=org_id,
         )
 
-    ctx.app.dependency_overrides[get_provenance_graph_service] = (
-        _get_provenance_graph_service_dep
-    )
+    ctx.app.dependency_overrides[get_provenance_graph_service] = _get_provenance_graph_service_dep

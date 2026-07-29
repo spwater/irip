@@ -37,6 +37,8 @@ export interface FocusModalProps {
   width?: number | string;
   /** 透传样式 */
   style?: CSSProperties;
+  /** 隐藏默认底部按钮（自定义内容区自行处理操作时使用） */
+  hideFooter?: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export function FocusModal({
   children,
   width = 480,
   style,
+  hideFooter = false,
 }: FocusModalProps): JSX.Element {
   return (
     <Modal
@@ -67,6 +70,7 @@ export function FocusModal({
       cancelText={cancelText}
       okButtonProps={{ danger, loading: confirmLoading }}
       width={width}
+      footer={hideFooter ? null : undefined}
       styles={{
         header: {
           borderBottom: '1px solid var(--ocean-border-subtle)',

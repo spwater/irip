@@ -105,3 +105,6 @@ $RECYCLE.BIN/
 *.log
 logs/
 celerybeat-schedule*
+
+# WorkBuddy memory
+.workbuddy/

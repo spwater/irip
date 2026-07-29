@@ -31,7 +31,6 @@ from packages.components.builtin.types import (
     ObservationTable,
     ParameterCandidate,
 )
-
 from tests.unit.components.conftest import make_test_context
 
 
@@ -93,10 +92,7 @@ class TestSchemaCheck:
 
         assert result.metadata["fail_count"] == 1
         report = result.outputs["diagnostics"]
-        assert any(
-            "type_mismatch" in ann["detail"]
-            for ann in report.row_annotations
-        )
+        assert any("type_mismatch" in ann["detail"] for ann in report.row_annotations)
 
     async def test_missing_required(self):
         """必需列缺失。"""
@@ -113,9 +109,7 @@ class TestSchemaCheck:
 
     async def test_range_constraint(self):
         """min/max 约束检查。"""
-        table = _make_table(
-            ("value",), [{"value": -5}, {"value": 10}, {"value": 100}]
-        )
+        table = _make_table(("value",), [{"value": -5}, {"value": 10}, {"value": 100}])
         checker = SchemaCheck()
         ctx = make_test_context()
         result = await checker.execute(
@@ -134,9 +128,7 @@ class TestRangeCheck:
 
     async def test_within_range(self):
         """值在范围内。"""
-        table = _make_table(
-            ("value",), [{"value": 10}, {"value": 20}, {"value": 30}]
-        )
+        table = _make_table(("value",), [{"value": 10}, {"value": 20}, {"value": 30}])
         checker = RangeCheck()
         ctx = make_test_context()
         result = await checker.execute(
@@ -148,9 +140,7 @@ class TestRangeCheck:
 
     async def test_out_of_range(self):
         """值超出范围。"""
-        table = _make_table(
-            ("value",), [{"value": -5}, {"value": 10}, {"value": 100}]
-        )
+        table = _make_table(("value",), [{"value": -5}, {"value": 10}, {"value": 100}])
         checker = RangeCheck()
         ctx = make_test_context()
         result = await checker.execute(
@@ -250,9 +240,7 @@ class TestRelationCompleteness:
             ("id", "parent_id"),
             [{"id": 1, "parent_id": 100}, {"id": 2, "parent_id": 200}],
         )
-        parent = _make_table(
-            ("pid",), [{"pid": 100}, {"pid": 200}, {"pid": 300}]
-        )
+        parent = _make_table(("pid",), [{"pid": 100}, {"pid": 200}, {"pid": 300}])
         checker = RelationCompleteness()
         ctx = make_test_context()
         result = await checker.execute(
@@ -318,9 +306,7 @@ class TestDescriptive:
 
     async def test_basic_stats(self):
         """基本统计量。"""
-        table = _make_table(
-            ("value",), [{"value": v} for v in [1, 2, 3, 4, 5]]
-        )
+        table = _make_table(("value",), [{"value": v} for v in [1, 2, 3, 4, 5]])
         desc = Descriptive()
         ctx = make_test_context()
         result = await desc.execute(ctx, {"observations": table, "columns": ["value"]})
@@ -348,9 +334,7 @@ class TestRobustEstimator:
 
     async def test_robust_stats(self):
         """稳健统计量。"""
-        table = _make_table(
-            ("value",), [{"value": v} for v in [10, 11, 10, 12, 10, 11, 100]]
-        )
+        table = _make_table(("value",), [{"value": v} for v in [10, 11, 10, 12, 10, 11, 100]])
         est = RobustEstimator()
         ctx = make_test_context()
         result = await est.execute(ctx, {"observations": table, "columns": ["value"]})
@@ -363,9 +347,7 @@ class TestRobustEstimator:
 
     async def test_trimmed_mean(self):
         """截尾均值过滤极端值。"""
-        table = _make_table(
-            ("value",), [{"value": v} for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 100]]
-        )
+        table = _make_table(("value",), [{"value": v} for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 100]])
         est = RobustEstimator()
         ctx = make_test_context()
         result = await est.execute(
@@ -387,9 +369,7 @@ class TestBootstrapInterval:
 
         rng = random.Random(42)
         values = [rng.gauss(10, 2) for _ in range(100)]
-        table = _make_table(
-            ("value",), [{"value": v} for v in values]
-        )
+        table = _make_table(("value",), [{"value": v} for v in values])
         boot = BootstrapInterval()
         ctx = make_test_context()
         result = await boot.execute(
@@ -436,9 +416,7 @@ class TestBootstrapInterval:
         table = _make_table(("value",), [{"value": 1}])
         boot = BootstrapInterval()
         ctx = make_test_context()
-        result = await boot.execute(
-            ctx, {"observations": table, "column": "value"}
-        )
+        result = await boot.execute(ctx, {"observations": table, "column": "value"})
 
         report = result.outputs["diagnostics"]
         assert len(report.warnings) > 0
@@ -451,9 +429,7 @@ class TestCurveFit:
         """线性拟合。"""
         xs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         ys = [2 * x + 1 for x in xs]  # y = 2x + 1
-        table = _make_table(
-            ("x", "y"), [{"x": x, "y": y} for x, y in zip(xs, ys)]
-        )
+        table = _make_table(("x", "y"), [{"x": x, "y": y} for x, y in zip(xs, ys, strict=False)])
         fitter = CurveFit()
         ctx = make_test_context()
         result = await fitter.execute(
@@ -542,9 +518,7 @@ class TestParameterCard:
                 "observations": table,
                 "variable_code": "test_var",
                 "value_column": "value",
-                "exclusion_rules": [
-                    {"column": "status", "operator": "eq", "value": "rejected"}
-                ],
+                "exclusion_rules": [{"column": "status", "operator": "eq", "value": "rejected"}],
             },
         )
 
@@ -555,9 +529,7 @@ class TestParameterCard:
 
     async def test_skip_missing_value(self):
         """缺失值跳过。"""
-        table = _make_table(
-            ("value",), [{"value": None}, {"value": "10"}]
-        )
+        table = _make_table(("value",), [{"value": None}, {"value": "10"}])
         card = ParameterCard()
         ctx = make_test_context()
         result = await card.execute(
@@ -611,9 +583,7 @@ class TestExperimentComparison:
 
     async def test_text_table_output(self):
         """文本对照表输出。"""
-        exp_a = _make_table(
-            ("sample", "value"), [{"sample": "s1", "value": 10}]
-        )
+        exp_a = _make_table(("sample", "value"), [{"sample": "s1", "value": 10}])
         comp = ExperimentComparison()
         ctx = make_test_context()
         result = await comp.execute(
@@ -669,9 +639,7 @@ class TestReportDraft:
         """空章节列表。"""
         report_gen = ReportDraft()
         ctx = make_test_context()
-        result = await report_gen.execute(
-            ctx, {"title": "空报告", "sections": []}
-        )
+        result = await report_gen.execute(ctx, {"title": "空报告", "sections": []})
 
         assert "# 空报告" in result.outputs["report"]
         assert result.metadata["section_count"] == 0

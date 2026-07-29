@@ -26,9 +26,7 @@ async def seed_tools_if_empty(session: AsyncSession) -> int:
     Returns:
         int: 本次写入的行数（表非空时返回 0）。
     """
-    count_result = await session.execute(
-        sa.select(sa.func.count()).select_from(AITool)
-    )
+    count_result = await session.execute(sa.select(sa.func.count()).select_from(AITool))
     count: int = count_result.scalar_one()
     if count > 0:
         return 0

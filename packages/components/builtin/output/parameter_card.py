@@ -45,9 +45,7 @@ class ParameterCard:
         value_column: str = params["value_column"]
         unit_column: str | None = params.get("unit_column")
         default_confidence: float = float(params.get("confidence", 0.8))
-        exclusion_rules: list[dict[str, Any]] = params.get(
-            "exclusion_rules", []
-        )
+        exclusion_rules: list[dict[str, Any]] = params.get("exclusion_rules", [])
 
         warnings: list[str] = []
         candidates: list[ParameterCandidate] = []
@@ -58,11 +56,13 @@ class ParameterCard:
             unit = row.get(unit_column) if unit_column else None
 
             if value is None:
-                row_annotations.append({
-                    "row_index": idx,
-                    "status": "skip",
-                    "detail": "value_missing",
-                })
+                row_annotations.append(
+                    {
+                        "row_index": idx,
+                        "status": "skip",
+                        "detail": "value_missing",
+                    }
+                )
                 continue
 
             # 检查排除规则
@@ -79,9 +79,7 @@ class ParameterCard:
                 if op in _OPERATORS:
                     try:
                         if _OPERATORS[op](cell_val, rule_val):
-                            exclusion_reasons.append(
-                                f"{col}_{op}_{rule_val}"
-                            )
+                            exclusion_reasons.append(f"{col}_{op}_{rule_val}")
                     except TypeError:
                         pass
 
@@ -94,11 +92,13 @@ class ParameterCard:
             )
             candidates.append(candidate)
 
-            row_annotations.append({
-                "row_index": idx,
-                "status": "excluded" if exclusion_reasons else "active",
-                "detail": ";".join(exclusion_reasons) if exclusion_reasons else "",
-            })
+            row_annotations.append(
+                {
+                    "row_index": idx,
+                    "status": "excluded" if exclusion_reasons else "active",
+                    "detail": ";".join(exclusion_reasons) if exclusion_reasons else "",
+                }
+            )
 
         active_count = sum(1 for c in candidates if not c.exclusion_reasons)
         excluded_count = len(candidates) - active_count

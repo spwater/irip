@@ -10,12 +10,9 @@ import {
 } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import {
-  apiCancelJob,
-  apiGetJobDetail,
-  apiRetryJob,
-  extractApiError,
-} from '@/api/client';
+import { apiCancelJob } from '@/api/client';
+import { apiGetJobDetail, apiRetryJob } from '@/api/governance';
+import { extractApiError } from '@/api/types';
 import { PageIntro, DetailSection, StatusMark, FeedbackState } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 

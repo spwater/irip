@@ -16,7 +16,6 @@
 import asyncio
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -27,7 +26,6 @@ from packages.connectors.contracts import (
     SourceRecord,
 )
 from packages.connectors.file_connectors import FileConnector
-
 
 # ---- 辅助函数 ----
 
@@ -113,9 +111,7 @@ class TestFileConnectorCSVRead:
     async def test_read_csv(self, tmp_path: Path):
         """流式读取 CSV 返回 SourceRecord 列表。"""
         path = tmp_path / "data.csv"
-        path.write_text(
-            "name,value\nD50,12.5\nD90,25\n", encoding="utf-8"
-        )
+        path.write_text("name,value\nD50,12.5\nD90,25\n", encoding="utf-8")
 
         connector = FileConnector()
         source = _make_file_source(str(path), "csv")
@@ -202,9 +198,7 @@ class TestFileConnectorJSON:
     async def test_read_json(self, tmp_path: Path):
         """流式读取 JSON 返回 SourceRecord。"""
         path = tmp_path / "data.json"
-        path.write_text(
-            json.dumps([{"x": 10}, {"x": 20}]), encoding="utf-8"
-        )
+        path.write_text(json.dumps([{"x": 10}, {"x": 20}]), encoding="utf-8")
 
         connector = FileConnector()
         source = _make_file_source(str(path), "json")

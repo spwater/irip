@@ -18,7 +18,7 @@ derivation_run, parameter_version。
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
@@ -75,9 +75,7 @@ class ProvenanceEdgeRef:
     source_type: str
     target_id: UUID
     target_type: str
-    edge_type: Literal[
-        "selected_from", "transformed_by", "produced", "published_as"
-    ]
+    edge_type: Literal["selected_from", "transformed_by", "produced", "published_as"]
 
 
 @dataclass(frozen=True)
@@ -158,7 +156,7 @@ class ProvenanceGraphService:
             run_node = ProvenanceNode(
                 id=run.id,
                 node_type="derivation_run",
-                label=f"DerivationRun",
+                label="DerivationRun",
                 version=str(run.id),
                 status=run.status,
             )
@@ -196,9 +194,7 @@ class ProvenanceGraphService:
             # 加载 fact_revision 节点
             if fact_revision_ids:
                 fr_result = await session.execute(
-                    sa.select(FactRevision).where(
-                        FactRevision.id.in_(fact_revision_ids)
-                    )
+                    sa.select(FactRevision).where(FactRevision.id.in_(fact_revision_ids))
                 )
                 fact_revisions = fr_result.scalars().all()
 
@@ -214,9 +210,7 @@ class ProvenanceGraphService:
 
                     # 加载该事实修订的原始观察值
                     raw_result = await session.execute(
-                        sa.select(RawObservation).where(
-                            RawObservation.fact_revision_id == fr.id
-                        )
+                        sa.select(RawObservation).where(RawObservation.fact_revision_id == fr.id)
                     )
                     raw_observations = raw_result.scalars().all()
 
@@ -261,9 +255,7 @@ class ProvenanceGraphService:
             edges=tuple(edges),
         )
 
-    async def get_paths_to_raw(
-        self, parameter_version_id: UUID
-    ) -> list[list[ProvenanceNode]]:
+    async def get_paths_to_raw(self, parameter_version_id: UUID) -> list[list[ProvenanceNode]]:
         """从参数版本追溯到原始事实的路径。
 
         沿溯源边从参数版本向上遍历，直到到达观察值节点。
@@ -302,9 +294,7 @@ class ProvenanceGraphService:
                 status="published",
             )
             for edge in start_edges:
-                queue.append(
-                    (edge.source_id, edge.source_type, [param_node])
-                )
+                queue.append((edge.source_id, edge.source_type, [param_node]))
 
             visited: set[UUID] = {parameter_version_id}
 
@@ -319,9 +309,7 @@ class ProvenanceGraphService:
                 current_node: ProvenanceNode | None = None
                 if current_type == "fact_revision":
                     fr = await session.scalar(
-                        sa.select(FactRevision).where(
-                            FactRevision.id == current_id
-                        )
+                        sa.select(FactRevision).where(FactRevision.id == current_id)
                     )
                     if fr is not None:
                         current_node = ProvenanceNode(
@@ -349,9 +337,7 @@ class ProvenanceGraphService:
                             paths.append(path + [current_node, obs_node])
                 elif current_type == "derivation_run":
                     run = await session.scalar(
-                        sa.select(DerivationRun).where(
-                            DerivationRun.id == current_id
-                        )
+                        sa.select(DerivationRun).where(DerivationRun.id == current_id)
                     )
                     if run is not None:
                         current_node = ProvenanceNode(
@@ -386,9 +372,7 @@ class ProvenanceGraphService:
                 up_edges = up_edges_result.scalars().all()
                 for ue in up_edges:
                     if ue.source_id not in visited:
-                        queue.append(
-                            (ue.source_id, ue.source_type, path + [current_node])
-                        )
+                        queue.append((ue.source_id, ue.source_type, path + [current_node]))
 
             return paths
 

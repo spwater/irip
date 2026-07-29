@@ -200,9 +200,7 @@ class DepartmentService:
         next_cursor: str | None = None
         if has_more and page_items:
             last_dept, _, _, _ = page_items[-1]
-            next_cursor = _encode_cursor(
-                last_dept.sort_order, last_dept.created_at, last_dept.id
-            )
+            next_cursor = _encode_cursor(last_dept.sort_order, last_dept.created_at, last_dept.id)
 
         return DepartmentListResult(
             items=page_items,
@@ -397,9 +395,8 @@ class DepartmentService:
                     fields={"department_id": str(department_id)},
                 )
 
-def _encode_cursor(
-    sort_order: int, created_at: datetime, dept_id: UUID
-) -> str:
+
+def _encode_cursor(sort_order: int, created_at: datetime, dept_id: UUID) -> str:
     """编码 keyset 分页游标。
 
     格式：base64url( JSON {"v": {"so": sort_order, "ct": created_at_iso}, "id": uuid} )

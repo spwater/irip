@@ -88,23 +88,15 @@ class ScopeGrant(Base):
     __tablename__ = "scope_grant"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    user_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=True
-    )
-    role_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("role.id"), nullable=True
-    )
+    user_id: Mapped[UUID | None] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=True)
+    role_id: Mapped[UUID | None] = mapped_column(GUID, sa.ForeignKey("role.id"), nullable=True)
     organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     object_root_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     resource_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     action: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    effective_from: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    effective_to: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    effective_from: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    effective_to: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     def __repr__(self) -> str:
         return (

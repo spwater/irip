@@ -36,6 +36,10 @@ from packages.common.database import Base, session_scope
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.errors import AppError
 from packages.common.ids import new_id
+from packages.components.flow_validation import (
+    FlowValidationService,
+    ValidationResult,
+)
 from packages.components.flows import (
     FlowEdge,
     FlowNode,
@@ -45,37 +49,34 @@ from packages.components.flows import (
     nodes_from_json,
     nodes_to_json,
 )
-from packages.components.flow_validation import (
-    FlowValidationService,
-    ValidationResult,
-)
 from packages.components.manifest import ComponentManifest
 from packages.components.registry import (
     ComponentRegistryService,
     ComponentVersion,
 )
-from packages.components.sdk import ComponentContext, ComponentResult
-from packages.components.sdk import ComponentRunner
+from packages.components.sdk import ComponentContext, ComponentResult, ComponentRunner
 
 #: 受保护参数白名单：外部运行 inputs 禁止覆盖这些文件路径类参数（F-13 安全约束）。
 #: 防止通过流程 inputs 注入任意文件路径，绕过节点参数的安全校验。
-PROTECTED_PARAMS: frozenset[str] = frozenset({
-    "path",
-    "file_path",
-    "input_path",
-    "output_path",
-    "file",
-    "filename",
-    "source_path",
-    "dest_path",
-    "input_file",
-    "output_file",
-    "data_path",
-    "template_path",
-    "config_path",
-    "script_path",
-    "executable_path",
-})
+PROTECTED_PARAMS: frozenset[str] = frozenset(
+    {
+        "path",
+        "file_path",
+        "input_path",
+        "output_path",
+        "file",
+        "filename",
+        "source_path",
+        "dest_path",
+        "input_file",
+        "output_file",
+        "data_path",
+        "template_path",
+        "config_path",
+        "script_path",
+        "executable_path",
+    }
+)
 
 
 # ---- ORM 实体 ----
@@ -134,10 +135,7 @@ class FlowDefinition(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"FlowDefinition(code={self.code!r}, "
-            f"status={self.status!r})"
-        )
+        return f"FlowDefinition(code={self.code!r}, status={self.status!r})"
 
 
 class FlowDefinitionVersionORM(Base):
@@ -170,12 +168,8 @@ class FlowDefinitionVersionORM(Base):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    nodes_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list
-    )
-    edges_json: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list
-    )
+    nodes_json: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    edges_json: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     random_seed: Mapped[int] = mapped_column(
         sa.Integer,
         nullable=False,
@@ -189,9 +183,7 @@ class FlowDefinitionVersionORM(Base):
         default="published",
         server_default=sa.text("'published'"),
     )
-    published_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         server_default=sa.func.now(),
@@ -199,10 +191,7 @@ class FlowDefinitionVersionORM(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"FlowDefinitionVersionORM(version={self.version!r}, "
-            f"status={self.status!r})"
-        )
+        return f"FlowDefinitionVersionORM(version={self.version!r}, status={self.status!r})"
 
 
 class FlowRun(Base):
@@ -240,16 +229,10 @@ class FlowRun(Base):
         server_default=sa.text("'pending'"),
     )
     job_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    input_snapshot: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    input_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     output_digest: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime,
         server_default=sa.func.now(),
@@ -257,10 +240,7 @@ class FlowRun(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"FlowRun(status={self.status!r}, "
-            f"flow_version_id={self.flow_version_id!r})"
-        )
+        return f"FlowRun(status={self.status!r}, flow_version_id={self.flow_version_id!r})"
 
 
 class FlowNodeExecution(Base):
@@ -298,30 +278,15 @@ class FlowNodeExecution(Base):
         default="pending",
         server_default=sa.text("'pending'"),
     )
-    input_summary: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
-    output_summary: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
-    diagnostics: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    started_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    duration_ms: Mapped[int | None] = mapped_column(
-        sa.Integer, nullable=True
-    )
+    input_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    output_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    diagnostics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    duration_ms: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
 
     def __repr__(self) -> str:
-        return (
-            f"FlowNodeExecution(node_id={self.node_id!r}, "
-            f"status={self.status!r})"
-        )
+        return f"FlowNodeExecution(node_id={self.node_id!r}, status={self.status!r})"
 
 
 # ---- 辅助函数 ----
@@ -365,9 +330,7 @@ def _build_manifest_from_version(
         )
 
     dependencies_raw: list[str] | None = raw.get("dependencies")
-    dependencies: tuple[str, ...] = (
-        tuple(dependencies_raw) if dependencies_raw else ()
-    )
+    dependencies: tuple[str, ...] = tuple(dependencies_raw) if dependencies_raw else ()
 
     return ComponentManifest(
         name=raw["name"],
@@ -407,9 +370,7 @@ def _topological_sort(
         adjacency[edge.source_node].append(edge.target_node)
         in_degree[edge.target_node] += 1
 
-    queue: list[str] = [
-        nid for nid, deg in in_degree.items() if deg == 0
-    ]
+    queue: list[str] = [nid for nid, deg in in_degree.items() if deg == 0]
     order: list[str] = []
 
     while queue:
@@ -478,9 +439,7 @@ def _compute_output_digest(
         "input_snapshot": input_snapshot,
         "node_summaries": node_executions,
     }
-    canonical: str = json.dumps(
-        payload, sort_keys=True, ensure_ascii=False, default=str
-    )
+    canonical: str = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
@@ -500,9 +459,7 @@ def _serialize_output_summary(
     summary: dict[str, Any] = {}
     for key, value in result.outputs.items():
         try:
-            summary[key] = json.loads(
-                json.dumps(value, ensure_ascii=False, default=str)
-            )
+            summary[key] = json.loads(json.dumps(value, ensure_ascii=False, default=str))
         except (TypeError, ValueError):
             summary[key] = str(value)
     summary["_metadata"] = result.metadata
@@ -524,9 +481,7 @@ def _serialize_input_summary(
     summary: dict[str, Any] = {}
     for key, value in inputs.items():
         try:
-            summary[key] = json.loads(
-                json.dumps(value, ensure_ascii=False, default=str)
-            )
+            summary[key] = json.loads(json.dumps(value, ensure_ascii=False, default=str))
         except (TypeError, ValueError):
             summary[key] = str(value)
     return summary
@@ -634,14 +589,11 @@ class FlowRuntimeService:
         """
         # DAG 校验
         if nodes:
-            dag_result: ValidationResult = (
-                FlowValidationService.validate_dag(nodes, edges)
-            )
+            dag_result: ValidationResult = FlowValidationService.validate_dag(nodes, edges)
             if not dag_result.valid:
                 raise AppError(
                     code="validation_failed",
-                    message="DAG 校验失败: "
-                    + "; ".join(dag_result.errors),
+                    message="DAG 校验失败: " + "; ".join(dag_result.errors),
                     retryable=False,
                     fields={"errors": list(dag_result.errors)},
                 )
@@ -706,29 +658,23 @@ class FlowRuntimeService:
             AppError: code="validation_failed"，当校验失败。
         """
         # 1. DAG 校验
-        dag_result: ValidationResult = (
-            FlowValidationService.validate_dag(nodes, edges)
-        )
+        dag_result: ValidationResult = FlowValidationService.validate_dag(nodes, edges)
         if not dag_result.valid:
             raise AppError(
                 code="validation_failed",
-                message="DAG 校验失败: "
-                + "; ".join(dag_result.errors),
+                message="DAG 校验失败: " + "; ".join(dag_result.errors),
                 retryable=False,
                 fields={"errors": list(dag_result.errors)},
             )
 
         # 2. 端口类型校验
-        port_result: ValidationResult = (
-            await FlowValidationService.check_port_types(
-                nodes, edges, self._registry
-            )
+        port_result: ValidationResult = await FlowValidationService.check_port_types(
+            nodes, edges, self._registry
         )
         if not port_result.valid:
             raise AppError(
                 code="validation_failed",
-                message="端口类型校验失败: "
-                + "; ".join(port_result.errors),
+                message="端口类型校验失败: " + "; ".join(port_result.errors),
                 retryable=False,
                 fields={"errors": list(port_result.errors)},
             )
@@ -754,17 +700,14 @@ class FlowRuntimeService:
                     },
                 ) from exc
 
-            manifest: ComponentManifest = _build_manifest_from_version(
-                version_row
-            )
-            param_result: ValidationResult = (
-                FlowValidationService.check_param_schema(node, manifest)
+            manifest: ComponentManifest = _build_manifest_from_version(version_row)
+            param_result: ValidationResult = FlowValidationService.check_param_schema(
+                node, manifest
             )
             if not param_result.valid:
                 raise AppError(
                     code="validation_failed",
-                    message=f"节点 {node.node_id} 参数校验失败: "
-                    + "; ".join(param_result.errors),
+                    message=f"节点 {node.node_id} 参数校验失败: " + "; ".join(param_result.errors),
                     retryable=False,
                     fields={
                         "node_id": node.node_id,
@@ -793,11 +736,8 @@ class FlowRuntimeService:
 
             # 计算版本号
             max_version: int | None = await session.scalar(
-                sa.select(
-                    sa.func.max(FlowDefinitionVersionORM.version)
-                ).where(
-                    FlowDefinitionVersionORM.flow_definition_id
-                    == flow_definition_id
+                sa.select(sa.func.max(FlowDefinitionVersionORM.version)).where(
+                    FlowDefinitionVersionORM.flow_definition_id == flow_definition_id
                 )
             )
             next_version: int = (max_version or 0) + 1
@@ -836,31 +776,19 @@ class FlowRuntimeService:
                 定义 + 最新版本（无版本时为 None），按 code 排序。
         """
         async with session_scope(self._factory) as session:
-            query = (
-                sa.select(FlowDefinition)
-                .where(FlowDefinition.organization_id == self._org_id)
-            )
+            query = sa.select(FlowDefinition).where(FlowDefinition.organization_id == self._org_id)
             if status is not None:
                 query = query.where(FlowDefinition.status == status)
             query = query.order_by(FlowDefinition.code)
 
-            definitions: list[FlowDefinition] = (
-                list((await session.execute(query)).scalars().all())
-            )
+            definitions: list[FlowDefinition] = list((await session.execute(query)).scalars().all())
 
-            result: list[
-                tuple[FlowDefinition, FlowDefinitionVersionORM | None]
-            ] = []
+            result: list[tuple[FlowDefinition, FlowDefinitionVersionORM | None]] = []
             for definition in definitions:
                 latest: FlowDefinitionVersionORM | None = await session.scalar(
                     sa.select(FlowDefinitionVersionORM)
-                    .where(
-                        FlowDefinitionVersionORM.flow_definition_id
-                        == definition.id
-                    )
-                    .order_by(
-                        FlowDefinitionVersionORM.version.desc()
-                    )
+                    .where(FlowDefinitionVersionORM.flow_definition_id == definition.id)
+                    .order_by(FlowDefinitionVersionORM.version.desc())
                     .limit(1)
                 )
                 result.append((definition, latest))
@@ -898,10 +826,7 @@ class FlowRuntimeService:
 
             latest: FlowDefinitionVersionORM | None = await session.scalar(
                 sa.select(FlowDefinitionVersionORM)
-                .where(
-                    FlowDefinitionVersionORM.flow_definition_id
-                    == definition.id
-                )
+                .where(FlowDefinitionVersionORM.flow_definition_id == definition.id)
                 .order_by(FlowDefinitionVersionORM.version.desc())
                 .limit(1)
             )
@@ -994,8 +919,7 @@ class FlowRuntimeService:
                     sa.select(FlowDefinition, FlowDefinitionVersionORM)
                     .join(
                         FlowDefinitionVersionORM,
-                        FlowDefinitionVersionORM.flow_definition_id
-                        == FlowDefinition.id,
+                        FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
                         FlowDefinition.organization_id == self._org_id,
@@ -1139,17 +1063,11 @@ class FlowRuntimeService:
                     code="not_found",
                     message=f"流程版本不存在: {run.flow_version_id}",
                     retryable=False,
-                    fields={
-                        "flow_version_id": str(run.flow_version_id)
-                    },
+                    fields={"flow_version_id": str(run.flow_version_id)},
                 )
 
-            nodes: tuple[FlowNode, ...] = nodes_from_json(
-                version.nodes_json
-            )
-            edges: tuple[FlowEdge, ...] = edges_from_json(
-                version.edges_json
-            )
+            nodes: tuple[FlowNode, ...] = nodes_from_json(version.nodes_json)
+            edges: tuple[FlowEdge, ...] = edges_from_json(version.edges_json)
             input_snapshot: dict[str, Any] = dict(run.input_snapshot or {})
             job_id: UUID | None = run.job_id
             version_digest: str = version.digest
@@ -1170,14 +1088,11 @@ class FlowRuntimeService:
         # 4. 逐节点执行
         node_outputs: dict[str, dict[str, Any]] = {}
         node_exec_summaries: list[dict[str, Any]] = []
-        all_succeeded: bool = True
 
         for node_id in order:
             # 检查取消信号
             if cancel_event.is_set():
-                await self._finalize_run(
-                    run_id, "cancelled", version_digest, node_exec_summaries
-                )
+                await self._finalize_run(run_id, "cancelled", version_digest, node_exec_summaries)
                 await self._update_job_status(job_id, "cancelled")
                 return
 
@@ -1186,9 +1101,7 @@ class FlowRuntimeService:
             # 解析输入
             inputs: dict[str, Any] = {}
             for port_name, binding in node.input_bindings.items():
-                inputs[port_name] = _resolve_input(
-                    binding, node_outputs, input_snapshot
-                )
+                inputs[port_name] = _resolve_input(binding, node_outputs, input_snapshot)
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
             # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
             # 但允许 artifact: 前缀的值通过（用户上传文件的合法引用）
@@ -1212,25 +1125,18 @@ class FlowRuntimeService:
                 {
                     "node_id": node_id,
                     "status": exec_result["status"],
-                    "output_summary": exec_result.get(
-                        "output_summary", {}
-                    ),
+                    "output_summary": exec_result.get("output_summary", {}),
                 }
             )
 
             if exec_result["status"] != "succeeded":
-                all_succeeded = False
                 # 节点失败，终止执行
-                await self._finalize_run(
-                    run_id, "failed", version_digest, node_exec_summaries
-                )
+                await self._finalize_run(run_id, "failed", version_digest, node_exec_summaries)
                 await self._update_job_status(job_id, "failed")
                 return
 
         # 5. 全部成功
-        await self._finalize_run(
-            run_id, "succeeded", version_digest, node_exec_summaries
-        )
+        await self._finalize_run(run_id, "succeeded", version_digest, node_exec_summaries)
         await self._update_job_status(job_id, "succeeded")
 
     async def _execute_single_node(
@@ -1281,12 +1187,8 @@ class FlowRuntimeService:
 
         try:
             # 获取组件 manifest（始终取最新发布版本，而非 flow 版本中记录的版本号）
-            version_row: ComponentVersion = await self._registry.get_latest(
-                node.component_name
-            )
-            manifest: ComponentManifest = _build_manifest_from_version(
-                version_row
-            )
+            version_row: ComponentVersion = await self._registry.get_latest(node.component_name)
+            manifest: ComponentManifest = _build_manifest_from_version(version_row)
 
             # 从组件 manifest 的参数中动态加载 prompt 和 tool_type，覆盖 flow 版本中的快照
             props = manifest.parameters.get("properties", {})
@@ -1313,19 +1215,13 @@ class FlowRuntimeService:
             merged_params: dict[str, Any] = {**node.params, **inputs}
 
             # 运行组件
-            result: ComponentResult = await self._runner.run(
-                manifest, context, merged_params
-            )
+            result: ComponentResult = await self._runner.run(manifest, context, merged_params)
 
             # 序列化输出摘要
-            output_summary: dict[str, Any] = _serialize_output_summary(
-                result
-            )
+            output_summary: dict[str, Any] = _serialize_output_summary(result)
 
             now_end: datetime = self._clock.now()
-            duration_ms: int = int(
-                (now_end - now_start).total_seconds() * 1000
-            )
+            duration_ms: int = int((now_end - now_start).total_seconds() * 1000)
 
             # 更新为 succeeded
             async with session_scope(self._factory) as session:
@@ -1349,9 +1245,7 @@ class FlowRuntimeService:
 
         except Exception as exc:
             now_end: datetime = self._clock.now()
-            duration_ms: int = int(
-                (now_end - now_start).total_seconds() * 1000
-            )
+            duration_ms: int = int((now_end - now_start).total_seconds() * 1000)
 
             diagnostics: dict[str, Any] = {
                 "error_type": type(exc).__name__,
@@ -1418,17 +1312,11 @@ class FlowRuntimeService:
                     code="not_found",
                     message=f"流程版本不存在: {run.flow_version_id}",
                     retryable=False,
-                    fields={
-                        "flow_version_id": str(run.flow_version_id)
-                    },
+                    fields={"flow_version_id": str(run.flow_version_id)},
                 )
 
-            nodes: tuple[FlowNode, ...] = nodes_from_json(
-                version.nodes_json
-            )
-            edges: tuple[FlowEdge, ...] = edges_from_json(
-                version.edges_json
-            )
+            nodes: tuple[FlowNode, ...] = nodes_from_json(version.nodes_json)
+            edges: tuple[FlowEdge, ...] = edges_from_json(version.edges_json)
             input_snapshot: dict[str, Any] = dict(run.input_snapshot or {})
             job_id: UUID | None = run.job_id
             version_digest: str = version.digest
@@ -1441,7 +1329,9 @@ class FlowRuntimeService:
                         .where(FlowNodeExecution.flow_run_id == run_id)
                         .order_by(FlowNodeExecution.started_at)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
 
             # 更新状态为 running，重置 started_at（重新计时）
@@ -1459,9 +1349,7 @@ class FlowRuntimeService:
         for exec_record in existing_execs:
             if exec_record.status == "succeeded":
                 succeeded_nodes.add(exec_record.node_id)
-                node_outputs[exec_record.node_id] = dict(
-                    exec_record.output_summary or {}
-                )
+                node_outputs[exec_record.node_id] = dict(exec_record.output_summary or {})
 
         # 创建取消事件
         cancel_event: asyncio.Event = asyncio.Event()
@@ -1481,7 +1369,9 @@ class FlowRuntimeService:
         for node_id in order:
             if cancel_event.is_set():
                 await self._finalize_run(
-                    run_id, "cancelled", version_digest,
+                    run_id,
+                    "cancelled",
+                    version_digest,
                     node_exec_summaries,
                 )
                 await self._update_job_status(job_id, "cancelled")
@@ -1496,9 +1386,7 @@ class FlowRuntimeService:
             # 解析输入
             inputs: dict[str, Any] = {}
             for port_name, binding in node.input_bindings.items():
-                inputs[port_name] = _resolve_input(
-                    binding, node_outputs, input_snapshot
-                )
+                inputs[port_name] = _resolve_input(binding, node_outputs, input_snapshot)
             # 合并外部输入（input_snapshot 里的参数覆盖节点默认值）
             # 安全约束（F-13）：禁止 inputs 覆盖文件路径类受保护参数
             # 但允许 artifact: 前缀的值通过（用户上传文件的合法引用）
@@ -1526,9 +1414,7 @@ class FlowRuntimeService:
                     node_exec_summaries[i] = {
                         "node_id": node_id,
                         "status": exec_result["status"],
-                        "output_summary": exec_result.get(
-                            "output_summary", {}
-                        ),
+                        "output_summary": exec_result.get("output_summary", {}),
                     }
                     found = True
                     break
@@ -1537,24 +1423,22 @@ class FlowRuntimeService:
                     {
                         "node_id": node_id,
                         "status": exec_result["status"],
-                        "output_summary": exec_result.get(
-                            "output_summary", {}
-                        ),
+                        "output_summary": exec_result.get("output_summary", {}),
                     }
                 )
 
             if exec_result["status"] != "succeeded":
                 await self._finalize_run(
-                    run_id, "failed", version_digest,
+                    run_id,
+                    "failed",
+                    version_digest,
                     node_exec_summaries,
                 )
                 await self._update_job_status(job_id, "failed")
                 return
 
         # 全部成功
-        await self._finalize_run(
-            run_id, "succeeded", version_digest, node_exec_summaries
-        )
+        await self._finalize_run(run_id, "succeeded", version_digest, node_exec_summaries)
         await self._update_job_status(job_id, "succeeded")
 
     async def cancel(self, run_id: UUID) -> FlowRun:
@@ -1601,9 +1485,7 @@ class FlowRuntimeService:
 
             return run
 
-    async def retry_node(
-        self, run_id: UUID, node_id: str
-    ) -> FlowNodeExecution:
+    async def retry_node(self, run_id: UUID, node_id: str) -> FlowNodeExecution:
         """重试单个失败节点。
 
         重新执行指定节点，不影响其他已成功节点。
@@ -1644,17 +1526,11 @@ class FlowRuntimeService:
                     code="not_found",
                     message=f"流程版本不存在: {run.flow_version_id}",
                     retryable=False,
-                    fields={
-                        "flow_version_id": str(run.flow_version_id)
-                    },
+                    fields={"flow_version_id": str(run.flow_version_id)},
                 )
 
-            nodes: tuple[FlowNode, ...] = nodes_from_json(
-                version.nodes_json
-            )
-            edges: tuple[FlowEdge, ...] = edges_from_json(
-                version.edges_json
-            )
+            nodes: tuple[FlowNode, ...] = nodes_from_json(version.nodes_json)
+            edges_from_json(version.edges_json)
             input_snapshot: dict[str, Any] = dict(run.input_snapshot or {})
             job_id: UUID | None = run.job_id
 
@@ -1678,10 +1554,7 @@ class FlowRuntimeService:
             if existing_exec is not None and existing_exec.status != "failed":
                 raise AppError(
                     code="validation_failed",
-                    message=(
-                        f"节点 {node_id} 状态为 "
-                        f"{existing_exec.status}，仅失败节点可重试"
-                    ),
+                    message=(f"节点 {node_id} 状态为 {existing_exec.status}，仅失败节点可重试"),
                     retryable=False,
                     fields={
                         "node_id": node_id,
@@ -1704,20 +1577,18 @@ class FlowRuntimeService:
                             FlowNodeExecution.status == "succeeded",
                         )
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             for exec_record in all_execs:
-                node_outputs[exec_record.node_id] = dict(
-                    exec_record.output_summary or {}
-                )
+                node_outputs[exec_record.node_id] = dict(exec_record.output_summary or {})
 
         # 解析目标节点输入
         node: FlowNode = node_map[node_id]
         inputs: dict[str, Any] = {}
         for port_name, binding in node.input_bindings.items():
-            inputs[port_name] = _resolve_input(
-                binding, node_outputs, input_snapshot
-            )
+            inputs[port_name] = _resolve_input(binding, node_outputs, input_snapshot)
 
         # 创建取消事件
         cancel_event: asyncio.Event = asyncio.Event()
@@ -1739,12 +1610,12 @@ class FlowRuntimeService:
                         await session.execute(
                             sa.select(FlowNodeExecution).where(
                                 FlowNodeExecution.flow_run_id == run_id,
-                                FlowNodeExecution.status.in_(
-                                    ["pending", "failed"]
-                                ),
+                                FlowNodeExecution.status.in_(["pending", "failed"]),
                             )
                         )
-                    ).scalars().all()
+                    )
+                    .scalars()
+                    .all()
                 )
                 all_succeeded = len(pending_or_failed) == 0
 
@@ -1758,7 +1629,9 @@ class FlowRuntimeService:
                                     FlowNodeExecution.flow_run_id == run_id
                                 )
                             )
-                        ).scalars().all()
+                        )
+                        .scalars()
+                        .all()
                     )
                 summaries: list[dict[str, Any]] = [
                     {
@@ -1768,27 +1641,23 @@ class FlowRuntimeService:
                     }
                     for e in all_execs2
                 ]
-                await self._finalize_run(
-                    run_id, "succeeded", version_digest, summaries
-                )
+                await self._finalize_run(run_id, "succeeded", version_digest, summaries)
                 await self._update_job_status(job_id, "succeeded")
             else:
-                await self._finalize_run(
-                    run_id, "running", version_digest, []
-                )
+                await self._finalize_run(run_id, "running", version_digest, [])
         else:
-            await self._finalize_run(
-                run_id, "failed", version_digest, []
-            )
+            await self._finalize_run(run_id, "failed", version_digest, [])
             await self._update_job_status(job_id, "failed")
 
         # 返回最新的节点执行记录
         async with session_scope(self._factory) as session:
             latest_exec: FlowNodeExecution | None = await session.scalar(
-                sa.select(FlowNodeExecution).where(
+                sa.select(FlowNodeExecution)
+                .where(
                     FlowNodeExecution.flow_run_id == run_id,
                     FlowNodeExecution.node_id == node_id,
-                ).order_by(FlowNodeExecution.id.desc())
+                )
+                .order_by(FlowNodeExecution.id.desc())
             )
             if latest_exec is None:
                 raise AppError(
@@ -1799,9 +1668,7 @@ class FlowRuntimeService:
                 )
             return latest_exec
 
-    async def get_run(
-        self, run_id: UUID
-    ) -> tuple[FlowRun, list[FlowNodeExecution]]:
+    async def get_run(self, run_id: UUID) -> tuple[FlowRun, list[FlowNodeExecution]]:
         """获取执行记录详情（含节点执行状态）。
 
         Args:
@@ -1836,7 +1703,9 @@ class FlowRuntimeService:
                         .where(FlowNodeExecution.flow_run_id == run_id)
                         .order_by(FlowNodeExecution.started_at)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             return run, executions
 
@@ -1858,9 +1727,7 @@ class FlowRuntimeService:
 
             # 删除节点执行记录
             await session.execute(
-                sa.delete(FlowNodeExecution).where(
-                    FlowNodeExecution.flow_run_id == run_id
-                )
+                sa.delete(FlowNodeExecution).where(FlowNodeExecution.flow_run_id == run_id)
             )
             # 删除执行记录
             await session.execute(
@@ -1872,9 +1739,8 @@ class FlowRuntimeService:
             # 删除关联的作业（避免残留 job 在看板显示空名称）
             if job_id is not None:
                 from packages.jobs.entities import Job
-                await session.execute(
-                    sa.delete(Job).where(Job.id == job_id)
-                )
+
+                await session.execute(sa.delete(Job).where(Job.id == job_id))
             await session.flush()
 
     async def delete_flow(self, flow_id: UUID) -> None:
@@ -1897,20 +1763,14 @@ class FlowRuntimeService:
                     FlowDefinitionVersionORM.flow_definition_id == flow_id
                 )
             )
-            version_ids: list[UUID] = [
-                row[0] for row in version_ids_result.all()
-            ]
+            version_ids: list[UUID] = [row[0] for row in version_ids_result.all()]
 
             if version_ids:
                 # 2. 删除这些版本关联的所有运行记录的节点执行记录
                 run_ids_result = await session.execute(
-                    sa.select(FlowRun.id).where(
-                        FlowRun.flow_version_id.in_(version_ids)
-                    )
+                    sa.select(FlowRun.id).where(FlowRun.flow_version_id.in_(version_ids))
                 )
-                run_ids: list[UUID] = [
-                    row[0] for row in run_ids_result.all()
-                ]
+                run_ids: list[UUID] = [row[0] for row in run_ids_result.all()]
 
                 if run_ids:
                     await session.execute(
@@ -1921,16 +1781,13 @@ class FlowRuntimeService:
 
                     # 3. 删除运行记录
                     await session.execute(
-                        sa.delete(FlowRun).where(
-                            FlowRun.flow_version_id.in_(version_ids)
-                        )
+                        sa.delete(FlowRun).where(FlowRun.flow_version_id.in_(version_ids))
                     )
 
                 # 4. 删除流程版本
                 await session.execute(
                     sa.delete(FlowDefinitionVersionORM).where(
-                        FlowDefinitionVersionORM.flow_definition_id
-                        == flow_id
+                        FlowDefinitionVersionORM.flow_definition_id == flow_id
                     )
                 )
 
@@ -1967,9 +1824,7 @@ class FlowRuntimeService:
                     sa.select(FlowRun).where(FlowRun.id == run_id)
                 )
                 if run is not None:
-                    input_snapshot: dict[str, Any] = dict(
-                        run.input_snapshot or {}
-                    )
+                    input_snapshot: dict[str, Any] = dict(run.input_snapshot or {})
                     output_digest = _compute_output_digest(
                         version_digest,
                         input_snapshot,
@@ -1984,15 +1839,9 @@ class FlowRuntimeService:
             }
             if output_digest is not None:
                 values["output_digest"] = output_digest
-            await session.execute(
-                sa.update(FlowRun)
-                .values(**values)
-                .where(FlowRun.id == run_id)
-            )
+            await session.execute(sa.update(FlowRun).values(**values).where(FlowRun.id == run_id))
 
-    async def _update_job_status(
-        self, job_id: UUID | None, status: str
-    ) -> None:
+    async def _update_job_status(self, job_id: UUID | None, status: str) -> None:
         """更新关联作业状态。
 
         Args:
@@ -2009,9 +1858,7 @@ class FlowRuntimeService:
             "failed": JobStatus.FAILED,
             "cancelled": JobStatus.CANCELLED,
         }
-        job_status: JobStatus = status_map.get(
-            status, JobStatus.SUCCEEDED
-        )
+        job_status: JobStatus = status_map.get(status, JobStatus.SUCCEEDED)
 
         async with session_scope(self._factory) as session:
             await session.execute(

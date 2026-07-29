@@ -10,8 +10,6 @@
 无数据库依赖（纯适配器逻辑测试）。
 """
 
-import json
-import os
 import sys
 import textwrap
 from pathlib import Path
@@ -26,7 +24,6 @@ from packages.models.adapters import (
 )
 from packages.models.applicability import ApplicabilityChecker
 from packages.models.contracts import ModelContract
-
 
 #: 测试用输入/输出契约。
 _TEST_CONTRACT_DICT: dict = {
@@ -153,9 +150,7 @@ class TestCommandModelAdapter:
     @pytest.mark.asyncio
     async def test_load_validate_predict(self, tmp_path: Path) -> None:
         """命令行适配器加载、校验、预测正常流程。"""
-        script_path = _write_cli_script(
-            tmp_path, "predict.py", _CLI_NORMAL_SCRIPT
-        )
+        script_path = _write_cli_script(tmp_path, "predict.py", _CLI_NORMAL_SCRIPT)
         contract = _make_contract(
             executor={
                 "type": "cli",
@@ -185,9 +180,7 @@ class TestCommandModelAdapter:
     @pytest.mark.asyncio
     async def test_timeout_handling(self, tmp_path: Path) -> None:
         """超时处理：执行超时发 SIGTERM 并抛 AppError。"""
-        script_path = _write_cli_script(
-            tmp_path, "slow.py", _CLI_SLEEP_SCRIPT
-        )
+        script_path = _write_cli_script(tmp_path, "slow.py", _CLI_SLEEP_SCRIPT)
         contract = _make_contract(
             executor={
                 "type": "cli",
@@ -208,9 +201,7 @@ class TestCommandModelAdapter:
     @pytest.mark.asyncio
     async def test_output_size_limit(self, tmp_path: Path) -> None:
         """输出大小限制：输出超限抛 AppError。"""
-        script_path = _write_cli_script(
-            tmp_path, "huge.py", _CLI_HUGE_OUTPUT_SCRIPT
-        )
+        script_path = _write_cli_script(tmp_path, "huge.py", _CLI_HUGE_OUTPUT_SCRIPT)
         contract = _make_contract(
             executor={
                 "type": "cli",
@@ -232,9 +223,7 @@ class TestCommandModelAdapter:
     @pytest.mark.asyncio
     async def test_invalid_input_rejected(self, tmp_path: Path) -> None:
         """无效输入拒绝：validate_input 对缺失字段返回 valid=False。"""
-        script_path = _write_cli_script(
-            tmp_path, "predict.py", _CLI_NORMAL_SCRIPT
-        )
+        script_path = _write_cli_script(tmp_path, "predict.py", _CLI_NORMAL_SCRIPT)
         contract = _make_contract(
             executor={
                 "type": "cli",
@@ -259,7 +248,7 @@ class TestCommandModelAdapter:
     @pytest.mark.asyncio
     async def test_predict_without_load_raises(self) -> None:
         """未加载即预测抛 AppError。"""
-        contract = _make_contract()
+        _make_contract()
         adapter = CommandModelAdapter(
             command=("python", "predict.py"),
             timeout_seconds=10,
@@ -304,9 +293,7 @@ class TestBuildAdapter:
 
     def test_build_python_adapter(self) -> None:
         """根据 executor.type=python 构建 PythonModelAdapter。"""
-        contract = _make_contract(
-            executor={"type": "python", "timeout_seconds": 60}
-        )
+        contract = _make_contract(executor={"type": "python", "timeout_seconds": 60})
         adapter = build_adapter(contract)
         assert isinstance(adapter, PythonModelAdapter)
 
@@ -392,8 +379,8 @@ class TestPythonModelAdapterSklearn:
 
 _SKLEARN_AVAILABLE: bool = True
 try:
-    import sklearn  # noqa: F401
     import joblib  # noqa: F401
+    import sklearn  # noqa: F401
 except ImportError:
     _SKLEARN_AVAILABLE = False
 
@@ -411,12 +398,12 @@ class TestPythonModelAdapter:
         import io
 
         import joblib
-        from sklearn.ensemble import RandomForestRegressor
-        from sklearn.pipeline import Pipeline
-        from sklearn.preprocessing import StandardScaler
 
         # 训练一个微型多输出模型
         import numpy as np
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
 
         rng = np.random.RandomState(42)
         x = rng.uniform(0, 100, size=(50, 2))

@@ -47,9 +47,7 @@ _SAFE_CLI_MODE: bool = os.getenv("IRIP_SAFE_CLI_MODE", "false").lower() in (
 )
 
 #: 沙箱容器镜像名称。
-_SANDBOX_IMAGE: str = os.getenv(
-    "IRIP_CLI_SANDBOX_IMAGE", "irip-cli-sandbox:latest"
-)
+_SANDBOX_IMAGE: str = os.getenv("IRIP_CLI_SANDBOX_IMAGE", "irip-cli-sandbox:latest")
 
 #: 沙箱容器内存上限（字节）。
 _SANDBOX_MEMORY_LIMIT: str = os.getenv("IRIP_CLI_SANDBOX_MEMORY", "512m")
@@ -138,16 +136,14 @@ class PythonComponentRunner:
                 from packages.components.builtin.ingestion.ez_scan_extractor import (
                     EZScanExtractor,
                 )
+
                 impl = EZScanExtractor()
                 # 自动注册，下次不用重复创建
                 self._registry[(manifest.name, manifest.version)] = impl
             else:
                 raise AppError(
                     code="component_not_found",
-                    message=(
-                        f"Python 组件未注册: "
-                        f"{manifest.name}@{manifest.version}"
-                    ),
+                    message=(f"Python 组件未注册: {manifest.name}@{manifest.version}"),
                     retryable=False,
                     fields={
                         "name": manifest.name,
@@ -155,12 +151,8 @@ class PythonComponentRunner:
                     },
                 )
 
-        execute_task = asyncio.create_task(
-            impl.execute(context, params)
-        )
-        cancel_watcher = asyncio.create_task(
-            context.cancel_event.wait()
-        )
+        execute_task = asyncio.create_task(impl.execute(context, params))
+        cancel_watcher = asyncio.create_task(context.cancel_event.wait())
 
         done: set[asyncio.Task[object]] = set()
         pending: set[asyncio.Task[object]] = set()
@@ -176,7 +168,8 @@ class PythonComponentRunner:
                     task.cancel()
             # 确保已取消的任务完成，抑制 CancelledError 警告
             await asyncio.gather(
-                execute_task, cancel_watcher,
+                execute_task,
+                cancel_watcher,
                 return_exceptions=True,
             )
 
@@ -184,10 +177,7 @@ class PythonComponentRunner:
         if cancel_watcher in done and execute_task not in done:
             raise AppError(
                 code="component_cancelled",
-                message=(
-                    f"组件执行被取消: "
-                    f"{manifest.name}@{manifest.version}"
-                ),
+                message=(f"组件执行被取消: {manifest.name}@{manifest.version}"),
                 retryable=False,
                 fields={
                     "name": manifest.name,
@@ -201,10 +191,7 @@ class PythonComponentRunner:
                 if isinstance(exc, asyncio.CancelledError):
                     raise AppError(
                         code="component_cancelled",
-                        message=(
-                            f"组件执行被取消: "
-                            f"{manifest.name}@{manifest.version}"
-                        ),
+                        message=(f"组件执行被取消: {manifest.name}@{manifest.version}"),
                         retryable=False,
                         fields={
                             "name": manifest.name,
@@ -217,10 +204,7 @@ class PythonComponentRunner:
         # 两者均未完成 → 超时
         raise AppError(
             code="component_timeout",
-            message=(
-                f"组件执行超时: "
-                f"{manifest.name}@{manifest.version}"
-            ),
+            message=(f"组件执行超时: {manifest.name}@{manifest.version}"),
             retryable=False,
             fields={
                 "name": manifest.name,
@@ -311,9 +295,7 @@ class CLIComponentRunner:
             AppError: code="component_failed"，当子进程非零退出。
             AppError: code="invalid_output"，当 output.json 解析失败。
         """
-        with tempfile.TemporaryDirectory(
-            prefix="irip-component-"
-        ) as tmpdir:
+        with tempfile.TemporaryDirectory(prefix="irip-component-") as tmpdir:
             workdir = Path(tmpdir)
 
             # 1. 写入 input.json
@@ -350,9 +332,7 @@ class CLIComponentRunner:
             else:
                 raise AppError(
                     code="invalid_manifest",
-                    message=(
-                        "parameters.command 必须为字符串或字符串列表"
-                    ),
+                    message=("parameters.command 必须为字符串或字符串列表"),
                     retryable=False,
                     fields={"name": manifest.name},
                 )
@@ -371,9 +351,7 @@ class CLIComponentRunner:
                 }
             else:
                 # 直接模式：在当前进程中执行（默认，开发/测试环境）
-                full_command = command + [
-                    str(input_path), str(output_path)
-                ]
+                full_command = command + [str(input_path), str(output_path)]
                 exec_kwargs = {
                     "cwd": str(workdir),
                     "env": safe_env,
@@ -410,21 +388,18 @@ class CLIComponentRunner:
                     process.communicate(),
                     timeout=self._timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 cancel_monitor.cancel()
                 self._terminate_process(process)
                 raise AppError(
                     code="component_timeout",
-                    message=(
-                        f"CLI 组件执行超时: "
-                        f"{manifest.name}@{manifest.version}"
-                    ),
+                    message=(f"CLI 组件执行超时: {manifest.name}@{manifest.version}"),
                     retryable=False,
                     fields={
                         "name": manifest.name,
                         "version": manifest.version,
                     },
-                )
+                ) from None
             finally:
                 if not cancel_monitor.done():
                     cancel_monitor.cancel()
@@ -437,10 +412,7 @@ class CLIComponentRunner:
             if context.cancel_event.is_set():
                 raise AppError(
                     code="component_cancelled",
-                    message=(
-                        f"CLI 组件被取消: "
-                        f"{manifest.name}@{manifest.version}"
-                    ),
+                    message=(f"CLI 组件被取消: {manifest.name}@{manifest.version}"),
                     retryable=False,
                     fields={
                         "name": manifest.name,
@@ -450,15 +422,10 @@ class CLIComponentRunner:
 
             # 7. 检查退出码
             if process.returncode != 0:
-                stderr_text = stderr_bytes.decode(
-                    "utf-8", errors="replace"
-                )
+                stderr_text = stderr_bytes.decode("utf-8", errors="replace")
                 raise AppError(
                     code="component_failed",
-                    message=(
-                        f"CLI 组件执行失败 "
-                        f"(exit={process.returncode}): {stderr_text}"
-                    ),
+                    message=(f"CLI 组件执行失败 (exit={process.returncode}): {stderr_text}"),
                     retryable=False,
                     fields={
                         "name": manifest.name,
@@ -471,10 +438,7 @@ class CLIComponentRunner:
             if not output_path.exists():
                 raise AppError(
                     code="invalid_output",
-                    message=(
-                        f"CLI 组件未生成 output.json: "
-                        f"{manifest.name}@{manifest.version}"
-                    ),
+                    message=(f"CLI 组件未生成 output.json: {manifest.name}@{manifest.version}"),
                     retryable=False,
                     fields={
                         "name": manifest.name,
@@ -483,9 +447,7 @@ class CLIComponentRunner:
                 )
 
             try:
-                output_data = json.loads(
-                    output_path.read_text(encoding="utf-8")
-                )
+                output_data = json.loads(output_path.read_text(encoding="utf-8"))
             except json.JSONDecodeError as exc:
                 raise AppError(
                     code="invalid_output",
@@ -536,19 +498,25 @@ class CLIComponentRunner:
         container_output = f"{container_workdir}/output.json"
 
         docker_command: list[str] = [
-            "docker", "run", "--rm",
+            "docker",
+            "run",
+            "--rm",
             # 安全限制
             "--network=none",
             "--read-only",
-            "--tmpfs", "/tmp:rw,size=64m,mode=1777",
-            "--user", "2000:2000",
+            "--tmpfs",
+            "/tmp:rw,size=64m,mode=1777",
+            "--user",
+            "2000:2000",
             "--cap-drop=ALL",
             "--no-new-privileges",
             f"--memory={_SANDBOX_MEMORY_LIMIT}",
             f"--cpus={_SANDBOX_CPU_LIMIT}",
             # 挂载工作目录（input.json + output.json 通信）
-            "-v", f"{workdir}:{container_workdir}",
-            "-w", container_workdir,
+            "-v",
+            f"{workdir}:{container_workdir}",
+            "-w",
+            container_workdir,
             # 沙箱镜像
             _SANDBOX_IMAGE,
             # 组件命令
@@ -575,18 +543,13 @@ class CLIComponentRunner:
         """
         safe_env: dict[str, str] = {}
         for key, value in os.environ.items():
-            if any(
-                key.startswith(prefix)
-                for prefix in self._SAFE_ENV_PREFIXES
-            ):
+            if any(key.startswith(prefix) for prefix in self._SAFE_ENV_PREFIXES):
                 safe_env[key] = value
         for key, value in secrets.items():
             safe_env[f"IRIP_COMPONENT_SECRET_{key.upper()}"] = value
         return safe_env
 
-    def _terminate_process(
-        self, process: asyncio.subprocess.Process
-    ) -> None:
+    def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
         """向子进程发送 SIGTERM（优雅终止）。
 
         Args:

@@ -27,9 +27,7 @@ from packages.components.builtin.ingestion.pdf_table_reader import (
 )
 from packages.components.builtin.ingestion.rest_fetch import RESTFetch
 from packages.components.builtin.types import ObservationTable
-
 from tests.unit.components.conftest import make_test_context
-
 
 # ---- JSONReader 异步行为 ----
 
@@ -40,9 +38,7 @@ class TestJSONReaderAsyncIO:
     async def test_read_json_returns_correct_data(self, tmp_path: Path):
         """异步读取 JSON 文件返回正确数据。"""
         path = tmp_path / "test.json"
-        path.write_text(
-            json.dumps([{"a": 1}, {"a": 2}]), encoding="utf-8"
-        )
+        path.write_text(json.dumps([{"a": 1}, {"a": 2}]), encoding="utf-8")
 
         reader = JSONReader()
         ctx = make_test_context()
@@ -172,9 +168,7 @@ class TestCSVReaderAsyncIO:
 
         reader = CSVReader()
         ctx = make_test_context()
-        result = await reader.execute(
-            ctx, {"path": str(path), "delimiter": "\t"}
-        )
+        result = await reader.execute(ctx, {"path": str(path), "delimiter": "\t"})
 
         table = result.outputs["observations"]
         assert table.columns == ("a", "b")
@@ -274,17 +268,13 @@ class TestRESTFetchAsyncIO:
 
     async def test_fetch_https_json(self):
         """HTTPS 拉取 JSON 数据（mock httpx.AsyncClient）。"""
-        mock_client = _make_mock_httpx_client(
-            body=b'{"items": [{"x": 1}, {"x": 2}]}'
-        )
+        mock_client = _make_mock_httpx_client(body=b'{"items": [{"x": 1}, {"x": 2}]}')
 
         with patch(
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
                 result = await reader.execute(
@@ -307,14 +297,10 @@ class TestRESTFetchAsyncIO:
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ) as mock_async_client:
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
-                await reader.execute(
-                    ctx, {"url": "https://api.example.com/data"}
-                )
+                await reader.execute(ctx, {"url": "https://api.example.com/data"})
 
         # 验证 httpx.AsyncClient 被调用（而非 urllib.request.urlopen）
         assert mock_async_client.called
@@ -334,9 +320,7 @@ class TestRESTFetchAsyncIO:
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
 
@@ -366,29 +350,21 @@ class TestRESTFetchAsyncIO:
             return_value=[(0, 0, 0, 0, ("127.0.0.1", 0))],
         ):
             with pytest.raises(Exception, match="禁止访问"):
-                await reader.execute(
-                    ctx, {"url": "https://localhost/data", "allow_http": False}
-                )
+                await reader.execute(ctx, {"url": "https://localhost/data", "allow_http": False})
 
     async def test_fetch_response_too_large(self):
         """响应超过 50MB 限制抛 response_too_large。"""
-        mock_client = _make_mock_httpx_client(
-            body=b"x" * (60 * 1024 * 1024)
-        )
+        mock_client = _make_mock_httpx_client(body=b"x" * (60 * 1024 * 1024))
 
         with patch(
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
                 with pytest.raises(Exception, match="超过 50MB"):
-                    await reader.execute(
-                        ctx, {"url": "https://api.example.com/data"}
-                    )
+                    await reader.execute(ctx, {"url": "https://api.example.com/data"})
 
     async def test_fetch_http_error_status(self):
         """HTTP 4xx/5xx 响应抛 http_error。"""
@@ -401,15 +377,11 @@ class TestRESTFetchAsyncIO:
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
                 with pytest.raises(Exception, match="HTTP 请求失败"):
-                    await reader.execute(
-                        ctx, {"url": "https://api.example.com/data"}
-                    )
+                    await reader.execute(ctx, {"url": "https://api.example.com/data"})
 
     async def test_fetch_connection_error(self):
         """httpx 连接错误抛 http_error。"""
@@ -424,12 +396,8 @@ class TestRESTFetchAsyncIO:
             "packages.components.builtin.ingestion.rest_fetch.httpx.AsyncClient",
             return_value=mock_client,
         ):
-            with patch(
-                "packages.components.builtin.ingestion.rest_fetch._resolve_and_check"
-            ):
+            with patch("packages.components.builtin.ingestion.rest_fetch._resolve_and_check"):
                 reader = RESTFetch()
                 ctx = make_test_context()
                 with pytest.raises(Exception, match="HTTP 请求失败"):
-                    await reader.execute(
-                        ctx, {"url": "https://api.example.com/data"}
-                    )
+                    await reader.execute(ctx, {"url": "https://api.example.com/data"})

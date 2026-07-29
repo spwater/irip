@@ -74,9 +74,8 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/standards',
     component: StandardsPageV1,
-    validateSearch: (search: Record<string, unknown>): { tab?: string; prefill_object?: string } => ({
+    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
-      prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
     }),
   });
 
@@ -131,6 +130,10 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/components',
     component: ComponentsPage,
+    validateSearch: (search: Record<string, unknown>): { prefill_object?: string; edit_id?: string } => ({
+      prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
+      edit_id: typeof search.edit_id === 'string' ? search.edit_id : undefined,
+    }),
   });
 
   // V2 流程编排路由
@@ -153,13 +156,15 @@ export function createAppRouter() {
     }),
   });
 
-  // 平台应用页面（Tab：AI 助手 / AI 工具管理）
+  // 平台应用页面（Tab：AI 助手 / AI 工具管理 / 数据接口）
   const platformRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/platform',
     component: PlatformPage,
-    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+    validateSearch: (search: Record<string, unknown>): { tab?: string; prefill_object?: string; edit_id?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
+      prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
+      edit_id: typeof search.edit_id === 'string' ? search.edit_id : undefined,
     }),
   });
 

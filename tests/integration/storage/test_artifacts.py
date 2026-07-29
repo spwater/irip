@@ -38,9 +38,7 @@ async def test_verify_returns_true_for_correct_content(
     artifact_service: ArtifactService,
 ) -> None:
     """校验正确内容的 SHA-256 返回 True。"""
-    ref = await artifact_service.put_bytes(
-        b"hello", "text/plain", "greeting.txt"
-    )
+    ref = await artifact_service.put_bytes(b"hello", "text/plain", "greeting.txt")
     assert await artifact_service.verify(ref.artifact_id) is True
 
 
@@ -49,12 +47,8 @@ async def test_different_content_creates_separate_blobs(
     artifact_service: ArtifactService,
 ) -> None:
     """不同内容创建独立的 blob。"""
-    ref_a = await artifact_service.put_bytes(
-        b"content-a", "text/plain", "a.txt"
-    )
-    ref_b = await artifact_service.put_bytes(
-        b"content-b", "text/plain", "b.txt"
-    )
+    ref_a = await artifact_service.put_bytes(b"content-a", "text/plain", "a.txt")
+    ref_b = await artifact_service.put_bytes(b"content-b", "text/plain", "b.txt")
 
     assert ref_a.sha256 != ref_b.sha256
     assert ref_a.object_key != ref_b.object_key
@@ -67,9 +61,7 @@ async def test_media_type_allowlist_enforced(
 ) -> None:
     """不在白名单中的媒体类型被拒绝。"""
     with pytest.raises(AppError, match="不支持的媒体类型"):
-        await artifact_service.put_bytes(
-            b"data", "application/octet-stream", "file.bin"
-        )
+        await artifact_service.put_bytes(b"data", "application/octet-stream", "file.bin")
 
 
 @pytest.mark.integration
@@ -118,9 +110,7 @@ async def test_presign_download_returns_url(
     artifact_service: ArtifactService,
 ) -> None:
     """预签名下载返回有效 URL。"""
-    ref = await artifact_service.put_bytes(
-        b"download me", "text/plain", "dl.txt"
-    )
+    ref = await artifact_service.put_bytes(b"download me", "text/plain", "dl.txt")
     url = await artifact_service.presign_download(ref.artifact_id)
 
     assert isinstance(url, str)
@@ -133,9 +123,7 @@ async def test_get_artifact_returns_ref(
     artifact_service: ArtifactService,
 ) -> None:
     """get_artifact 返回正确的工件引用。"""
-    ref = await artifact_service.put_bytes(
-        b"get me", "text/plain", "get.txt"
-    )
+    ref = await artifact_service.put_bytes(b"get me", "text/plain", "get.txt")
     retrieved = await artifact_service.get_artifact(ref.artifact_id)
 
     assert retrieved.artifact_id == ref.artifact_id
@@ -163,9 +151,7 @@ async def test_hash_mismatch_detected(
     unique_content = b"original content " + os.urandom(8)
 
     # 上传正确内容
-    ref = await artifact_service.put_bytes(
-        unique_content, "text/plain", "original.txt"
-    )
+    ref = await artifact_service.put_bytes(unique_content, "text/plain", "original.txt")
     assert await artifact_service.verify(ref.artifact_id) is True
 
     # 篡改 S3 对象（直接覆盖同一 key 的内容）
@@ -197,9 +183,7 @@ async def test_unauthorized_download_returns_401(
     from packages.common.errors import AppError
 
     # 先创建一个工件
-    ref = await artifact_service.put_bytes(
-        b"protected", "text/plain", "secret.txt"
-    )
+    ref = await artifact_service.put_bytes(b"protected", "text/plain", "secret.txt")
 
     app = FastAPI(title="IRIP Unauthorized Test")
     app.include_router(artifacts_router)
@@ -216,9 +200,7 @@ async def test_unauthorized_download_returns_401(
     }
 
     @app.exception_handler(AppError)
-    async def handle_app_error(
-        request: Request, exc: AppError
-    ) -> JSONResponse:
+    async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         status = _STATUS_MAP.get(exc.code, 500)
         return JSONResponse(
             status_code=status,
@@ -238,12 +220,8 @@ async def test_blob_dedup_does_not_reupload(
     async_session_factory,
 ) -> None:
     """相同内容的 blob 去重后不会在 S3 中产生重复对象。"""
-    ref1 = await artifact_service.put_bytes(
-        b"unique-dedup", "text/plain", "first.txt"
-    )
-    ref2 = await artifact_service.put_bytes(
-        b"unique-dedup", "text/plain", "second.txt"
-    )
+    ref1 = await artifact_service.put_bytes(b"unique-dedup", "text/plain", "first.txt")
+    ref2 = await artifact_service.put_bytes(b"unique-dedup", "text/plain", "second.txt")
 
     assert ref1.sha256 == ref2.sha256
     assert ref1.object_key == ref2.object_key

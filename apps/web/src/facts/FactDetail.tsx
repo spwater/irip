@@ -15,11 +15,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
-import {
-  apiGetFact,
-  apiGetFactData,
-  apiGetArtifactDownloadUrl,
-} from '@/api/client';
+import { apiGetFact, apiGetFactData } from '@/api/facts-provenance';
+import { apiGetArtifactDownloadUrl } from '@/api/models-ai';
 import { PageIntro, DetailSection, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;

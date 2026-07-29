@@ -25,13 +25,13 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.common.database import Base
-from packages.common.db_types import GUID, UTCDateTime
-from packages.common.ids import new_id
+import packages.facts.entities  # noqa: F401 — fact_revision table
 
 # 导入被引用的 ORM 模型所在模块，确保 FK 目标表注册到 Base.metadata。
 import packages.jobs.entities  # noqa: F401 — job table
-import packages.facts.entities  # noqa: F401 — fact_revision table
+from packages.common.database import Base
+from packages.common.db_types import GUID, UTCDateTime
+from packages.common.ids import new_id
 
 
 class EvidenceSet(Base):
@@ -75,10 +75,7 @@ class EvidenceSet(Base):
     created_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
 
     def __repr__(self) -> str:
-        return (
-            f"EvidenceSet(id={self.id!r}, name={self.name!r}, "
-            f"status={self.status!r})"
-        )
+        return f"EvidenceSet(id={self.id!r}, name={self.name!r}, status={self.status!r})"
 
 
 class EvidenceSetVersion(Base):
@@ -190,10 +187,7 @@ class TransformationRecipe(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"TransformationRecipe(id={self.id!r}, code={self.code!r}, "
-            f"status={self.status!r})"
-        )
+        return f"TransformationRecipe(id={self.id!r}, code={self.code!r}, status={self.status!r})"
 
 
 class TransformationRecipeVersion(Base):
@@ -306,12 +300,8 @@ class DerivationRun(Base):
     )
     output_digest: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     outputs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     error: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -360,9 +350,7 @@ class ProvenanceEdge(Base):
     target_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     target_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     edge_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    metadata_: Mapped[dict | None] = mapped_column(
-        "metadata", JSONB, nullable=True
-    )
+    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

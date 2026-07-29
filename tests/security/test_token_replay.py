@@ -42,9 +42,7 @@ def _refresh(client, refresh_cookie: str) -> tuple[int, dict]:
         "/api/v1/auth/refresh",
         cookies={"irip_refresh": refresh_cookie},
     )
-    is_json = resp.headers.get("content-type", "").startswith(
-        "application/json"
-    )
+    is_json = resp.headers.get("content-type", "").startswith("application/json")
     body = resp.json() if is_json else {}
     return resp.status_code, body
 
@@ -123,9 +121,7 @@ class TestTokenExpiry:
             "iat": int(time.time()) - 3600,
             "exp": int(time.time()) - 1800,
         }
-        expired_token = jwt.encode(
-            expired_payload, token_secret, algorithm=JWT_ALGORITHM
-        )
+        expired_token = jwt.encode(expired_payload, token_secret, algorithm=JWT_ALGORITHM)
 
         resp = sec_api_client.get(
             "/api/v1/me",

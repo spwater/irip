@@ -47,9 +47,7 @@ class AppUser(Base):
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     password_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -104,9 +102,7 @@ class RefreshSession(Base):
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     family_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
-    user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     token_digest: Mapped[str] = mapped_column(sa.Text, unique=True, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False

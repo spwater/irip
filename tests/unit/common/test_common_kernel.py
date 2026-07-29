@@ -32,8 +32,7 @@ def test_fixed_clock_and_error_contract() -> None:
     error = AppError(code="conflict", message="版本冲突", retryable=False, fields={})
     assert error.to_dict()["code"] == "conflict"
     assert (
-        sha256_bytes(b"irip")
-        == "a5ebfab3d0dcea62678ab31148b1a308155b1d200426a832f5d22206459e1d54"
+        sha256_bytes(b"irip") == "a5ebfab3d0dcea62678ab31148b1a308155b1d200426a832f5d22206459e1d54"
     )
 
 
@@ -86,10 +85,7 @@ def test_app_error_defaults() -> None:
 
 
 def test_sha256_bytes_empty_input() -> None:
-    assert (
-        sha256_bytes(b"")
-        == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
+    assert sha256_bytes(b"") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 
 
 # ---- ID 生成 ----

@@ -245,9 +245,7 @@ class ModelService:
             AppError: code="invalid_state"，当版本状态非 draft 时。
         """
         async with session_scope(self._factory) as session:
-            version = await self._get_version_owned(
-                session, model_id, version_id
-            )
+            version = await self._get_version_owned(session, model_id, version_id)
             if version is None:
                 raise AppError(
                     code="not_found",
@@ -258,10 +256,7 @@ class ModelService:
             if version.status != "draft":
                 raise AppError(
                     code="invalid_state",
-                    message=(
-                        f"版本状态非 draft（当前: {version.status}），"
-                        f"无法提交验证"
-                    ),
+                    message=(f"版本状态非 draft（当前: {version.status}），无法提交验证"),
                     retryable=False,
                     fields={"status": version.status},
                 )
@@ -296,9 +291,7 @@ class ModelService:
             AppError: code="invalid_state"，当版本状态非 pending_validation 时。
         """
         async with session_scope(self._factory) as session:
-            version = await self._get_version_owned(
-                session, model_id, version_id
-            )
+            version = await self._get_version_owned(session, model_id, version_id)
             if version is None:
                 raise AppError(
                     code="not_found",
@@ -309,10 +302,7 @@ class ModelService:
             if version.status != "pending_validation":
                 raise AppError(
                     code="invalid_state",
-                    message=(
-                        f"版本状态非 pending_validation"
-                        f"（当前: {version.status}），无法验证"
-                    ),
+                    message=(f"版本状态非 pending_validation（当前: {version.status}），无法验证"),
                     retryable=False,
                     fields={"status": version.status},
                 )
@@ -323,9 +313,7 @@ class ModelService:
                     **metrics,
                 }
                 if dataset_artifact_id is not None:
-                    version.metrics_json["dataset_artifact_id"] = str(
-                        dataset_artifact_id
-                    )
+                    version.metrics_json["dataset_artifact_id"] = str(dataset_artifact_id)
             if applicability_domain is not None:
                 version.applicability_domain_json = applicability_domain
 
@@ -364,9 +352,7 @@ class ModelService:
                     retryable=False,
                     fields={"model_id": str(model_id)},
                 )
-            version = await self._get_version_owned(
-                session, model_id, version_id
-            )
+            version = await self._get_version_owned(session, model_id, version_id)
             if version is None:
                 raise AppError(
                     code="not_found",
@@ -377,10 +363,7 @@ class ModelService:
             if version.status != "validated":
                 raise AppError(
                     code="invalid_state",
-                    message=(
-                        f"版本状态非 validated（当前: {version.status}），"
-                        f"无法发布"
-                    ),
+                    message=(f"版本状态非 validated（当前: {version.status}），无法发布"),
                     retryable=False,
                     fields={"status": version.status},
                 )
@@ -423,9 +406,7 @@ class ModelService:
                     retryable=False,
                     fields={"model_id": str(model_id)},
                 )
-            version = await self._get_version_owned(
-                session, model_id, target_version_id
-            )
+            version = await self._get_version_owned(session, model_id, target_version_id)
             if version is None:
                 raise AppError(
                     code="not_found",
@@ -436,9 +417,7 @@ class ModelService:
             if version.status not in ("published", "validated"):
                 raise AppError(
                     code="invalid_state",
-                    message=(
-                        f"目标版本状态不可回滚（当前: {version.status}）"
-                    ),
+                    message=(f"目标版本状态不可回滚（当前: {version.status}）"),
                     retryable=False,
                     fields={"status": version.status},
                 )
@@ -551,9 +530,7 @@ class ModelService:
         # 获取版本
         async with self._factory() as session:
             version = await session.scalar(
-                sa.select(ModelVersion).where(
-                    ModelVersion.id == model_version_id
-                )
+                sa.select(ModelVersion).where(ModelVersion.id == model_version_id)
             )
             if version is None:
                 raise AppError(
@@ -562,15 +539,9 @@ class ModelService:
                     retryable=False,
                     fields={"version_id": str(model_version_id)},
                 )
-            model = await self._get_model_owned(
-                session, version.model_id
-            )
-            contract_dict: dict[str, Any] = dict(
-                version.contract_json or {}
-            )
-            applicability_domain: dict[str, Any] = dict(
-                version.applicability_domain_json or {}
-            )
+            await self._get_model_owned(session, version.model_id)
+            contract_dict: dict[str, Any] = dict(version.contract_json or {})
+            applicability_domain: dict[str, Any] = dict(version.applicability_domain_json or {})
             model_artifact_id = version.model_artifact_id
             version_no = version.version
 
@@ -590,15 +561,11 @@ class ModelService:
             )
 
         # 适用域检查
-        domain_result = self._applicability_checker.check(
-            inputs, applicability_domain
-        )
+        domain_result = self._applicability_checker.check(inputs, applicability_domain)
         if not domain_result.valid:
             raise AppError(
                 code="outside_applicability_domain",
-                message="输入超出适用域: " + "; ".join(
-                    domain_result.errors
-                ),
+                message="输入超出适用域: " + "; ".join(domain_result.errors),
                 retryable=False,
                 fields={"errors": list(domain_result.errors)},
             )
@@ -606,9 +573,7 @@ class ModelService:
         # 下载模型工件
         artifact_bytes: bytes = b""
         if model_artifact_id is not None:
-            artifact_bytes = await self._artifact_service.get_bytes(
-                model_artifact_id
-            )
+            artifact_bytes = await self._artifact_service.get_bytes(model_artifact_id)
 
         # 加载并预测
         await adapter.load(artifact_bytes, contract)
@@ -669,9 +634,7 @@ class ModelService:
                 )
             return model
 
-    async def list_models(
-        self, status: str | None = None
-    ) -> list[Model]:
+    async def list_models(self, status: str | None = None) -> list[Model]:
         """列出当前组织的模型。
 
         Args:
@@ -691,9 +654,7 @@ class ModelService:
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
-    async def get_versions(
-        self, model_id: UUID
-    ) -> list[ModelVersion]:
+    async def get_versions(self, model_id: UUID) -> list[ModelVersion]:
         """列出模型的所有版本。
 
         Args:
@@ -839,9 +800,7 @@ class ModelService:
             raw=tuple(raw_obs),
             normalized=tuple(norm_obs),
             artifacts=(),
-            idempotency_key=(
-                f"model-exec-{model_version_id}-{started_at.isoformat()}"
-            ),
+            idempotency_key=(f"model-exec-{model_version_id}-{started_at.isoformat()}"),
             created_by=None,  # type: ignore[arg-type]
         )
         ref = await self._fact_service.create(command)

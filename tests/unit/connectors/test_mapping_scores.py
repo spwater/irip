@@ -472,9 +472,7 @@ class TestMappingProfileLifecycle:
             rules=[_sample_rule(version_id)],
         )
 
-        items, next_cursor = await mapping_profile_service.list_profiles(
-            page_size=10
-        )
+        items, next_cursor = await mapping_profile_service.list_profiles(page_size=10)
         names = {item["name"] for item in items}
         assert "列表A" in names
         assert "列表B" in names
@@ -506,15 +504,11 @@ class TestMappingProfileLifecycle:
         assert len(page1) == 2
         assert cursor1 is not None
 
-        page2, cursor2 = await mapping_profile_service.list_profiles(
-            cursor=cursor1, page_size=2
-        )
+        page2, cursor2 = await mapping_profile_service.list_profiles(cursor=cursor1, page_size=2)
         assert len(page2) == 1
         assert cursor2 is None
 
-        all_names = [item["name"] for item in page1] + [
-            item["name"] for item in page2
-        ]
+        all_names = [item["name"] for item in page1] + [item["name"] for item in page2]
         assert sorted(all_names) == sorted(created_names)
         # 无重复
         assert len(all_names) == len(set(all_names))

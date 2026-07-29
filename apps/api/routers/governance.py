@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from apps.api.composition import lookup_org_id
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.audit.events import AuditEventData
@@ -32,8 +33,6 @@ from packages.auth.permissions import BUILTIN_ROLES
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.departments.entities import AppUserDepartment
-
-from apps.api.composition import lookup_org_id
 
 #: 路由实例。
 governance_router = APIRouter(prefix="/api/v1/governance", tags=["governance"])
@@ -84,9 +83,7 @@ class UserListResponse(BaseModel):
 class AssignRolesRequest(BaseModel):
     """分配角色请求体。"""
 
-    roles: list[str] = Field(
-        ..., min_length=1, description="要分配的角色代码列表"
-    )
+    roles: list[str] = Field(..., min_length=1, description="要分配的角色代码列表")
 
 
 class CreateUserRequest(BaseModel):
@@ -95,9 +92,7 @@ class CreateUserRequest(BaseModel):
     email: str = Field(..., description="用户邮箱（登录账号）")
     display_name: str = Field(..., description="显示名")
     password: str = Field(..., min_length=6, description="初始密码（至少 6 位）")
-    roles: list[str] = Field(
-        ..., min_length=1, description="角色代码列表（可多选）"
-    )
+    roles: list[str] = Field(..., min_length=1, description="角色代码列表（可多选）")
     department_id: str | None = Field(None, description="所属实验室 ID")
 
 
@@ -278,9 +273,7 @@ async def create_user(
 
     async with session_scope(session_factory) as session:
         # 检查邮箱唯一性
-        existing = await session.execute(
-            sa.select(AppUser).where(AppUser.email == body.email)
-        )
+        existing = await session.execute(sa.select(AppUser).where(AppUser.email == body.email))
         if existing.scalar_one_or_none() is not None:
             raise AppError(
                 code="conflict",
@@ -404,9 +397,7 @@ async def update_user(
         return _to_user_response(user)
 
 
-@governance_router.post(
-    "/users/{user_id}/roles", response_model=UserResponse
-)
+@governance_router.post("/users/{user_id}/roles", response_model=UserResponse)
 async def assign_roles(
     user_id: UUID,
     body: AssignRolesRequest,
@@ -431,9 +422,7 @@ async def assign_roles(
     _validate_role_codes(body.roles)
 
     async with session_scope(session_factory) as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
                 code="not_found",
@@ -471,9 +460,7 @@ async def assign_roles(
     return _to_user_response(user)
 
 
-@governance_router.delete(
-    "/users/{user_id}/roles/{role}", response_model=UserResponse
-)
+@governance_router.delete("/users/{user_id}/roles/{role}", response_model=UserResponse)
 async def remove_role(
     user_id: UUID,
     role: str,
@@ -495,9 +482,7 @@ async def remove_role(
         AppError: code="not_found"，当用户不存在时。
     """
     async with session_scope(session_factory) as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
                 code="not_found",
@@ -533,9 +518,7 @@ async def remove_role(
     return _to_user_response(user)
 
 
-@governance_router.patch(
-    "/users/{user_id}/status", response_model=UserResponse
-)
+@governance_router.patch("/users/{user_id}/status", response_model=UserResponse)
 async def update_user_status(
     user_id: UUID,
     body: UpdateUserStatusRequest,
@@ -566,9 +549,7 @@ async def update_user_status(
         )
 
     async with session_scope(session_factory) as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
                 code="not_found",

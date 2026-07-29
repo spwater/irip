@@ -7,7 +7,6 @@
 - 审计事件追加验证（INSERT 成功，UPDATE/DELETE 被拒）。
 """
 
-
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -79,9 +78,7 @@ class TestDirectIdAccessDenial:
             resource_type="fact",
         )
         with pytest.raises(AppError, match="无权访问"):
-            await security_setup.authz.require(
-                security_setup.user_a, "fact:read", unrelated
-            )
+            await security_setup.authz.require(security_setup.user_a, "fact:read", unrelated)
 
 
 # ============================================================
@@ -108,9 +105,7 @@ class TestListQueryFiltering:
         ]
         visible: list[ResourceRef] = []
         for obj in all_objects:
-            allowed = await security_setup.authz.has_grant(
-                security_setup.user_a, "fact:read", obj
-            )
+            allowed = await security_setup.authz.has_grant(security_setup.user_a, "fact:read", obj)
             if allowed:
                 visible.append(obj)
 
@@ -129,9 +124,7 @@ class TestListQueryFiltering:
         ]
         visible: list[ResourceRef] = []
         for obj in all_objects:
-            allowed = await security_setup.authz.has_grant(
-                security_setup.user_b, "fact:read", obj
-            )
+            allowed = await security_setup.authz.has_grant(security_setup.user_b, "fact:read", obj)
             if allowed:
                 visible.append(obj)
 
@@ -188,9 +181,7 @@ class TestAIEquivalentOperations:
 
         # AI 不能读 B 的对象
         with pytest.raises(AppError, match="无权访问"):
-            await security_setup.authz.require(
-                user_a, "fact:read", security_setup.object_y
-            )
+            await security_setup.authz.require(user_a, "fact:read", security_setup.object_y)
 
     async def test_ai_cannot_exceed_user_permissions(
         self,
@@ -285,9 +276,7 @@ class TestAuditAppendOnly:
         # 验证 payload 已脱敏
         async with session_scope(async_session_factory) as session:
             row = await session.execute(
-                sa.select(AuditEvent).where(
-                    AuditEvent.action == "security.test.redaction"
-                )
+                sa.select(AuditEvent).where(AuditEvent.action == "security.test.redaction")
             )
             audit = row.scalar_one()
             assert audit.payload is not None
@@ -297,9 +286,7 @@ class TestAuditAppendOnly:
         # 清理
         async with session_scope(async_session_factory) as session:
             await session.execute(
-                sa.delete(AuditEvent).where(
-                    AuditEvent.action == "security.test.redaction"
-                )
+                sa.delete(AuditEvent).where(AuditEvent.action == "security.test.redaction")
             )
 
     async def test_audit_update_denied_for_app_role(
@@ -309,7 +296,6 @@ class TestAuditAppendOnly:
     ) -> None:
         """irip_app 角色不能 UPDATE audit_event（数据库级仅追加）。"""
         import os
-
 
         org = new_id()
         event = AuditEventData(
@@ -325,9 +311,7 @@ class TestAuditAppendOnly:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             # INSERT as irip_app succeeds
@@ -350,9 +334,7 @@ class TestAuditAppendOnly:
         # 验证未被篡改
         async with session_scope(async_session_factory) as session:
             row = await session.execute(
-                sa.select(AuditEvent).where(
-                    AuditEvent.action == "security.test.update_denied"
-                )
+                sa.select(AuditEvent).where(AuditEvent.action == "security.test.update_denied")
             )
             audit = row.scalar_one()
             assert audit.action == "security.test.update_denied"
@@ -360,9 +342,7 @@ class TestAuditAppendOnly:
         # 清理
         async with session_scope(async_session_factory) as session:
             await session.execute(
-                sa.delete(AuditEvent).where(
-                    AuditEvent.action == "security.test.update_denied"
-                )
+                sa.delete(AuditEvent).where(AuditEvent.action == "security.test.update_denied")
             )
 
     async def test_audit_delete_denied_for_app_role(
@@ -372,7 +352,6 @@ class TestAuditAppendOnly:
     ) -> None:
         """irip_app 角色不能 DELETE audit_event（数据库级仅追加）。"""
         import os
-
 
         org = new_id()
         event = AuditEventData(
@@ -387,9 +366,7 @@ class TestAuditAppendOnly:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
@@ -397,8 +374,7 @@ class TestAuditAppendOnly:
                 try:
                     await conn.execute(
                         sa.text(
-                            "DELETE FROM audit_event "
-                            "WHERE action = 'security.test.delete_denied'"
+                            "DELETE FROM audit_event WHERE action = 'security.test.delete_denied'"
                         )
                     )
                     pytest.fail("DELETE should have been denied for irip_app")
@@ -411,18 +387,14 @@ class TestAuditAppendOnly:
         # 验证事件仍存在
         async with session_scope(async_session_factory) as session:
             row = await session.execute(
-                sa.select(AuditEvent).where(
-                    AuditEvent.action == "security.test.delete_denied"
-                )
+                sa.select(AuditEvent).where(AuditEvent.action == "security.test.delete_denied")
             )
             assert row.scalar_one() is not None
 
         # 清理
         async with session_scope(async_session_factory) as session:
             await session.execute(
-                sa.delete(AuditEvent).where(
-                    AuditEvent.action == "security.test.delete_denied"
-                )
+                sa.delete(AuditEvent).where(AuditEvent.action == "security.test.delete_denied")
             )
 
     async def test_audit_insert_succeeds_for_app_role(
@@ -432,15 +404,12 @@ class TestAuditAppendOnly:
         """irip_app 角色可以 INSERT audit_event。"""
         import os
 
-
         url = os.getenv("IRIP_TEST_DATABASE_URL", "")
         if not url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         action = "security.test.app_role_insert"
         org = new_id()
@@ -449,8 +418,7 @@ class TestAuditAppendOnly:
                 await conn.execute(sa.text("SET ROLE irip_app"))
                 await conn.execute(
                     sa.text(
-                        "INSERT INTO audit_event (organization_id, action) "
-                        "VALUES (:org, :action)"
+                        "INSERT INTO audit_event (organization_id, action) VALUES (:org, :action)"
                     ),
                     {"org": str(org), "action": action},
                 )
@@ -460,16 +428,12 @@ class TestAuditAppendOnly:
 
         # 验证
         async with session_scope(async_session_factory) as session:
-            row = await session.execute(
-                sa.select(AuditEvent).where(AuditEvent.action == action)
-            )
+            row = await session.execute(sa.select(AuditEvent).where(AuditEvent.action == action))
             assert row.scalar_one() is not None
 
         # 清理
         async with session_scope(async_session_factory) as session:
-            await session.execute(
-                sa.delete(AuditEvent).where(AuditEvent.action == action)
-            )
+            await session.execute(sa.delete(AuditEvent).where(AuditEvent.action == action))
 
     async def test_audit_select_succeeds_for_app_role(
         self,
@@ -478,7 +442,6 @@ class TestAuditAppendOnly:
     ) -> None:
         """irip_app 角色可以 SELECT audit_event。"""
         import os
-
 
         org = new_id()
         action = "security.test.app_role_select"
@@ -491,9 +454,7 @@ class TestAuditAppendOnly:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
             return
 
-        async_url = url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
             async with engine.connect() as conn:
@@ -510,9 +471,7 @@ class TestAuditAppendOnly:
 
         # 清理
         async with session_scope(async_session_factory) as session:
-            await session.execute(
-                sa.delete(AuditEvent).where(AuditEvent.action == action)
-            )
+            await session.execute(sa.delete(AuditEvent).where(AuditEvent.action == action))
 
     async def test_audit_recorder_has_no_update_or_delete_methods(
         self,

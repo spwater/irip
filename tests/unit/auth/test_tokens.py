@@ -72,9 +72,7 @@ def test_access_token_wrong_secret_raises() -> None:
     """密钥不匹配的 JWT 抛出 InvalidTokenError。"""
     now = datetime.now(UTC)
     clock = FixedClock(now)
-    token = create_access_token(
-        uuid4(), "a@b.c", [], "secret-key-A-at-least-32-chars-long", clock
-    )
+    token = create_access_token(uuid4(), "a@b.c", [], "secret-key-A-at-least-32-chars-long", clock)
 
     with pytest.raises(jwt.InvalidTokenError):
         decode_access_token(token, "secret-key-B-at-least-32-chars-long")

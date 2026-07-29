@@ -16,9 +16,9 @@ IngestionPipeline 将外部源文件通过映射配置转化为 L2 事实，
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
-import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -27,7 +27,6 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.connectors.entities import MappingProfileVersion
 from packages.facts.observations import (
@@ -334,18 +333,14 @@ class IngestionPipeline:
 
             # 提取实验 ID 作为 subject_id
             subject_id = (
-                parsed.get("Experiment ID")
-                or parsed.get("experiment_id")
-                or file_path.stem
+                parsed.get("Experiment ID") or parsed.get("experiment_id") or file_path.stem
             )
 
             # 提取源单位（用于粒度字段单位转换）
             file_source_unit = parsed.get("Source Unit", "")
 
             # 3. map: 加载映射规则与变量版本
-            rules, var_versions = await self._load_mapping_rules(
-                mapping_profile_version_id
-            )
+            rules, var_versions = await self._load_mapping_rules(mapping_profile_version_id)
 
             # 4-5. 映射 + 标准化 + 构建观察值
             from packages.common.ids import new_id
@@ -536,11 +531,7 @@ class IngestionPipeline:
                     code="not_found",
                     message="映射配置版本不存在",
                     retryable=False,
-                    fields={
-                        "mapping_profile_version_id": str(
-                            mapping_profile_version_id
-                        )
-                    },
+                    fields={"mapping_profile_version_id": str(mapping_profile_version_id)},
                 )
 
             rules_raw = mpv.rules or []
@@ -563,18 +554,14 @@ class IngestionPipeline:
             var_versions: dict[UUID, VariableVersion] = {}
             if vv_ids:
                 result = await session.execute(
-                    sa.select(VariableVersion).where(
-                        VariableVersion.id.in_(vv_ids)
-                    )
+                    sa.select(VariableVersion).where(VariableVersion.id.in_(vv_ids))
                 )
                 for vv in result.scalars().all():
                     var_versions[vv.id] = vv
 
             return rules, var_versions
 
-    async def _check_deduplicated(
-        self, idempotency_key: str, fact_id: UUID
-    ) -> bool:
+    async def _check_deduplicated(self, idempotency_key: str, fact_id: UUID) -> bool:
         """检查事实是否为去重（幂等键已存在且事实不是新创建的）。
 
         通过检查 fact 表中是否有相同幂等键但不同创建时间的事实来判断。
@@ -587,7 +574,6 @@ class IngestionPipeline:
         Returns:
             bool: 是否为去重。
         """
-        from packages.facts.entities import Fact
         from packages.facts.repository import FactRepository
 
         async with self._factory() as session:

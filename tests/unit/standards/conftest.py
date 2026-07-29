@@ -88,9 +88,7 @@ async def template_service(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM fact_template WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM fact_template WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -154,9 +152,7 @@ async def package_service(
             {"oid": org_id},
         )
         conn.execute(
-            sa.text(
-                "DELETE FROM standard_package WHERE organization_id = :oid"
-            ),
+            sa.text("DELETE FROM standard_package WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()

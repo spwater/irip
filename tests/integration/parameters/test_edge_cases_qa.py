@@ -9,13 +9,11 @@ Additional edge cases not covered by the engineer's test suite:
 """
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.parameters.service import ParameterService
-
 from tests.integration.parameters.conftest import _create_derivation_chain
 
 
@@ -40,9 +38,7 @@ class TestQAEdgeCases:
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=2
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=2)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -94,9 +90,7 @@ class TestQAEdgeCases:
         org_id = param_setup["organization_id"]
         actor_id = param_setup["actor_id"]
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=2
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=2)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(
@@ -147,9 +141,7 @@ class TestQAEdgeCases:
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
-        chain = await _create_derivation_chain(
-            param_setup, async_session_factory, num_facts=2
-        )
+        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=2)
         run_ref = chain["run_ref"]
 
         param_service = ParameterService(

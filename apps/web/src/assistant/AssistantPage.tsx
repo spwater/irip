@@ -29,13 +29,11 @@ import {
   apiSendMessage,
   apiTogglePin,
   apiToggleArchive,
-  apiListFacts,
-  apiGetFactData,
-  extractApiError,
   type AssistantMessage,
   type ConversationSummary,
-  type FactSummary,
-} from '@/api/client';
+} from '@/api/models-ai';
+import { apiListFacts, apiGetFactData } from '@/api/facts-provenance';
+import { extractApiError, type FactSummary } from '@/api/types';
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;

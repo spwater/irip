@@ -28,48 +28,60 @@ class TestOfflineD50Citations:
     def d50_request(self) -> AIRequest:
         """D50 问题请求。"""
         return AIRequest(
-            messages=(
-                {"role": "user", "content": "D50 参数的溯源链路是什么？"},
-            ),
+            messages=({"role": "user", "content": "D50 参数的溯源链路是什么？"},),
             tools=("search_parameters", "explain_provenance"),
             user_context={"user_id": "test", "organization_id": "test"},
             provider_mode="offline",
         )
 
-    async def test_d50_returns_response(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_returns_response(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """D50 问题返回 AIResponse。"""
         response = await provider.complete(d50_request)
         assert isinstance(response, AIResponse)
 
-    async def test_d50_answer_mentions_d50(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_answer_mentions_d50(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """回答中提及 D50。"""
         response = await provider.complete(d50_request)
         assert "D50" in response.answer
 
-    async def test_d50_returns_citations(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_returns_citations(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """D50 问题返回引用。"""
         response = await provider.complete(d50_request)
         assert len(response.citations) >= 3
 
-    async def test_d50_citation_has_parameter_version(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_citation_has_parameter_version(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用包含 parameter_version。"""
         response = await provider.complete(d50_request)
         types = [c.object_type for c in response.citations]
         assert "parameter_version" in types
 
-    async def test_d50_citation_has_fact_revision(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_citation_has_fact_revision(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用包含 fact_revision。"""
         response = await provider.complete(d50_request)
         types = [c.object_type for c in response.citations]
         assert "fact_revision" in types
 
-    async def test_d50_citation_has_derivation_run(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_citation_has_derivation_run(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用包含 derivation_run。"""
         response = await provider.complete(d50_request)
         types = [c.object_type for c in response.citations]
         assert "derivation_run" in types
 
-    async def test_d50_citations_have_all_fields(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_citations_have_all_fields(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用包含完整字段。"""
         response = await provider.complete(d50_request)
         for c in response.citations:
@@ -80,13 +92,17 @@ class TestOfflineD50Citations:
             assert c.label != ""
             assert c.href != ""
 
-    async def test_d50_citations_have_clickable_href(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_citations_have_clickable_href(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用 href 以 / 开头（可点击跳转）。"""
         response = await provider.complete(d50_request)
         for c in response.citations:
             assert c.href.startswith("/")
 
-    async def test_d50_tool_calls_non_empty(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_tool_calls_non_empty(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """D50 回答包含工具调用摘要。"""
         response = await provider.complete(d50_request)
         assert len(response.tool_calls) >= 1
@@ -94,7 +110,9 @@ class TestOfflineD50Citations:
             assert "tool" in tc
             assert "summary" in tc
 
-    async def test_d50_provider_mode_offline(self, provider: OfflineProvider, d50_request: AIRequest) -> None:
+    async def test_d50_provider_mode_offline(
+        self, provider: OfflineProvider, d50_request: AIRequest
+    ) -> None:  # noqa: E501
         """provider_mode 为 offline。"""
         response = await provider.complete(d50_request)
         assert response.provider_mode == "offline"
@@ -110,41 +128,51 @@ class TestOfflineROMCitations:
     @pytest.fixture
     def rom_request(self) -> AIRequest:
         return AIRequest(
-            messages=(
-                {"role": "user", "content": "有哪些降阶模型 ROM 可以用？"},
-            ),
+            messages=({"role": "user", "content": "有哪些降阶模型 ROM 可以用？"},),
             tools=("search_standards", "run_published_model"),
             user_context={"user_id": "test", "organization_id": "test"},
             provider_mode="offline",
         )
 
-    async def test_rom_returns_response(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_returns_response(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """ROM 问题返回 AIResponse。"""
         response = await provider.complete(rom_request)
         assert isinstance(response, AIResponse)
 
-    async def test_rom_answer_mentions_rom(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_answer_mentions_rom(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """回答中提及降阶模型。"""
         response = await provider.complete(rom_request)
         assert "降阶模型" in response.answer or "ROM" in response.answer
 
-    async def test_rom_returns_citations(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_returns_citations(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """ROM 问题返回引用。"""
         response = await provider.complete(rom_request)
         assert len(response.citations) >= 1
 
-    async def test_rom_citation_has_model_version(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_citation_has_model_version(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """引用包含 model_version。"""
         response = await provider.complete(rom_request)
         types = [c.object_type for c in response.citations]
         assert "model_version" in types
 
-    async def test_rom_tool_calls_non_empty(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_tool_calls_non_empty(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """ROM 回答包含工具调用。"""
         response = await provider.complete(rom_request)
         assert len(response.tool_calls) >= 1
 
-    async def test_rom_has_uncertainty(self, provider: OfflineProvider, rom_request: AIRequest) -> None:
+    async def test_rom_has_uncertainty(
+        self, provider: OfflineProvider, rom_request: AIRequest
+    ) -> None:  # noqa: E501
         """ROM 回答包含不确定性说明。"""
         response = await provider.complete(rom_request)
         assert response.uncertainty is not None
@@ -233,7 +261,9 @@ class TestOfflineOtherQueries:
         assert len(response.citations) >= 1
         assert any(c.object_type == "parameter_version" for c in response.citations)
 
-    async def test_provenance_query_returns_three_citations(self, provider: OfflineProvider) -> None:
+    async def test_provenance_query_returns_three_citations(
+        self, provider: OfflineProvider
+    ) -> None:  # noqa: E501
         """溯源问题返回三类引用。"""
         response = await provider.complete(
             AIRequest(

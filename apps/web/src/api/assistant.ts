@@ -6,8 +6,5 @@
 
 export {
   type AssistantMessage,
-} from './client';
-
-export {
   apiSendMessage,
-} from './client';
+} from './models-ai';

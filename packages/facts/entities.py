@@ -25,10 +25,6 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.common.database import Base
-from packages.common.db_types import GUID, UTCDateTime
-from packages.common.ids import new_id
-
 # 导入被引用的 ORM 模型所在模块，确保 FK 目标表注册到 Base.metadata。
 # 这些导入不在此模块中使用，但 SQLAlchemy 需要它们来解析 FK 依赖。
 import packages.auth.entities  # noqa: F401 — app_user table
@@ -37,6 +33,9 @@ import packages.standards.methods  # noqa: F401 — method_version table
 import packages.standards.objects  # noqa: F401 — industrial_object table
 import packages.standards.templates  # noqa: F401 — fact_template_version table
 import packages.standards.variables  # noqa: F401 — variable_version table
+from packages.common.database import Base
+from packages.common.db_types import GUID, UTCDateTime
+from packages.common.ids import new_id
 
 
 class Fact(Base):
@@ -78,15 +77,11 @@ class Fact(Base):
     current_revision: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("1")
     )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     lock_version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
-    idempotency_key: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    idempotency_key: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -175,18 +170,10 @@ class FactRevision(Base):
         sa.ForeignKey("flow_run.id", ondelete="SET NULL"),
         nullable=True,
     )
-    started_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    ended_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    revision_reason: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
-    revision_summary: Mapped[dict | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    revision_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    revision_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -198,16 +185,13 @@ class FactRevision(Base):
     search_vector: Mapped[object] = mapped_column(
         sa.Text,
         server_default=sa.text(
-            "to_tsvector('simple', coalesce(subject_id, '') || ' ' "
-            "|| coalesce(fact_type, ''))"
+            "to_tsvector('simple', coalesce(subject_id, '') || ' ' || coalesce(fact_type, ''))"
         ),
         nullable=False,
     )
 
     __table_args__ = (
-        sa.UniqueConstraint(
-            "fact_id", "revision", name="uq_fact_revision_fact_revision"
-        ),
+        sa.UniqueConstraint("fact_id", "revision", name="uq_fact_revision_fact_revision"),
     )
 
     def __repr__(self) -> str:
@@ -243,12 +227,8 @@ class RawObservation(Base):
     )
     source_path: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_value: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    source_unit: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
-    source_name: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    source_unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    source_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     artifact_id: Mapped[UUID | None] = mapped_column(
         GUID,
         sa.ForeignKey("artifact.id"),
@@ -301,9 +281,7 @@ class NormalizedObservation(Base):
         nullable=False,
     )
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    unit: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

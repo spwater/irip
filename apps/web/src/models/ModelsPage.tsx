@@ -23,10 +23,10 @@ import {
   apiListModels,
   apiPublishModelVersion,
   apiRollbackModel,
-  extractApiError,
   type ModelSummary,
   type ModelVersionSummary,
-} from '@/api/client';
+} from '@/api/models-ai';
+import { extractApiError } from '@/api/types';
 
 const { Text } = Typography;
 

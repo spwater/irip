@@ -114,9 +114,7 @@ class CommandModelAdapter:
         Returns:
             LoadedModel: 已加载的模型引用（artifact_ref 为工作目录路径）。
         """
-        workdir = Path(
-            tempfile.mkdtemp(prefix="irip-model-")
-        )
+        workdir = Path(tempfile.mkdtemp(prefix="irip-model-"))
         artifact_path = workdir / "model.artifact"
         artifact_path.write_bytes(artifact_bytes)
 
@@ -207,7 +205,9 @@ class CommandModelAdapter:
 
         safe_env = self._build_safe_env()
         full_command: list[str] = list(self._command) + [
-            str(workdir), str(input_path), str(output_path)
+            str(workdir),
+            str(input_path),
+            str(output_path),
         ]
 
         try:
@@ -231,25 +231,20 @@ class CommandModelAdapter:
                 process.communicate(),
                 timeout=self._timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._terminate_process(process)
             raise AppError(
                 code="model_timeout",
-                message=(
-                    f"模型执行超时（{self._timeout_seconds}s）"
-                ),
+                message=(f"模型执行超时（{self._timeout_seconds}s）"),
                 retryable=False,
                 fields={"timeout_seconds": self._timeout_seconds},
-            )
+            ) from None
 
         if process.returncode != 0:
             stderr_text = stderr_bytes.decode("utf-8", errors="replace")
             raise AppError(
                 code="model_failed",
-                message=(
-                    f"模型执行失败 (exit={process.returncode}): "
-                    f"{stderr_text}"
-                ),
+                message=(f"模型执行失败 (exit={process.returncode}): {stderr_text}"),
                 retryable=False,
                 fields={"exit_code": process.returncode},
             )
@@ -266,10 +261,7 @@ class CommandModelAdapter:
         if len(output_bytes) > self._max_output_bytes:
             raise AppError(
                 code="invalid_output",
-                message=(
-                    f"模型输出过大（{len(output_bytes)} > "
-                    f"{self._max_output_bytes} bytes）"
-                ),
+                message=(f"模型输出过大（{len(output_bytes)} > {self._max_output_bytes} bytes）"),
                 retryable=False,
                 fields={
                     "output_size": len(output_bytes),
@@ -278,9 +270,7 @@ class CommandModelAdapter:
             )
 
         try:
-            output_data = json.loads(
-                output_bytes.decode("utf-8")
-            )
+            output_data = json.loads(output_bytes.decode("utf-8"))
         except json.JSONDecodeError as exc:
             raise AppError(
                 code="invalid_output",
@@ -289,9 +279,7 @@ class CommandModelAdapter:
                 fields={},
             ) from exc
 
-        predictions: dict[str, Any] = output_data.get(
-            "predictions", {}
-        )
+        predictions: dict[str, Any] = output_data.get("predictions", {})
         metadata: dict[str, Any] = output_data.get("metadata", {})
         return ModelOutput(
             predictions=predictions,
@@ -307,9 +295,7 @@ class CommandModelAdapter:
             HealthStatus: 健康检查结果。
         """
         if not self._command:
-            return HealthStatus(
-                healthy=False, message="命令为空"
-            )
+            return HealthStatus(healthy=False, message="命令为空")
         executable = self._command[0]
         if os.path.isabs(executable):
             if not Path(executable).exists():
@@ -319,6 +305,7 @@ class CommandModelAdapter:
                 )
         else:
             from shutil import which
+
             if which(executable) is None:
                 return HealthStatus(
                     healthy=False,
@@ -339,16 +326,11 @@ class CommandModelAdapter:
         """
         safe_env: dict[str, str] = {}
         for key, value in os.environ.items():
-            if any(
-                key.startswith(prefix)
-                for prefix in _SAFE_ENV_PREFIXES
-            ):
+            if any(key.startswith(prefix) for prefix in _SAFE_ENV_PREFIXES):
                 safe_env[key] = value
         return safe_env
 
-    def _terminate_process(
-        self, process: asyncio.subprocess.Process
-    ) -> None:
+    def _terminate_process(self, process: asyncio.subprocess.Process) -> None:
         """向子进程发送 SIGTERM（优雅终止）。
 
         Args:
@@ -414,12 +396,15 @@ class PythonModelAdapter:
         """
         try:
             try:
-                import joblib
                 import io
+
+                import joblib
+
                 self._model_obj = joblib.load(io.BytesIO(artifact_bytes))
             except ImportError:
-                import pickle
                 import io
+                import pickle
+
                 self._model_obj = pickle.loads(artifact_bytes)
         except Exception as exc:
             raise AppError(
@@ -508,14 +493,10 @@ class PythonModelAdapter:
             output_dims = []
 
         # 构造特征矩阵
-        feature_row: list[float] = [
-            float(inputs[dim]) for dim in input_dims
-        ]
+        feature_row: list[float] = [float(inputs[dim]) for dim in input_dims]
 
         try:
-            raw_pred = await asyncio.to_thread(
-                self._model_obj.predict, [feature_row]
-            )
+            raw_pred = await asyncio.to_thread(self._model_obj.predict, [feature_row])
         except Exception as exc:
             raise AppError(
                 code="model_failed",
@@ -526,21 +507,13 @@ class PythonModelAdapter:
 
         # 映射预测结果
         predictions: dict[str, Any] = {}
-        pred_list = (
-            raw_pred.tolist()[0]
-            if hasattr(raw_pred, "tolist")
-            else list(raw_pred[0])
-        )
+        pred_list = raw_pred.tolist()[0] if hasattr(raw_pred, "tolist") else list(raw_pred[0])
         if output_dims and len(pred_list) == len(output_dims):
             for i, dim in enumerate(output_dims):
                 predictions[dim] = pred_list[i]
         else:
             for i, value in enumerate(pred_list):
-                key = (
-                    output_dims[i]
-                    if i < len(output_dims)
-                    else f"output_{i}"
-                )
+                key = output_dims[i] if i < len(output_dims) else f"output_{i}"
                 predictions[key] = value
 
         return ModelOutput(
@@ -555,9 +528,7 @@ class PythonModelAdapter:
             HealthStatus: 健康检查结果。
         """
         if self._model_obj is None:
-            return HealthStatus(
-                healthy=False, message="模型未加载"
-            )
+            return HealthStatus(healthy=False, message="模型未加载")
         if not hasattr(self._model_obj, "predict"):
             return HealthStatus(
                 healthy=False,
@@ -587,9 +558,7 @@ def build_adapter(
     contract_dict = contract.to_dict()
     executor: dict[str, Any] = contract_dict.get("executor", {}) or {}
     adapter_type: str = executor.get("type", "python")
-    timeout_seconds: int = int(
-        executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
-    )
+    timeout_seconds: int = int(executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS))
 
     if adapter_type == "cli":
         command_list: list[str] = list(executor.get("command", []))

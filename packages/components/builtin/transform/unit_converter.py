@@ -35,9 +35,7 @@ def _resolve_factor(from_unit: str, to_unit: str, factor: float | None) -> float
         return table[to_unit]
     if from_unit == to_unit:
         return 1.0
-    raise ValueError(
-        f"未知的单位转换: {from_unit} → {to_unit}"
-    )
+    raise ValueError(f"未知的单位转换: {from_unit} → {to_unit}")
 
 
 class UnitConverter:

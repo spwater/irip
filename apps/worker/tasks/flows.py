@@ -33,26 +33,24 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     Returns:
         dict: 执行结果摘要。
     """
+    import sqlalchemy as sa
+
+    from packages.common.artifacts import ArtifactService
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
-    from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
     from packages.components.flow_runtime import FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
-    from packages.jobs.entities import Job, JobStatus
-    import sqlalchemy as sa
 
     db_url = os.getenv(
         "IRIP_DATABASE_URL",
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -62,8 +60,11 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
     from apps.api.routers.ai_config import (
         get_active_ai_config,
+    )
+    from apps.api.routers.ai_config import (
         set_session_factory as set_ai_config_session_factory,
     )
+
     set_ai_config_session_factory(factory)
 
     organization_id = UUID(str(payload["organization_id"]))
@@ -122,9 +123,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     from packages.components.flow_runtime import FlowRun
 
     async with session_scope(factory) as session:
-        run = await session.scalar(
-            sa.select(FlowRun).where(FlowRun.id == run_uuid)
-        )
+        run = await session.scalar(sa.select(FlowRun).where(FlowRun.id == run_uuid))
         if run is None:
             return {"error": "run not found", "run_id": run_id}
 
@@ -183,9 +182,7 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -238,25 +235,24 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     Returns:
         dict: 恢复结果摘要。
     """
+    import sqlalchemy as sa
+
+    from packages.common.artifacts import ArtifactService
     from packages.common.clock import SystemClock
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
-    from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRuntimeService, FlowRun
+    from packages.components.flow_runtime import FlowRun, FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
-    import sqlalchemy as sa
 
     db_url = os.getenv(
         "IRIP_DATABASE_URL",
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -266,8 +262,11 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
     from apps.api.routers.ai_config import (
         get_active_ai_config,
+    )
+    from apps.api.routers.ai_config import (
         set_session_factory as set_ai_config_session_factory,
     )
+
     set_ai_config_session_factory(factory)
 
     organization_id = UUID(str(payload["organization_id"]))
@@ -318,9 +317,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     await service.resume(run_uuid)
 
     async with session_scope(factory) as session:
-        run = await session.scalar(
-            sa.select(FlowRun).where(FlowRun.id == run_uuid)
-        )
+        run = await session.scalar(sa.select(FlowRun).where(FlowRun.id == run_uuid))
         if run is None:
             return {"error": "run not found", "run_id": run_id}
 

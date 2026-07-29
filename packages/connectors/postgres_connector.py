@@ -30,13 +30,9 @@ if TYPE_CHECKING:
 def _to_async_url(url: str) -> str:
     """将同步 psycopg URL 转换为异步 psycopg_async URL。"""
     if url.startswith("postgresql+psycopg://"):
-        return url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        return url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     if url.startswith("postgresql://"):
-        return url.replace(
-            "postgresql://", "postgresql+psycopg_async://", 1
-        )
+        return url.replace("postgresql://", "postgresql+psycopg_async://", 1)
     return url
 
 
@@ -57,9 +53,7 @@ class PostgresConnector:
         """
         self._secret_store = secret_store
 
-    async def preview(
-        self, source: ConnectorSource, limit: int = 100
-    ) -> PreviewTable:
+    async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览查询结果前 limit 行。
 
         Args:
@@ -88,9 +82,7 @@ class PostgresConnector:
             row_count=len(rows),
         )
 
-    async def read(
-        self, source: ConnectorSource
-    ) -> AsyncIterator[SourceRecord]:
+    async def read(self, source: ConnectorSource) -> AsyncIterator[SourceRecord]:
         """流式读取查询全部结果。
 
         Args:
@@ -152,9 +144,7 @@ class PostgresConnector:
         return f"SELECT * FROM ({query.rstrip(';')}) AS _irip_sub LIMIT {safe_limit}"
 
     @staticmethod
-    async def _execute(
-        engine: AsyncEngine, sql: str
-    ) -> tuple[tuple[str, ...], list[list]]:
+    async def _execute(engine: AsyncEngine, sql: str) -> tuple[tuple[str, ...], list[list]]:
         """执行 SQL，返回 (列名元组, 行列表)。"""
         from sqlalchemy import text
 

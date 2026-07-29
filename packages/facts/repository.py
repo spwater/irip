@@ -378,9 +378,7 @@ class FactRepository:
         Raises:
             AppError: code="not_found"，当事实不存在或不属于该组织时。
         """
-        result = await session.execute(
-            sa.select(Fact).where(Fact.id == fact_id)
-        )
+        result = await session.execute(sa.select(Fact).where(Fact.id == fact_id))
         fact = result.scalar_one_or_none()
         if fact is None or fact.organization_id != org_id:
             raise AppError(
@@ -532,9 +530,7 @@ class FactRepository:
         """
         result = await session.execute(
             sa.select(NormalizedObservation)
-            .where(
-                NormalizedObservation.fact_revision_id == revision_id
-            )
+            .where(NormalizedObservation.fact_revision_id == revision_id)
             .order_by(
                 NormalizedObservation.created_at.asc(),
                 NormalizedObservation.id.asc(),
@@ -797,8 +793,6 @@ class FactRepository:
             FactRevisionLink | None: 链接实体，不存在时返回 None。
         """
         result = await session.execute(
-            sa.select(FactRevisionLink).where(
-                FactRevisionLink.from_revision_id == from_revision_id
-            )
+            sa.select(FactRevisionLink).where(FactRevisionLink.from_revision_id == from_revision_id)
         )
         return result.scalar_one_or_none()

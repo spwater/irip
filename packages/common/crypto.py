@@ -72,9 +72,7 @@ def _decode_key(encoded: str) -> bytes:
     except Exception as exc:
         raise ValueError(f"Invalid master key encoding: {exc}") from exc
     if len(key) != 32:
-        raise ValueError(
-            f"Master key must be 32 bytes, got {len(key)} bytes"
-        )
+        raise ValueError(f"Master key must be 32 bytes, got {len(key)} bytes")
     return key
 
 
@@ -101,15 +99,13 @@ class EnvelopeCrypto:
             old_keys: 旧版本 key 字典 {version: key_bytes}。
         """
         if len(current_key) != 32:
-            raise ValueError(
-                f"Master key must be 32 bytes, got {len(current_key)} bytes"
-            )
+            raise ValueError(f"Master key must be 32 bytes, got {len(current_key)} bytes")
         self._current_key: bytes = current_key
         self._current_version: int = current_version
         self._old_keys: dict[int, bytes] = old_keys or {}
 
     @classmethod
-    def from_env(cls) -> "EnvelopeCrypto":
+    def from_env(cls) -> EnvelopeCrypto:
         """从环境变量构建 EnvelopeCrypto。
 
         读取 ``IRIP_MASTER_KEY``（base64 编码的 32 字节密钥）。
@@ -206,9 +202,7 @@ class EnvelopeCrypto:
         """
         parts = encrypted.split(":", 2)
         if len(parts) != 3:
-            raise ValueError(
-                f"Invalid encrypted format: expected 'v{{version}}:{{nonce}}:{{ciphertext}}'"
-            )
+            raise ValueError("Invalid encrypted format: expected 'v{version}:{nonce}:{ciphertext}'")
 
         version_str, nonce_b64, ct_b64 = parts
         if not version_str.startswith("v"):

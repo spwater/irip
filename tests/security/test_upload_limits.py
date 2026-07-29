@@ -53,9 +53,7 @@ def _presign_upload(
         },
         headers=_auth_headers(token),
     )
-    is_json = resp.headers.get("content-type", "").startswith(
-        "application/json"
-    )
+    is_json = resp.headers.get("content-type", "").startswith("application/json")
     body = resp.json() if is_json else {}
     return resp.status_code, body
 
@@ -214,9 +212,7 @@ class TestMIMEWhitelist:
             media_type,
             1024,
         )
-        assert status == 200, (
-            f"Whitelisted MIME {media_type} should be accepted: {body}"
-        )
+        assert status == 200, f"Whitelisted MIME {media_type} should be accepted: {body}"
 
     @pytest.mark.parametrize(
         "media_type",
@@ -245,9 +241,7 @@ class TestMIMEWhitelist:
             media_type,
             1024,
         )
-        assert status == 422, (
-            f"Non-whitelisted MIME {media_type} should be rejected: {body}"
-        )
+        assert status == 422, f"Non-whitelisted MIME {media_type} should be rejected: {body}"
         assert body["error"]["code"] == "unsupported_media_type"
 
     def test_csv_in_whitelist(self) -> None:

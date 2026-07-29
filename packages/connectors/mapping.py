@@ -13,8 +13,8 @@
 - 已发布配置规则不可变（published_version_immutable）。
 """
 
-import json
 import asyncio
+import json
 from datetime import datetime
 from pathlib import Path
 from uuid import UUID
@@ -53,10 +53,7 @@ _WEIGHT_PRIOR_CONFIRMED: float = 0.05
 
 # ---- JSON Schema 路径 ----
 _SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[2]
-    / "schemas"
-    / "mapping-profile"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[2] / "schemas" / "mapping-profile" / "v1.schema.json"
 )
 
 
@@ -249,9 +246,7 @@ class MappingService:
             tuple[MappingCandidate, ...]: 按分数降序排列的候选。
         """
         async with self._factory() as session:
-            candidates = await self._score_candidates(
-                session, source_name, source_unit, data_type
-            )
+            candidates = await self._score_candidates(session, source_name, source_unit, data_type)
 
         candidates_sorted = sorted(candidates, key=lambda c: c.score, reverse=True)
         return tuple(candidates_sorted)
@@ -317,9 +312,7 @@ class MappingService:
                 )
         return candidates
 
-    async def _load_published_versions(
-        self, session: AsyncSession
-    ) -> list[VariableVersion]:
+    async def _load_published_versions(self, session: AsyncSession) -> list[VariableVersion]:
         """加载当前组织内所有已发布的变量版本。"""
         result = await session.execute(
             sa.select(VariableVersion)
@@ -338,18 +331,14 @@ class MappingService:
         if not variable_ids:
             return {}
         result = await session.execute(
-            sa.select(VariableAlias).where(
-                VariableAlias.variable_id.in_(variable_ids)
-            )
+            sa.select(VariableAlias).where(VariableAlias.variable_id.in_(variable_ids))
         )
         mapping: dict[UUID, list[str]] = {}
         for alias in result.scalars().all():
             mapping.setdefault(alias.variable_id, []).append(alias.alias)
         return mapping
 
-    async def _load_prior_confirmed_targets(
-        self, session: AsyncSession
-    ) -> set[UUID]:
+    async def _load_prior_confirmed_targets(self, session: AsyncSession) -> set[UUID]:
         """加载已发布映射配置中确认过的目标变量版本 ID 集合。"""
         result = await session.execute(
             sa.select(MappingProfileVersion)
@@ -379,9 +368,7 @@ class MappingService:
         return targets
 
     @staticmethod
-    def _same_dimension(
-        source_unit: str | None, target_unit: str | None
-    ) -> bool:
+    def _same_dimension(source_unit: str | None, target_unit: str | None) -> bool:
         """判断源单位与目标单位是否同维度（via UnitConverter 注册表）。
 
         任一单位未知或为 None 时返回 False（不加分、不扣分）。
@@ -720,9 +707,7 @@ class MappingProfileService:
 
     # ---- 内部辅助 ----
 
-    async def _get_profile(
-        self, session: AsyncSession, profile_id: UUID
-    ) -> MappingProfile:
+    async def _get_profile(self, session: AsyncSession, profile_id: UUID) -> MappingProfile:
         """读取配置并校验组织归属。"""
         result = await session.execute(
             sa.select(MappingProfile).where(MappingProfile.id == profile_id)
@@ -830,9 +815,7 @@ class IngestionService:
         self._factory = session_factory
         self._org_id = organization_id
 
-    async def preview(
-        self, source: ConnectorSource, limit: int = 100
-    ) -> PreviewTable:
+    async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览数据源。
 
         Args:

@@ -43,53 +43,35 @@ from packages.standards.packages import PackageService
 from packages.standards.templates import TemplateService
 
 #: 需 standard:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("standard:write"))]
 
 #: 需 standard:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("standard:read"))]
 
 #: 需 standard:publish 权限的当前用户依赖。
-PublishUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:publish"))
-]
+PublishUserDep = Annotated[CurrentUser, Depends(require_permission("standard:publish"))]
 
 # ---- DI 占位 ----
 
 
 def get_template_service() -> TemplateService:
     """获取 TemplateService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_template_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_template_service must be overridden via dependency_overrides")
 
 
 def get_method_service() -> MethodService:
     """获取 MethodService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_method_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_method_service must be overridden via dependency_overrides")
 
 
 def get_package_service() -> PackageService:
     """获取 PackageService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_package_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_package_service must be overridden via dependency_overrides")
 
 
-TemplateServiceDep = Annotated[
-    TemplateService, Depends(get_template_service)
-]
-MethodServiceDep = Annotated[
-    MethodService, Depends(get_method_service)
-]
-PackageServiceDep = Annotated[
-    PackageService, Depends(get_package_service)
-]
+TemplateServiceDep = Annotated[TemplateService, Depends(get_template_service)]
+MethodServiceDep = Annotated[MethodService, Depends(get_method_service)]
+PackageServiceDep = Annotated[PackageService, Depends(get_package_service)]
 
 
 # ---- 路由实例 ----
@@ -126,9 +108,7 @@ class AddObservationRequest(BaseModel):
 
     variable_version_id: UUID = Field(..., description="标准变量版本 ID")
     required: bool = Field(True, description="是否必需")
-    cardinality: Literal["one", "many"] = Field(
-        "one", description="基数"
-    )
+    cardinality: Literal["one", "many"] = Field("one", description="基数")
 
 
 class CreateMethodRequest(BaseModel):
@@ -160,9 +140,7 @@ class CreatePackageRequest(BaseModel):
 class AddPackageRefRequest(BaseModel):
     """添加包引用请求。"""
 
-    ref_type: Literal["variable", "method", "template"] = Field(
-        ..., description="引用类型"
-    )
+    ref_type: Literal["variable", "method", "template"] = Field(..., description="引用类型")
     ref_id: UUID = Field(..., description="被引用实体 ID")
     version: int = Field(..., ge=1, description="版本号")
 
@@ -574,9 +552,7 @@ def _package_version_orm_to_dict(version: object) -> dict:
 # ---- 模板端点 ----
 
 
-@templates_router.post(
-    "", response_model=TemplateDetailResponse, status_code=201
-)
+@templates_router.post("", response_model=TemplateDetailResponse, status_code=201)
 async def create_template(
     body: CreateTemplateRequest,
     current_user: WriteUserDep,
@@ -603,9 +579,7 @@ async def list_templates(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> TemplateListResponse:
     """分页查询事实模板列表。"""
-    items, next_cursor = await service.list_templates(
-        cursor=cursor, page_size=page_size
-    )
+    items, next_cursor = await service.list_templates(cursor=cursor, page_size=page_size)
     return TemplateListResponse(
         items=[
             TemplateListItem(
@@ -618,9 +592,7 @@ async def list_templates(
                 created_at=item["created_at"],
                 updated_at=item["updated_at"],
                 lock_version=item["lock_version"],
-                latest_version=_template_version_to_response(
-                    item["latest_version"]
-                )
+                latest_version=_template_version_to_response(item["latest_version"])
                 if item.get("latest_version")
                 else None,
             )
@@ -630,9 +602,7 @@ async def list_templates(
     )
 
 
-@templates_router.get(
-    "/{template_id}", response_model=TemplateDetailResponse
-)
+@templates_router.get("/{template_id}", response_model=TemplateDetailResponse)
 async def get_template(
     template_id: UUID,
     current_user: ReadUserDep,
@@ -661,14 +631,10 @@ async def add_observation(
         required=body.required,
         cardinality=body.cardinality,
     )
-    return _template_version_to_response(
-        _template_version_orm_to_dict(version)
-    )
+    return _template_version_to_response(_template_version_orm_to_dict(version))
 
 
-@templates_router.post(
-    "/{template_id}/submit", response_model=TemplateVersionResponse
-)
+@templates_router.post("/{template_id}/submit", response_model=TemplateVersionResponse)
 async def submit_template(
     template_id: UUID,
     current_user: WriteUserDep,
@@ -676,14 +642,10 @@ async def submit_template(
 ) -> TemplateVersionResponse:
     """提交模板审核（DRAFT → IN_REVIEW，验证后创建版本快照）。"""
     version = await service.submit_template(template_id)
-    return _template_version_to_response(
-        _template_version_orm_to_dict(version)
-    )
+    return _template_version_to_response(_template_version_orm_to_dict(version))
 
 
-@templates_router.post(
-    "/{template_id}/publish", response_model=TemplateVersionResponse
-)
+@templates_router.post("/{template_id}/publish", response_model=TemplateVersionResponse)
 async def publish_template(
     template_id: UUID,
     current_user: PublishUserDep,
@@ -691,14 +653,10 @@ async def publish_template(
 ) -> TemplateVersionResponse:
     """发布模板（IN_REVIEW → PUBLISHED，版本此后不可变）。"""
     version = await service.publish_template(template_id)
-    return _template_version_to_response(
-        _template_version_orm_to_dict(version)
-    )
+    return _template_version_to_response(_template_version_orm_to_dict(version))
 
 
-@templates_router.post(
-    "/{template_id}/reject", response_model=TemplateVersionResponse
-)
+@templates_router.post("/{template_id}/reject", response_model=TemplateVersionResponse)
 async def reject_template(
     template_id: UUID,
     body: RejectRequest,
@@ -707,14 +665,10 @@ async def reject_template(
 ) -> TemplateVersionResponse:
     """拒绝模板（IN_REVIEW → REJECTED，设置拒绝原因）。"""
     version = await service.reject_template(template_id, reason=body.reason)
-    return _template_version_to_response(
-        _template_version_orm_to_dict(version)
-    )
+    return _template_version_to_response(_template_version_orm_to_dict(version))
 
 
-@templates_router.post(
-    "/{template_id}/deprecate", response_model=TemplateVersionResponse
-)
+@templates_router.post("/{template_id}/deprecate", response_model=TemplateVersionResponse)
 async def deprecate_template(
     template_id: UUID,
     current_user: PublishUserDep,
@@ -722,17 +676,13 @@ async def deprecate_template(
 ) -> TemplateVersionResponse:
     """弃用模板（PUBLISHED → DEPRECATED）。"""
     version = await service.deprecate_template(template_id)
-    return _template_version_to_response(
-        _template_version_orm_to_dict(version)
-    )
+    return _template_version_to_response(_template_version_orm_to_dict(version))
 
 
 # ---- 方法端点 ----
 
 
-@methods_router.post(
-    "", response_model=MethodDetailResponse, status_code=201
-)
+@methods_router.post("", response_model=MethodDetailResponse, status_code=201)
 async def create_method(
     body: CreateMethodRequest,
     current_user: WriteUserDep,
@@ -756,9 +706,7 @@ async def list_methods(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> MethodListResponse:
     """分页查询方法列表。"""
-    items, next_cursor = await service.list_methods(
-        cursor=cursor, page_size=page_size
-    )
+    items, next_cursor = await service.list_methods(cursor=cursor, page_size=page_size)
     return MethodListResponse(
         items=[
             MethodListItem(
@@ -771,9 +719,7 @@ async def list_methods(
                 created_at=item["created_at"],
                 updated_at=item["updated_at"],
                 lock_version=item["lock_version"],
-                latest_version=_method_version_to_response(
-                    item["latest_version"]
-                )
+                latest_version=_method_version_to_response(item["latest_version"])
                 if item.get("latest_version")
                 else None,
             )
@@ -783,9 +729,7 @@ async def list_methods(
     )
 
 
-@methods_router.get(
-    "/{method_id}", response_model=MethodDetailResponse
-)
+@methods_router.get("/{method_id}", response_model=MethodDetailResponse)
 async def get_method(
     method_id: UUID,
     current_user: ReadUserDep,
@@ -796,9 +740,7 @@ async def get_method(
     return _method_detail_to_response(detail)
 
 
-@methods_router.post(
-    "/{method_id}/submit", response_model=MethodVersionResponse
-)
+@methods_router.post("/{method_id}/submit", response_model=MethodVersionResponse)
 async def submit_method(
     method_id: UUID,
     current_user: WriteUserDep,
@@ -806,14 +748,10 @@ async def submit_method(
 ) -> MethodVersionResponse:
     """提交方法审核（DRAFT → IN_REVIEW，创建版本快照）。"""
     version = await service.submit_method(method_id)
-    return _method_version_to_response(
-        _method_version_orm_to_dict(version)
-    )
+    return _method_version_to_response(_method_version_orm_to_dict(version))
 
 
-@methods_router.post(
-    "/{method_id}/publish", response_model=MethodVersionResponse
-)
+@methods_router.post("/{method_id}/publish", response_model=MethodVersionResponse)
 async def publish_method(
     method_id: UUID,
     current_user: PublishUserDep,
@@ -821,17 +759,13 @@ async def publish_method(
 ) -> MethodVersionResponse:
     """发布方法（IN_REVIEW → PUBLISHED，版本此后不可变）。"""
     version = await service.publish_method(method_id)
-    return _method_version_to_response(
-        _method_version_orm_to_dict(version)
-    )
+    return _method_version_to_response(_method_version_orm_to_dict(version))
 
 
 # ---- 标准包端点 ----
 
 
-@packages_router.post(
-    "", response_model=PackageDetailResponse, status_code=201
-)
+@packages_router.post("", response_model=PackageDetailResponse, status_code=201)
 async def create_package(
     body: CreatePackageRequest,
     current_user: WriteUserDep,
@@ -855,9 +789,7 @@ async def list_packages(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> PackageListResponse:
     """分页查询标准包列表。"""
-    items, next_cursor = await service.list_packages(
-        cursor=cursor, page_size=page_size
-    )
+    items, next_cursor = await service.list_packages(cursor=cursor, page_size=page_size)
     return PackageListResponse(
         items=[
             PackageListItem(
@@ -870,9 +802,7 @@ async def list_packages(
                 created_at=item["created_at"],
                 updated_at=item["updated_at"],
                 lock_version=item["lock_version"],
-                latest_version=_package_version_to_response(
-                    item["latest_version"]
-                )
+                latest_version=_package_version_to_response(item["latest_version"])
                 if item.get("latest_version")
                 else None,
             )
@@ -882,9 +812,7 @@ async def list_packages(
     )
 
 
-@packages_router.get(
-    "/{package_id}", response_model=PackageDetailResponse
-)
+@packages_router.get("/{package_id}", response_model=PackageDetailResponse)
 async def get_package(
     package_id: UUID,
     current_user: ReadUserDep,
@@ -895,9 +823,7 @@ async def get_package(
     return _package_detail_to_response(detail)
 
 
-@packages_router.post(
-    "/{package_id}/refs", response_model=PackageDetailResponse
-)
+@packages_router.post("/{package_id}/refs", response_model=PackageDetailResponse)
 async def add_package_ref(
     package_id: UUID,
     body: AddPackageRefRequest,
@@ -910,24 +836,16 @@ async def add_package_ref(
     已发布的包不可添加引用。
     """
     if body.ref_type == "variable":
-        await service.add_variable_ref(
-            package_id, body.ref_id, body.version
-        )
+        await service.add_variable_ref(package_id, body.ref_id, body.version)
     elif body.ref_type == "method":
-        await service.add_method_ref(
-            package_id, body.ref_id, body.version
-        )
+        await service.add_method_ref(package_id, body.ref_id, body.version)
     elif body.ref_type == "template":
-        await service.add_template_ref(
-            package_id, body.ref_id, body.version
-        )
+        await service.add_template_ref(package_id, body.ref_id, body.version)
     detail = await service.get_package(package_id)
     return _package_detail_to_response(detail)
 
 
-@packages_router.post(
-    "/{package_id}/submit", response_model=PackageDetailResponse
-)
+@packages_router.post("/{package_id}/submit", response_model=PackageDetailResponse)
 async def submit_package(
     package_id: UUID,
     current_user: WriteUserDep,
@@ -939,9 +857,7 @@ async def submit_package(
     return _package_detail_to_response(detail)
 
 
-@packages_router.post(
-    "/{package_id}/publish", response_model=PackageVersionResponse
-)
+@packages_router.post("/{package_id}/publish", response_model=PackageVersionResponse)
 async def publish_package(
     package_id: UUID,
     current_user: PublishUserDep,
@@ -949,14 +865,10 @@ async def publish_package(
 ) -> PackageVersionResponse:
     """发布标准包（IN_REVIEW → PUBLISHED，冻结所有引用）。"""
     version = await service.publish_package(package_id)
-    return _package_version_to_response(
-        _package_version_orm_to_dict(version)
-    )
+    return _package_version_to_response(_package_version_orm_to_dict(version))
 
 
-@packages_router.post(
-    "/{package_id}/reject", response_model=PackageVersionResponse
-)
+@packages_router.post("/{package_id}/reject", response_model=PackageVersionResponse)
 async def reject_package(
     package_id: UUID,
     body: RejectRequest,
@@ -964,9 +876,5 @@ async def reject_package(
     service: PackageServiceDep,
 ) -> PackageVersionResponse:
     """拒绝标准包（IN_REVIEW → REJECTED，设置拒绝原因）。"""
-    version = await service.reject_package(
-        package_id, reason=body.reason
-    )
-    return _package_version_to_response(
-        _package_version_orm_to_dict(version)
-    )
+    version = await service.reject_package(package_id, reason=body.reason)
+    return _package_version_to_response(_package_version_orm_to_dict(version))

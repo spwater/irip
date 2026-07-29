@@ -8,13 +8,9 @@ import {
   message,
 } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  apiApproveCandidate,
-  apiRejectCandidate,
-  extractApiError,
-  type CurrentUser,
-  type ParameterCandidate,
-} from '@/api/client';
+import { type CurrentUser } from '@/api/client';
+import { apiApproveCandidate, apiRejectCandidate } from '@/api/facts-provenance';
+import { extractApiError, type ParameterCandidate } from '@/api/types';
 
 const { Text } = Typography;
 

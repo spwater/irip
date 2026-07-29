@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -12,8 +13,6 @@ from apps.api.dependencies.authorization import require_permission
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.standards.object_type_dict import ObjectTypeDict
-
-import sqlalchemy as sa
 
 object_types_router = APIRouter(prefix="/api/v1/object-types", tags=["object-types"])
 
@@ -85,6 +84,7 @@ async def create_object_type(
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
     from packages.common.ids import gen_code
+
     code = gen_code("obtype")
     async with session_scope(_get_session_factory()) as session:
         existing = await session.execute(
@@ -92,9 +92,7 @@ async def create_object_type(
         )
         if existing.scalar_one_or_none() is not None:
             raise AppError(code="conflict", message="类型名称已存在", retryable=False)
-        max_order = await session.execute(
-            sa.select(sa.func.max(ObjectTypeDict.sort_order))
-        )
+        max_order = await session.execute(sa.select(sa.func.max(ObjectTypeDict.sort_order)))
         sort_order = (max_order.scalar() or 0) + 1
         obj = ObjectTypeDict(
             code=code,
@@ -113,7 +111,9 @@ async def update_object_type(
     body: UpdateObjectTypeRequest,
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
-    from datetime import UTC, datetime as dt
+    from datetime import UTC
+    from datetime import datetime as dt
+
     async with session_scope(_get_session_factory()) as session:
         result = await session.execute(
             sa.select(ObjectTypeDict).where(ObjectTypeDict.id == type_id)
@@ -144,6 +144,7 @@ async def delete_object_type(
             raise AppError(code="not_found", message="类型不存在", retryable=False)
         # 检查是否有对象在用这个类型
         from packages.standards.objects import IndustrialObject
+
         count_result = await session.execute(
             sa.select(sa.func.count())
             .select_from(IndustrialObject)

@@ -41,9 +41,7 @@ ReadUserDep = Annotated[CurrentUser, Depends(require_permission("department:read
 
 
 #: DepartmentService 依赖类型别名。
-DepartmentServiceDep = Annotated[
-    DepartmentService, Depends(get_department_service)
-]
+DepartmentServiceDep = Annotated[DepartmentService, Depends(get_department_service)]
 
 
 # ---- 请求模型 ----
@@ -55,9 +53,7 @@ class CreateDepartmentRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     sort_order: int = Field(0, ge=0)
-    parent_id: str | None = Field(
-        None, description="上级部门ID，顶级部门为null"
-    )
+    parent_id: str | None = Field(None, description="上级部门ID，顶级部门为null")
 
 
 class UpdateDepartmentRequest(BaseModel):
@@ -67,9 +63,7 @@ class UpdateDepartmentRequest(BaseModel):
     description: str | None = Field(None, max_length=2000)
     sort_order: int = Field(0, ge=0)
     lock_version: int = Field(..., ge=0)
-    parent_id: str | None = Field(
-        None, description="上级部门ID，顶级部门为null"
-    )
+    parent_id: str | None = Field(None, description="上级部门ID，顶级部门为null")
 
 
 class UpdateDepartmentStatusRequest(BaseModel):
@@ -177,6 +171,7 @@ async def create_department(
         AppError: code="conflict"，当编码已存在时。
     """
     from packages.common.ids import gen_code
+
     dept = await service.create(
         code=gen_code("dept"),
         display_name=body.display_name,
@@ -216,15 +211,15 @@ async def list_departments(
 
         # 查询用户实验室及其所有子实验室 ID（递归遍历 parent_id 层次）
         import sqlalchemy as sa
+
         from packages.departments.entities import Department
 
         allowed_ids: set[UUID] = {current_user.department_id}
         pending_ids: list[UUID] = [current_user.department_id]
         async with service._factory() as session:  # noqa: SLF001
             while pending_ids:
-                children_stmt = (
-                    sa.select(Department.id)
-                    .where(Department.parent_id.in_(pending_ids))
+                children_stmt = sa.select(Department.id).where(
+                    Department.parent_id.in_(pending_ids)
                 )
                 children_result = await session.execute(children_stmt)
                 children_ids = {row[0] for row in children_result}
@@ -283,6 +278,7 @@ async def get_department_name_map(
         list[DepartmentNameMapItem]: 全部门 id→display_name 映射列表。
     """
     import sqlalchemy as sa
+
     from packages.departments.entities import Department
 
     async with service._factory() as session:  # noqa: SLF001
@@ -292,10 +288,7 @@ async def get_department_name_map(
         result = await session.execute(stmt)
         rows = result.all()
 
-    return [
-        DepartmentNameMapItem(id=str(row[0]), display_name=row[1])
-        for row in rows
-    ]
+    return [DepartmentNameMapItem(id=str(row[0]), display_name=row[1]) for row in rows]
 
 
 @departments_router.get("/{department_id}", response_model=DepartmentResponse)
@@ -354,9 +347,7 @@ async def update_department(
     return _to_response(dept)
 
 
-@departments_router.patch(
-    "/{department_id}/status", response_model=DepartmentResponse
-)
+@departments_router.patch("/{department_id}/status", response_model=DepartmentResponse)
 async def update_department_status(
     department_id: UUID,
     body: UpdateDepartmentStatusRequest,

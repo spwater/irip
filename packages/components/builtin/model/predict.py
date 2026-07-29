@@ -73,20 +73,13 @@ class ModelPredictComponent:
                 "predictions": dict(result.predictions),
                 "model_version_id": str(result.model_version_id),
                 "version": result.version,
-                "fact_id": (
-                    str(result.fact_id) if result.fact_id else None
-                ),
+                "fact_id": (str(result.fact_id) if result.fact_id else None),
             },
-            summary=(
-                f"模型 {model_id} 预测完成"
-                f"（版本 {result.version}）"
-            ),
+            summary=(f"模型 {model_id} 预测完成（版本 {result.version}）"),
             metadata={
                 "model_id": str(model_id),
                 "model_version_id": str(result.model_version_id),
                 "version": result.version,
-                "fact_id": (
-                    str(result.fact_id) if result.fact_id else None
-                ),
+                "fact_id": (str(result.fact_id) if result.fact_id else None),
             },
         )

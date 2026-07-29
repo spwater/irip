@@ -84,21 +84,23 @@ class SteadyWindow:
                 duration = end - i
                 if duration >= min_duration:
                     window_vals_final = values[i:end]
-                    windows.append({
-                        "start_index": i,
-                        "end_index": end - 1,
-                        "start_row": i,
-                        "end_row": end - 1,
-                        "duration": duration,
-                        "mean": statistics.mean(window_vals_final),
-                        "std": (
-                            statistics.stdev(window_vals_final)
-                            if len(window_vals_final) > 1
-                            else 0.0
-                        ),
-                        "min": min(window_vals_final),
-                        "max": max(window_vals_final),
-                    })
+                    windows.append(
+                        {
+                            "start_index": i,
+                            "end_index": end - 1,
+                            "start_row": i,
+                            "end_row": end - 1,
+                            "duration": duration,
+                            "mean": statistics.mean(window_vals_final),
+                            "std": (
+                                statistics.stdev(window_vals_final)
+                                if len(window_vals_final) > 1
+                                else 0.0
+                            ),
+                            "min": min(window_vals_final),
+                            "max": max(window_vals_final),
+                        }
+                    )
                 i = end
             else:
                 i += 1

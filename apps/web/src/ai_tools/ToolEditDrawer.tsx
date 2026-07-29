@@ -12,11 +12,8 @@ import {
   message,
 } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  apiCreateAITool,
-  apiUpdateAITool,
-  extractApiError,
-} from '@/api/client';
+import { apiCreateAITool, apiUpdateAITool } from '@/api/models-ai';
+import { extractApiError } from '@/api/types';
 import type { AIToolDTO } from './types';
 
 const { Text } = Typography;

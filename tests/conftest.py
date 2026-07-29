@@ -54,14 +54,13 @@ class RecordingTaskSender:
 def _to_async_url(url: str) -> str:
     """将同步 psycopg URL 转换为异步 psycopg_async URL。"""
     if url.startswith("postgresql+psycopg://"):
-        return url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        return url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     return url
 
 
 # F-17: 需要数据库的 fixture 自动标记为 integration
 # 这些 fixture 依赖 IRIP_TEST_DATABASE_URL，属于集成测试范畴
+
 
 @pytest.fixture(scope="session")
 def sync_engine() -> Iterator[Engine]:
@@ -92,9 +91,7 @@ def async_session_factory(
 
     F-17: 依赖 sync_engine，自动继承 integration 标记。
     """
-    async_url = _to_async_url(
-        sync_engine.url.render_as_string(hide_password=False)
-    )
+    async_url = _to_async_url(sync_engine.url.render_as_string(hide_password=False))
     engine = create_async_engine(async_url, poolclass=NullPool)
     return async_sessionmaker(engine, expire_on_commit=False)
 
@@ -253,9 +250,7 @@ class JobHarness:
 
         return await self._service.request_cancel(job_id, uuid4())
 
-    async def deliver(
-        self, job_id: UUID, owner: str | None = None
-    ) -> "JobResult | None":
+    async def deliver(self, job_id: UUID, owner: str | None = None) -> "JobResult | None":
         """投递作业到 worker 执行。"""
         from uuid import uuid4
 
@@ -267,9 +262,7 @@ class JobHarness:
         await self._executor.execute(job_id, "worker-dup-1")
         await self._executor.execute(job_id, "worker-dup-2")
 
-    async def deliver_with_retries(
-        self, job_id: UUID, fail_times: int
-    ) -> None:
+    async def deliver_with_retries(self, job_id: UUID, fail_times: int) -> None:
         """模拟带重试的投递。
 
         前 fail_times 次投递使用会失败的 handler，
@@ -321,17 +314,13 @@ class JobHarness:
         """启动作业后放弃（模拟 worker 崩溃）。"""
         ref = await self.accept(kind, {"value": 1}, f"idem-abandon-{kind}")
         # 获取租约但不执行
-        acquired = await self._lease_manager.acquire(
-            ref.job_id, "crashed-worker"
-        )
+        acquired = await self._lease_manager.acquire(ref.job_id, "crashed-worker")
         assert acquired, "Failed to acquire lease for abandon test"
         return ref
 
     async def simulate_worker_crash(self, job_id: UUID) -> None:
         """模拟 worker 崩溃（获取租约但不释放）。"""
-        acquired = await self._lease_manager.acquire(
-            job_id, "crashed-worker"
-        )
+        acquired = await self._lease_manager.acquire(job_id, "crashed-worker")
         assert acquired, "Failed to acquire lease for crash simulation"
 
     async def reap_expired_leases(self) -> list[UUID]:
@@ -360,9 +349,7 @@ class JobHarness:
 
         return await self._lease_manager.reap_expired()
 
-    async def authoritative_results(
-        self, job_id: UUID
-    ) -> "list[JobResult]":
+    async def authoritative_results(self, job_id: UUID) -> "list[JobResult]":
         """从数据库获取权威结果。"""
         import sqlalchemy as sa
 
@@ -370,9 +357,7 @@ class JobHarness:
         from packages.jobs.entities import Job, JobResult, JobStatus
 
         async with session_scope(self._factory) as session:
-            job = await session.scalar(
-                sa.select(Job).where(Job.id == job_id)
-            )
+            job = await session.scalar(sa.select(Job).where(Job.id == job_id))
             if job is None or job.result is None:
                 return []
             return [

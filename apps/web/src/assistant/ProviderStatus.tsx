@@ -3,10 +3,7 @@ import { Badge, Card, Descriptions, Modal, Tag, Typography } from 'antd';
 import {
   useQuery,
 } from '@tanstack/react-query';
-import {
-  apiGetProviderStatus,
-  type ToolInfo,
-} from '@/api/client';
+import { apiGetProviderStatus, type ToolInfo } from '@/api/models-ai';
 
 const { Text, Title } = Typography;
 

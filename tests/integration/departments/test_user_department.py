@@ -61,9 +61,7 @@ async def _cleanup_test_user(session_factory: object, user_id: object) -> None:
             )
 
 
-async def _cleanup_departments(
-    session_factory: object, org_id: object, codes: list[str]
-) -> None:
+async def _cleanup_departments(session_factory: object, org_id: object, codes: list[str]) -> None:
     """清理测试实验室。"""
     async with session_factory() as session:  # type: ignore[operator]
         async with session.begin():
@@ -77,8 +75,7 @@ async def _cleanup_departments(
             )
             await session.execute(
                 sa.text(
-                    "DELETE FROM department WHERE organization_id = :org "
-                    "AND code = ANY(:codes)"
+                    "DELETE FROM department WHERE organization_id = :org AND code = ANY(:codes)"
                 ),
                 {"org": org_id, "codes": codes},
             )
@@ -124,7 +121,8 @@ async def test_set_and_get_user_departments(
     finally:
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
-            async_session_factory, test_user.organization_id,
+            async_session_factory,
+            test_user.organization_id,
             ["ud_lab_01", "ud_lab_02"],
         )
 
@@ -228,7 +226,8 @@ async def test_is_primary_uniqueness(
     finally:
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
-            async_session_factory, test_user.organization_id,
+            async_session_factory,
+            test_user.organization_id,
             ["ud_primary_01", "ud_primary_02"],
         )
 
@@ -278,7 +277,8 @@ async def test_remove_department_association(
     finally:
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
-            async_session_factory, test_user.organization_id,
+            async_session_factory,
+            test_user.organization_id,
             ["ud_remove_01", "ud_remove_02"],
         )
 

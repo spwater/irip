@@ -239,11 +239,7 @@ class DerivationService:
             if fact_revision_ids:
                 norm_result = await session.execute(
                     sa.select(NormalizedObservation)
-                    .where(
-                        NormalizedObservation.fact_revision_id.in_(
-                            fact_revision_ids
-                        )
-                    )
+                    .where(NormalizedObservation.fact_revision_id.in_(fact_revision_ids))
                     .order_by(NormalizedObservation.fact_revision_id)
                 )
                 norm_observations = norm_result.scalars().all()
@@ -259,9 +255,7 @@ class DerivationService:
             algo_params: dict[str, object] = dict(recipe_version.parameters or {})
             algo_params["random_seed"] = recipe_version.random_seed
 
-            output_defs: tuple[str, ...] = tuple(
-                recipe_version.output_definitions or []
-            )
+            output_defs: tuple[str, ...] = tuple(recipe_version.output_definitions or [])
 
             outputs_list: list[ParameterCandidateOutput] = []
             if output_defs:

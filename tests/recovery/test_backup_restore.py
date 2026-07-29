@@ -34,7 +34,6 @@ from deployments.compose.backup_manifest import (
 )
 from packages.common.hashing import sha256_bytes
 
-
 # ---- 跳过条件 ----
 
 _SKIP_REASON: str = (
@@ -133,9 +132,7 @@ class TestBackupManifestIntegrity:
         validator: BackupManifestValidator = BackupManifestValidator()
         assert validator.validate(manifest, tmp_path) is True
 
-    def test_tamper_detection_rejects_mismatched_db_hash(
-        self, tmp_path: Path
-    ) -> None:
+    def test_tamper_detection_rejects_mismatched_db_hash(self, tmp_path: Path) -> None:
         """篡改数据库 dump 后，校验器拒绝恢复（哈希不匹配）。"""
         dump_path: Path = tmp_path / DATABASE_DUMP_FILENAME
         dump_path.write_bytes(b"original-content")
@@ -158,9 +155,7 @@ class TestBackupManifestIntegrity:
         assert exc_info.value.component == "database"
         assert "不匹配" in exc_info.value.message
 
-    def test_tamper_detection_rejects_mismatched_objects_hash(
-        self, tmp_path: Path
-    ) -> None:
+    def test_tamper_detection_rejects_mismatched_objects_hash(self, tmp_path: Path) -> None:
         """篡改 MinIO 对象后，校验器拒绝恢复（聚合哈希不匹配）。"""
         dump_path: Path = tmp_path / DATABASE_DUMP_FILENAME
         dump_path.write_bytes(b"db-content")
@@ -273,9 +268,7 @@ class TestBackupRestoreCycle:
     """备份/恢复完整周期集成测试（需要 Docker + DB + MinIO）。"""
 
     @pytest.mark.integration
-    def test_unencrypted_backup_package(
-        self, backup_restore_env: Path
-    ) -> None:
+    def test_unencrypted_backup_package(self, backup_restore_env: Path) -> None:
         """未加密测试包：备份后 manifest 结构完整、哈希可校验。"""
         import asyncio
 
@@ -317,9 +310,7 @@ class TestBackupRestoreCycle:
         assert validator.validate(manifest, backup_restore_env) is True
 
     @pytest.mark.integration
-    def test_tamper_detection_on_real_backup(
-        self, backup_restore_env: Path
-    ) -> None:
+    def test_tamper_detection_on_real_backup(self, backup_restore_env: Path) -> None:
         """对真实备份篡改数据库 dump，校验器拒绝。"""
         import asyncio
 
@@ -355,9 +346,7 @@ class TestBackupRestoreCycle:
         assert exc_info.value.component == "database"
 
     @pytest.mark.integration
-    def test_empty_volume_restore_smoke(
-        self, backup_restore_env: Path
-    ) -> None:
+    def test_empty_volume_restore_smoke(self, backup_restore_env: Path) -> None:
         """空卷恢复：恢复到隔离环境后冒烟查询可执行。"""
         import asyncio
 
@@ -404,13 +393,9 @@ class TestBackupRestoreCycle:
         # 转同步 URL
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg_async://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
         elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):
@@ -434,9 +419,7 @@ class TestBackupRestoreCycle:
         engine = create_engine(sync_url, pool_pre_ping=True)
         try:
             with engine.connect() as conn:
-                result = conn.execute(
-                    text("SELECT version_num FROM alembic_version LIMIT 1")
-                )
+                result = conn.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
                 row = result.fetchone()
                 if row is not None:
                     assert manifest.migration_version == str(row[0])
@@ -462,13 +445,9 @@ class TestBackupRestoreCycle:
         db_url: str = _require_db()
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg_async://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
         elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):
@@ -476,25 +455,21 @@ class TestBackupRestoreCycle:
 
         # 备份前查询 fact 表行数（D50 数据在此表中）
         engine = create_engine(sync_url, pool_pre_ping=True)
-        pre_fact_count: int = 0
-        pre_provenance_count: int = 0
         try:
             with engine.connect() as conn:
                 # 查询 fact_observation 行数（D50 粒径数据存储于此）
                 try:
                     result = conn.execute(text("SELECT count(*) FROM fact_observation"))
-                    pre_fact_count = int(result.scalar() or 0)
+                    int(result.scalar() or 0)
                 except Exception:
-                    pre_fact_count = -1  # 表可能不存在
+                    pass  # 表可能不存在
 
                 # 查询溯源记录行数
                 try:
-                    result = conn.execute(
-                        text("SELECT count(*) FROM derivation_record")
-                    )
-                    pre_provenance_count = int(result.scalar() or 0)
+                    result = conn.execute(text("SELECT count(*) FROM derivation_record"))
+                    int(result.scalar() or 0)
                 except Exception:
-                    pre_provenance_count = -1
+                    pass
         finally:
             engine.dispose()
 
@@ -543,13 +518,9 @@ class TestBackupRestoreCycle:
         db_url: str = _require_db()
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg_async://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
         elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace(
-                "postgresql+psycopg://", "postgresql://", 1
-            )
+            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):
@@ -557,23 +528,21 @@ class TestBackupRestoreCycle:
 
         # 备份前查询模型版本表行数（ROM 模型历史存储于此）
         engine = create_engine(sync_url, pool_pre_ping=True)
-        pre_model_count: int = 0
-        pre_version_count: int = 0
         try:
             with engine.connect() as conn:
                 # 查询 model 表行数
                 try:
                     result = conn.execute(text("SELECT count(*) FROM model"))
-                    pre_model_count = int(result.scalar() or 0)
+                    int(result.scalar() or 0)
                 except Exception:
-                    pre_model_count = -1
+                    pass
 
                 # 查询 model_version 表行数（ROM 版本历史）
                 try:
                     result = conn.execute(text("SELECT count(*) FROM model_version"))
-                    pre_version_count = int(result.scalar() or 0)
+                    int(result.scalar() or 0)
                 except Exception:
-                    pre_version_count = -1
+                    pass
         finally:
             engine.dispose()
 
@@ -607,6 +576,7 @@ class TestBackupRestoreCycle:
             from deployments.compose.backup_manifest import (
                 compute_objects_aggregate_sha256,
             )
+
             agg_sha, count, _ = compute_objects_aggregate_sha256(objects_dir)
             assert agg_sha == manifest.objects_sha256
             assert count == manifest.object_count

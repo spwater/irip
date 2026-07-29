@@ -30,20 +30,17 @@ import {
   apiGetComponent,
   apiListComponentVersions,
   apiListComponents,
-  apiListDepartments,
   apiListEquipment,
-  apiListObjects,
   apiPublishComponent,
   apiRestoreComponent,
-  apiUploadFile,
-  apiRecommendPrompt,
-  apiExtractPreview,
-  extractApiError,
   type ComponentDetail,
   type ComponentSummary,
   type ComponentVersionItem,
-  type IndustrialObject,
-} from '@/api/client';
+} from '@/api/equipment-flows';
+import { apiListObjects } from '@/api/standards-objects';
+import { apiListDepartments } from '@/api/departments';
+import { apiUploadFile, apiRecommendPrompt, apiExtractPreview } from '@/api/models-ai';
+import { extractApiError, type IndustrialObject } from '@/api/types';
 import type { UploadProps } from 'antd';
 
 /** 把 UTC 时间字符串转成本地时间显示 */
@@ -542,7 +539,7 @@ function ComponentFormFields({
  * - 摩登：基于 LLM 的组件（如 llm_extractor）
  * - 古法：基于代码的经典组件（csv_reader 等）
  */
-export function ComponentsPage({ prefillObject }: { prefillObject?: string }): JSX.Element {
+export function ComponentsPage({ prefillObject, editId }: { prefillObject?: string; editId?: string }): JSX.Element {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
@@ -568,6 +565,15 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillObject]);
+
+  // ---- 从 AI 工具管理页跳转过来时，自动打开编辑弹窗 ----
+  useEffect(() => {
+    if (editId) {
+      setDetailId(editId);
+      void handleOpenEdit({ id: editId } as ComponentSummary);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
 
   // ---- 列表查询 ----
   const { data, isLoading } = useQuery({
@@ -1164,7 +1170,7 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
           )
         }
       >
-        {detail && <ComponentDetailPanel detail={detail} detailId={detailId!} />}
+        {detail && <ComponentDetailPanel detail={detail} detailId={detailId!} onVersionChange={setDetailId} />}
       </Drawer>
 
       {/* 编辑组件 Modal（双模式：默认高级模式，可切换到表单模式）*/}
@@ -1233,9 +1239,11 @@ export function ComponentsPage({ prefillObject }: { prefillObject?: string }): J
 function ComponentDetailPanel({
   detail,
   detailId,
+  onVersionChange,
 }: {
   detail: ComponentDetail;
   detailId: string;
+  onVersionChange?: (versionId: string) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   // ---- 版本历史查询 ----
@@ -1255,7 +1263,7 @@ function ComponentDetailPanel({
       void queryClient.invalidateQueries({ queryKey: ['component', detailId] });
       void queryClient.invalidateQueries({ queryKey: ['component-versions', detailId] });
       // 切换 detailId 到回滚后的版本，详情和编辑窗口会自动加载该版本数据
-      setDetailId(versionId);
+      onVersionChange?.(versionId);
       void queryClient.refetchQueries({ queryKey: ['component', versionId] });
       void queryClient.refetchQueries({ queryKey: ['component-versions', versionId] });
       message.success('已回滚到该版本');

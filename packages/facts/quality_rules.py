@@ -44,9 +44,7 @@ class QualityRule(Protocol):
         ...
 
 
-def _get_quantile(
-    observations: dict[str, object], prefix: str
-) -> float | None:
+def _get_quantile(observations: dict[str, object], prefix: str) -> float | None:
     """从观察值字典中获取分位数值（兼容 _um 和 _mm 后缀）。
 
     Args:

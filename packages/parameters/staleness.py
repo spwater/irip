@@ -70,8 +70,7 @@ class StalenessChecker:
             # 1. 加载 staleness 跟踪条目
             result = await session.execute(
                 sa.select(ParameterStaleness).where(
-                    ParameterStaleness.parameter_version_id
-                    == parameter_version_id
+                    ParameterStaleness.parameter_version_id == parameter_version_id
                 )
             )
             entries = result.scalars().all()
@@ -86,9 +85,7 @@ class StalenessChecker:
             for entry in entries:
                 # 2. 加载跟踪的事实修订
                 fact_rev = await session.scalar(
-                    sa.select(FactRevision).where(
-                        FactRevision.id == entry.fact_revision_id
-                    )
+                    sa.select(FactRevision).where(FactRevision.id == entry.fact_revision_id)
                 )
                 if fact_rev is None:
                     # 事实修订被删除 → 标记为 review_required
@@ -98,9 +95,7 @@ class StalenessChecker:
                     continue
 
                 # 3. 加载事实，检查 current_revision
-                fact = await session.scalar(
-                    sa.select(Fact).where(Fact.id == fact_rev.fact_id)
-                )
+                fact = await session.scalar(sa.select(Fact).where(Fact.id == fact_rev.fact_id))
                 if fact is None:
                     entry.review_state = "review_required"
                     entry.last_checked_at = now
@@ -119,9 +114,7 @@ class StalenessChecker:
 
             return overall_state
 
-    async def mark_stale(
-        self, parameter_version_id: UUID, fact_revision_id: UUID
-    ) -> None:
+    async def mark_stale(self, parameter_version_id: UUID, fact_revision_id: UUID) -> None:
         """标记参数版本因特定事实修订而过期。
 
         查找对应的 staleness 跟踪条目并更新为 review_required。
@@ -134,10 +127,8 @@ class StalenessChecker:
         async with session_scope(self._factory) as session:
             entry = await session.scalar(
                 sa.select(ParameterStaleness).where(
-                    ParameterStaleness.parameter_version_id
-                    == parameter_version_id,
-                    ParameterStaleness.fact_revision_id
-                    == fact_revision_id,
+                    ParameterStaleness.parameter_version_id == parameter_version_id,
+                    ParameterStaleness.fact_revision_id == fact_revision_id,
                 )
             )
             now: datetime = datetime.now(UTC)

@@ -31,19 +31,13 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 
 #: 路由实例。
-models_router = APIRouter(
-    prefix="/api/v1/models", tags=["models"]
-)
+models_router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
 #: 需 model:manage 权限的当前用户依赖。
-ManageUserDep = Annotated[
-    CurrentUser, Depends(require_permission("model:manage"))
-]
+ManageUserDep = Annotated[CurrentUser, Depends(require_permission("model:manage"))]
 
 #: 需 model:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("model:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("model:read"))]
 
 
 def get_model_service() -> Any:
@@ -52,9 +46,7 @@ def get_model_service() -> Any:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_model_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_model_service must be overridden via dependency_overrides")
 
 
 #: ModelService 依赖类型别名。
@@ -85,31 +77,21 @@ class CreateModelRequest(BaseModel):
 class ValidateModelRequest(BaseModel):
     """提交验证请求。"""
 
-    dataset_artifact_id: str | None = Field(
-        None, description="验证数据集工件 ID"
-    )
-    metrics: dict[str, Any] | None = Field(
-        None, description="验证指标字典"
-    )
-    applicability_domain: dict[str, Any] | None = Field(
-        None, description="适用域字典"
-    )
+    dataset_artifact_id: str | None = Field(None, description="验证数据集工件 ID")
+    metrics: dict[str, Any] | None = Field(None, description="验证指标字典")
+    applicability_domain: dict[str, Any] | None = Field(None, description="适用域字典")
 
 
 class RollbackRequest(BaseModel):
     """回滚请求。"""
 
-    target_version_id: str = Field(
-        ..., description="目标版本 ID（UUID 字符串）"
-    )
+    target_version_id: str = Field(..., description="目标版本 ID（UUID 字符串）")
 
 
 class PredictRequest(BaseModel):
     """预测请求。"""
 
-    inputs: dict[str, Any] = Field(
-        ..., description="输入参数字典"
-    )
+    inputs: dict[str, Any] = Field(..., description="输入参数字典")
 
 
 # ---- 响应模型 ----
@@ -192,9 +174,7 @@ async def create_model(
     Returns:
         ModelResponse: 新创建的模型信息（201 Created）。
     """
-    model = await service.create_model(
-        code=body.code, display_name=body.display_name
-    )
+    model = await service.create_model(code=body.code, display_name=body.display_name)
     return _to_model_response(model)
 
 
@@ -215,14 +195,10 @@ async def list_models(
         ModelListResponse: 模型列表。
     """
     models = await service.list_models(status=status)
-    return ModelListResponse(
-        items=[_to_model_response(m) for m in models]
-    )
+    return ModelListResponse(items=[_to_model_response(m) for m in models])
 
 
-@models_router.get(
-    "/{model_id}", response_model=ModelResponse
-)
+@models_router.get("/{model_id}", response_model=ModelResponse)
 async def get_model(
     model_id: UUID,
     current_user: ReadUserDep,
@@ -262,9 +238,7 @@ async def list_versions(
         ModelVersionListResponse: 版本列表。
     """
     versions = await service.get_versions(model_id)
-    return ModelVersionListResponse(
-        items=[_to_version_response(v) for v in versions]
-    )
+    return ModelVersionListResponse(items=[_to_version_response(v) for v in versions])
 
 
 @models_router.post(
@@ -328,9 +302,7 @@ async def publish_version(
     return _to_model_response(model)
 
 
-@models_router.post(
-    "/{model_id}/rollback", response_model=ModelResponse
-)
+@models_router.post("/{model_id}/rollback", response_model=ModelResponse)
 async def rollback_model(
     model_id: UUID,
     body: RollbackRequest,
@@ -353,9 +325,7 @@ async def rollback_model(
     return _to_model_response(model)
 
 
-@models_router.post(
-    "/{model_id}/predict", response_model=PredictionResponse
-)
+@models_router.post("/{model_id}/predict", response_model=PredictionResponse)
 async def predict_model(
     model_id: UUID,
     body: PredictRequest,
@@ -380,15 +350,11 @@ async def predict_model(
         version=result.version,
         predictions=dict(result.predictions),
         metadata=dict(result.metadata),
-        fact_id=(
-            str(result.fact_id) if result.fact_id else None
-        ),
+        fact_id=(str(result.fact_id) if result.fact_id else None),
     )
 
 
-@models_router.post(
-    "/{model_id}/deprecate", response_model=ModelResponse
-)
+@models_router.post("/{model_id}/deprecate", response_model=ModelResponse)
 async def deprecate_model(
     model_id: UUID,
     current_user: ManageUserDep,
@@ -419,9 +385,7 @@ def _to_model_response(model: Any) -> ModelResponse:
         display_name=model.display_name,
         status=model.status,
         current_version_id=(
-            str(model.current_version_id)
-            if model.current_version_id is not None
-            else None
+            str(model.current_version_id) if model.current_version_id is not None else None
         ),
         lock_version=model.lock_version,
         created_at=model.created_at,
@@ -440,14 +404,10 @@ def _to_version_response(version: Any) -> ModelVersionResponse:
         status=version.status,
         contract_sha256=contract_sha256,
         model_artifact_id=(
-            str(version.model_artifact_id)
-            if version.model_artifact_id is not None
-            else None
+            str(version.model_artifact_id) if version.model_artifact_id is not None else None
         ),
         metrics=dict(version.metrics_json or {}),
-        applicability_domain=dict(
-            version.applicability_domain_json or {}
-        ),
+        applicability_domain=dict(version.applicability_domain_json or {}),
         code_hash=version.code_hash,
         dependency_hash=version.dependency_hash,
         model_hash=version.model_hash,

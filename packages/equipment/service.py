@@ -127,9 +127,7 @@ class EquipmentService:
             AppError: code="conflict"，当编码已存在时。
         """
         async with session_scope(self._factory) as session:
-            existing = await EquipmentRepository.select_by_org_and_code(
-                session, self._org_id, code
-            )
+            existing = await EquipmentRepository.select_by_org_and_code(session, self._org_id, code)
             if existing is not None:
                 raise AppError(
                     code="conflict",
@@ -370,14 +368,10 @@ class EquipmentService:
                     retryable=False,
                     fields={"equipment_id": str(equipment_id)},
                 )
-            await session.execute(
-                sa.delete(Equipment).where(Equipment.id == equipment_id)
-            )
+            await session.execute(sa.delete(Equipment).where(Equipment.id == equipment_id))
 
 
-def _encode_cursor(
-    sort_order: int, created_at: datetime, equip_id: UUID
-) -> str:
+def _encode_cursor(sort_order: int, created_at: datetime, equip_id: UUID) -> str:
     """编码 keyset 分页游标。
 
     格式：base64url( JSON {"v": {"so": sort_order, "ct": created_at_iso}, "id": uuid} )

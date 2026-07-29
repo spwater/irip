@@ -16,12 +16,12 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiDeleteFact,
   apiDeleteFactsByTask,
-  apiListDepartments,
   apiListFacts,
   apiSearchFacts,
   apiSearchFactsByData,
-  type FactSummary,
-} from '@/api/client';
+} from '@/api/facts-provenance';
+import { apiListDepartments } from '@/api/departments';
+import type { FactSummary } from '@/api/types';
 import { ActionBar, DataTableShell, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;

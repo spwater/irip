@@ -23,11 +23,11 @@ import {
   apiGetModelVersions,
   apiListModels,
   apiPredictModel,
-  extractApiError,
   type ModelSummary,
   type ModelVersionSummary,
   type PredictionResult,
-} from '@/api/client';
+} from '@/api/models-ai';
+import { extractApiError } from '@/api/types';
 
 const { Title, Text, Paragraph } = Typography;
 

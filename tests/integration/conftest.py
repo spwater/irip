@@ -75,17 +75,13 @@ def sync_engine() -> Iterator[Engine]:
     try:
         from testcontainers.postgres import PostgresContainer
     except ImportError:
-        pytest.skip(
-            "testcontainers not installed; set IRIP_TEST_DATABASE_URL"
-        )
+        pytest.skip("testcontainers not installed; set IRIP_TEST_DATABASE_URL")
         return  # 不可达，满足 mypy
 
     with PostgresContainer("pgvector/pgvector:pg16") as pg:
         container_url = pg.get_connection_url()
         # testcontainers 默认返回 psycopg2 驱动，切换为 psycopg 3
-        container_url = container_url.replace(
-            "postgresql+psycopg2://", "postgresql+psycopg://"
-        )
+        container_url = container_url.replace("postgresql+psycopg2://", "postgresql+psycopg://")
         _run_alembic_upgrade(container_url)
         engine = create_engine(container_url, pool_pre_ping=True)
         try:
@@ -100,9 +96,7 @@ def sync_engine() -> Iterator[Engine]:
 def _to_async_url(url: str) -> str:
     """将同步 psycopg URL 转换为异步 psycopg_async URL。"""
     if url.startswith("postgresql+psycopg://"):
-        return url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        return url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     return url
 
 
@@ -196,9 +190,7 @@ def api_client(
     app.dependency_overrides[get_me_session_factory] = lambda: async_session_factory
 
     # 覆盖健康检查依赖
-    app.dependency_overrides[get_health_session_factory] = (
-        lambda: async_session_factory
-    )
+    app.dependency_overrides[get_health_session_factory] = lambda: async_session_factory
     app.dependency_overrides[get_redis_url] = lambda: os.getenv(
         "IRIP_REDIS_URL", "redis://localhost:56379/0"
     )
@@ -301,12 +293,8 @@ def seeded_user(sync_engine: Engine) -> Iterator[SeededUser]:
     """活跃测试用户（密码 Correct-Horse-2026!）。"""
     email = "seeded@irip.local"
     password = "Correct-Horse-2026!"
-    user_id = _insert_user(
-        sync_engine, email, "Seeded User", password, "active"
-    )
-    yield SeededUser(
-        user_id=user_id, email=email, password=password, display_name="Seeded User"
-    )
+    user_id = _insert_user(sync_engine, email, "Seeded User", password, "active")
+    yield SeededUser(user_id=user_id, email=email, password=password, display_name="Seeded User")
     _cleanup_user(sync_engine, user_id)
 
 
@@ -315,12 +303,8 @@ def seeded_disabled_user(sync_engine: Engine) -> Iterator[SeededUser]:
     """禁用测试用户（密码 Correct-Horse-2026!，status=disabled）。"""
     email = "disabled@irip.local"
     password = "Correct-Horse-2026!"
-    user_id = _insert_user(
-        sync_engine, email, "Disabled User", password, "disabled"
-    )
-    yield SeededUser(
-        user_id=user_id, email=email, password=password, display_name="Disabled User"
-    )
+    user_id = _insert_user(sync_engine, email, "Disabled User", password, "disabled")
+    yield SeededUser(user_id=user_id, email=email, password=password, display_name="Disabled User")
     _cleanup_user(sync_engine, user_id)
 
 

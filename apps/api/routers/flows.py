@@ -25,12 +25,12 @@ DI 约定（与 V1 standards 路由一致）：
   生产环境通过 dependency_overrides 注入按请求构造的实例。
 """
 
-from datetime import datetime, timezone
 import json
+from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
@@ -38,12 +38,12 @@ from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.common.errors import AppError
 from packages.components.flow_runtime import (
+    PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,
     FlowNodeExecution,
     FlowRun,
     FlowRuntimeService,
-    PROTECTED_PARAMS,
 )
 from packages.components.flows import (
     FlowEdge,
@@ -56,22 +56,16 @@ from packages.components.flows import (
 flows_router = APIRouter(prefix="/api/v1/flows", tags=["flows"])
 
 #: 需 flow:manage 权限的当前用户依赖。
-ManageUserDep = Annotated[
-    CurrentUser, Depends(require_permission("flow:manage"))
-]
+ManageUserDep = Annotated[CurrentUser, Depends(require_permission("flow:manage"))]
 
 #: 需 flow:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("flow:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
 
 #: 需 flow:execute 权限的当前用户依赖。
-ExecuteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("flow:execute"))
-]
+ExecuteUserDep = Annotated[CurrentUser, Depends(require_permission("flow:execute"))]
 
 # 从 facts 路由复用响应模型
-from apps.api.routers.facts import FactListResponse, FactRevisionResponse
+from apps.api.routers.facts import FactListResponse, FactRevisionResponse  # noqa: E402
 
 
 def get_flow_service() -> FlowRuntimeService:
@@ -80,15 +74,11 @@ def get_flow_service() -> FlowRuntimeService:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_flow_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_flow_service must be overridden via dependency_overrides")
 
 
 #: FlowRuntimeService 依赖类型别名。
-FlowServiceDep = Annotated[
-    FlowRuntimeService, Depends(get_flow_service)
-]
+FlowServiceDep = Annotated[FlowRuntimeService, Depends(get_flow_service)]
 
 
 # ---- 请求模型 ----
@@ -260,9 +250,7 @@ def _definition_to_response(
             "version": version.version,
             "digest": version.digest,
             "status": version.status,
-            "published_at": version.published_at.isoformat()
-            if version.published_at
-            else None,
+            "published_at": version.published_at.isoformat() if version.published_at else None,
             "nodes": version.nodes_json or [],
             "edges": version.edges_json or [],
             "random_seed": version.random_seed,
@@ -364,13 +352,10 @@ async def create_flow(
         AppError: code="conflict"，当编码已存在。
         AppError: code="validation_failed"，当 DAG 校验失败。
     """
-    nodes = _nodes_to_schema_list(
-        [n.model_dump() for n in body.nodes]
-    )
-    edges = _edges_to_schema_list(
-        [e.model_dump() for e in body.edges]
-    )
+    nodes = _nodes_to_schema_list([n.model_dump() for n in body.nodes])
+    edges = _edges_to_schema_list([e.model_dump() for e in body.edges])
     from packages.common.ids import gen_code
+
     definition = await service.create_definition(
         code=gen_code("task"),
         display_name=body.display_name,
@@ -410,12 +395,8 @@ async def publish_flow(
         AppError: code="not_found"，当定义不存在。
         AppError: code="validation_failed"，当校验失败。
     """
-    nodes = _nodes_to_schema_list(
-        [n.model_dump() for n in body.nodes]
-    )
-    edges = _edges_to_schema_list(
-        [e.model_dump() for e in body.edges]
-    )
+    nodes = _nodes_to_schema_list([n.model_dump() for n in body.nodes])
+    edges = _edges_to_schema_list([e.model_dump() for e in body.edges])
     version = await service.publish_version(
         flow_definition_id=flow_id,
         nodes=nodes,
@@ -458,10 +439,7 @@ async def list_flows(
         ]
 
     return FlowListResponse(
-        items=[
-            _definition_to_response(definition, version)
-            for definition, version in items
-        ]
+        items=[_definition_to_response(definition, version) for definition, version in items]
     )
 
 
@@ -567,8 +545,8 @@ async def update_flow(
     """
     import sqlalchemy as sa
 
-    from packages.common.errors import AppError
     from packages.common.database import session_scope
+    from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
     async with session_scope(service.session_factory) as session:
@@ -581,11 +559,12 @@ async def update_flow(
         definition.display_name = body.display_name
         if body.department_id is not None:
             from uuid import UUID as UUIDType
+
             definition.department_id = UUIDType(body.department_id) if body.department_id else None
         definition.project_name = body.project_name
         if body.operator is not None:
             definition.operator = body.operator
-        definition.updated_at = datetime.now(timezone.utc)
+        definition.updated_at = datetime.now(UTC)
 
     return _definition_to_response(definition, None)
 
@@ -624,6 +603,7 @@ async def list_runs(
     persisted_ids: set = set()
     if run_ids:
         from packages.facts.entities import FactRevision
+
         async with session_scope(service.session_factory) as session:
             persist_stmt = (
                 sa.select(FactRevision.flow_run_id)
@@ -647,10 +627,12 @@ async def list_runs(
             node_result = await session.execute(node_stmt)
             node = node_result.scalar_one_or_none()
             if node:
-                if node.status == 'succeeded' and node.output_summary:
+                if node.status == "succeeded" and node.output_summary:
                     resp.output_summary = node.output_summary
-                elif node.status == 'failed' and node.diagnostics:
-                    resp.error_message = node.diagnostics.get("error_message", str(node.diagnostics))
+                elif node.status == "failed" and node.diagnostics:
+                    resp.error_message = node.diagnostics.get(
+                        "error_message", str(node.diagnostics)
+                    )  # noqa: E501
         result.append(resp)
     return result
 
@@ -832,9 +814,7 @@ async def get_run(
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
-        node_executions=[
-            _execution_to_response(e) for e in executions
-        ],
+        node_executions=[_execution_to_response(e) for e in executions],
     )
 
 
@@ -856,7 +836,9 @@ class PersistFactRequest(BaseModel):
 
     object_id: UUID
     template_version_id: UUID | None = None
-    custom_data: dict | None = None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}
+    custom_data: dict | None = (
+        None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}  # noqa: E501
+    )
 
 
 class PersistFactResponse(BaseModel):
@@ -886,11 +868,12 @@ async def persist_run_as_fact(
     创建 Fact 记录，每个 point 作为一条 raw observation。
     如果执行时传了 path 且是 PDF 文件，同时上传 PDF 到 artifact 存储。
     """
-    from packages.facts.service import FactService, CreateFactCommand
-    from packages.facts.observations import RawObservationInput
-    from packages.common.ids import new_id
-    from packages.common.artifacts import ArtifactService
     from pathlib import Path
+
+    from packages.common.artifacts import ArtifactService
+    from packages.common.ids import new_id
+    from packages.facts.observations import RawObservationInput
+    from packages.facts.service import CreateFactCommand, FactService
 
     # 1. 获取执行记录和节点输出
     run, executions = await service.get_run(run_id)
@@ -942,13 +925,13 @@ async def persist_run_as_fact(
     if source_path.startswith("artifact:"):
         try:
             import sqlalchemy as sa
+
             from packages.common.artifacts import Artifact
             from packages.common.database import session_scope as _session_scope
-            _art_id = UUID(source_path[len("artifact:"):])
+
+            _art_id = UUID(source_path[len("artifact:") :])
             async with _session_scope(service.session_factory) as sess:
-                _art = await sess.scalar(
-                    sa.select(Artifact).where(Artifact.id == _art_id)
-                )
+                _art = await sess.scalar(sa.select(Artifact).where(Artifact.id == _art_id))
                 if _art and _art.filename:
                     source_filename = _art.filename
         except Exception:
@@ -962,6 +945,7 @@ async def persist_run_as_fact(
 
     try:
         from apps.api.main import _build_s3_repo
+
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
@@ -973,8 +957,8 @@ async def persist_run_as_fact(
         # 4a. 上传原始 PDF
         if source_path and source_path.lower().endswith(".pdf"):
             file_path = Path(source_path)
-            if file_path.exists():
-                pdf_data = file_path.read_bytes()
+            if file_path.exists():  # noqa: ASYNC240
+                pdf_data = file_path.read_bytes()  # noqa: ASYNC240
                 pdf_ref = await artifact_svc.put_bytes(
                     data=pdf_data,
                     media_type="application/pdf",
@@ -1014,24 +998,28 @@ async def persist_run_as_fact(
     # 6. 查询任务信息快照（入库时保存，避免后续反查 JOIN）
     task_code: str | None = None
     task_name: str | None = None
-    project_name: str | None = None
     department_name: str | None = None
     operator: str | None = None
     try:
         import sqlalchemy as sa
+
         from packages.common.database import session_scope
         from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
         from packages.departments.entities import Department
+
         async with session_scope(service.session_factory) as sess:
-            fv_stmt = sa.select(FlowDefinitionVersionORM).where(FlowDefinitionVersionORM.id == run.flow_version_id)
+            fv_stmt = sa.select(FlowDefinitionVersionORM).where(
+                FlowDefinitionVersionORM.id == run.flow_version_id
+            )  # noqa: E501
             fv = (await sess.execute(fv_stmt)).scalar_one_or_none()
             if fv:
-                fd_stmt = sa.select(FlowDefinition).where(FlowDefinition.id == fv.flow_definition_id)
+                fd_stmt = sa.select(FlowDefinition).where(
+                    FlowDefinition.id == fv.flow_definition_id
+                )  # noqa: E501
                 fd = (await sess.execute(fd_stmt)).scalar_one_or_none()
                 if fd:
                     task_code = fd.code
                     task_name = fd.display_name
-                    project_name = fd.project_name
                     operator = fd.operator
                     if fd.department_id:
                         dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
@@ -1053,9 +1041,9 @@ async def persist_run_as_fact(
     )
 
     # 入库命名：统一用 任务名-文件名(去后缀) 作为子项名，任务名作为分组名
-    file_stem = Path(source_filename).stem if source_filename else ''
+    file_stem = Path(source_filename).stem if source_filename else ""
     subject_id = f"{task_name or ''}-{file_stem}" if file_stem else (task_name or str(run_id))
-    group_name = task_name or ''
+    group_name = task_name or ""
 
     command = CreateFactCommand(
         fact_type="experiment_run",
@@ -1083,9 +1071,10 @@ async def persist_run_as_fact(
     # 写入通用数据索引（KV 展平），支持跨任务内容搜索
     try:
         import sqlalchemy as sa
-        from packages.facts.entities import FactDataIndex
+
         from packages.common.database import session_scope
         from packages.common.ids import new_id
+        from packages.facts.entities import FactDataIndex
 
         index_rows = []
         for row_idx, point in enumerate(points):
@@ -1103,14 +1092,16 @@ async def persist_run_as_fact(
                 val_text = str(value)
             else:
                 continue
-            index_rows.append({
-                "id": new_id(),
-                "fact_revision_id": __import__('uuid').UUID(ref.revision_id),
-                "row_index": row_idx,
-                "key": str(key),
-                "value_text": val_text,
-                "value_number": val_num,
-            })
+            index_rows.append(
+                {
+                    "id": new_id(),
+                    "fact_revision_id": __import__("uuid").UUID(ref.revision_id),
+                    "row_index": row_idx,
+                    "key": str(key),
+                    "value_text": val_text,
+                    "value_number": val_num,
+                }
+            )
 
         if index_rows:
             async with session_scope(service.session_factory) as sess:
@@ -1120,6 +1111,7 @@ async def persist_run_as_fact(
                 )
     except Exception as e:
         import logging
+
         logging.getLogger(__name__).warning(f"Failed to write data index: {e}")
 
     return PersistFactResponse(
@@ -1142,12 +1134,14 @@ async def list_facts_by_flow(
 ) -> FactListResponse:
     """查询某个任务（flow_definition）产出的所有事实。
 
-    通过 flow_run_id 外键反查：flow_definition → flow_definition_version → flow_run → fact_revision。
+    通过 flow_run_id 外键反查：flow_definition → flow_definition_version
+    → flow_run → fact_revision。
     """
     import sqlalchemy as sa
+
     from packages.common.database import session_scope
     from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
-    from packages.facts.entities import FactRevision, Fact
+    from packages.facts.entities import Fact, FactRevision
     from packages.facts.observations import FactRevisionRef
 
     async with session_scope(service.session_factory) as session:
@@ -1167,30 +1161,37 @@ async def list_facts_by_flow(
         for rev in revisions:
             # 查 fact 状态
             fact = await session.get(Fact, rev.fact_id)
-            refs.append(FactRevisionRef(
-                fact_id=rev.fact_id,
-                revision=rev.revision,
-                revision_id=rev.id,
-                fact_type=rev.fact_type,
-                subject_id=rev.subject_id,
-                status=fact.status if fact else "unknown",
-            ))
+            refs.append(
+                FactRevisionRef(
+                    fact_id=rev.fact_id,
+                    revision=rev.revision,
+                    revision_id=rev.id,
+                    fact_type=rev.fact_type,
+                    subject_id=rev.subject_id,
+                    status=fact.status if fact else "unknown",
+                )
+            )
 
-        items = [FactRevisionResponse(
-            fact_id=str(r.fact_id),
-            revision=r.revision,
-            revision_id=str(r.revision_id),
-            fact_type=r.fact_type,
-            subject_id=r.subject_id,
-            status=r.status,
-        ) for r in refs]
+        items = [
+            FactRevisionResponse(
+                fact_id=str(r.fact_id),
+                revision=r.revision,
+                revision_id=str(r.revision_id),
+                fact_type=r.fact_type,
+                subject_id=r.subject_id,
+                status=r.status,
+            )
+            for r in refs
+        ]
 
         # 填充快照字段
         if items:
-            snap_stmt = (
-                sa.select(FactRevision.id, FactRevision.task_code, FactRevision.task_name, FactRevision.department_name)
-                .where(FactRevision.id.in_([__import__('uuid').UUID(i.revision_id) for i in items]))
-            )
+            snap_stmt = sa.select(
+                FactRevision.id,
+                FactRevision.task_code,
+                FactRevision.task_name,
+                FactRevision.department_name,
+            ).where(FactRevision.id.in_([__import__("uuid").UUID(i.revision_id) for i in items]))  # noqa: E501
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple] = {}
             for row in snap_result:

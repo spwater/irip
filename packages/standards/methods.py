@@ -70,9 +70,7 @@ class Method(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     version_count: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -86,11 +84,7 @@ class Method(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
 
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_method_org_code"
-        ),
-    )
+    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_method_org_code"),)
 
     def __repr__(self) -> str:
         return (
@@ -135,13 +129,9 @@ class MethodVersion(Base):
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     published_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    deprecated_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    deprecated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     deprecated_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -342,9 +332,7 @@ class MethodService:
             )
             return result.scalar_one()
 
-    async def reject_method(
-        self, method_id: UUID, reason: str
-    ) -> MethodVersion:
+    async def reject_method(self, method_id: UUID, reason: str) -> MethodVersion:
         """拒绝方法（IN_REVIEW → REJECTED，设置拒绝原因）。
 
         Args:
@@ -456,9 +444,7 @@ class MethodService:
             )
 
             result = await session.execute(
-                sa.select(MethodVersion).where(
-                    MethodVersion.id == published.id
-                )
+                sa.select(MethodVersion).where(MethodVersion.id == published.id)
             )
             return result.scalar_one()
 
@@ -550,9 +536,7 @@ class MethodService:
             "created_at": method.created_at,
             "updated_at": method.updated_at,
             "lock_version": method.lock_version,
-            "latest_version": _method_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _method_version_to_dict(latest) if latest else None,
         }
 
     async def get_method(self, method_id: UUID) -> dict:
@@ -582,9 +566,7 @@ class MethodService:
             "created_at": method.created_at,
             "updated_at": method.updated_at,
             "lock_version": method.lock_version,
-            "latest_version": _method_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _method_version_to_dict(latest) if latest else None,
         }
 
     async def list_methods(
@@ -646,9 +628,7 @@ class MethodService:
                         "created_at": m.created_at,
                         "updated_at": m.updated_at,
                         "lock_version": m.lock_version,
-                        "latest_version": _method_version_to_dict(latest)
-                        if latest
-                        else None,
+                        "latest_version": _method_version_to_dict(latest) if latest else None,
                     }
                 )
 
@@ -679,9 +659,7 @@ class MethodService:
         Raises:
             AppError: code="not_found"，当方法不存在或不属于当前组织时。
         """
-        result = await session.execute(
-            sa.select(Method).where(Method.id == method_id)
-        )
+        result = await session.execute(sa.select(Method).where(Method.id == method_id))
         method = result.scalar_one_or_none()
         if method is None or method.organization_id != self._org_id:
             raise AppError(
@@ -737,9 +715,7 @@ def _method_version_to_dict(version: MethodVersion) -> dict:
         "published_at": version.published_at,
         "published_by": str(version.published_by) if version.published_by else None,
         "deprecated_at": version.deprecated_at,
-        "deprecated_by": str(version.deprecated_by)
-        if version.deprecated_by
-        else None,
+        "deprecated_by": str(version.deprecated_by) if version.deprecated_by else None,
         "rejection_reason": version.rejection_reason,
         "created_at": version.created_at,
         "lock_version": version.lock_version,

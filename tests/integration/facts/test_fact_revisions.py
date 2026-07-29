@@ -7,7 +7,6 @@
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -391,12 +390,8 @@ class TestFactRevisionChain:
 
         # 8. 修订链链接存在
         async with async_session_factory() as session:
-            link_r2 = await FactRepository.get_revision_link(
-                session, ref2.revision_id
-            )
-            link_r3 = await FactRepository.get_revision_link(
-                session, ref3.revision_id
-            )
+            link_r2 = await FactRepository.get_revision_link(session, ref2.revision_id)
+            link_r3 = await FactRepository.get_revision_link(session, ref3.revision_id)
         assert link_r2 is not None
         assert link_r2.from_revision_id == ref2.revision_id
         assert link_r2.to_revision_id == ref1.revision_id

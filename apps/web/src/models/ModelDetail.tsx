@@ -25,9 +25,9 @@ import {
   apiPublishModelVersion,
   apiRollbackModel,
   apiValidateModelVersion,
-  extractApiError,
   type ModelVersionSummary,
-} from '@/api/client';
+} from '@/api/models-ai';
+import { extractApiError } from '@/api/types';
 
 const { Text, Paragraph } = Typography;
 

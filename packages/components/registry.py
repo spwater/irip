@@ -85,10 +85,7 @@ class Component(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"Component(name={self.name!r}, kind={self.kind!r}, "
-            f"status={self.status!r})"
-        )
+        return f"Component(name={self.name!r}, kind={self.kind!r}, status={self.status!r})"
 
 
 class ComponentVersion(Base):
@@ -114,9 +111,7 @@ class ComponentVersion(Base):
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     component_id: Mapped[UUID] = mapped_column(
         GUID,
-        sa.ForeignKey(
-            "component.id", name="fk_component_version_component_id"
-        ),
+        sa.ForeignKey("component.id", name="fk_component_version_component_id"),
         nullable=False,
     )
     version: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -125,9 +120,7 @@ class ComponentVersion(Base):
     # 从 manifest 提取的实验对象编码（独立列，便于查询关联）
     experimental_object_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     runtime: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    port_schemas: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )
+    port_schemas: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(
         sa.Text,
         nullable=False,
@@ -232,7 +225,8 @@ class ComponentRegistryService:
         return self._factory
 
     async def publish(
-        self, manifest: ComponentManifest,
+        self,
+        manifest: ComponentManifest,
         experimental_object_code: str | None = None,
     ) -> ComponentVersion:
         """发布组件版本。
@@ -287,9 +281,7 @@ class ComponentRegistryService:
                     raise AppError(
                         code="conflict",
                         message=(
-                            f"组件 kind 不一致: "
-                            f"已有 {component.kind}, "
-                            f"新版本 {manifest.kind}"
+                            f"组件 kind 不一致: 已有 {component.kind}, 新版本 {manifest.kind}"
                         ),
                         retryable=False,
                         fields={"name": manifest.name},
@@ -305,7 +297,7 @@ class ComponentRegistryService:
             )
             if latest_version:
                 # 递增 patch 号（如 1.0.5 → 1.0.6）
-                parts = latest_version.version.split('.')
+                parts = latest_version.version.split(".")
                 if len(parts) == 3:
                     auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
                 else:
@@ -326,14 +318,15 @@ class ComponentRegistryService:
                 if existing.manifest_sha256 == manifest.sha256:
                     return existing
                 # 版本号冲突，再递增一次
-                parts = auto_version.split('.')
+                parts = auto_version.split(".")
                 auto_version = f"{parts[0]}.{parts[1]}.{int(parts[2]) + 1}"
 
             # 4. 替换 manifest_yaml 里的 name 为组件真实编码
             import re
+
             updated_yaml = re.sub(
-                r'^name:\s*\S+.*',
-                f'name: {component.name}',
+                r"^name:\s*\S+.*",
+                f"name: {component.name}",
                 manifest.raw_yaml,
                 count=1,
                 flags=re.MULTILINE,
@@ -363,9 +356,7 @@ class ComponentRegistryService:
 
             return version
 
-    async def get(
-        self, name: str, version: str
-    ) -> ComponentVersion:
+    async def get(self, name: str, version: str) -> ComponentVersion:
         """按 name + version 查询组件版本。
 
         Args:
@@ -409,9 +400,7 @@ class ComponentRegistryService:
 
             return version_row
 
-    async def get_latest(
-        self, name: str
-    ) -> ComponentVersion:
+    async def get_latest(self, name: str) -> ComponentVersion:
         """按 name 查询组件的当前活跃版本。
 
         优先取 component.active_version_id 指定的版本（支持回滚），
@@ -472,9 +461,7 @@ class ComponentRegistryService:
 
             return version_row
 
-    async def get_version_by_id(
-        self, version_id: UUID
-    ) -> tuple[Component, ComponentVersion]:
+    async def get_version_by_id(self, version_id: UUID) -> tuple[Component, ComponentVersion]:
         """按版本 UUID 查询组件 + 版本（供 API 详情端点使用）。
 
         Args:
@@ -532,14 +519,11 @@ class ComponentRegistryService:
         """
         async with session_scope(self._factory) as session:
             # 优先用 active_version_id 关联，没有才取 created_at 最新的版本
-            query = (
-                sa.select(Component, ComponentVersion)
-                .outerjoin(
-                    ComponentVersion,
-                    sa.and_(
-                        ComponentVersion.id == Component.active_version_id,
-                    ),
-                )
+            query = sa.select(Component, ComponentVersion).outerjoin(
+                ComponentVersion,
+                sa.and_(
+                    ComponentVersion.id == Component.active_version_id,
+                ),
             )
             rows = (await session.execute(query)).all()
             # 过滤掉没有版本的，对没有 active_version_id 的用 created_at 最新
@@ -713,12 +697,8 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             # 删除所有版本
             await session.execute(
-                sa.delete(ComponentVersion).where(
-                    ComponentVersion.component_id == component_id
-                )
+                sa.delete(ComponentVersion).where(ComponentVersion.component_id == component_id)
             )
             # 删除主记录
-            await session.execute(
-                sa.delete(Component).where(Component.id == component_id)
-            )
+            await session.execute(sa.delete(Component).where(Component.id == component_id))
             await session.flush()

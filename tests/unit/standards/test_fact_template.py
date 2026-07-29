@@ -17,7 +17,6 @@
 """
 
 import pytest
-from uuid import UUID
 
 from packages.common.errors import AppError
 from packages.standards.methods import MethodService
@@ -30,9 +29,7 @@ class TestFactTemplate:
     """事实模板创建、观测添加与验证测试。"""
 
     @pytest.mark.asyncio
-    async def test_create_template_draft(
-        self, template_service: TemplateService
-    ) -> None:
+    async def test_create_template_draft(self, template_service: TemplateService) -> None:
         """创建模板 → status=draft, version_count=0。"""
         template = await template_service.create_template(
             code="exp_run_tpl",
@@ -155,9 +152,7 @@ class TestFactTemplate:
         # 验证 → 应报告 duplicate_observation
         report = await template_service.validate_template(template.id)
         assert not report.valid
-        assert any(
-            c.startswith("duplicate_observation:") for c in report.codes
-        )
+        assert any(c.startswith("duplicate_observation:") for c in report.codes)
 
     @pytest.mark.asyncio
     async def test_validate_unpublished_variable_reference(
@@ -191,10 +186,7 @@ class TestFactTemplate:
         # 验证 → 应报告 reference_not_published
         report = await template_service.validate_template(template.id)
         assert not report.valid
-        assert any(
-            c.startswith("reference_not_published:")
-            for c in report.codes
-        )
+        assert any(c.startswith("reference_not_published:") for c in report.codes)
 
     @pytest.mark.asyncio
     async def test_validate_valid_template(
@@ -283,9 +275,7 @@ class TestMethod:
     """方法生命周期测试。"""
 
     @pytest.mark.asyncio
-    async def test_method_lifecycle(
-        self, method_service: MethodService
-    ) -> None:
+    async def test_method_lifecycle(self, method_service: MethodService) -> None:
         """方法生命周期：创建 → 提交 → 发布 → 不可变。"""
         # 创建
         method = await method_service.create_method(
@@ -312,9 +302,7 @@ class TestMethod:
         assert detail["version_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_published_method_immutable(
-        self, method_service: MethodService
-    ) -> None:
+    async def test_published_method_immutable(self, method_service: MethodService) -> None:
         """已发布方法不可再次提交（invalid_transition）。"""
         method = await method_service.create_method(
             code="immutable_method",
@@ -329,9 +317,7 @@ class TestMethod:
         assert exc_info.value.code == "invalid_transition"
 
     @pytest.mark.asyncio
-    async def test_method_deprecate(
-        self, method_service: MethodService
-    ) -> None:
+    async def test_method_deprecate(self, method_service: MethodService) -> None:
         """方法弃用：published → deprecated。"""
         method = await method_service.create_method(
             code="deprecate_method",
@@ -352,9 +338,7 @@ class TestStandardPackage:
     """标准包测试。"""
 
     @pytest.mark.asyncio
-    async def test_create_package_draft(
-        self, package_service: PackageService
-    ) -> None:
+    async def test_create_package_draft(self, package_service: PackageService) -> None:
         """创建包 → status=draft, version_count=0。"""
         pkg = await package_service.create_package(
             code="test_pkg",
@@ -379,7 +363,7 @@ class TestStandardPackage:
             data_type="number",
             canonical_unit="mm",
         )
-        version = await standard_service.submit_for_review(variable.id)
+        await standard_service.submit_for_review(variable.id)
         await standard_service.publish_variable(variable.id)
 
         # 创建包
@@ -389,9 +373,7 @@ class TestStandardPackage:
         )
 
         # 添加变量引用
-        await package_service.add_variable_ref(
-            pkg.id, variable.id, version=1
-        )
+        await package_service.add_variable_ref(pkg.id, variable.id, version=1)
 
         # 提交 → 验证通过
         report = await package_service.submit_package(pkg.id)
@@ -432,18 +414,14 @@ class TestStandardPackage:
         )
 
         # 添加变量引用（引用的是 version 1，处于 in_review，未发布）
-        await package_service.add_variable_ref(
-            pkg.id, variable.id, version=1
-        )
+        await package_service.add_variable_ref(pkg.id, variable.id, version=1)
 
         # 提交 → 应失败
         with pytest.raises(AppError) as exc_info:
             await package_service.submit_package(pkg.id)
         assert exc_info.value.code == "validation_failed"
         codes = exc_info.value.fields.get("codes", [])
-        assert any(
-            c == "reference_not_published:variable" for c in codes
-        )
+        assert any(c == "reference_not_published:variable" for c in codes)
 
     @pytest.mark.asyncio
     async def test_published_package_immutable(
@@ -459,7 +437,7 @@ class TestStandardPackage:
             data_type="number",
             canonical_unit="mm",
         )
-        version = await standard_service.submit_for_review(variable.id)
+        await standard_service.submit_for_review(variable.id)
         await standard_service.publish_variable(variable.id)
 
         # 创建包并完成生命周期
@@ -467,17 +445,13 @@ class TestStandardPackage:
             code="immut_pkg",
             display_name="不可变包",
         )
-        await package_service.add_variable_ref(
-            pkg.id, variable.id, version=1
-        )
+        await package_service.add_variable_ref(pkg.id, variable.id, version=1)
         await package_service.submit_package(pkg.id)
         await package_service.publish_package(pkg.id)
 
         # 尝试添加引用 → 应抛出 invalid_transition
         with pytest.raises(AppError) as exc_info:
-            await package_service.add_variable_ref(
-                pkg.id, variable.id, version=1
-            )
+            await package_service.add_variable_ref(pkg.id, variable.id, version=1)
         assert exc_info.value.code == "invalid_transition"
 
     @pytest.mark.asyncio
@@ -494,7 +468,7 @@ class TestStandardPackage:
             data_type="number",
             canonical_unit="mm",
         )
-        version = await standard_service.submit_for_review(variable.id)
+        await standard_service.submit_for_review(variable.id)
         await standard_service.publish_variable(variable.id)
 
         # 创建包
@@ -505,9 +479,7 @@ class TestStandardPackage:
         assert pkg.status == "draft"
 
         # 添加引用
-        await package_service.add_variable_ref(
-            pkg.id, variable.id, version=1
-        )
+        await package_service.add_variable_ref(pkg.id, variable.id, version=1)
 
         # 提交
         report = await package_service.submit_package(pkg.id)
@@ -548,9 +520,7 @@ class TestStandardPackage:
         )
 
         # 添加方法引用
-        await package_service.add_method_ref(
-            pkg.id, method.id, version=1
-        )
+        await package_service.add_method_ref(pkg.id, method.id, version=1)
 
         # 提交 → 验证通过
         report = await package_service.submit_package(pkg.id)
@@ -597,9 +567,7 @@ class TestStandardPackage:
         )
 
         # 添加模板引用
-        await package_service.add_template_ref(
-            pkg.id, template.id, version=1
-        )
+        await package_service.add_template_ref(pkg.id, template.id, version=1)
 
         # 提交 → 验证通过
         report = await package_service.submit_package(pkg.id)

@@ -12,7 +12,7 @@ import {
   apiGetSystemHealth,
   type HealthCheck,
   type SystemHealth,
-} from '@/api/client';
+} from '@/api/governance';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { OceanPanel, StatusMark, FeedbackState } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';

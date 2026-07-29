@@ -24,9 +24,7 @@ def _read_csv_sync(
     encoding: str,
 ) -> list[list[str]]:
     """同步读取 CSV 文件并返回所有行（在线程池中执行，F-21）。"""
-    with open(
-        Path(path_str), newline="", encoding=encoding
-    ) as f:
+    with open(Path(path_str), newline="", encoding=encoding) as f:
         if delimiter:
             reader = csv.reader(f, delimiter=delimiter)
         else:
@@ -37,9 +35,7 @@ def _read_csv_sync(
                 reader = csv.reader(f, delimiter=",")
             else:
                 try:
-                    detected = csv.Sniffer().sniff(
-                        sample, delimiters=",\t;|"
-                    )
+                    detected = csv.Sniffer().sniff(sample, delimiters=",\t;|")
                     reader = csv.reader(f, delimiter=detected.delimiter)
                 except csv.Error:
                     reader = csv.reader(f, delimiter=",")
@@ -62,9 +58,7 @@ class CSVReader:
         has_header: bool = params.get("has_header", True)
 
         # F-21: 同步文件 I/O 放 asyncio.to_thread() 避免阻塞事件循环
-        all_rows = await asyncio.to_thread(
-            _read_csv_sync, path_str, delimiter, encoding
-        )
+        all_rows = await asyncio.to_thread(_read_csv_sync, path_str, delimiter, encoding)
 
         if not all_rows:
             return ComponentResult(
@@ -87,12 +81,10 @@ class CSVReader:
             if not row:
                 continue
             record: dict[str, Any] = {}
-            for col_name, cell in zip(columns, row):
+            for col_name, cell in zip(columns, row, strict=False):
                 record[col_name] = _coerce(cell)
             data_rows.append(record)
-            source_locs.append(
-                {"file": Path(path_str).name, "row": idx}
-            )
+            source_locs.append({"file": Path(path_str).name, "row": idx})
 
         table = ObservationTable(
             columns=columns,

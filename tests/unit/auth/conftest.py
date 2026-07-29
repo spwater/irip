@@ -144,12 +144,12 @@ class AuthTestUser:
 
 
 @pytest.fixture
-def researcher() -> AuthTestUser:
-    """研究员用户（roles=["researcher"]）。"""
+def lab_member() -> AuthTestUser:
+    """实验室成员用户（roles=["lab_member"]）。"""
     return AuthTestUser(
         user_id=new_id(),
-        email="researcher@irip.local",
-        roles=["researcher"],
+        email="lab_member@irip.local",
+        roles=["lab_member"],
     )
 
 
@@ -209,7 +209,7 @@ def cooler(org_id: UUID) -> ResourceRef:
 async def authz(
     async_session_factory: async_sessionmaker[AsyncSession],
     db_helper: DbHelper,
-    researcher: AuthTestUser,
+    lab_member: AuthTestUser,
     kiln: KilnResource,
     org_id: UUID,
 ) -> AsyncIterator[AuthorizationService]:
@@ -218,7 +218,7 @@ async def authz(
     使用迁移已种子的 researcher 角色（不创建新角色）。
     清理：测试后删除 scope_grant 记录。
     """
-    role_id = db_helper.get_role_id_sync("researcher")
+    role_id = db_helper.get_role_id_sync("lab_member")
 
     async with session_scope(async_session_factory) as session:
         grant = ScopeGrant(

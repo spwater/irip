@@ -29,7 +29,6 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from packages.common.errors import AppError
-
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
 
@@ -70,7 +69,7 @@ def _check_ip_allowed(ip_str: str) -> None:
             message="无法解析的目标地址",
             retryable=False,
             fields={"ip": "invalid"},
-        )
+        ) from None
 
     for net in _FORBIDDEN_NETWORKS:
         if ip in ipaddress.ip_network(net):
@@ -99,7 +98,7 @@ def _resolve_and_check(host: str) -> None:
             message="无法解析主机名",
             retryable=False,
             fields={"host": host},
-        )
+        ) from None
     for info in infos:
         ip_str = info[4][0]
         _check_ip_allowed(ip_str)
@@ -150,9 +149,7 @@ class RESTFetch:
             token = context.secrets.get(auth_header_secret, "")
             headers = {**headers, "Authorization": f"Bearer {token}"}
 
-        data = await self._fetch_with_redirects(
-            url, method, headers, query_params
-        )
+        data = await self._fetch_with_redirects(url, method, headers, query_params)
 
         # 解析 JSON 并展平
         json_data: Any = json.loads(data)
@@ -166,10 +163,7 @@ class RESTFetch:
 
         records: list[dict[str, Any]]
         if isinstance(json_data, list):
-            records = [
-                r if isinstance(r, dict) else {"value": r}
-                for r in json_data
-            ]
+            records = [r if isinstance(r, dict) else {"value": r} for r in json_data]
         elif isinstance(json_data, dict):
             records = [json_data]
         else:
@@ -185,9 +179,7 @@ class RESTFetch:
         table = ObservationTable(
             columns=columns,
             rows=tuple(records),
-            source_locations=(
-                {"url": parsed._replace(path=parsed.path).geturl()},
-            ),
+            source_locations=({"url": parsed._replace(path=parsed.path).geturl()},),
         )
         return ComponentResult(
             outputs={"observations": table},
@@ -263,9 +255,7 @@ class RESTFetch:
                 redirect_parsed = urlparse(redirect_url)
                 redirect_host = redirect_parsed.hostname or ""
                 await asyncio.to_thread(_resolve_and_check, redirect_host)
-                if not redirect_parsed.scheme.lower().startswith(
-                    "https"
-                ) and not params_allow_http(
+                if not redirect_parsed.scheme.lower().startswith("https") and not params_allow_http(
                     query_params
                 ):
                     raise AppError(

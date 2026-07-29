@@ -50,10 +50,7 @@ class JSONReader:
 
         records: list[dict[str, Any]]
         if isinstance(data, list):
-            records = [
-                r if isinstance(r, dict) else {"value": r}
-                for r in data
-            ]
+            records = [r if isinstance(r, dict) else {"value": r} for r in data]
         elif isinstance(data, dict):
             # 单条对象 → 单行
             records = [data]
@@ -76,8 +73,7 @@ class JSONReader:
         columns: tuple[str, ...] = tuple(col_set)
 
         source_locs: list[dict[str, Any]] = [
-            {"file": Path(path_str).name, "index": i}
-            for i in range(len(records))
+            {"file": Path(path_str).name, "index": i} for i in range(len(records))
         ]
 
         table = ObservationTable(

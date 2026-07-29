@@ -71,16 +71,12 @@ class MeResponse(BaseModel):
 
 def get_auth_service() -> AuthService:
     """获取 AuthService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_auth_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_auth_service must be overridden via dependency_overrides")
 
 
 def get_me_session_factory() -> async_sessionmaker[AsyncSession]:
     """获取 /me 端点用的 DB 会话工厂（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_me_session_factory must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_me_session_factory must be overridden via dependency_overrides")
 
 
 # ---- 类型别名 ----

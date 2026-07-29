@@ -16,17 +16,30 @@
 from typing import Any
 
 import sqlparse
-from packages.common.errors import AppError
 
+from packages.common.errors import AppError
 from packages.components.builtin.types import ObservationTable
 from packages.components.sdk import ComponentContext, ComponentResult
 
 #: 禁止的 SQL 语句关键字。
-_FORBIDDEN_KEYWORDS: frozenset[str] = frozenset({
-    "DROP", "DELETE", "UPDATE", "INSERT", "ALTER",
-    "TRUNCATE", "CREATE", "GRANT", "REVOKE", "MERGE",
-    "CALL", "EXEC", "EXECUTE", "COPY",
-})
+_FORBIDDEN_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "DROP",
+        "DELETE",
+        "UPDATE",
+        "INSERT",
+        "ALTER",
+        "TRUNCATE",
+        "CREATE",
+        "GRANT",
+        "REVOKE",
+        "MERGE",
+        "CALL",
+        "EXEC",
+        "EXECUTE",
+        "COPY",
+    }
+)
 
 #: 最大返回行数默认值。
 _DEFAULT_LIMIT: int = 10000
@@ -105,9 +118,9 @@ class PostgresQuery:
             with psycopg.connect(dsn) as conn:
                 with conn.cursor() as cur:
                     cur.execute(query)
-                    col_names: tuple[str, ...] = tuple(
-                        desc[0] for desc in cur.description
-                    ) if cur.description else ()
+                    col_names: tuple[str, ...] = (
+                        tuple(desc[0] for desc in cur.description) if cur.description else ()
+                    )
                     rows_data: list[list[Any]] = cur.fetchmany(limit)
                     return col_names, rows_data
 
@@ -116,7 +129,7 @@ class PostgresQuery:
         data_rows: list[dict[str, Any]] = []
         for row in raw_rows:
             record: dict[str, Any] = {}
-            for col_name, val in zip(columns, row):
+            for col_name, val in zip(columns, row, strict=False):
                 record[col_name] = val
             data_rows.append(record)
 

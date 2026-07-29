@@ -272,7 +272,7 @@ class TestNamespaceConfinement:
         key = f"uploads/{artifact_id}"
         assert key.startswith("uploads/")
         # UUID 不含路径分隔符或穿越字符
-        suffix = key[len("uploads/"):]
+        suffix = key[len("uploads/") :]
         assert "/" not in suffix
         assert ".." not in suffix
         assert "\\" not in suffix
@@ -301,5 +301,5 @@ class TestNamespaceConfinement:
         assert ".." not in key
         assert "\\" not in key
         # UUID 部分是合法 UUID 格式
-        uuid_part = key[len("uploads/"):]
+        uuid_part = key[len("uploads/") :]
         assert len(uuid_part) == 36  # UUID 字符串长度

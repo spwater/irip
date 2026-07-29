@@ -31,7 +31,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from packages.ai.citation import CitationGenerator, SignedCitation
 from packages.ai.citations import Citation
 from packages.ai.providers import AIProvider, AIRequest, AIResponse
-from packages.ai.tools import ToolRegistry, ToolSpec
+from packages.ai.tools import ToolRegistry
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import Base, session_scope
 from packages.common.db_types import GUID, UTCDateTime
@@ -58,18 +58,14 @@ class AIConversation(Base):
     organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     user_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     title: Mapped[str] = mapped_column(sa.Text, nullable=False, default="")
-    provider_mode: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, default="offline"
-    )
+    provider_mode: Mapped[str] = mapped_column(sa.Text, nullable=False, default="offline")
     pinned: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
     )
     archived: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, default=False, server_default=sa.text("false")
     )
-    system_context: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True, default=None
-    )
+    system_context: Mapped[str | None] = mapped_column(sa.Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, default=lambda: SystemClock().now()
     )
@@ -464,9 +460,7 @@ class AIService:
         """
         async with self._factory() as session:
             conv = await session.scalar(
-                sa.select(AIConversation).where(
-                    AIConversation.id == conversation_id
-                )
+                sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
             if conv is None:
                 raise AppError(
@@ -562,9 +556,7 @@ class AIService:
         else:
             # 验证对话归属并加载历史
             msgs = await self.list_messages(conversation_id, user_id)
-            history_messages = [
-                {"role": m.role, "content": m.content} for m in msgs
-            ]
+            history_messages = [{"role": m.role, "content": m.content} for m in msgs]
 
         # 构建 user_context（不含凭据）
         user_context: dict[str, Any] = {
@@ -685,9 +677,7 @@ class AIService:
                     {
                         "tool": tool_name,
                         "args": tool_args,
-                        "summary": (
-                            f"拒绝执行：缺少权限 '{spec.required_permission}'"
-                        ),
+                        "summary": (f"拒绝执行：缺少权限 '{spec.required_permission}'"),
                         "status": "forbidden",
                     }
                 )
@@ -709,9 +699,7 @@ class AIService:
                     {
                         "tool": tool_name,
                         "args": tool_args,
-                        "summary": (
-                            f"候选工具建议（需人工审批）：{spec.display_name}"
-                        ),
+                        "summary": (f"候选工具建议（需人工审批）：{spec.display_name}"),
                         "status": "candidate",
                     }
                 )
@@ -729,9 +717,7 @@ class AIService:
 
             # 白名单工具真实执行
             try:
-                tool_result = await self._execute_tool(
-                    tool_name, tool_args, user, org_id
-                )
+                tool_result = await self._execute_tool(tool_name, tool_args, user, org_id)
                 result_summary = str(tool_result.get("summary", ""))
                 executed_tool_calls.append(
                     {
@@ -775,9 +761,7 @@ class AIService:
                     {
                         "role": "tool",
                         "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            {"error": error_msg}, ensure_ascii=False
-                        ),
+                        "content": json.dumps({"error": error_msg}, ensure_ascii=False),
                     }
                 )
 
@@ -786,16 +770,17 @@ class AIService:
             # 构建 assistant 消息（含 tool_calls，OpenAI 格式）
             assistant_tool_calls = []
             for tc in response.tool_calls:
-                tc_id = str(tc.get("id", "")) or f"call_{tc.get('tool', 'unknown')}_{len(assistant_tool_calls)}"
+                tc_id = (
+                    str(tc.get("id", ""))
+                    or f"call_{tc.get('tool', 'unknown')}_{len(assistant_tool_calls)}"
+                )  # noqa: E501
                 assistant_tool_calls.append(
                     {
                         "id": tc_id,
                         "type": "function",
                         "function": {
                             "name": str(tc.get("tool", "")),
-                            "arguments": json.dumps(
-                                tc.get("args", {}), ensure_ascii=False
-                            ),
+                            "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False),
                         },
                     }
                 )
@@ -914,7 +899,8 @@ class AIService:
                     "function": {
                         "name": spec.name,
                         "description": spec.description,
-                        "parameters": spec.parameters_schema or {
+                        "parameters": spec.parameters_schema
+                        or {
                             "type": "object",
                             "properties": {},
                         },
@@ -966,9 +952,7 @@ class AIService:
                 "data": {"error": f"Tool not implemented: {tool_name}"},
             }
 
-    async def _handle_search_facts(
-        self, args: dict[str, Any], org_id: UUID
-    ) -> dict[str, Any]:
+    async def _handle_search_facts(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 search_facts 工具：搜索实验事实。"""
         query = str(args.get("query", ""))
         fact_type = str(args.get("fact_type", "")) or None
@@ -994,7 +978,7 @@ class AIService:
                     "summary": f"搜索到 {len(items)} 条事实",
                     "data": {"count": len(items), "results": items},
                 }
-            except Exception as exc:
+            except Exception:
                 # fact_service.search 参数不匹配时走数据库 fallback
                 pass
 
@@ -1015,7 +999,12 @@ class AIService:
             result = await session.execute(stmt, params)
             rows = result.fetchall()
             items = [
-                {"id": str(r[0]), "subject_id": str(r[1]), "fact_type": str(r[2]), "data_summary": str(r[3] or "")}
+                {
+                    "id": str(r[0]),
+                    "subject_id": str(r[1]),
+                    "fact_type": str(r[2]),
+                    "data_summary": str(r[3] or ""),
+                }  # noqa: E501
                 for r in rows
             ]
             return {
@@ -1023,16 +1012,12 @@ class AIService:
                 "data": {"count": len(items), "results": items},
             }
 
-    async def _handle_search_standards(
-        self, args: dict[str, Any], org_id: UUID
-    ) -> dict[str, Any]:
+    async def _handle_search_standards(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 search_standards 工具：搜索标准变量。"""
         query = str(args.get("query", ""))
         async with self._factory() as session:
             stmt = (
-                sa.select(
-                    sa.text("vv.id, v.code, vv.display_name, vv.canonical_unit")
-                )
+                sa.select(sa.text("vv.id, v.code, vv.display_name, vv.canonical_unit"))
                 .select_from(sa.text("variable_version vv"))
                 .join(sa.text("variable v"), sa.text("v.id = vv.variable_id"))
                 .where(
@@ -1042,9 +1027,7 @@ class AIService:
             )
             params: dict[str, Any] = {"org_id": org_id}
             if query:
-                stmt = stmt.where(
-                    sa.text("(v.code ILIKE :q OR vv.display_name ILIKE :q)")
-                )
+                stmt = stmt.where(sa.text("(v.code ILIKE :q OR vv.display_name ILIKE :q)"))
                 params["q"] = f"%{query}%"
             stmt = stmt.limit(20)
             result = await session.execute(stmt, params)
@@ -1063,9 +1046,7 @@ class AIService:
                 "data": {"count": len(items), "results": items},
             }
 
-    async def _handle_search_parameters(
-        self, args: dict[str, Any], org_id: UUID
-    ) -> dict[str, Any]:
+    async def _handle_search_parameters(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 search_parameters 工具：搜索参数。"""
         variable_code = str(args.get("variable_code", ""))
         if self._parameter_service is not None:
@@ -1203,9 +1184,7 @@ class AIService:
             "data": {"error": "model_service not configured"},
         }
 
-    async def _handle_draft_report(
-        self, args: dict[str, Any], org_id: UUID
-    ) -> dict[str, Any]:
+    async def _handle_draft_report(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 draft_report 工具：生成报告草稿（只读，不落库）。"""
         title = str(args.get("title", "未命名报告"))
         fact_ids = args.get("fact_ids", [])
@@ -1219,9 +1198,7 @@ class AIService:
                 for fid in fact_ids[:10]:
                     try:
                         result = await session.execute(
-                            sa.select(
-                                sa.text("subject_id, fact_type")
-                            )
+                            sa.select(sa.text("subject_id, fact_type"))
                             .select_from(sa.text("fact"))
                             .where(
                                 sa.text("id = :fid"),
@@ -1250,9 +1227,7 @@ class AIService:
             },
         }
 
-    async def _handle_extract_data(
-        self, args: dict[str, Any], org_id: UUID
-    ) -> dict[str, Any]:
+    async def _handle_extract_data(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 extract_data 工具：数据提取（标记为需要 ingestion:write 权限）。"""
         path = str(args.get("path", ""))
         prompt = str(args.get("prompt", ""))
@@ -1280,9 +1255,7 @@ class AIService:
         import re
 
         # 替换 Bearer token 模式
-        text = re.sub(
-            r"[Bb]earer\s+[A-Za-z0-9\-_\.]{20,}", "[REDACTED]", text
-        )
+        text = re.sub(r"[Bb]earer\s+[A-Za-z0-9\-_\.]{20,}", "[REDACTED]", text)
         # 替换疑似 API key 模式（sk- 开头或长 hex/base64 串）
         text = re.sub(r"sk-[A-Za-z0-9]{20,}", "[REDACTED]", text)
         return text
@@ -1406,8 +1379,7 @@ class AIService:
                                 {
                                     "role": "user",
                                     "content": (
-                                        f"用户问题：{question[:500]}\n"
-                                        f"AI回答：{answer[:500]}"
+                                        f"用户问题：{question[:500]}\nAI回答：{answer[:500]}"
                                     ),
                                 },
                             ],
@@ -1429,7 +1401,7 @@ class AIService:
                 return
 
         # 清理标题
-        title = title.strip("\"'""''「」『』 \n\r\t")
+        title = title.strip("\"'''「」『』 \n\r\t")  # noqa: B005
         title = title.split("\n")[0].strip()
         if len(title) > 60:
             title = title[:60]
@@ -1490,7 +1462,8 @@ class AIService:
                     "required_permission": s.required_permission,
                     "candidate": s.candidate,
                 }
-                for s in enabled if not s.candidate
+                for s in enabled
+                if not s.candidate
             ],
             "candidate_tools": [
                 {
@@ -1500,6 +1473,7 @@ class AIService:
                     "required_permission": s.required_permission,
                     "candidate": s.candidate,
                 }
-                for s in enabled if s.candidate
+                for s in enabled
+                if s.candidate
             ],
         }

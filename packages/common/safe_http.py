@@ -71,9 +71,7 @@ def validate_url_host(host: str, port: int | None = None) -> None:
     try:
         ip = ipaddress.ip_address(host)
         if _is_private_ip(ip):
-            raise ValueError(
-                f"SSRF blocked: {ip} is in a private/reserved network range"
-            )
+            raise ValueError(f"SSRF blocked: {ip} is in a private/reserved network range")
         return
     except ValueError:
         # host 不是合法 IP 字符串，继续做 DNS 解析
@@ -208,10 +206,7 @@ class SafeHTTPClient:
 
         # 1. 校验协议
         if parsed.scheme not in ("http", "https"):
-            raise ValueError(
-                f"Unsupported URL scheme: {parsed.scheme} "
-                f"(only http/https allowed)"
-            )
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme} (only http/https allowed)")
 
         # 2. DNS 解析后校验 IP（allow_private 时跳过）
         if not self._allow_private:
@@ -223,9 +218,7 @@ class SafeHTTPClient:
         # 4. 禁止重定向
         if response.is_redirect:
             location = response.headers.get("location", "")
-            raise ValueError(
-                f"Redirect blocked: {response.status_code} -> {location}"
-            )
+            raise ValueError(f"Redirect blocked: {response.status_code} -> {location}")
 
         # 5. 检查响应大小（content-length 头）
         content_length = response.headers.get("content-length")
@@ -234,8 +227,7 @@ class SafeHTTPClient:
                 size = int(content_length)
                 if size > self._max_size:
                     raise ValueError(
-                        f"Response too large: {size} bytes "
-                        f"exceeds max {self._max_size} bytes"
+                        f"Response too large: {size} bytes exceeds max {self._max_size} bytes"
                     )
             except ValueError:
                 # content-length 不是合法整数，跳过预检

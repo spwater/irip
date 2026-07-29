@@ -63,7 +63,7 @@ class EvidenceMember:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "EvidenceMember":
+    def from_dict(cls, d: dict) -> EvidenceMember:
         """从字典反序列化。"""
         return cls(
             fact_id=UUID(str(d["fact_id"])),
@@ -388,6 +388,4 @@ class EvidenceService:
                 )
 
             members_list = version_row.members or []
-            return tuple(
-                EvidenceMember.from_dict(m) for m in members_list
-            )
+            return tuple(EvidenceMember.from_dict(m) for m in members_list)

@@ -126,19 +126,14 @@ class UserDepartmentService:
                         department_id=dept_id,
                         is_primary=False,
                     )
-                    .on_conflict_do_nothing(
-                        index_elements=["user_id", "department_id"]
-                    )
+                    .on_conflict_do_nothing(index_elements=["user_id", "department_id"])
                 )
 
             # 3. 设置 is_primary（仅指定实验室为 primary，其余为 false）
             if primary_department_id is not None:
                 await session.execute(
                     sa.update(AppUserDepartment)
-                    .values(
-                        is_primary=AppUserDepartment.department_id
-                        == primary_department_id
-                    )
+                    .values(is_primary=AppUserDepartment.department_id == primary_department_id)
                     .where(AppUserDepartment.user_id == user_id)
                 )
             else:
@@ -148,9 +143,7 @@ class UserDepartmentService:
                     .where(AppUserDepartment.user_id == user_id)
                 )
 
-    async def get_user_departments(
-        self, user_id: UUID
-    ) -> list[UserDepartmentItem]:
+    async def get_user_departments(self, user_id: UUID) -> list[UserDepartmentItem]:
         """查询用户所属实验室列表。
 
         JOIN department 获取实验室编码和显示名。
@@ -191,9 +184,7 @@ class UserDepartmentService:
             for row in rows
         ]
 
-    async def get_department_users(
-        self, department_id: UUID
-    ) -> list[DepartmentUserItem]:
+    async def get_department_users(self, department_id: UUID) -> list[DepartmentUserItem]:
         """查询实验室下用户列表。
 
         JOIN app_user 获取用户邮箱和显示名。

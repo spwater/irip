@@ -63,11 +63,13 @@ class RangeCheck:
 
             if row_failures:
                 fail_count += 1
-                row_annotations.append({
-                    "row_index": idx,
-                    "status": "fail",
-                    "detail": ";".join(row_failures),
-                })
+                row_annotations.append(
+                    {
+                        "row_index": idx,
+                        "status": "fail",
+                        "detail": ";".join(row_failures),
+                    }
+                )
 
         report = DiagnosticReport(
             component="range_check",

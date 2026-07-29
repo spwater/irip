@@ -36,19 +36,13 @@ from packages.standards.units import UnitConverter
 standards_router = APIRouter(prefix="/api/v1/standards", tags=["standards"])
 
 #: 需 standard:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("standard:write"))]
 
 #: 需 standard:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("standard:read"))]
 
 #: 需 standard:publish 权限的当前用户依赖。
-PublishUserDep = Annotated[
-    CurrentUser, Depends(require_permission("standard:publish"))
-]
+PublishUserDep = Annotated[CurrentUser, Depends(require_permission("standard:publish"))]
 
 
 def get_standard_service() -> StandardService:
@@ -57,15 +51,11 @@ def get_standard_service() -> StandardService:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_standard_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_standard_service must be overridden via dependency_overrides")
 
 
 #: StandardService 依赖类型别名。
-StandardServiceDep = Annotated[
-    StandardService, Depends(get_standard_service)
-]
+StandardServiceDep = Annotated[StandardService, Depends(get_standard_service)]
 
 
 # ---- 请求模型 ----
@@ -233,9 +223,7 @@ def _version_to_response(version: dict) -> VersionResponse:
 # ---- 端点：变量 CRUD ----
 
 
-@standards_router.post(
-    "/variables", response_model=VariableDetailResponse, status_code=201
-)
+@standards_router.post("/variables", response_model=VariableDetailResponse, status_code=201)
 async def create_variable(
     body: CreateVariableRequest,
     current_user: WriteUserDep,
@@ -316,9 +304,7 @@ async def list_variables(
     )
 
 
-@standards_router.get(
-    "/variables/{variable_id}", response_model=VariableDetailResponse
-)
+@standards_router.get("/variables/{variable_id}", response_model=VariableDetailResponse)
 async def get_variable(
     variable_id: UUID,
     current_user: ReadUserDep,
@@ -344,9 +330,7 @@ async def get_variable(
 # ---- 端点：状态转换 ----
 
 
-@standards_router.post(
-    "/variables/{variable_id}/submit", response_model=VersionResponse
-)
+@standards_router.post("/variables/{variable_id}/submit", response_model=VersionResponse)
 async def submit_for_review(
     variable_id: UUID,
     current_user: WriteUserDep,
@@ -370,9 +354,7 @@ async def submit_for_review(
     return _version_to_response(_version_orm_to_dict(version))
 
 
-@standards_router.post(
-    "/variables/{variable_id}/publish", response_model=VersionResponse
-)
+@standards_router.post("/variables/{variable_id}/publish", response_model=VersionResponse)
 async def publish_variable(
     variable_id: UUID,
     current_user: PublishUserDep,
@@ -396,9 +378,7 @@ async def publish_variable(
     return _version_to_response(_version_orm_to_dict(version))
 
 
-@standards_router.post(
-    "/variables/{variable_id}/reject", response_model=VersionResponse
-)
+@standards_router.post("/variables/{variable_id}/reject", response_model=VersionResponse)
 async def reject_variable(
     variable_id: UUID,
     body: RejectVariableRequest,
@@ -424,9 +404,7 @@ async def reject_variable(
     return _version_to_response(_version_orm_to_dict(version))
 
 
-@standards_router.post(
-    "/variables/{variable_id}/deprecate", response_model=VersionResponse
-)
+@standards_router.post("/variables/{variable_id}/deprecate", response_model=VersionResponse)
 async def deprecate_variable(
     variable_id: UUID,
     body: DeprecateVariableRequest,
@@ -452,9 +430,7 @@ async def deprecate_variable(
     return _version_to_response(_version_orm_to_dict(version))
 
 
-@standards_router.post(
-    "/variables/{variable_id}/resubmit", response_model=VersionResponse
-)
+@standards_router.post("/variables/{variable_id}/resubmit", response_model=VersionResponse)
 async def resubmit_variable(
     variable_id: UUID,
     current_user: WriteUserDep,
@@ -510,9 +486,7 @@ async def add_alias(
         AppError: code="not_found"，当变量不存在时。
         AppError: code="conflict"，当别名已存在时。
     """
-    alias = await service.add_alias(
-        variable_id, alias=body.alias, language=body.language
-    )
+    alias = await service.add_alias(variable_id, alias=body.alias, language=body.language)
     return AliasResponse(alias=alias.alias, language=alias.language)
 
 
@@ -568,8 +542,7 @@ def _detail_to_response(detail: dict) -> VariableDetailResponse:
         if detail["latest_version"]
         else None,
         aliases=[
-            AliasResponse(alias=a["alias"], language=a["language"])
-            for a in detail["aliases"]
+            AliasResponse(alias=a["alias"], language=a["language"]) for a in detail["aliases"]
         ],
     )
 

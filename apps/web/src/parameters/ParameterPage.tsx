@@ -24,11 +24,8 @@ import {
   apiListCandidates,
   apiListParameterVersions,
   apiListParameters,
-  extractApiError,
-  type ParameterCandidate,
-  type ParameterSummary,
-  type ParameterVersion,
-} from '@/api/client';
+} from '@/api/facts-provenance';
+import { extractApiError, type ParameterCandidate, type ParameterSummary, type ParameterVersion } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { ApprovalPanel } from '@/parameters/ApprovalPanel';
 import { ProvenancePage } from '@/provenance/ProvenancePage';

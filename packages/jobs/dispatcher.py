@@ -11,9 +11,6 @@ Dispatcher 由 Celery Beat 定时触发，使用 ``FOR UPDATE SKIP LOCKED`` 拉�
 """
 
 import logging
-from datetime import datetime
-from typing import Any
-from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -102,8 +99,7 @@ class OutboxDispatcherService:
                     delivered_count += 1
                 else:
                     logger.warning(
-                        "Failed to dispatch event %s (kind=%s); "
-                        "will retry on next cycle",
+                        "Failed to dispatch event %s (kind=%s); will retry on next cycle",
                         event.id,
                         event.event_type,
                     )
@@ -125,8 +121,7 @@ class OutboxDispatcherService:
         """
         if self._task_sender is None:
             logger.warning(
-                "TaskSender not configured; skip dispatch for event %s "
-                "(will retry on next cycle)",
+                "TaskSender not configured; skip dispatch for event %s (will retry on next cycle)",
                 event.id,
             )
             return False
@@ -144,9 +139,7 @@ class OutboxDispatcherService:
             )
             return True
         except Exception:
-            logger.exception(
-                "Failed to send task for event %s", event.id
-            )
+            logger.exception("Failed to send task for event %s", event.id)
             return False
 
     async def get_undelivered_count(self) -> int:
@@ -157,9 +150,7 @@ class OutboxDispatcherService:
         """
         async with session_scope(self._factory) as session:
             result = await session.execute(
-                sa.select(sa.func.count(OutboxEvent.id)).where(
-                    OutboxEvent.delivered_at.is_(None)
-                )
+                sa.select(sa.func.count(OutboxEvent.id)).where(OutboxEvent.delivered_at.is_(None))
             )
             count: int = result.scalar() or 0
             return count
@@ -185,14 +176,9 @@ def run_dispatch(task_sender: TaskSender | None = None) -> int:
 
     from packages.common.database import build_session_factory
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
-    )
+    db_url = os.getenv("IRIP_DATABASE_URL", "")
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 

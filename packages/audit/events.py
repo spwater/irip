@@ -84,6 +84,5 @@ class AuditEvent(Base):
 
     def __repr__(self) -> str:
         return (
-            f"AuditEvent(id={self.id!r}, action={self.action!r}, "
-            f"occurred_at={self.occurred_at!r})"
+            f"AuditEvent(id={self.id!r}, action={self.action!r}, occurred_at={self.occurred_at!r})"
         )

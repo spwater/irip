@@ -13,25 +13,18 @@ fixture async_session_factory / test_user 由 tests/conftest.py 提供。
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import FixedClock
 from packages.common.errors import AppError
 from packages.components.flow_runtime import (
-    FlowDefinition,
-    FlowDefinitionVersionORM,
-    FlowNodeExecution,
-    FlowRun,
     FlowRuntimeService,
 )
 from packages.components.flows import (
     FlowEdge,
     FlowNode,
-    compute_flow_digest,
 )
 from packages.components.manifest import ComponentManifest
 from packages.components.registry import ComponentRegistryService
@@ -44,10 +37,7 @@ from packages.components.sdk import (
 
 #: JSON Schema 路径（相对项目根目录）。
 SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[3]
-    / "schemas"
-    / "component-manifest"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[3] / "schemas" / "component-manifest" / "v1.schema.json"
 )
 
 #: 有效清单 YAML — echo 组件 v1（输入 dataset → 输出 dataset）。
@@ -125,9 +115,7 @@ class FlakyComponent:
 @pytest.fixture
 def fixed_clock() -> FixedClock:
     """固定时钟（确定性测试）。"""
-    return FixedClock(
-        instant=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
-    )
+    return FixedClock(instant=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
 
 
 @pytest.fixture
@@ -299,9 +287,7 @@ class TestFlowExecution:
                 input_bindings={"data": "source:data"},
             ),
         )
-        edges = (
-            FlowEdge("source", "data", "echo", "data"),
-        )
+        edges = (FlowEdge("source", "data", "echo", "data"),)
         version = await flow_service.publish_version(
             flow_definition_id=definition.id,
             nodes=nodes,
@@ -665,9 +651,7 @@ class TestFlowDefinition:
             display_name="Get Test",
         )
 
-        result_def, result_version = await flow_service.get_definition(
-            definition.id
-        )
+        result_def, result_version = await flow_service.get_definition(definition.id)
         assert result_def.code == "test_get"
         assert result_version is None  # 无已发布版本
 

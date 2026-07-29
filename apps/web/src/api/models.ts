@@ -18,4 +18,4 @@ export {
   apiRollbackModel,
   apiPredictModel,
   apiDeprecateModel,
-} from './client';
+} from './models-ai';

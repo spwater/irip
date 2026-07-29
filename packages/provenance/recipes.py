@@ -220,9 +220,7 @@ class RecipeService:
                 .order_by(TransformationRecipeVersion.version.desc())
                 .limit(1)
             )
-            new_version: int = (
-                latest_version_row.version + 1 if latest_version_row else 1
-            )
+            new_version: int = latest_version_row.version + 1 if latest_version_row else 1
 
             # 3. 创建配方版本（不可变）
             recipe_version = TransformationRecipeVersion(

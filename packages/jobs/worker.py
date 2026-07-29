@@ -92,9 +92,7 @@ class WorkerLeaseManager:
         expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
 
         async with session_scope(self._factory) as session:
-            acquired = await JobRepository.acquire_lease(
-                session, job_id, owner, expires_at
-            )
+            acquired = await JobRepository.acquire_lease(session, job_id, owner, expires_at)
             return acquired
 
     async def heartbeat(
@@ -116,9 +114,7 @@ class WorkerLeaseManager:
         new_expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
 
         async with session_scope(self._factory) as session:
-            renewed = await JobRepository.renew_lease(
-                session, job_id, owner, new_expires_at
-            )
+            renewed = await JobRepository.renew_lease(session, job_id, owner, new_expires_at)
             return renewed
 
     async def release(
@@ -233,7 +229,6 @@ class JobExecutor:
 
                 lock_version: int = job.lock_version
                 kind: str = job.kind
-                payload: dict[str, Any] | None = job.payload
                 attempt: int = job.attempt
                 max_attempts: int = job.max_attempts
 
@@ -247,9 +242,7 @@ class JobExecutor:
                     retryable=False,
                     fields={"kind": kind},
                 )
-                await self._commit_failure(
-                    job_id, lock_version, error, attempt, max_attempts
-                )
+                await self._commit_failure(job_id, lock_version, error, attempt, max_attempts)
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -260,9 +253,7 @@ class JobExecutor:
                 result_data = await handler(job)
             except AppError as exc:
                 # 不可重试的错误
-                await self._commit_failure(
-                    job_id, lock_version, exc, attempt, max_attempts
-                )
+                await self._commit_failure(job_id, lock_version, exc, attempt, max_attempts)
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -272,9 +263,7 @@ class JobExecutor:
                 # 可重试的错误
                 should_retry = attempt + 1 < max_attempts
                 if should_retry:
-                    await self._commit_retry(
-                        job_id, lock_version, exc, attempt, max_attempts
-                    )
+                    await self._commit_retry(job_id, lock_version, exc, attempt, max_attempts)
                     return JobResult(
                         job_id=job_id,
                         status=JobStatus.RETRY_WAIT,
@@ -305,9 +294,7 @@ class JobExecutor:
                     )
 
             # Step 4: 乐观锁提交结果
-            committed = await self._commit_success(
-                job_id, lock_version, result_data
-            )
+            committed = await self._commit_success(job_id, lock_version, result_data)
 
             if committed:
                 return JobResult(
@@ -318,9 +305,7 @@ class JobExecutor:
             else:
                 # lock_version 不匹配 → 重复提交，读取当前结果
                 async with session_scope(self._factory) as session:
-                    existing: Job | None = await JobRepository.get(
-                        session, job_id
-                    )
+                    existing: Job | None = await JobRepository.get(session, job_id)
                     if existing is not None:
                         return JobResult(
                             job_id=job_id,
@@ -404,7 +389,7 @@ class JobExecutor:
             max_attempts: 最大尝试次数。
         """
         clock = SystemClock()
-        backoff = timedelta(seconds=2 ** attempt)
+        backoff = timedelta(seconds=2**attempt)
 
         async with session_scope(self._factory) as session:
             await session.execute(

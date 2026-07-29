@@ -150,9 +150,9 @@ const mocks = vi.hoisted(() => {
 });
 
 // ============================================================
-// Mock @/api/client
+// Mock @/api/equipment-flows + @/api/types
 // ============================================================
-vi.mock('@/api/client', () => ({
+vi.mock('@/api/equipment-flows', () => ({
   apiListFlows: vi.fn(() => Promise.resolve(mocks.mockFlowsPage)),
   apiGetFlow: vi.fn((_id: string) => Promise.resolve(mocks.mockFlow)),
   apiListFlowRuns: vi.fn((_id: string) => Promise.resolve([])),
@@ -170,8 +170,35 @@ vi.mock('@/api/client', () => ({
     mocks.mockApiPublishFlow(args[0], args[1]);
     return Promise.resolve(mocks.mockFlow);
   },
+  apiDeleteFlow: vi.fn(),
+  apiDeleteFlowRun: vi.fn(),
+  apiArchiveFlow: vi.fn(() => Promise.resolve(mocks.mockFlow)),
+  apiRestoreFlow: vi.fn(() => Promise.resolve(mocks.mockFlow)),
+  apiUpdateFlow: vi.fn(() => Promise.resolve(mocks.mockFlow)),
+  apiListEquipment: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
+  apiListFactTemplateVersions: vi.fn(() => Promise.resolve([])),
+  apiPersistRunAsFact: vi.fn(),
+  apiArchiveComponent: vi.fn(),
+  apiRestoreComponent: vi.fn(),
+  apiActivateVersion: vi.fn(),
+  apiDeleteComponent: vi.fn(),
+}));
+
+vi.mock('@/api/types', () => ({
   extractApiError: (err: unknown): string =>
     err instanceof Error ? err.message : '操作失败',
+}));
+
+vi.mock('@/api/models-ai', () => ({
+  apiUploadFile: vi.fn(),
+}));
+
+vi.mock('@/api/standards-objects', () => ({
+  apiListObjects: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
+}));
+
+vi.mock('@/api/departments', () => ({
+  apiListDepartments: vi.fn(() => Promise.resolve([])),
 }));
 
 import { FlowDetail } from '@/components/FlowDetail';
@@ -604,7 +631,7 @@ describe('FlowDetail — 发布版本弹窗与组件选择器', () => {
 
     it('空组件列表时选择器仍可渲染', async () => {
       // 临时 mock apiListComponents 返回空
-      const { apiListComponents } = await import('@/api/client');
+      const { apiListComponents } = await import('@/api/equipment-flows');
       vi.mocked(apiListComponents).mockResolvedValueOnce({
         items: [],
         next_cursor: null,

@@ -64,8 +64,10 @@ services:
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
-      IRIP_API_CORS_ORIGINS: ${IRIP_API_CORS_ORIGINS:-http://localhost}
+      IRIP_API_CORS_ORIGINS: ${IRIP_API_CORS_ORIGINS:-http://localhost:8080}
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
+      IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +100,8 @@ services:
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
+      IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -121,6 +125,8 @@ services:
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
+      IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,6 +161,7 @@ services:
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

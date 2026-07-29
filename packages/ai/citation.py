@@ -27,7 +27,7 @@ import hmac
 import json
 import os
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def _get_signing_secret() -> str:
@@ -110,7 +110,7 @@ class CitationGenerator:
         if len(params_json) > 500:
             params_json = params_json[:500]
 
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         # 构造签名消息：tool_name|params|summary|timestamp
         message = f"{tool_name}|{params_json}|{result_summary}|{timestamp}"

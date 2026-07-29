@@ -136,11 +136,7 @@ class BootstrapInterval:
                 "iterations": len(boot_stats),
                 "seed": seed,
                 "bootstrap_mean": statistics.mean(boot_stats),
-                "bootstrap_std": (
-                    statistics.stdev(boot_stats)
-                    if len(boot_stats) > 1
-                    else 0.0
-                ),
+                "bootstrap_std": (statistics.stdev(boot_stats) if len(boot_stats) > 1 else 0.0),
             }
         }
 
@@ -153,7 +149,7 @@ class BootstrapInterval:
         )
         return ComponentResult(
             outputs={"intervals": intervals, "diagnostics": report},
-            summary=f"Bootstrap {statistic} 置信区间 [{lower:.4f}, {upper:.4f}]（{confidence*100:.0f}%）",
+            summary=f"Bootstrap {statistic} 置信区间 [{lower:.4f}, {upper:.4f}]（{confidence * 100:.0f}%）",  # noqa: E501
             metadata={
                 "column": column,
                 "statistic": statistic,

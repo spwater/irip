@@ -28,7 +28,6 @@ import json
 import os
 import re
 import tempfile
-import zipfile
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -59,6 +58,7 @@ class EZScanExtractor:
             from packages.components.builtin.ingestion.xrd_tool_component import (
                 XrdToolComponent,
             )
+
             return await XrdToolComponent().execute(context, params)
 
         path_str: str = params["path"]
@@ -78,9 +78,7 @@ class EZScanExtractor:
         # 支持 artifact:{artifact_id} 格式：从 MinIO 下载到临时文件
         # 兼容旧格式：直接使用文件系统路径
         if path_str.startswith("artifact:"):
-            file_path = await self._download_artifact_to_temp(
-                context, path_str[len("artifact:"):]
-            )
+            file_path = await self._download_artifact_to_temp(context, path_str[len("artifact:") :])
         else:
             file_path = Path(path_str)
 
@@ -127,19 +125,18 @@ class EZScanExtractor:
                 {"type": "text", "text": f"{prompt}\n\n请根据以下图片内容提取数据。"},
             ]
             for img_data_url in content:
-                user_content.append({
-                    "type": "image_url",
-                    "image_url": {"url": img_data_url},
-                })
+                user_content.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": img_data_url},
+                    }
+                )
             messages = [
                 {"role": "user", "content": user_content},
             ]
         else:
             # 纯文本模式
-            user_message: str = (
-                f"{prompt}\n\n"
-                f"文件内容：\n{content}"
-            )
+            user_message: str = f"{prompt}\n\n文件内容：\n{content}"
             messages = [
                 {"role": "user", "content": user_message},
             ]
@@ -160,21 +157,20 @@ class EZScanExtractor:
         }
 
         try:
-            async with httpx.AsyncClient(
-                timeout=float(timeout), proxy=None
-            ) as client:
+            async with httpx.AsyncClient(timeout=float(timeout), proxy=None) as client:
                 resp = await client.post(url, headers=headers, json=request_body)
         except httpx.TimeoutException:
             raise AppError(
                 code="ai_timeout",
                 message=f"LLM 调用超时（{timeout} 秒）",
                 retryable=True,
-            )
+            ) from None
         except httpx.HTTPError as exc:
             # Server disconnected 等连接错误，自动重试一次
             err_msg = str(exc)[:200]
             if "disconnected" in err_msg.lower() or "remote" in err_msg.lower():
                 import asyncio as _aio
+
                 await _aio.sleep(2)
                 try:
                     async with httpx.AsyncClient(
@@ -186,13 +182,13 @@ class EZScanExtractor:
                         code="ai_request_failed",
                         message=f"LLM 请求失败（重试后）：{str(exc2)[:200]}",
                         retryable=True,
-                    )
+                    ) from None
             else:
                 raise AppError(
                     code="ai_request_failed",
                     message=f"LLM 请求失败：{err_msg}",
                     retryable=True,
-                )
+                ) from None
 
         if resp.status_code != 200:
             raise AppError(
@@ -227,8 +223,7 @@ class EZScanExtractor:
 
         # 8. 构建 source_locations
         source_locs: list[dict[str, Any]] = [
-            {"file": file_path.name, "row": idx}
-            for idx in range(1, len(converted_rows) + 1)
+            {"file": file_path.name, "row": idx} for idx in range(1, len(converted_rows) + 1)
         ]
 
         # 8. 构建 ObservationTable
@@ -398,8 +393,9 @@ def _extract_pdf_as_images(file_path: Path, image_dpi: int = 200) -> list[str] |
         list[str] | str: base64 data URL 列表；PyMuPDF 不可用时回退到文本读取。
     """
     try:
-        import fitz  # PyMuPDF
         import base64
+
+        import fitz  # PyMuPDF
 
         doc = fitz.open(str(file_path))
         images: list[str] = []
@@ -469,7 +465,7 @@ def _extract_docx(file_path: Path) -> str:
             code="validation_failed",
             message="读取 Word 文件需要 python-docx 依赖，请执行 pip install python-docx",
             retryable=False,
-        )
+        ) from None
 
 
 def _extract_xlsx(file_path: Path) -> str:
@@ -503,7 +499,7 @@ def _extract_xlsx(file_path: Path) -> str:
             code="validation_failed",
             message="读取 Excel 文件需要 openpyxl 依赖，请执行 pip install openpyxl",
             retryable=False,
-        )
+        ) from None
 
 
 def _parse_llm_json(content: str) -> dict[str, Any]:
@@ -560,6 +556,7 @@ def _guess_suffix(data: bytes) -> str:
     if data[:4] == b"PK\x03\x04":
         try:
             import zipfile
+
             with zipfile.ZipFile(io.BytesIO(data)) as zf:
                 names = zf.namelist()
                 if any(n.startswith("word/") for n in names):

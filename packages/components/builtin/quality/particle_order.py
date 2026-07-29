@@ -47,9 +47,7 @@ class ParticleOrder:
 
             if d10 is None or d50 is None or d90 is None:
                 failures.append("missing_values")
-            elif not all(
-                isinstance(v, (int, float)) for v in (d10, d50, d90)
-            ):
+            elif not all(isinstance(v, (int, float)) for v in (d10, d50, d90)):
                 failures.append("non_numeric")
             else:
                 if strict:
@@ -65,14 +63,16 @@ class ParticleOrder:
 
             if failures:
                 fail_count += 1
-                row_annotations.append({
-                    "row_index": idx,
-                    "status": "fail",
-                    "detail": ";".join(failures),
-                    "d10": d10,
-                    "d50": d50,
-                    "d90": d90,
-                })
+                row_annotations.append(
+                    {
+                        "row_index": idx,
+                        "status": "fail",
+                        "detail": ";".join(failures),
+                        "d10": d10,
+                        "d50": d50,
+                        "d90": d90,
+                    }
+                )
 
         report = DiagnosticReport(
             component="particle_order",

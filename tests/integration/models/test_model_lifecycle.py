@@ -20,17 +20,15 @@ from uuid import UUID
 
 import pytest
 import pytest_asyncio
-import sqlalchemy as sa
 
 from packages.common.errors import AppError
 from packages.models.contracts import ModelContract
-from packages.models.entities import Model, ModelVersion
 from packages.models.service import ModelService
 
 _SKLEARN_AVAILABLE: bool = True
 try:
-    import sklearn  # noqa: F401
     import joblib  # noqa: F401
+    import sklearn  # noqa: F401
 except ImportError:
     _SKLEARN_AVAILABLE = False
 
@@ -130,7 +128,6 @@ def _train_tiny_model() -> bytes:
         bytes: joblib 序列化的 Pipeline 字节。
     """
     import numpy as np
-
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.pipeline import Pipeline
     from sklearn.preprocessing import StandardScaler
@@ -205,7 +202,6 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """完整生命周期：创建→验证→发布→预测→回滚。"""
-        org_id = model_service._org_id
 
         # 1. 创建模型
         model = await model_service.create_model(
@@ -228,9 +224,7 @@ class TestModelLifecycle:
         version_id = version.id
 
         # 3. 提交验证
-        submitted = await model_service.submit_for_validation(
-            model_id, version_id
-        )
+        submitted = await model_service.submit_for_validation(model_id, version_id)
         assert submitted.status == "pending_validation"
 
         # 4. 验证
@@ -248,9 +242,7 @@ class TestModelLifecycle:
         assert published_model.current_version_id == version_id
 
         # 6. 预测（使用当前发布版本）
-        result = await model_service.predict(
-            model_id, {"x": 10.0, "y": 20.0}
-        )
+        result = await model_service.predict(model_id, {"x": 10.0, "y": 20.0})
         assert result.model_id == model_id
         assert result.model_version_id == version_id
         assert "sum" in result.predictions
@@ -296,9 +288,7 @@ class TestModelLifecycle:
 
         # 超出适用域的输入应被拒绝
         with pytest.raises(AppError) as exc_info:
-            await model_service.predict(
-                model_id, {"x": 150.0, "y": 20.0}
-            )
+            await model_service.predict(model_id, {"x": 150.0, "y": 20.0})
         assert exc_info.value.code == "outside_applicability_domain"
 
     @pytest.mark.asyncio
@@ -308,9 +298,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """预测结果写入 model_execution 事实。"""
-        model = await model_service.create_model(
-            code="fact_test", display_name="事实测试模型"
-        )
+        model = await model_service.create_model(code="fact_test", display_name="事实测试模型")
         model_id = model.id
         artifact_id = UUID("00000000-0000-0000-0000-000000000001")
         version = await model_service.create_version(
@@ -332,9 +320,7 @@ class TestModelLifecycle:
         assert len(fact_service.calls) == 0
 
         # 预测
-        result = await model_service.predict(
-            model_id, {"x": 5.0, "y": 15.0}
-        )
+        result = await model_service.predict(model_id, {"x": 5.0, "y": 15.0})
 
         # 预测后事实已写入
         assert result.fact_id is not None
@@ -350,9 +336,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """废弃模型。"""
-        model = await model_service.create_model(
-            code="deprecate_test", display_name="废弃测试模型"
-        )
+        model = await model_service.create_model(code="deprecate_test", display_name="废弃测试模型")
         model_id = model.id
         deprecated = await model_service.deprecate(model_id)
         assert deprecated.status == "deprecated"
@@ -364,18 +348,12 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """列表查询与版本列表。"""
-        model = await model_service.create_model(
-            code="list_test", display_name="列表测试模型"
-        )
+        model = await model_service.create_model(code="list_test", display_name="列表测试模型")
         model_id = model.id
 
         # 创建两个版本
-        v1 = await model_service.create_version(
-            model_id=model_id, contract=test_contract
-        )
-        v2 = await model_service.create_version(
-            model_id=model_id, contract=test_contract
-        )
+        v1 = await model_service.create_version(model_id=model_id, contract=test_contract)
+        v2 = await model_service.create_version(model_id=model_id, contract=test_contract)
         assert v1.version == 1
         assert v2.version == 2
 
@@ -396,13 +374,9 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """非法状态转换被拒绝。"""
-        model = await model_service.create_model(
-            code="state_test", display_name="状态测试模型"
-        )
+        model = await model_service.create_model(code="state_test", display_name="状态测试模型")
         model_id = model.id
-        version = await model_service.create_version(
-            model_id=model_id, contract=test_contract
-        )
+        version = await model_service.create_version(model_id=model_id, contract=test_contract)
         version_id = version.id
 
         # 未提交验证直接发布应失败

@@ -52,9 +52,7 @@ def compute_contract_sha256(
         "output_schema": output_schema,
         "applicability_domain": applicability_domain,
     }
-    canonical: str = json.dumps(
-        payload, sort_keys=True, ensure_ascii=False
-    )
+    canonical: str = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 

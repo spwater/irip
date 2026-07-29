@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
@@ -34,26 +34,17 @@ from packages.components.registry import ComponentRegistryService
 
 #: JSON Schema 路径（相对项目根目录）。
 _SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[3]
-    / "schemas"
-    / "component-manifest"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[3] / "schemas" / "component-manifest" / "v1.schema.json"
 )
 
 #: 路由实例。
-components_router = APIRouter(
-    prefix="/api/v1/components", tags=["components"]
-)
+components_router = APIRouter(prefix="/api/v1/components", tags=["components"])
 
 #: 需 component:manage 权限的当前用户依赖。
-ManageUserDep = Annotated[
-    CurrentUser, Depends(require_permission("component:manage"))
-]
+ManageUserDep = Annotated[CurrentUser, Depends(require_permission("component:manage"))]
 
 #: 需 component:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("component:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("component:read"))]
 
 
 def get_component_registry_service() -> ComponentRegistryService:
@@ -63,8 +54,7 @@ def get_component_registry_service() -> ComponentRegistryService:
     （需当前用户上下文查询 organization_id）。
     """
     raise NotImplementedError(
-        "get_component_registry_service must be overridden "
-        "via dependency_overrides"
+        "get_component_registry_service must be overridden via dependency_overrides"
     )
 
 
@@ -251,8 +241,10 @@ async def publish_component(
     exp_code = body.experimental_object_code or _parse_experimental_object_code(body.manifest_yaml)
     if exp_code:
         import sqlalchemy as sa
+
         from packages.common.database import session_scope
         from packages.standards.objects import IndustrialObject
+
         async with session_scope(service.session_factory) as sess:
             obj = await sess.scalar(
                 sa.select(IndustrialObject).where(
@@ -285,9 +277,7 @@ async def publish_component(
     )
 
 
-@components_router.get(
-    "/", response_model=ComponentListResponse
-)
+@components_router.get("/", response_model=ComponentListResponse)
 async def list_components(
     current_user: ReadUserDep,
     service: ComponentRegistryServiceDep,
@@ -313,12 +303,11 @@ async def list_components(
     # 数据接口通过 experimental_object_code → industrial_object.code →
     # industrial_object.department_id 间接关联到所属部门。
     if should_filter_by_department(current_user):
-        visible_dept_ids = await get_visible_department_ids(
-            current_user, service.session_factory
-        )
+        visible_dept_ids = await get_visible_department_ids(current_user, service.session_factory)
         if visible_dept_ids:
             # 查出可见部门内的实验对象 code 列表
             import sqlalchemy as sa
+
             from packages.common.database import session_scope
             from packages.standards.objects import IndustrialObject
 
@@ -328,15 +317,12 @@ async def list_components(
                         IndustrialObject.department_id.in_(visible_dept_ids)
                     )
                 )
-                visible_codes = {
-                    row[0] for row in visible_codes_result.fetchall()
-                }
+                visible_codes = {row[0] for row in visible_codes_result.fetchall()}
 
             # 过滤 items，只保留 experimental_object_code 在 visible_codes 内的。
             # experimental_object_code 为 NULL 的组件不在可见范围内，不显示。
             items = [
-                (comp, ver) for comp, ver in items
-                if ver.experimental_object_code in visible_codes
+                (comp, ver) for comp, ver in items if ver.experimental_object_code in visible_codes
             ]
         else:
             # 无实验室用户（非管理员且 department_id 为 NULL）：看不到任何数据接口
@@ -353,7 +339,8 @@ async def list_components(
                 kind=comp.kind,
                 runtime=ver.runtime,
                 engine=_detect_engine(ver.manifest_yaml),
-                experimental_object_code=ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml),
+                experimental_object_code=ver.experimental_object_code
+                or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
@@ -365,9 +352,7 @@ async def list_components(
     )
 
 
-@components_router.get(
-    "/{component_id}", response_model=ComponentDetailResponse
-)
+@components_router.get("/{component_id}", response_model=ComponentDetailResponse)
 async def get_component(
     component_id: UUID,
     current_user: ReadUserDep,
@@ -396,7 +381,8 @@ async def get_component(
         runtime=ver.runtime,
         status=comp.status,
         active_version_id=str(comp.active_version_id) if comp.active_version_id else None,
-        experimental_object_code=ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml),
+        experimental_object_code=ver.experimental_object_code
+        or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,
         published_at=ver.published_at,

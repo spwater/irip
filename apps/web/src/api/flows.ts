@@ -8,7 +8,7 @@ export {
   type FlowSummary,
   type FlowRunSummary,
   type FlowRunDetail,
-} from './client';
+} from './equipment-flows';
 
 export {
   apiCreateFlow,
@@ -26,4 +26,4 @@ export {
   apiRetryFlowNode,
   apiDeleteFlowRun,
   apiGetFlowRun,
-} from './client';
+} from './equipment-flows';

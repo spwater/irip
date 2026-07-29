@@ -276,14 +276,10 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
 ALL_TOOLS: tuple[ToolSpec, ...] = WHITELIST_TOOLS + CANDIDATE_TOOLS
 
 #: 白名单工具名称集合（只读，可直接执行）。
-WHITELIST_TOOL_NAMES: frozenset[str] = frozenset(
-    spec.name for spec in WHITELIST_TOOLS
-)
+WHITELIST_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in WHITELIST_TOOLS)
 
 #: 候选工具名称集合（需审批）。
-CANDIDATE_TOOL_NAMES: frozenset[str] = frozenset(
-    spec.name for spec in CANDIDATE_TOOLS
-)
+CANDIDATE_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in CANDIDATE_TOOLS)
 
 #: 全部合法工具名称集合。
 ALL_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in ALL_TOOLS)
@@ -563,9 +559,7 @@ class ToolRegistry:
         if spec.candidate and not invocation.confirmed:
             raise AppError(
                 code="confirmation_required",
-                message=(
-                    f"工具 {invocation.tool_name} 需要用户确认后才能执行"
-                ),
+                message=(f"工具 {invocation.tool_name} 需要用户确认后才能执行"),
                 retryable=False,
                 fields={"tool_name": invocation.tool_name},
             )
@@ -574,15 +568,13 @@ class ToolRegistry:
         from packages.auth.permissions import has_role_permission
 
         has_permission: bool = any(
-            has_role_permission(role, spec.required_permission)
-            for role in invocation.user_roles
+            has_role_permission(role, spec.required_permission) for role in invocation.user_roles
         )
         if not has_permission:
             raise AppError(
                 code="forbidden",
                 message=(
-                    f"用户无权执行工具 {invocation.tool_name}，"
-                    f"需要权限: {spec.required_permission}"
+                    f"用户无权执行工具 {invocation.tool_name}，需要权限: {spec.required_permission}"
                 ),
                 retryable=False,
                 fields={"required_permission": spec.required_permission},

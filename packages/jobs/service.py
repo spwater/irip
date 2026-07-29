@@ -261,12 +261,11 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
             status = JobStatus(job.status)
-            retryable = (
-                job.attempt < job.max_attempts
-                and status not in TERMINAL_STATUSES
-            )
+            retryable = job.attempt < job.max_attempts and status not in TERMINAL_STATUSES
             stage = job.last_error.get("stage", "") if job.last_error else ""
-            progress = 100 if status in TERMINAL_STATUSES else (50 if status == JobStatus.RUNNING else 0)
+            progress = (
+                100 if status in TERMINAL_STATUSES else (50 if status == JobStatus.RUNNING else 0)
+            )  # noqa: E501
             return JobRef(
                 job_id=job.id,
                 status=status,
@@ -324,11 +323,16 @@ class JobService:
         async with self._factory() as session:
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
             from packages.components.flow_runtime import (
-                FlowRun as FlowRunORM,
-                FlowDefinitionVersionORM,
                 FlowDefinition as FlowDefORM,
             )
+            from packages.components.flow_runtime import (
+                FlowDefinitionVersionORM,
+            )
+            from packages.components.flow_runtime import (
+                FlowRun as FlowRunORM,
+            )
             from packages.departments.entities import Department
+
             stmt = (
                 sa.select(
                     Job,
@@ -336,7 +340,10 @@ class JobService:
                     Department.display_name.label("dept_name"),
                 )
                 .outerjoin(FlowRunORM, FlowRunORM.job_id == Job.id)
-                .outerjoin(FlowDefinitionVersionORM, FlowDefinitionVersionORM.id == FlowRunORM.flow_version_id)
+                .outerjoin(
+                    FlowDefinitionVersionORM,
+                    FlowDefinitionVersionORM.id == FlowRunORM.flow_version_id,
+                )  # noqa: E501
                 .outerjoin(FlowDefORM, FlowDefORM.id == FlowDefinitionVersionORM.flow_definition_id)
                 .outerjoin(Department, Department.id == FlowDefORM.department_id)
                 .where(*conditions)
@@ -355,10 +362,7 @@ class JobService:
         items: list[tuple[Job, str, int, bool, str, str]] = []
         for job, flow_name, dept_name in page_rows:
             job_status = JobStatus(job.status)
-            retryable = (
-                job.attempt < job.max_attempts
-                and job_status not in TERMINAL_STATUSES
-            )
+            retryable = job.attempt < job.max_attempts and job_status not in TERMINAL_STATUSES
             stage = job.last_error.get("stage", "") if job.last_error else ""
             progress = (
                 100

@@ -94,7 +94,9 @@ async def get_visible_department_ids(
             ),
             {"dept_id": str(user.department_id)},
         )
-        return [row[0] if isinstance(row[0], UUID) else UUID(str(row[0])) for row in result.fetchall()]
+        return [
+            row[0] if isinstance(row[0], UUID) else UUID(str(row[0])) for row in result.fetchall()
+        ]  # noqa: E501
 
 
 def can_edit_department(user: CurrentUser, target_dept_id: UUID | None) -> bool:

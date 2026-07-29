@@ -58,12 +58,8 @@ async def test_normal_success(job_harness) -> None:
 @pytest.mark.integration
 async def test_three_retries_then_success(job_harness) -> None:
     """3 次重试后成功。"""
-    job = await job_harness.accept(
-        "flaky", {"value": 1}, "idem-retry"
-    )
-    await job_harness.deliver_with_retries(
-        job.job_id, fail_times=2
-    )
+    job = await job_harness.accept("flaky", {"value": 1}, "idem-retry")
+    await job_harness.deliver_with_retries(job.job_id, fail_times=2)
     ref = await job_harness.get(job.job_id)
     assert ref.status == JobStatus.SUCCEEDED
 
@@ -71,9 +67,7 @@ async def test_three_retries_then_success(job_harness) -> None:
 @pytest.mark.integration
 async def test_non_retryable_failure(job_harness) -> None:
     """不可重试错误直接失败。"""
-    job = await job_harness.accept(
-        "validation_fail", {"bad": True}, "idem-validation"
-    )
+    job = await job_harness.accept("validation_fail", {"bad": True}, "idem-validation")
     await job_harness.deliver(job.job_id)
     ref = await job_harness.get(job.job_id)
     assert ref.status == JobStatus.FAILED

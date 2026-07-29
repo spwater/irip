@@ -54,16 +54,12 @@ async def test_minio_outage_job_retries(job_harness) -> None:
     async def minio_flaky_handler(job) -> dict:
         if fail_count[0] < max_fails:
             fail_count[0] += 1
-            raise RuntimeError(
-                f"MinIO connection refused (attempt #{fail_count[0]})"
-            )
+            raise RuntimeError(f"MinIO connection refused (attempt #{fail_count[0]})")
         return {"result": "minio_recovered", **(job.payload or {})}
 
     job_harness._executor.register_handler("minio_flaky", minio_flaky_handler)
 
-    ref = await job_harness.accept(
-        "minio_flaky", {"data": "test"}, "idem-minio-outage-retry"
-    )
+    ref = await job_harness.accept("minio_flaky", {"data": "test"}, "idem-minio-outage-retry")
 
     # 第一次执行：MinIO 中断 → 失败 → RETRY_WAIT
     await job_harness.deliver(ref.job_id)
@@ -107,9 +103,7 @@ async def test_no_results_committed_during_outage(job_harness) -> None:
 
     job_harness._executor.register_handler("minio_always_fail", always_fail_handler)
 
-    ref = await job_harness.accept(
-        "minio_always_fail", {"data": "test"}, "idem-minio-no-commit"
-    )
+    ref = await job_harness.accept("minio_always_fail", {"data": "test"}, "idem-minio-no-commit")
 
     # 多次执行（均失败）
     for _ in range(max_fails):

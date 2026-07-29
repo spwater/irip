@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 完整性校验模块 —— 校验 RAS_RAW 解析结果的完整性，不通过则抛出对应异常。
 
@@ -13,7 +12,7 @@
 import json
 import logging
 import math
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,39 +20,47 @@ logger = logging.getLogger(__name__)
 # 异常定义
 # ============================================================
 
+
 class XRDConverterError(Exception):
     """XRD 转换器基础异常类。"""
+
     pass
 
 
 class UnsupportedFileFormatError(XRDConverterError):
     """不支持的文件格式。"""
+
     pass
 
 
 class FileReadError(XRDConverterError):
     """文件读取失败。"""
+
     pass
 
 
 class InvalidRasRawStructureError(XRDConverterError):
     """RAS_RAW 文件结构不合法。"""
+
     pass
 
 
 class XrdDataCountMismatchError(XRDConverterError):
     """XRD 数据点数量与声明值不一致。"""
+
     pass
 
 
 class XrdDataParseError(XRDConverterError):
     """XRD 数据行解析失败。"""
+
     pass
 
 
 # ============================================================
 # 校验函数
 # ============================================================
+
 
 def _check_no_nan_inf(value: Any) -> bool:
     """递归检查值中是否存在 NaN 或 Infinity。
@@ -79,10 +86,10 @@ def _check_no_nan_inf(value: Any) -> bool:
 
 
 def validate_result(
-    metadata: Dict[str, Any],
-    points: List[Dict[str, Any]],
-    series: List[Dict[str, Any]],
-    params: Dict[str, Any],
+    metadata: dict[str, Any],
+    points: list[dict[str, Any]],
+    series: list[dict[str, Any]],
+    params: dict[str, Any],
 ) -> None:
     """校验解析结果的完整性，不通过则抛出异常。
 
@@ -111,13 +118,14 @@ def validate_result(
     """
     # ----- 1. 数据点数量校验（警告，不阻断）-----
     declared_count = params.get("MEAS_DATA_COUNT")
-    xrd_data: List[Tuple[float, float]] = params.get("xrd_data", [])
+    xrd_data: list[tuple[float, float]] = params.get("xrd_data", [])
     actual_count = len(xrd_data)
 
     if declared_count is not None and declared_count != actual_count:
         logger.warning(
             "数据点数量不一致：声明 %s 条，实际 %s 条（继续解析）",
-            declared_count, actual_count,
+            declared_count,
+            actual_count,
         )
 
     # 没有 XRD 数据时无需后续校验
@@ -133,7 +141,8 @@ def validate_result(
         if abs(first_x - scan_start) > 1e-4:
             logger.warning(
                 "首条 X 值 %s 与 MEAS_SCAN_START %s 不一致（继续解析）",
-                first_x, scan_start,
+                first_x,
+                scan_start,
             )
 
     if scan_stop is not None:
@@ -141,7 +150,8 @@ def validate_result(
         if abs(last_x - scan_stop) > 1e-4:
             logger.warning(
                 "末条 X 值 %s 与 MEAS_SCAN_STOP %s 不一致（继续解析）",
-                last_x, scan_stop,
+                last_x,
+                scan_stop,
             )
 
     # ----- 3 & 4. 步长一致性与单调递增校验 -----
@@ -153,7 +163,10 @@ def validate_result(
         if xrd_data[i][0] <= xrd_data[i - 1][0]:
             logger.warning(
                 "X 值非单调递增：第 %d 条 %s <= 第 %d 条 %s（继续解析）",
-                i, xrd_data[i][0], i - 1, xrd_data[i - 1][0],
+                i,
+                xrd_data[i][0],
+                i - 1,
+                xrd_data[i - 1][0],
             )
             break
 
@@ -167,7 +180,8 @@ def validate_result(
         if mismatch_count > 0:
             logger.warning(
                 "步长不一致：%d 条数据步长与声明步长 %s 偏差超过容差（继续解析）",
-                mismatch_count, scan_step,
+                mismatch_count,
+                scan_step,
             )
 
     # ----- 5. JSON 合法性校验（无 NaN / Infinity）-----
@@ -179,4 +193,4 @@ def validate_result(
     try:
         json.dumps(full_result, allow_nan=False)
     except (ValueError, TypeError) as exc:
-        raise InvalidRasRawStructureError(f"结果无法序列化为合法 JSON: {exc}")
+        raise InvalidRasRawStructureError(f"结果无法序列化为合法 JSON: {exc}") from exc

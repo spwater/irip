@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 RAS_RAW 文件核心解析器 —— 将 Rigaku SmartLabXE 导出的 RAS_RAW 原始文件解析为
 {metadata, points, series} 结构化数据。
@@ -9,14 +8,12 @@ RAS_RAW 文件核心解析器 —— 将 Rigaku SmartLabXE 导出的 RAS_RAW 原
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .type_converter import convert_value
 from .validator import (
-    InvalidRasRawStructureError,
-    UnsupportedFileFormatError,
     FileReadError,
-    XrdDataCountMismatchError,
+    UnsupportedFileFormatError,
     XrdDataParseError,
     validate_result,
 )
@@ -28,7 +25,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 # 显式单位映射表：字段名 → 单位来源字段名
-UNIT_MAPPING: Dict[str, str] = {
+UNIT_MAPPING: dict[str, str] = {
     "MEAS_COND_XG_VOLTAGE": "HW_XG_VOLTAGE_UNIT",
     "MEAS_COND_XG_CURRENT": "HW_XG_CURRENT_UNIT",
     "HW_XG_WAVE_LENGTH_ALPHA1": "HW_XG_WAVE_LENGTH_UNIT",
@@ -42,7 +39,7 @@ UNIT_MAPPING: Dict[str, str] = {
 }
 
 # MEAS_COND_AXIS 子字段列表（按指定顺序）
-MEAS_COND_AXIS_SUBFIELDS: List[str] = [
+MEAS_COND_AXIS_SUBFIELDS: list[str] = [
     "NAME",
     "NAME_INTERNAL",
     "OFFSET",
@@ -59,21 +56,22 @@ MEAS_COND_AXIS_SUBFIELDS: List[str] = [
 _MEAS_COND_AXIS_PREFIX = "MEAS_COND_AXIS_"
 
 # 提取编号后缀的正则：匹配 KEY 末尾的 -数字
-_INDEX_PATTERN = re.compile(r'-(\d+)$')
+_INDEX_PATTERN = re.compile(r"-(\d+)$")
 
 # XRD 曲线数据行正则：两列数字（角度 + 强度）
-_XRD_DATA_LINE_PATTERN = re.compile(r'^\d+\.?\d*\s+\d+\.?\d*$')
+_XRD_DATA_LINE_PATTERN = re.compile(r"^\d+\.?\d*\s+\d+\.?\d*$")
 
 # 星号行正则：*KEY "VALUE"
 _STAR_LINE_PATTERN = re.compile(r'^\*(\S+)\s+"(.*)"$')
 
 # 井号行正则：#KEY=VALUE
-_HASH_LINE_PATTERN = re.compile(r'^#([^=]+)=(.*)$')
+_HASH_LINE_PATTERN = re.compile(r"^#([^=]+)=(.*)$")
 
 
 # ============================================================
 # 文件读取
 # ============================================================
+
 
 def _read_file(file_path: str) -> str:
     """读取文件内容，支持 UTF-8（含 BOM）和 GBK 编码自动识别回退。
@@ -92,11 +90,11 @@ def _read_file(file_path: str) -> str:
 
     # 尝试编码列表：UTF-8（自动处理 BOM）→ GBK 回退
     encodings = ["utf-8-sig", "gbk"]
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for encoding in encodings:
         try:
-            with open(file_path, "r", encoding=encoding) as f:
+            with open(file_path, encoding=encoding) as f:
                 content = f.read()
             logger.debug("文件 %s 使用 %s 编码读取成功", file_path, encoding)
             return content
@@ -112,7 +110,8 @@ def _read_file(file_path: str) -> str:
 # 行解析
 # ============================================================
 
-def _parse_star_line(line: str) -> Optional[Tuple[str, str]]:
+
+def _parse_star_line(line: str) -> tuple[str, str] | None:
     """解析 *KEY "VALUE" 格式的行。
 
     Args:
@@ -129,7 +128,7 @@ def _parse_star_line(line: str) -> Optional[Tuple[str, str]]:
     return None
 
 
-def _parse_hash_line(line: str) -> Optional[Tuple[str, str]]:
+def _parse_hash_line(line: str) -> tuple[str, str] | None:
     """解析 #KEY=VALUE 格式的行。
 
     Args:
@@ -146,7 +145,7 @@ def _parse_hash_line(line: str) -> Optional[Tuple[str, str]]:
     return None
 
 
-def _parse_xrd_data_line(line: str) -> Optional[Tuple[float, float]]:
+def _parse_xrd_data_line(line: str) -> tuple[float, float] | None:
     """解析 XRD 曲线数据行（两列数字）。
 
     Args:
@@ -165,7 +164,7 @@ def _parse_xrd_data_line(line: str) -> Optional[Tuple[float, float]]:
             y = float(parts[1])
             return x, y
         except (ValueError, IndexError) as exc:
-            raise XrdDataParseError(f"XRD 数据行解析失败: {line} ({exc})")
+            raise XrdDataParseError(f"XRD 数据行解析失败: {line} ({exc})") from exc
     return None
 
 
@@ -173,7 +172,8 @@ def _parse_xrd_data_line(line: str) -> Optional[Tuple[float, float]]:
 # 编号字段处理
 # ============================================================
 
-def _extract_index(key: str) -> Optional[int]:
+
+def _extract_index(key: str) -> int | None:
     """从字段名末尾提取编号。
 
     使用正则匹配字段末尾的编号后缀（如 -0、-100）。
@@ -201,7 +201,7 @@ def _strip_index(key: str) -> str:
     """
     match = _INDEX_PATTERN.search(key)
     if match:
-        return key[:match.start()]
+        return key[: match.start()]
     return key
 
 
@@ -228,10 +228,11 @@ def _get_group_prefix(base_name: str) -> str:
 # 单位查找
 # ============================================================
 
+
 def _lookup_unit(
     field_name: str,
-    star_params: Dict[str, str],
-) -> Tuple[str, Optional[str]]:
+    star_params: dict[str, str],
+) -> tuple[str, str | None]:
     """查找字段对应的单位。
 
     查找顺序：
@@ -263,7 +264,7 @@ def _lookup_unit(
     return "", None
 
 
-def _collect_unit_source_fields(star_params: Dict[str, str]) -> set:
+def _collect_unit_source_fields(star_params: dict[str, str]) -> set:
     """收集所有作为单位来源的字段名。
 
     这些字段不会被单独输出为 point。
@@ -294,9 +295,10 @@ def _collect_unit_source_fields(star_params: Dict[str, str]) -> set:
 # 序列构建
 # ============================================================
 
+
 def _build_meas_cond_axis_series(
-    numbered_fields: Dict[str, Dict[int, str]],
-) -> Optional[Dict[str, Any]]:
+    numbered_fields: dict[str, dict[int, str]],
+) -> dict[str, Any] | None:
     """构建 MEAS_COND_AXIS 多列序列。
 
     将 10 种子字段（NAME, NAME_INTERNAL, OFFSET, ...）按编号重组为多列序列。
@@ -309,7 +311,7 @@ def _build_meas_cond_axis_series(
         序列字典 {name, columns, rows}，无数据则返回 None。
     """
     # 收集所有 MEAS_COND_AXIS 子字段
-    subfield_data: Dict[str, Dict[int, str]] = {}
+    subfield_data: dict[str, dict[int, str]] = {}
     for subfield in MEAS_COND_AXIS_SUBFIELDS:
         full_key = _MEAS_COND_AXIS_PREFIX + subfield
         if full_key in numbered_fields:
@@ -331,9 +333,9 @@ def _build_meas_cond_axis_series(
 
     # 按编号排序，构建行
     sorted_indices = sorted(all_indices)
-    rows: List[List[Any]] = []
+    rows: list[list[Any]] = []
     for idx in sorted_indices:
-        row: List[Any] = [idx]
+        row: list[Any] = [idx]
         for subfield in MEAS_COND_AXIS_SUBFIELDS:
             if subfield in subfield_data and idx in subfield_data[subfield]:
                 row.append(convert_value(subfield_data[subfield][idx]))
@@ -349,8 +351,8 @@ def _build_meas_cond_axis_series(
 
 
 def _build_other_numbered_series(
-    numbered_fields: Dict[str, Dict[int, str]],
-) -> List[Dict[str, Any]]:
+    numbered_fields: dict[str, dict[int, str]],
+) -> list[dict[str, Any]]:
     """构建非 MEAS_COND_AXIS 的编号字段序列。
 
     分组规则：按分组前缀（去除最后一个下划线组件）分组。
@@ -364,20 +366,20 @@ def _build_other_numbered_series(
         序列字典列表。
     """
     # 排除 MEAS_COND_AXIS 字段
-    non_axis_fields: Dict[str, Dict[int, str]] = {}
+    non_axis_fields: dict[str, dict[int, str]] = {}
     for base_name, data in numbered_fields.items():
         if not base_name.startswith(_MEAS_COND_AXIS_PREFIX):
             non_axis_fields[base_name] = data
 
     # 按分组前缀分组
-    groups: Dict[str, List[str]] = {}
+    groups: dict[str, list[str]] = {}
     for base_name in non_axis_fields:
         prefix = _get_group_prefix(base_name)
         if prefix not in groups:
             groups[prefix] = []
         groups[prefix].append(base_name)
 
-    series_list: List[Dict[str, Any]] = []
+    series_list: list[dict[str, Any]] = []
 
     for prefix, base_names in sorted(groups.items()):
         # 对基础字段名排序，保证列顺序稳定
@@ -389,11 +391,13 @@ def _build_other_numbered_series(
             data = non_axis_fields[base_name]
             sorted_indices = sorted(data.keys())
             rows = [[idx, convert_value(data[idx])] for idx in sorted_indices]
-            series_list.append({
-                "name": base_name,
-                "columns": ["index", "value"],
-                "rows": rows,
-            })
+            series_list.append(
+                {
+                    "name": base_name,
+                    "columns": ["index", "value"],
+                    "rows": rows,
+                }
+            )
         else:
             # 多列序列：columns = ["index", base_name1, base_name2, ...]
             all_indices: set = set()
@@ -401,9 +405,9 @@ def _build_other_numbered_series(
                 all_indices.update(non_axis_fields[bn].keys())
 
             sorted_indices = sorted(all_indices)
-            rows: List[List[Any]] = []
+            rows: list[list[Any]] = []
             for idx in sorted_indices:
-                row: List[Any] = [idx]
+                row: list[Any] = [idx]
                 for bn in base_names:
                     if idx in non_axis_fields[bn]:
                         row.append(convert_value(non_axis_fields[bn][idx]))
@@ -411,20 +415,22 @@ def _build_other_numbered_series(
                         row.append(None)
                 rows.append(row)
 
-            series_list.append({
-                "name": prefix,
-                "columns": ["index"] + base_names,
-                "rows": rows,
-            })
+            series_list.append(
+                {
+                    "name": prefix,
+                    "columns": ["index"] + base_names,
+                    "rows": rows,
+                }
+            )
 
     return series_list
 
 
 def _build_xrd_series(
-    xrd_data: List[Tuple[float, float]],
-    star_params: Dict[str, str],
-    hash_params: Dict[str, str],
-) -> Dict[str, Any]:
+    xrd_data: list[tuple[float, float]],
+    star_params: dict[str, str],
+    hash_params: dict[str, str],
+) -> dict[str, Any]:
     """构建 XRD 衍射谱序列。
 
     Args:
@@ -463,6 +469,7 @@ def _build_xrd_series(
 # 主解析函数
 # ============================================================
 
+
 def parse_ras_raw(file_path: str) -> dict:
     """解析 RAS_RAW 格式的 XRD 原始文件，返回结构化数据。
 
@@ -484,9 +491,9 @@ def parse_ras_raw(file_path: str) -> dict:
     lines = content.splitlines()
 
     # ----- 2. 逐行解析 -----
-    star_params: Dict[str, str] = {}  # *KEY → 原始值
-    hash_params: Dict[str, str] = {}  # #KEY → 原始值
-    xrd_data: List[Tuple[float, float]] = []
+    star_params: dict[str, str] = {}  # *KEY → 原始值
+    hash_params: dict[str, str] = {}  # #KEY → 原始值
+    xrd_data: list[tuple[float, float]] = []
 
     for line_num, raw_line in enumerate(lines, start=1):
         line = raw_line.strip()
@@ -529,11 +536,13 @@ def parse_ras_raw(file_path: str) -> dict:
     logger.info(
         "文件格式识别通过: FILE_TYPE=RAS_RAW, FILE_SYSTEM_NAME=SmartLabXE, "
         "星号参数 %d 项, 井号参数 %d 项, XRD 数据 %d 条",
-        len(star_params), len(hash_params), len(xrd_data),
+        len(star_params),
+        len(hash_params),
+        len(xrd_data),
     )
 
     # ----- 4. 构建 metadata -----
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = {}
     for key, raw_value in star_params.items():
         if key.startswith("FILE_"):
             metadata[key] = convert_value(raw_value)
@@ -544,7 +553,7 @@ def parse_ras_raw(file_path: str) -> dict:
     unit_source_fields = _collect_unit_source_fields(star_params)
 
     # ----- 6. 分离编号字段与非编号字段 -----
-    numbered_fields: Dict[str, Dict[int, str]] = {}  # base_name → {index → raw_value}
+    numbered_fields: dict[str, dict[int, str]] = {}  # base_name → {index → raw_value}
 
     for key, raw_value in star_params.items():
         # FILE_* 字段已进入 metadata，跳过
@@ -560,7 +569,7 @@ def parse_ras_raw(file_path: str) -> dict:
             numbered_fields[base_name][index] = raw_value
 
     # ----- 7. 构建 points -----
-    points: List[Dict[str, Any]] = []
+    points: list[dict[str, Any]] = []
 
     for key, raw_value in star_params.items():
         # FILE_* 字段已进入 metadata，跳过
@@ -585,7 +594,7 @@ def parse_ras_raw(file_path: str) -> dict:
         points.append({"name": key, "value": value, "unit": ""})
 
     # ----- 8. 构建 series -----
-    series: List[Dict[str, Any]] = []
+    series: list[dict[str, Any]] = []
 
     # MEAS_COND_AXIS 多列序列
     meas_axis_series = _build_meas_cond_axis_series(numbered_fields)
@@ -602,7 +611,9 @@ def parse_ras_raw(file_path: str) -> dict:
 
     logger.info(
         "解析完成: metadata %d 项, points %d 项, series %d 项",
-        len(metadata), len(points), len(series),
+        len(metadata),
+        len(points),
+        len(series),
     )
 
     # ----- 9. 完整性校验 -----
@@ -613,7 +624,7 @@ def parse_ras_raw(file_path: str) -> dict:
     meas_scan_step_raw = star_params.get("MEAS_SCAN_STEP", "")
     meas_scan_unequally_spaced = star_params.get("MEAS_SCAN_UNEQUALY_SPACED", "False")
 
-    validate_params: Dict[str, Any] = {
+    validate_params: dict[str, Any] = {
         "MEAS_DATA_COUNT": convert_value(meas_data_count_raw) if meas_data_count_raw else None,
         "MEAS_SCAN_START": convert_value(meas_scan_start_raw) if meas_scan_start_raw else None,
         "MEAS_SCAN_STOP": convert_value(meas_scan_stop_raw) if meas_scan_stop_raw else None,

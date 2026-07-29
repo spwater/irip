@@ -41,19 +41,13 @@ from packages.connectors.mapping import (
 ingestions_router = APIRouter(prefix="/api/v1/ingestions", tags=["ingestions"])
 
 #: 需 ingestion:write 权限的当前用户依赖。
-WriteUserDep = Annotated[
-    CurrentUser, Depends(require_permission("ingestion:write"))
-]
+WriteUserDep = Annotated[CurrentUser, Depends(require_permission("ingestion:write"))]
 
 #: 需 ingestion:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("ingestion:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("ingestion:read"))]
 
 #: 需 ingestion:publish 权限的当前用户依赖。
-PublishUserDep = Annotated[
-    CurrentUser, Depends(require_permission("ingestion:publish"))
-]
+PublishUserDep = Annotated[CurrentUser, Depends(require_permission("ingestion:publish"))]
 
 
 def get_mapping_service() -> MappingService:
@@ -62,9 +56,7 @@ def get_mapping_service() -> MappingService:
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
     （需当前用户上下文查询 organization_id）。
     """
-    raise NotImplementedError(
-        "get_mapping_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_mapping_service must be overridden via dependency_overrides")
 
 
 def get_mapping_profile_service() -> MappingProfileService:
@@ -76,16 +68,12 @@ def get_mapping_profile_service() -> MappingProfileService:
 
 def get_ingestion_service() -> IngestionService:
     """获取 IngestionService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_ingestion_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_ingestion_service must be overridden via dependency_overrides")
 
 
 #: 服务依赖类型别名。
 MappingServiceDep = Annotated[MappingService, Depends(get_mapping_service)]
-MappingProfileServiceDep = Annotated[
-    MappingProfileService, Depends(get_mapping_profile_service)
-]
+MappingProfileServiceDep = Annotated[MappingProfileService, Depends(get_mapping_profile_service)]
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 
 
@@ -309,9 +297,7 @@ def _preview_to_response(table: PreviewTable) -> PreviewResponse:
     return PreviewResponse(
         columns=list(table.columns),
         rows=[
-            PreviewRowResponse(
-                values=[None if v is None else str(v) for v in row]
-            )
+            PreviewRowResponse(values=[None if v is None else str(v) for v in row])
             for row in table.rows
         ],
         row_count=table.row_count,
@@ -382,9 +368,7 @@ async def rank_mapping(
 # ---- 端点：映射配置 CRUD / 生命周期 ----
 
 
-@ingestions_router.post(
-    "/mapping-profiles", response_model=ProfileDetailResponse, status_code=201
-)
+@ingestions_router.post("/mapping-profiles", response_model=ProfileDetailResponse, status_code=201)
 async def create_profile(
     body: CreateProfileRequest,
     current_user: WriteUserDep,
@@ -426,18 +410,14 @@ async def list_profiles(
     Returns:
         ProfileListResponse: 分页列表。
     """
-    items, next_cursor = await service.list_profiles(
-        cursor=cursor, page_size=page_size
-    )
+    items, next_cursor = await service.list_profiles(cursor=cursor, page_size=page_size)
     return ProfileListResponse(
         items=[_profile_to_response(item) for item in items],
         next_cursor=next_cursor,
     )
 
 
-@ingestions_router.get(
-    "/mapping-profiles/{profile_id}", response_model=ProfileDetailResponse
-)
+@ingestions_router.get("/mapping-profiles/{profile_id}", response_model=ProfileDetailResponse)
 async def get_profile(
     profile_id: UUID,
     current_user: ReadUserDep,

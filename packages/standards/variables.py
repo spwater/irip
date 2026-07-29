@@ -113,9 +113,7 @@ class Variable(Base):
     canonical_unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     quantity_kind: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     valid_range: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     version_count: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -129,11 +127,7 @@ class Variable(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
 
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_variable_org_code"
-        ),
-    )
+    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_variable_org_code"),)
 
     def __repr__(self) -> str:
         return (
@@ -185,13 +179,9 @@ class VariableVersion(Base):
     quantity_kind: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     valid_range: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     published_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    deprecated_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    deprecated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     deprecated_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -231,18 +221,12 @@ class VariableAlias(Base):
         nullable=False,
     )
     alias: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    language: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'zh'")
-    )
+    language: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'zh'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
 
-    __table_args__ = (
-        sa.UniqueConstraint(
-            "variable_id", "alias", name="uq_variable_alias"
-        ),
-    )
+    __table_args__ = (sa.UniqueConstraint("variable_id", "alias", name="uq_variable_alias"),)
 
     def __repr__(self) -> str:
         return (

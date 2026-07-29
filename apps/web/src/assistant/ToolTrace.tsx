@@ -1,5 +1,5 @@
 import { Collapse, Tag, Typography } from 'antd';
-import type { ToolCallSummary } from '@/api/client';
+import type { ToolCallSummary } from '@/api/models-ai';
 
 const { Text, Paragraph } = Typography;
 

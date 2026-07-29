@@ -23,28 +23,27 @@ import {
   apiCreateFlowRun,
   apiDeleteFlow,
   apiDeleteFlowRun,
-  apiUploadFile,
   apiArchiveFlow,
   apiRestoreFlow,
   apiGetComponent,
   apiGetFlow,
   apiGetFlowRun,
   apiListComponents,
-  apiListObjects,
   apiListEquipment,
-  apiListDepartments,
   apiListFlows,
   apiListFlowRuns,
   apiPublishFlow,
   apiResumeFlowRun,
   apiUpdateFlow,
-  extractApiError,
   type ComponentSummary,
   type FlowNodeSchema,
   type FlowRunSummary,
   type FlowSummary,
-  type IndustrialObject,
-} from '@/api/client';
+} from '@/api/equipment-flows';
+import { apiUploadFile } from '@/api/models-ai';
+import { apiListObjects } from '@/api/standards-objects';
+import { apiListDepartments } from '@/api/departments';
+import { extractApiError, type IndustrialObject } from '@/api/types';
 import { FactModal } from './flow/FactModal';
 import {
   fmtTime,
@@ -983,10 +982,11 @@ export function FlowDetail(): JSX.Element {
               showSearch
               optionFilterProp="label"
               options={componentOptions}
-              onChange={(value: string, option: { label?: string } | undefined) => {
+              onChange={(value: string, option: any) => {
+                const opt = option as { label?: string } | undefined;
                 const now = new Date();
                 const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-                const compLabel = option?.label ? option.label.split(' (')[0] : value;
+                const compLabel = opt?.label ? opt.label.split(' (')[0] : value;
                 createForm.setFieldsValue({
                   code: `${value}_${ts}`,
                   display_name: `${compLabel}_${ts}`,

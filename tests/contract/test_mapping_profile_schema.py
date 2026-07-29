@@ -15,10 +15,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 
 _SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[2]
-    / "schemas"
-    / "mapping-profile"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[2] / "schemas" / "mapping-profile" / "v1.schema.json"
 )
 
 
@@ -190,12 +187,8 @@ class TestSecretIsolation:
     def test_only_secret_id_referenced(self) -> None:
         """postgres/rest 子对象的属性仅 secret_id 及业务字段。"""
         schema = _load_schema()
-        pg_props = schema["properties"]["source"]["properties"]["postgres"][
-            "properties"
-        ]
-        rest_props = schema["properties"]["source"]["properties"]["rest"][
-            "properties"
-        ]
+        pg_props = schema["properties"]["source"]["properties"]["postgres"]["properties"]
+        rest_props = schema["properties"]["source"]["properties"]["rest"]["properties"]
         assert "secret_id" in pg_props
         assert "dsn" not in pg_props
         assert "secret_id" in rest_props

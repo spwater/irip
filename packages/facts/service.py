@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
 from packages.common.errors import AppError
-from packages.facts.entities import Fact, FactRevision
+from packages.facts.entities import Fact
 from packages.facts.observations import (
     FactRevisionRef,
     NormalizedObservation,
@@ -32,7 +32,6 @@ from packages.facts.repository import FactRepository
 from packages.standards.methods import MethodVersion
 from packages.standards.objects import IndustrialObject
 from packages.standards.templates import FactTemplateVersion, FactType
-from packages.standards.variables import VariableVersion
 
 #: 合法事实类型集合。
 _VALID_FACT_TYPES: frozenset[str] = frozenset(
@@ -65,9 +64,7 @@ class CreateFactCommand:
         created_by: 创建人 ID。
     """
 
-    fact_type: Literal[
-        "experiment_run", "simulation_run", "document_record", "model_execution"
-    ]
+    fact_type: Literal["experiment_run", "simulation_run", "document_record", "model_execution"]
     template_version_id: UUID | None
     organization_id: UUID
     object_id: UUID
@@ -237,9 +234,7 @@ class FactService:
                         code="template_not_published",
                         message="事实模板版本未发布",
                         retryable=False,
-                        fields={
-                            "template_version_id": str(command.template_version_id)
-                        },
+                        fields={"template_version_id": str(command.template_version_id)},
                     )
 
             # 4. 校验工业对象属于组织
@@ -260,18 +255,14 @@ class FactService:
             # 5. 校验方法已发布（如提供）
             if command.method_version_id is not None:
                 method_version = await session.scalar(
-                    sa.select(MethodVersion).where(
-                        MethodVersion.id == command.method_version_id
-                    )
+                    sa.select(MethodVersion).where(MethodVersion.id == command.method_version_id)
                 )
                 if method_version is None or method_version.status != "published":
                     raise AppError(
                         code="method_not_published",
                         message="方法版本未发布",
                         retryable=False,
-                        fields={
-                            "method_version_id": str(command.method_version_id)
-                        },
+                        fields={"method_version_id": str(command.method_version_id)},
                     )
 
             # 7. 创建 fact 行
@@ -320,9 +311,7 @@ class FactService:
                 }
                 for r in command.raw
             ]
-            raw_orms = await FactRepository.insert_raw_observations(
-                session, rev.id, raw_dicts
-            )
+            raw_orms = await FactRepository.insert_raw_observations(session, rev.id, raw_dicts)
 
             # 构建 raw_input_index → raw_orm_id 映射
             raw_id_by_path: dict[str, UUID] = {}
@@ -340,9 +329,7 @@ class FactService:
                         code="normalized_without_raw",
                         message="标准化观察值必须引用一个原始观察值",
                         retryable=False,
-                        fields={
-                            "variable_version_id": str(norm.variable_version_id)
-                        },
+                        fields={"variable_version_id": str(norm.variable_version_id)},
                     )
                 norm_dicts.append(
                     {
@@ -352,14 +339,11 @@ class FactService:
                         "unit": norm.unit,
                     }
                 )
-            await FactRepository.insert_normalized_observations(
-                session, rev.id, norm_dicts
-            )
+            await FactRepository.insert_normalized_observations(session, rev.id, norm_dicts)
 
             # 11. 创建 fact_artifacts
             art_dicts: list[dict] = [
-                {"artifact_id": aid, "role": "raw_data"}
-                for aid in command.artifacts
+                {"artifact_id": aid, "role": "raw_data"} for aid in command.artifacts
             ]
             await FactRepository.insert_artifacts(session, rev.id, art_dicts)
 
@@ -409,26 +393,19 @@ class FactService:
         async with session_scope(self._factory) as session:
             # 1. 获取当前 fact + 最新修订
             fact = await FactRepository.get_fact(session, fact_id, self._org_id)
-            latest_rev = await FactRepository.get_latest_revision(
-                session, fact_id, self._org_id
-            )
+            latest_rev = await FactRepository.get_latest_revision(session, fact_id, self._org_id)
 
             # 2-3. 计算新修订字段
             new_revision = latest_rev.revision + 1
             new_subject_id = changes.get("subject_id", latest_rev.subject_id)
-            new_method_version_id = changes.get(
-                "method_version_id", latest_rev.method_version_id
-            )
+            new_method_version_id = changes.get("method_version_id", latest_rev.method_version_id)
             new_started_at = changes.get("started_at", latest_rev.started_at)
             new_ended_at = changes.get("ended_at", latest_rev.ended_at)
 
             # 校验标准化观察值
             if "normalized" in changes:
                 for norm in changes["normalized"]:
-                    if (
-                        hasattr(norm, "raw_observation_id")
-                        and norm.raw_observation_id is None
-                    ):
+                    if hasattr(norm, "raw_observation_id") and norm.raw_observation_id is None:
                         raise AppError(
                             code="normalized_without_raw",
                             message="标准化观察值必须引用一个原始观察值",
@@ -490,9 +467,7 @@ class FactService:
                 raw_id_by_path = {r.source_path: r.id for r in raw_orms}
             else:
                 # 复制上一修订的原始观察值
-                old_raws = await FactRepository.get_raw_observations(
-                    session, latest_rev.id
-                )
+                old_raws = await FactRepository.get_raw_observations(session, latest_rev.id)
                 raw_dicts = [
                     {
                         "source_path": r.source_path,
@@ -527,21 +502,13 @@ class FactService:
                             "unit": norm.unit,
                         }
                     )
-                await FactRepository.insert_normalized_observations(
-                    session, new_rev.id, norm_dicts
-                )
+                await FactRepository.insert_normalized_observations(session, new_rev.id, norm_dicts)
             else:
                 # 复制上一修订的标准化观察值，映射到新的 raw id
-                old_norms = await FactRepository.get_normalized_observations(
-                    session, latest_rev.id
-                )
+                old_norms = await FactRepository.get_normalized_observations(session, latest_rev.id)
                 # 需要将 old raw_observation_id 映射到 new raw id
-                old_raws = await FactRepository.get_raw_observations(
-                    session, latest_rev.id
-                )
-                old_raw_id_to_path = {
-                    r.id: r.source_path for r in old_raws
-                }
+                old_raws = await FactRepository.get_raw_observations(session, latest_rev.id)
+                old_raw_id_to_path = {r.id: r.source_path for r in old_raws}
                 norm_dicts = []
                 for norm in old_norms:
                     path = old_raw_id_to_path.get(norm.raw_observation_id, "")
@@ -557,31 +524,19 @@ class FactService:
                             "unit": norm.unit,
                         }
                     )
-                await FactRepository.insert_normalized_observations(
-                    session, new_rev.id, norm_dicts
-                )
+                await FactRepository.insert_normalized_observations(session, new_rev.id, norm_dicts)
 
             # 复制/更新工件链接
             if "artifacts" in changes and changes["artifacts"]:
                 art_dicts = [
-                    {"artifact_id": aid, "role": "raw_data"}
-                    for aid in changes["artifacts"]
+                    {"artifact_id": aid, "role": "raw_data"} for aid in changes["artifacts"]
                 ]
-                await FactRepository.insert_artifacts(
-                    session, new_rev.id, art_dicts
-                )
+                await FactRepository.insert_artifacts(session, new_rev.id, art_dicts)
             else:
                 # 复制上一修订的工件链接
-                old_arts = await FactRepository.get_artifacts(
-                    session, latest_rev.id
-                )
-                art_dicts = [
-                    {"artifact_id": a.artifact_id, "role": a.role}
-                    for a in old_arts
-                ]
-                await FactRepository.insert_artifacts(
-                    session, new_rev.id, art_dicts
-                )
+                old_arts = await FactRepository.get_artifacts(session, latest_rev.id)
+                art_dicts = [{"artifact_id": a.artifact_id, "role": a.role} for a in old_arts]
+                await FactRepository.insert_artifacts(session, new_rev.id, art_dicts)
 
             # 8. 返回 FactRevisionRef
             return FactRevisionRef(
@@ -593,9 +548,7 @@ class FactService:
                 status=fact.status,
             )
 
-    async def get(
-        self, fact_id: UUID, revision: int | None = None
-    ) -> FactRevisionRef:
+    async def get(self, fact_id: UUID, revision: int | None = None) -> FactRevisionRef:
         """获取事实（指定 revision 或最新）。
 
         Args:
@@ -611,13 +564,9 @@ class FactService:
         async with self._factory() as session:
             fact = await FactRepository.get_fact(session, fact_id, self._org_id)
             if revision is not None:
-                rev = await FactRepository.get_revision(
-                    session, fact_id, revision, self._org_id
-                )
+                rev = await FactRepository.get_revision(session, fact_id, revision, self._org_id)
             else:
-                rev = await FactRepository.get_latest_revision(
-                    session, fact_id, self._org_id
-                )
+                rev = await FactRepository.get_latest_revision(session, fact_id, self._org_id)
             return FactRevisionRef(
                 fact_id=fact_id,
                 revision=rev.revision,
@@ -641,9 +590,7 @@ class FactService:
         """
         async with self._factory() as session:
             fact = await FactRepository.get_fact(session, fact_id, self._org_id)
-            revs = await FactRepository.get_revisions(
-                session, fact_id, self._org_id
-            )
+            revs = await FactRepository.get_revisions(session, fact_id, self._org_id)
             return [
                 FactRevisionRef(
                     fact_id=fact_id,
@@ -674,20 +621,12 @@ class FactService:
         """
         async with self._factory() as session:
             if revision is not None:
-                rev = await FactRepository.get_revision(
-                    session, fact_id, revision, self._org_id
-                )
+                rev = await FactRepository.get_revision(session, fact_id, revision, self._org_id)
             else:
-                rev = await FactRepository.get_latest_revision(
-                    session, fact_id, self._org_id
-                )
+                rev = await FactRepository.get_latest_revision(session, fact_id, self._org_id)
 
-            raw_orms = await FactRepository.get_raw_observations(
-                session, rev.id
-            )
-            norm_orms = await FactRepository.get_normalized_observations(
-                session, rev.id
-            )
+            raw_orms = await FactRepository.get_raw_observations(session, rev.id)
+            norm_orms = await FactRepository.get_normalized_observations(session, rev.id)
 
             raws = tuple(
                 RawObservation(

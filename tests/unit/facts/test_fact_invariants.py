@@ -22,7 +22,6 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.errors import AppError
@@ -108,9 +107,7 @@ class TestCreateFact:
     """事实创建测试。"""
 
     @pytest.mark.asyncio
-    async def test_create_fact_success(
-        self, fact_service: FactService, fact_setup: dict
-    ) -> None:
+    async def test_create_fact_success(self, fact_service: FactService, fact_setup: dict) -> None:
         """创建事实成功 → returns FactRevisionRef with revision=1。"""
         command = _make_command(fact_setup, subject_id="S-SUCCESS-001")
         ref = await fact_service.create(command)
@@ -152,9 +149,7 @@ class TestCreateFact:
         assert ref2.revision == ref1.revision
 
     @pytest.mark.asyncio
-    async def test_fact_type_validation(
-        self, fact_service: FactService, fact_setup: dict
-    ) -> None:
+    async def test_fact_type_validation(self, fact_service: FactService, fact_setup: dict) -> None:
         """无效 fact_type → error。"""
         command = _make_command(
             fact_setup,
@@ -258,9 +253,7 @@ class TestRevisionHistory:
         assert latest.subject_id == "S-REV-002"
 
     @pytest.mark.asyncio
-    async def test_revision_increments(
-        self, fact_service: FactService, fact_setup: dict
-    ) -> None:
+    async def test_revision_increments(self, fact_service: FactService, fact_setup: dict) -> None:
         """修订号递增：create (rev 1) → revise (rev 2) → revise (rev 3)。"""
         command = _make_command(fact_setup, subject_id="S-INC-001")
         ref1 = await fact_service.create(command)
@@ -307,9 +300,7 @@ class TestRevisionHistory:
         ref2 = await fact_service.revise(ref1.fact_id, reason="修订")
 
         async with async_session_factory() as session:
-            link = await FactRepository.get_revision_link(
-                session, ref2.revision_id
-            )
+            link = await FactRepository.get_revision_link(session, ref2.revision_id)
         assert link is not None
         assert link.from_revision_id == ref2.revision_id
         assert link.to_revision_id == ref1.revision_id
@@ -325,9 +316,7 @@ class TestRevisionHistory:
         """修订不可变：旧修订数据在新修订后仍可查询且内容不变。"""
         command = _make_command(fact_setup, subject_id="S-IMM-001")
         ref1 = await fact_service.create(command)
-        await fact_service.revise(
-            ref1.fact_id, reason="修订", changes={"subject_id": "S-IMM-002"}
-        )
+        await fact_service.revise(ref1.fact_id, reason="修订", changes={"subject_id": "S-IMM-002"})
 
         # 旧修订 subject_id 不变
         old = await fact_service.get(ref1.fact_id, revision=1)
@@ -445,9 +434,7 @@ class TestListFacts:
     ) -> None:
         """创建多个事实 → 按 fact_type 过滤 → 正确子集。"""
         # 创建一个 experiment_run 事实
-        cmd_exp = _make_command(
-            fact_setup, subject_id="S-LIST-EXP", fact_type="experiment_run"
-        )
+        cmd_exp = _make_command(fact_setup, subject_id="S-LIST-EXP", fact_type="experiment_run")
         await fact_service.create(cmd_exp)
 
         # 创建一个 simulation_run 事实（需要不同模板）
@@ -498,17 +485,13 @@ class TestListFacts:
         await fact_service.create(cmd_sim)
 
         # 按 experiment_run 过滤
-        refs, _ = await fact_service.list_facts(
-            filters={"fact_type": "experiment_run"}
-        )
+        refs, _ = await fact_service.list_facts(filters={"fact_type": "experiment_run"})
         exp_subjects = [r.subject_id for r in refs]
         assert "S-LIST-EXP" in exp_subjects
         assert "S-LIST-SIM" not in exp_subjects
 
         # 按 simulation_run 过滤
-        refs_sim, _ = await fact_service.list_facts(
-            filters={"fact_type": "simulation_run"}
-        )
+        refs_sim, _ = await fact_service.list_facts(filters={"fact_type": "simulation_run"})
         sim_subjects = [r.subject_id for r in refs_sim]
         assert "S-LIST-SIM" in sim_subjects
         assert "S-LIST-EXP" not in sim_subjects

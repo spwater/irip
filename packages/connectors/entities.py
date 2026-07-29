@@ -81,9 +81,7 @@ class MappingProfile(Base):
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_kind: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_config: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     lock_version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -96,16 +94,11 @@ class MappingProfile(Base):
     created_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
 
     __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "name", name="uq_mapping_profile_org_name"
-        ),
+        sa.UniqueConstraint("organization_id", "name", name="uq_mapping_profile_org_name"),
     )
 
     def __repr__(self) -> str:
-        return (
-            f"MappingProfile(id={self.id!r}, name={self.name!r}, "
-            f"status={self.status!r})"
-        )
+        return f"MappingProfile(id={self.id!r}, name={self.name!r}, status={self.status!r})"
 
 
 class MappingProfileVersion(Base):
@@ -137,12 +130,8 @@ class MappingProfileVersion(Base):
     rules: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
     )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     lock_version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )

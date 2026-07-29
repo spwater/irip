@@ -45,9 +45,7 @@ class JobRepository:
     @staticmethod
     async def get(session: AsyncSession, job_id: UUID) -> Job | None:
         """按 ID 查询作业。"""
-        result = await session.execute(
-            sa.select(Job).where(Job.id == job_id)
-        )
+        result = await session.execute(sa.select(Job).where(Job.id == job_id))
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -95,9 +93,7 @@ class JobRepository:
 
         # 终态不可再更新（幂等保护）
         if status in TERMINAL_STATUSES:
-            conditions.append(
-                ~Job.status.in_([s.value for s in TERMINAL_STATUSES])
-            )
+            conditions.append(~Job.status.in_([s.value for s in TERMINAL_STATUSES]))
 
         stmt = sa.update(Job).values(**values).where(*conditions)
         exec_result: CursorResult[Any] = await session.execute(stmt)  # type: ignore[assignment]

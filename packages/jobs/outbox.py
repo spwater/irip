@@ -53,9 +53,7 @@ class OutboxEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    delivered_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    delivered_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -190,8 +188,7 @@ class OutboxDispatcher:
         """
         if self._task_sender is None:
             logger.warning(
-                "TaskSender not configured; skip dispatch for event %s "
-                "(will retry on next cycle)",
+                "TaskSender not configured; skip dispatch for event %s (will retry on next cycle)",
                 event.id,
             )
             return False
@@ -209,9 +206,7 @@ class OutboxDispatcher:
             )
             return True
         except Exception:
-            logger.exception(
-                "Failed to dispatch event %s", event.id
-            )
+            logger.exception("Failed to dispatch event %s", event.id)
             return False
 
     async def get_undelivered_count(self) -> int:
@@ -222,9 +217,7 @@ class OutboxDispatcher:
         """
         async with session_scope(self._factory) as session:
             result = await session.execute(
-                sa.select(sa.func.count(OutboxEvent.id)).where(
-                    OutboxEvent.delivered_at.is_(None)
-                )
+                sa.select(sa.func.count(OutboxEvent.id)).where(OutboxEvent.delivered_at.is_(None))
             )
             count: int = result.scalar() or 0
             return count
@@ -249,9 +242,7 @@ class OutboxDispatcher:
             from sqlalchemy.engine import CursorResult
 
             result = await session.execute(
-                sa.update(OutboxEvent)
-                .values(delivered_at=None)
-                .where(*conditions)
+                sa.update(OutboxEvent).values(delivered_at=None).where(*conditions)
             )
             typed_result: CursorResult[Any] = result  # type: ignore[assignment]
             return typed_result.rowcount

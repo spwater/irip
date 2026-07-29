@@ -407,10 +407,7 @@ def _collect_xlsx_files(fixture_dir: Path) -> tuple[Path, ...]:
     Returns:
         tuple[Path, ...]: XLSX 文件路径元组（按文件名排序）。
     """
-    files = sorted(
-        f for f in fixture_dir.iterdir()
-        if f.suffix == ".xlsx"
-    )
+    files = sorted(f for f in fixture_dir.iterdir() if f.suffix == ".xlsx")
     return tuple(files)
 
 
@@ -541,14 +538,11 @@ class TestParticleIngestion:
         # 加载 ground truth 验证 blocked 实验
         ground_truth = _load_ground_truth(fixture_dir)
         blocked_experiments = {
-            exp["id"]
-            for exp in ground_truth["experiments"]
-            if exp.get("self_check_failure", False)
+            exp["id"] for exp in ground_truth["experiments"] if exp.get("self_check_failure", False)
         }
         assert len(blocked_experiments) == 3
 
         # 验证 blocked 实验的 subject_id 匹配 ground truth
-        blocked_subjects = set()
         for r in blocked:
             if r.error is None:
                 # 通过 fact service 获取 subject_id
@@ -585,8 +579,7 @@ class TestParticleIngestion:
 
         # 统计 warning 数（非去重、非 blocked 的结果中 warnings > 0）
         warning_results = [
-            r for r in results
-            if not r.deduplicated and not r.blocked and r.warnings > 0
+            r for r in results if not r.deduplicated and not r.blocked and r.warnings > 0
         ]
         # 至少 2 个 warning（fixture 注入的 2 个 moisture warning）
         assert len(warning_results) >= 2
@@ -594,9 +587,7 @@ class TestParticleIngestion:
         # ground truth 中 moisture_warning 数量
         ground_truth = _load_ground_truth(fixture_dir)
         moisture_warning_experiments = {
-            exp["id"]
-            for exp in ground_truth["experiments"]
-            if exp.get("moisture_warning", False)
+            exp["id"] for exp in ground_truth["experiments"] if exp.get("moisture_warning", False)
         }
         assert len(moisture_warning_experiments) == 2
 

@@ -16,13 +16,13 @@ import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   apiGetFlowRun,
-  apiListObjects,
   apiPersistRunAsFact,
-  extractApiError,
   type ComponentSummary,
   type FlowNodeSchema,
   type FlowSummary,
-} from '@/api/client';
+} from '@/api/equipment-flows';
+import { apiListObjects } from '@/api/standards-objects';
+import { extractApiError } from '@/api/types';
 import { fmtTime } from './shared';
 import { FocusModal } from '@/components/ui';
 import { OceanPanel } from '@/components/ui';
@@ -95,12 +95,16 @@ export function FactModal({
   const persistFactMutation = useMutation({
     mutationFn: () => {
       // 解析编辑后的数据
-      let customData: { metadata: Record<string, unknown>; points: unknown[]; series: unknown[] } | undefined;
+      let customData: { metadata: Record<string, unknown>; points: { name: string; value: unknown; unit: string | null }[]; series: unknown[] } | undefined;
       try {
         const parsedHeader = JSON.parse(headerText);
         const parsedData = JSON.parse(dataText);
         if (parsedData && typeof parsedData === 'object' && !Array.isArray(parsedData)) {
-          customData = { metadata: parsedHeader, points: parsedData.points ?? [], series: parsedData.series ?? [] };
+          customData = {
+            metadata: parsedHeader as Record<string, unknown>,
+            points: (parsedData.points ?? []) as { name: string; value: unknown; unit: string | null }[],
+            series: (parsedData.series ?? []) as unknown[],
+          };
         }
       } catch {
         // 解析失败用原始数据
@@ -143,20 +147,8 @@ export function FactModal({
       title="执行结果数据"
       onCancel={onClose}
       width={720}
+      hideFooter
     >
-      {/* 底部操作区 */}
-      <Space style={{ width: '100%', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <Button onClick={onClose}>关闭</Button>
-        <Button
-          type="primary"
-          disabled={!factObjectId}
-          loading={persistFactMutation.isPending}
-          onClick={() => persistFactMutation.mutate()}
-        >
-          写入事实
-        </Button>
-      </Space>
-
       {/* 任务信息 */}
       <OceanPanel variant="default" padding="12px 16px" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px 24px' }}>
@@ -209,6 +201,18 @@ export function FactModal({
           marginTop: 4,
         }}
       />
+      {/* 底部操作区 */}
+      <Space style={{ width: '100%', justifyContent: 'flex-end', marginTop: 16 }}>
+        <Button onClick={onClose}>关闭</Button>
+        <Button
+          type="primary"
+          disabled={!factObjectId}
+          loading={persistFactMutation.isPending}
+          onClick={() => persistFactMutation.mutate()}
+        >
+          写入事实
+        </Button>
+      </Space>
     </FocusModal>
   );
 }

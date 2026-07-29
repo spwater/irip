@@ -50,9 +50,7 @@ def register(ctx: CompositionContext) -> None:
     from packages.parameters.service import ParameterService
 
     # 健康检查依赖
-    ctx.app.dependency_overrides[get_health_session_factory] = (
-        lambda: ctx.session_factory
-    )
+    ctx.app.dependency_overrides[get_health_session_factory] = lambda: ctx.session_factory
     ctx.app.dependency_overrides[get_redis_url] = lambda: ctx.redis_url
     ctx.app.dependency_overrides[get_s3_repo] = lambda: ctx.s3_repo
 
@@ -72,19 +70,13 @@ def register(ctx: CompositionContext) -> None:
     ctx.app.dependency_overrides[get_artifact_service] = _get_artifact_service
 
     # 治理路由用的 DB 会话工厂
-    ctx.app.dependency_overrides[get_governance_session_factory] = (
-        lambda: ctx.session_factory
-    )
+    ctx.app.dependency_overrides[get_governance_session_factory] = lambda: ctx.session_factory
 
     # 审计路由用的 DB 会话工厂
-    ctx.app.dependency_overrides[get_audit_session_factory] = (
-        lambda: ctx.session_factory
-    )
+    ctx.app.dependency_overrides[get_audit_session_factory] = lambda: ctx.session_factory
 
     # 备份/恢复路由用的 DB 会话工厂
-    ctx.app.dependency_overrides[get_backups_session_factory] = (
-        lambda: ctx.session_factory
-    )
+    ctx.app.dependency_overrides[get_backups_session_factory] = lambda: ctx.session_factory
 
     # 映射评分服务
     async def _get_mapping_service_dep(
@@ -110,9 +102,7 @@ def register(ctx: CompositionContext) -> None:
             actor_id=current_user.user_id,
         )
 
-    ctx.app.dependency_overrides[get_mapping_profile_service] = (
-        _get_mapping_profile_service_dep
-    )
+    ctx.app.dependency_overrides[get_mapping_profile_service] = _get_mapping_profile_service_dep
 
     # 数据源预览服务
     async def _get_ingestion_service_dep(
@@ -137,6 +127,4 @@ def register(ctx: CompositionContext) -> None:
             actor_id=current_user.user_id,
         )
 
-    ctx.app.dependency_overrides[get_parameter_service] = (
-        _get_parameter_service_dep
-    )
+    ctx.app.dependency_overrides[get_parameter_service] = _get_parameter_service_dep

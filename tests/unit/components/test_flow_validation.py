@@ -12,19 +12,16 @@
 无需数据库。
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-import jsonschema
 import pytest
 
-from packages.components.flows import FlowEdge, FlowNode
 from packages.components.flow_validation import (
     FlowValidationService,
-    ValidationResult,
 )
+from packages.components.flows import FlowEdge, FlowNode
 from packages.components.manifest import ComponentManifest
 from packages.components.sdk import PortSpec
-
 
 # ---- DAG 无环检测 ----
 
@@ -248,14 +245,10 @@ class TestCheckPortTypes:
         port_schemas = {
             "source@1.0.0": {
                 "inputs": [],
-                "outputs": [
-                    {"name": "out", "data_type": "dataset", "required": True}
-                ],
+                "outputs": [{"name": "out", "data_type": "dataset", "required": True}],
             },
             "target@1.0.0": {
-                "inputs": [
-                    {"name": "in", "data_type": "dataset", "required": True}
-                ],
+                "inputs": [{"name": "in", "data_type": "dataset", "required": True}],
                 "outputs": [],
             },
         }
@@ -267,9 +260,7 @@ class TestCheckPortTypes:
         )
         edges = (FlowEdge("src", "out", "tgt", "in"),)
 
-        result = await FlowValidationService.check_port_types(
-            nodes, edges, registry
-        )
+        result = await FlowValidationService.check_port_types(nodes, edges, registry)
 
         assert result.valid is True
         assert len(result.errors) == 0
@@ -280,14 +271,10 @@ class TestCheckPortTypes:
         port_schemas = {
             "source@1.0.0": {
                 "inputs": [],
-                "outputs": [
-                    {"name": "out", "data_type": "dataset", "required": True}
-                ],
+                "outputs": [{"name": "out", "data_type": "dataset", "required": True}],
             },
             "target@1.0.0": {
-                "inputs": [
-                    {"name": "in", "data_type": "report", "required": True}
-                ],
+                "inputs": [{"name": "in", "data_type": "report", "required": True}],
                 "outputs": [],
             },
         }
@@ -299,9 +286,7 @@ class TestCheckPortTypes:
         )
         edges = (FlowEdge("src", "out", "tgt", "in"),)
 
-        result = await FlowValidationService.check_port_types(
-            nodes, edges, registry
-        )
+        result = await FlowValidationService.check_port_types(nodes, edges, registry)
 
         assert result.valid is False
         assert any("类型不兼容" in e for e in result.errors)
@@ -312,14 +297,10 @@ class TestCheckPortTypes:
         port_schemas = {
             "source@1.0.0": {
                 "inputs": [],
-                "outputs": [
-                    {"name": "out", "data_type": "any", "required": True}
-                ],
+                "outputs": [{"name": "out", "data_type": "any", "required": True}],
             },
             "target@1.0.0": {
-                "inputs": [
-                    {"name": "in", "data_type": "report", "required": True}
-                ],
+                "inputs": [{"name": "in", "data_type": "report", "required": True}],
                 "outputs": [],
             },
         }
@@ -331,9 +312,7 @@ class TestCheckPortTypes:
         )
         edges = (FlowEdge("src", "out", "tgt", "in"),)
 
-        result = await FlowValidationService.check_port_types(
-            nodes, edges, registry
-        )
+        result = await FlowValidationService.check_port_types(nodes, edges, registry)
 
         assert result.valid is True
 
@@ -343,14 +322,10 @@ class TestCheckPortTypes:
         port_schemas = {
             "source@1.0.0": {
                 "inputs": [],
-                "outputs": [
-                    {"name": "out", "data_type": "dataset", "required": True}
-                ],
+                "outputs": [{"name": "out", "data_type": "dataset", "required": True}],
             },
             "target@1.0.0": {
-                "inputs": [
-                    {"name": "in", "data_type": "dataset", "required": True}
-                ],
+                "inputs": [{"name": "in", "data_type": "dataset", "required": True}],
                 "outputs": [],
             },
         }
@@ -362,9 +337,7 @@ class TestCheckPortTypes:
         )
         edges = (FlowEdge("src", "nonexistent", "tgt", "in"),)
 
-        result = await FlowValidationService.check_port_types(
-            nodes, edges, registry
-        )
+        result = await FlowValidationService.check_port_types(nodes, edges, registry)
 
         assert result.valid is False
         assert any("源端口不存在" in e for e in result.errors)
@@ -378,9 +351,7 @@ class TestCheckPortTypes:
         nodes = (FlowNode("src", "nonexistent", "1.0.0"),)
         edges: tuple[FlowEdge, ...] = ()
 
-        result = await FlowValidationService.check_port_types(
-            nodes, edges, registry
-        )
+        result = await FlowValidationService.check_port_types(nodes, edges, registry)
 
         assert result.valid is False
         assert any("组件不存在" in e for e in result.errors)

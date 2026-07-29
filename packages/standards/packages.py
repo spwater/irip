@@ -106,9 +106,7 @@ class StandardPackage(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     version_count: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -123,9 +121,7 @@ class StandardPackage(Base):
     )
 
     __table_args__ = (
-        sa.UniqueConstraint(
-            "organization_id", "code", name="uq_standard_package_org_code"
-        ),
+        sa.UniqueConstraint("organization_id", "code", name="uq_standard_package_org_code"),
     )
 
     def __repr__(self) -> str:
@@ -173,30 +169,16 @@ class StandardPackageVersion(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    variable_refs: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    method_refs: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    template_refs: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
-    quality_rule_refs: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    variable_refs: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+    method_refs: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+    template_refs: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
+    quality_rule_refs: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    published_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     published_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    deprecated_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    deprecated_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     deprecated_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    rejection_reason: Mapped[str | None] = mapped_column(
-        sa.Text, nullable=True
-    )
+    rejection_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -308,9 +290,7 @@ class PackageService:
             AppError: code="not_found"，当包不存在时。
             AppError: code="invalid_transition"，当包状态不允许修改时。
         """
-        await self._add_ref(
-            package_id, "variable_refs", variable_id, version
-        )
+        await self._add_ref(package_id, "variable_refs", variable_id, version)
 
     async def add_method_ref(
         self,
@@ -325,9 +305,7 @@ class PackageService:
             method_id: 方法 UUID。
             version: 方法版本号。
         """
-        await self._add_ref(
-            package_id, "method_refs", method_id, version
-        )
+        await self._add_ref(package_id, "method_refs", method_id, version)
 
     async def add_template_ref(
         self,
@@ -342,13 +320,9 @@ class PackageService:
             template_id: 模板 UUID。
             version: 模板版本号。
         """
-        await self._add_ref(
-            package_id, "template_refs", template_id, version
-        )
+        await self._add_ref(package_id, "template_refs", template_id, version)
 
-    async def submit_package(
-        self, package_id: UUID
-    ) -> PackageValidationReport:
+    async def submit_package(self, package_id: UUID) -> PackageValidationReport:
         """提交审核（DRAFT → IN_REVIEW），验证所有引用是否已发布。
 
         验证规则：
@@ -387,8 +361,7 @@ class PackageService:
             if not report.valid:
                 raise AppError(
                     code="validation_failed",
-                    message="包引用验证失败: "
-                    + "; ".join(report.codes),
+                    message="包引用验证失败: " + "; ".join(report.codes),
                     retryable=False,
                     fields={"codes": list(report.codes)},
                 )
@@ -401,8 +374,7 @@ class PackageService:
                 )
                 .where(
                     StandardPackageVersion.id == draft.id,
-                    StandardPackageVersion.lock_version
-                    == draft.lock_version,
+                    StandardPackageVersion.lock_version == draft.lock_version,
                 )
             )
 
@@ -422,9 +394,7 @@ class PackageService:
 
             return report
 
-    async def publish_package(
-        self, package_id: UUID
-    ) -> StandardPackageVersion:
+    async def publish_package(self, package_id: UUID) -> StandardPackageVersion:
         """发布包（IN_REVIEW → PUBLISHED），冻结所有引用。
 
         发布后包版本不可变，不能添加新引用。
@@ -462,8 +432,7 @@ class PackageService:
                 )
                 .where(
                     StandardPackageVersion.id == latest.id,
-                    StandardPackageVersion.lock_version
-                    == latest.lock_version,
+                    StandardPackageVersion.lock_version == latest.lock_version,
                 )
             )
 
@@ -481,15 +450,11 @@ class PackageService:
             )
 
             result = await session.execute(
-                sa.select(StandardPackageVersion).where(
-                    StandardPackageVersion.id == latest.id
-                )
+                sa.select(StandardPackageVersion).where(StandardPackageVersion.id == latest.id)
             )
             return result.scalar_one()
 
-    async def reject_package(
-        self, package_id: UUID, reason: str
-    ) -> StandardPackageVersion:
+    async def reject_package(self, package_id: UUID, reason: str) -> StandardPackageVersion:
         """拒绝包（IN_REVIEW → REJECTED，设置拒绝原因）。
 
         Args:
@@ -521,8 +486,7 @@ class PackageService:
                 )
                 .where(
                     StandardPackageVersion.id == latest.id,
-                    StandardPackageVersion.lock_version
-                    == latest.lock_version,
+                    StandardPackageVersion.lock_version == latest.lock_version,
                 )
             )
 
@@ -540,15 +504,11 @@ class PackageService:
             )
 
             result = await session.execute(
-                sa.select(StandardPackageVersion).where(
-                    StandardPackageVersion.id == latest.id
-                )
+                sa.select(StandardPackageVersion).where(StandardPackageVersion.id == latest.id)
             )
             return result.scalar_one()
 
-    async def deprecate_package(
-        self, package_id: UUID
-    ) -> StandardPackageVersion:
+    async def deprecate_package(self, package_id: UUID) -> StandardPackageVersion:
         """弃用包（PUBLISHED → DEPRECATED）。
 
         Args:
@@ -561,9 +521,7 @@ class PackageService:
             pkg = await self._get_and_check_org(session, package_id)
             assert_transition(pkg.status, StandardStatus.DEPRECATED)
 
-            published = await self._get_published_version(
-                session, package_id
-            )
+            published = await self._get_published_version(session, package_id)
             if published is None:
                 raise AppError(
                     code="not_found",
@@ -582,8 +540,7 @@ class PackageService:
                 )
                 .where(
                     StandardPackageVersion.id == published.id,
-                    StandardPackageVersion.lock_version
-                    == published.lock_version,
+                    StandardPackageVersion.lock_version == published.lock_version,
                 )
             )
 
@@ -601,9 +558,7 @@ class PackageService:
             )
 
             result = await session.execute(
-                sa.select(StandardPackageVersion).where(
-                    StandardPackageVersion.id == published.id
-                )
+                sa.select(StandardPackageVersion).where(StandardPackageVersion.id == published.id)
             )
             return result.scalar_one()
 
@@ -647,9 +602,7 @@ class PackageService:
             "created_at": pkg.created_at,
             "updated_at": pkg.updated_at,
             "lock_version": pkg.lock_version,
-            "latest_version": _package_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _package_version_to_dict(latest) if latest else None,
         }
 
     async def get_package(self, package_id: UUID) -> dict:
@@ -679,9 +632,7 @@ class PackageService:
             "created_at": pkg.created_at,
             "updated_at": pkg.updated_at,
             "lock_version": pkg.lock_version,
-            "latest_version": _package_version_to_dict(latest)
-            if latest
-            else None,
+            "latest_version": _package_version_to_dict(latest) if latest else None,
         }
 
     async def list_packages(
@@ -741,9 +692,7 @@ class PackageService:
                         "created_at": p.created_at,
                         "updated_at": p.updated_at,
                         "lock_version": p.lock_version,
-                        "latest_version": _package_version_to_dict(latest)
-                        if latest
-                        else None,
+                        "latest_version": _package_version_to_dict(latest) if latest else None,
                     }
                 )
 
@@ -795,9 +744,7 @@ class PackageService:
             draft = await self._get_or_create_draft_version(session, pkg)
 
             current_refs = getattr(draft, ref_column) or []
-            current_refs.append(
-                {"ref_id": str(ref_id), "version": version}
-            )
+            current_refs.append({"ref_id": str(ref_id), "version": version})
 
             await session.execute(
                 sa.update(StandardPackageVersion)
@@ -871,9 +818,7 @@ class PackageService:
     ) -> StandardPackage:
         """读取包并校验组织归属。"""
         result = await session.execute(
-            sa.select(StandardPackage).where(
-                StandardPackage.id == package_id
-            )
+            sa.select(StandardPackage).where(StandardPackage.id == package_id)
         )
         pkg = result.scalar_one_or_none()
         if pkg is None or pkg.organization_id != self._org_id:
@@ -978,13 +923,9 @@ def _package_version_to_dict(version: StandardPackageVersion) -> dict:
         "quality_rule_refs": version.quality_rule_refs or [],
         "status": version.status,
         "published_at": version.published_at,
-        "published_by": str(version.published_by)
-        if version.published_by
-        else None,
+        "published_by": str(version.published_by) if version.published_by else None,
         "deprecated_at": version.deprecated_at,
-        "deprecated_by": str(version.deprecated_by)
-        if version.deprecated_by
-        else None,
+        "deprecated_by": str(version.deprecated_by) if version.deprecated_by else None,
         "rejection_reason": version.rejection_reason,
         "created_at": version.created_at,
         "lock_version": version.lock_version,

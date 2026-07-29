@@ -39,18 +39,22 @@ class JobStatus(StrEnum):
 
 
 #: 终态集合（不可再转移）。
-TERMINAL_STATUSES: frozenset[JobStatus] = frozenset({
-    JobStatus.SUCCEEDED,
-    JobStatus.FAILED,
-    JobStatus.CANCELLED,
-})
+TERMINAL_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.SUCCEEDED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    }
+)
 
 #: 可被 worker 获取租约的状态集合（非终态且可执行）。
-LEASEABLE_STATUSES: frozenset[JobStatus] = frozenset({
-    JobStatus.ACCEPTED,
-    JobStatus.QUEUED,
-    JobStatus.RETRY_WAIT,
-})
+LEASEABLE_STATUSES: frozenset[JobStatus] = frozenset(
+    {
+        JobStatus.ACCEPTED,
+        JobStatus.QUEUED,
+        JobStatus.RETRY_WAIT,
+    }
+)
 
 
 class Job(Base):
@@ -84,23 +88,15 @@ class Job(Base):
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     idempotency_key: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    attempt: Mapped[int] = mapped_column(
-        sa.Integer, server_default=sa.text("0"), nullable=False
-    )
+    attempt: Mapped[int] = mapped_column(sa.Integer, server_default=sa.text("0"), nullable=False)
     max_attempts: Mapped[int] = mapped_column(
         sa.Integer, server_default=sa.text("3"), nullable=False
     )
-    run_after: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    run_after: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    lease_expires_at: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    lease_expires_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    last_error: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    last_error: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -113,10 +109,7 @@ class Job(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"Job(id={self.id!r}, kind={self.kind!r}, "
-            f"status={self.status!r})"
-        )
+        return f"Job(id={self.id!r}, kind={self.kind!r}, status={self.status!r})"
 
 
 @dataclass(frozen=True)

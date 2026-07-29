@@ -1,7 +1,7 @@
 import { Avatar, Typography } from 'antd';
 import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
-import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/client';
+import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { useEffect, useRef } from 'react';

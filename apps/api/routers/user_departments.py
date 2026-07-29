@@ -37,9 +37,7 @@ ManageUserDep = Annotated[CurrentUser, Depends(require_permission("user:manage")
 ReadUserDep = Annotated[CurrentUser, Depends(require_permission("department:read"))]
 
 #: UserDepartmentService 依赖类型别名。
-UserDepartmentServiceDep = Annotated[
-    UserDepartmentService, Depends(get_user_department_service)
-]
+UserDepartmentServiceDep = Annotated[UserDepartmentService, Depends(get_user_department_service)]
 
 
 # ---- 请求/响应模型 ----

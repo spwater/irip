@@ -17,7 +17,7 @@ import {
   apiSetUserDepartments,
   type DepartmentListItem,
   type DepartmentUser,
-} from '@/api/client';
+} from '@/api/departments';
 
 const { Text } = Typography;
 

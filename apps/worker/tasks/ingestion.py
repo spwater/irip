@@ -36,22 +36,18 @@ async def _process_ingestion_async(
     Returns:
         dict: 摄入结果摘要。
     """
-    from packages.common.database import build_session_factory
+    from packages.common.database import build_session_factory, session_scope
     from packages.connectors.ingestion_service import IngestionPipeline
     from packages.facts.quality import QualityEngine
     from packages.facts.service import FactService
     from packages.jobs.entities import Job, JobStatus
-    from packages.jobs.repository import JobRepository
-    from packages.common.database import session_scope
 
     db_url = os.getenv(
         "IRIP_DATABASE_URL",
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
@@ -61,15 +57,11 @@ async def _process_ingestion_async(
     organization_id = UUID(str(payload["organization_id"]))
     actor_id_str = payload.get("actor_id")
     actor_id = UUID(str(actor_id_str)) if actor_id_str else None
-    mapping_profile_version_id = UUID(
-        str(payload["mapping_profile_version_id"])
-    )
+    mapping_profile_version_id = UUID(str(payload["mapping_profile_version_id"]))
     template_version_id = UUID(str(payload["template_version_id"]))
     object_id = UUID(str(payload["object_id"]))
     method_version_id_str = payload.get("method_version_id")
-    method_version_id = (
-        UUID(str(method_version_id_str)) if method_version_id_str else None
-    )
+    method_version_id = UUID(str(method_version_id_str)) if method_version_id_str else None
 
     # 构建服务
     fact_service = FactService(
@@ -123,9 +115,7 @@ async def _process_ingestion_async(
     deduplicated_count = sum(1 for r in results if r.deduplicated)
     blocked_count = sum(1 for r in results if r.blocked)
     warning_count = sum(1 for r in results if r.warnings > 0 and not r.blocked)
-    success_count = total - blocked_count - sum(
-        1 for r in results if r.error is not None
-    )
+    success_count = total - blocked_count - sum(1 for r in results if r.error is not None)
 
     summary = {
         "total": total,
@@ -197,9 +187,7 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 

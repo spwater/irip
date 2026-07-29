@@ -55,9 +55,11 @@ class RobustEstimator:
             mad = statistics.median(abs_devs)
             mad_scaled = _MAD_CONSTANT * mad
 
-            q = statistics.quantiles(sorted_vals, n=4) if n >= 4 else [
-                sorted_vals[0], median, sorted_vals[-1]
-            ]
+            q = (
+                statistics.quantiles(sorted_vals, n=4)
+                if n >= 4
+                else [sorted_vals[0], median, sorted_vals[-1]]
+            )
             iqr = q[2] - q[0]
 
             # 截尾均值
@@ -66,7 +68,7 @@ class RobustEstimator:
                 trimmed = sorted_vals[trim_count : n - trim_count]
                 trimmed_mean = statistics.mean(trimmed)
             else:
-                trimmed_mean = mean = statistics.mean(values)
+                trimmed_mean = statistics.mean(values)
 
             robust_result[col] = {
                 "median": median,

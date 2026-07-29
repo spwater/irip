@@ -30,9 +30,7 @@ def get_authorization_service() -> AuthorizationService:
 
 
 #: AuthorizationService 依赖类型别名。
-AuthorizationServiceDep = Annotated[
-    AuthorizationService, Depends(get_authorization_service)
-]
+AuthorizationServiceDep = Annotated[AuthorizationService, Depends(get_authorization_service)]
 
 
 def require_permission(action: str):  # type: ignore[no-untyped-def]

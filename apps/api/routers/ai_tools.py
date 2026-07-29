@@ -18,12 +18,12 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.routers.components import ComponentRegistryServiceDep
 from packages.ai.tool_repository import AIToolRow, ToolRepository
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
@@ -66,9 +66,7 @@ class AIToolCreateRequest(BaseModel):
     )
     display_name: str = Field(..., max_length=128, description="中文显示名")
     description: str = Field(..., max_length=2000, description="工具描述")
-    required_permission: str = Field(
-        ..., max_length=64, description="执行此工具所需权限"
-    )
+    required_permission: str = Field(..., max_length=64, description="执行此工具所需权限")
     candidate: bool = Field(False, description="是否为候选工具（需审批）")
     parameters_schema: dict[str, Any] = Field(
         default_factory=dict, description="工具参数 JSON Schema"
@@ -91,6 +89,56 @@ class AIToolToggleRequest(BaseModel):
 
     enabled: bool
     lock_version: int = Field(..., description="乐观锁版本号")
+
+
+class UnifiedToolDTO(BaseModel):
+    """统一工具/插件 DTO（AI 工具 + 组件插件汇总）。
+
+    将 ``ai_tool`` 表的工具与 ``component`` 表的已发布组件汇总为统一格式，
+    供 AI 工具管理页面统一展示。
+
+    Attributes:
+        name: 工具/插件唯一键。
+        display_name: 显示名。
+        description: 描述。
+        source: 数据来源（``"ai_tool"`` 或 ``"component"``）。
+        enabled: 是否启用（AI 工具为真实状态；组件为 status==published）。
+        status: 状态字符串
+            （AI 工具: enabled/disabled；组件: published/deprecated）。
+        kind: 类型
+            （AI 工具: readonly/candidate；组件: ingestion 等）。
+        candidate: 是否为候选工具（仅 AI 工具有意义，组件固定 False）。
+        lock_version: 乐观锁版本号（仅 AI 工具有意义）。
+        updated_at: 更新时间 ISO 字符串。
+        updated_by: 最后修改人（仅 AI 工具有意义）。
+        required_permission: 所需权限（仅 AI 工具有意义）。
+        parameters_schema: 参数 JSON Schema（仅 AI 工具有意义）。
+        version: 组件版本号（仅组件有意义）。
+        runtime: 组件运行时类型（仅组件有意义）。
+    """
+
+    name: str
+    display_name: str
+    description: str
+    source: str = Field(..., description='"ai_tool" 或 "component"')
+    enabled: bool
+    status: str = Field(
+        ...,
+        description="AI 工具: enabled/disabled; 组件: published/deprecated",
+    )
+    kind: str = Field(..., description="AI 工具: readonly/candidate; 组件: ingestion 等")
+    candidate: bool = False
+    lock_version: int = 0
+    updated_at: str = ""
+    updated_by: str | None = None
+    required_permission: str = ""
+    parameters_schema: dict[str, Any] = Field(default_factory=dict)
+    version: str = ""
+    runtime: str = ""
+    component_id: str = Field(
+        default="", description="组件主表 UUID（仅组件有意义，用于归档/恢复操作）"
+    )
+    version_id: str = Field(default="", description="组件版本 UUID（仅组件有意义，用于编辑跳转）")
 
 
 # ---- 辅助函数 ----
@@ -117,6 +165,44 @@ def _to_dto(row: AIToolRow) -> AIToolDTO:
         updated_at=row.updated_at.isoformat() if row.updated_at else "",
         updated_by=str(row.updated_by) if row.updated_by else None,
     )
+
+
+def _parse_manifest_display_name(manifest_yaml: str) -> str:
+    """从 manifest YAML 提取 display_name 字段。
+
+    Args:
+        manifest_yaml: 组件清单 YAML 文本。
+
+    Returns:
+        str: display_name 值，未找到返回空字符串。
+    """
+    import re
+
+    match = re.search(
+        r'^display_name:\s*["\']?(.*?)["\']?\s*$',
+        manifest_yaml,
+        re.MULTILINE,
+    )
+    return match.group(1) if match else ""
+
+
+def _parse_manifest_description(manifest_yaml: str) -> str:
+    """从 manifest YAML 提取 description 字段。
+
+    Args:
+        manifest_yaml: 组件清单 YAML 文本。
+
+    Returns:
+        str: description 值，未找到返回空字符串。
+    """
+    import re
+
+    match = re.search(
+        r'^description:\s*["\']?(.*?)["\']?\s*$',
+        manifest_yaml,
+        re.MULTILINE,
+    )
+    return match.group(1) if match else ""
 
 
 def _row_to_audit_payload(row: AIToolRow) -> dict[str, Any]:
@@ -173,6 +259,85 @@ async def list_ai_tools(
     async with session_scope(_get_session_factory()) as session:
         rows = await ToolRepository.list_all(session)
         return [_to_dto(r) for r in rows]
+
+
+@ai_tools_router.get("/unified", response_model=list[UnifiedToolDTO])
+async def list_unified_tools(
+    current_user: ManageUserDep,
+    component_service: ComponentRegistryServiceDep,
+) -> list[UnifiedToolDTO]:
+    """列出统一工具/插件（AI 工具 + 组件插件汇总）。
+
+    汇总两个数据源：
+    - AI 工具白名单（``ai_tool`` 表全部工具）；
+    - 已发布组件（``component`` 表 kind=ingestion, status=published）。
+
+    组件插件在列表中只读展示，不可编辑/启用禁用。
+
+    Args:
+        current_user: 当前操作用户（需 ``system:manage`` 权限）。
+        component_service: 组件注册表服务（DI 注入）。
+
+    Returns:
+        list[UnifiedToolDTO]: 统一工具列表，按 name 排序。
+    """
+    # 1. AI 工具（ai_tool 表全部工具）
+    ai_tools: list[UnifiedToolDTO] = []
+    async with session_scope(_get_session_factory()) as session:
+        ai_rows = await ToolRepository.list_all(session)
+    for row in ai_rows:
+        ai_tools.append(
+            UnifiedToolDTO(
+                name=row.name,
+                display_name=row.display_name,
+                description=row.description,
+                source="ai_tool",
+                enabled=row.enabled,
+                status="enabled" if row.enabled else "disabled",
+                kind="candidate" if row.candidate else "readonly",
+                candidate=row.candidate,
+                lock_version=row.lock_version,
+                updated_at=row.updated_at.isoformat() if row.updated_at else "",
+                updated_by=str(row.updated_by) if row.updated_by else None,
+                required_permission=row.required_permission,
+                parameters_schema=row.parameters_schema,
+                version="",
+                runtime="",
+            )
+        )
+
+    # 2. 组件插件（kind=ingestion，含 published 和 deprecated）
+    components = await component_service.list(kind="ingestion")
+    component_items: list[UnifiedToolDTO] = []
+    for comp, ver in components:
+        display_name = _parse_manifest_display_name(ver.manifest_yaml) or comp.name
+        description = _parse_manifest_description(ver.manifest_yaml)
+        component_items.append(
+            UnifiedToolDTO(
+                name=comp.name,
+                display_name=display_name,
+                description=description,
+                source="component",
+                enabled=comp.status == "published",
+                status=comp.status,
+                kind=comp.kind,
+                candidate=False,
+                lock_version=0,
+                updated_at=comp.updated_at.isoformat() if comp.updated_at else "",
+                updated_by=None,
+                required_permission="",
+                parameters_schema={},
+                version=ver.version,
+                runtime=ver.runtime,
+                component_id=str(comp.id),
+                version_id=str(comp.active_version_id or ver.id),
+            )
+        )
+
+    # 合并并按 name 排序
+    all_tools = ai_tools + component_items
+    all_tools.sort(key=lambda t: t.name)
+    return all_tools
 
 
 @ai_tools_router.get("/{name}", response_model=AIToolDTO)
@@ -333,7 +498,5 @@ def set_session_factory(factory: Any) -> None:
 
 def _get_session_factory() -> Any:
     if _session_factory is None:
-        raise RuntimeError(
-            "Session factory not set. Call set_session_factory() first."
-        )
+        raise RuntimeError("Session factory not set. Call set_session_factory() first.")
     return _session_factory

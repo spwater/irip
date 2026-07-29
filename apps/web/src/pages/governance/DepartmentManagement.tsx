@@ -25,7 +25,7 @@ import {
   apiUpdateDepartment,
   apiUpdateDepartmentStatus,
   type DepartmentListItem,
-} from '@/api/client';
+} from '@/api/departments';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
 
@@ -226,7 +226,7 @@ export function DepartmentManagement({
 
   const handleEdit = async (record: DepartmentListItem): Promise<void> => {
     // 获取详情以拿到 lock_version + description + parent_id（列表项不含这些字段）
-    const { apiGetDepartment } = await import('@/api/client');
+    const { apiGetDepartment } = await import('@/api/departments');
     const detail = await apiGetDepartment(record.id);
     setEditingDept(record);
     form.setFieldsValue({
@@ -244,7 +244,7 @@ export function DepartmentManagement({
       const values = await form.validateFields();
       if (editingDept) {
         // 编辑：需要 lock_version，从详情接口获取
-        const { apiGetDepartment } = await import('@/api/client');
+        const { apiGetDepartment } = await import('@/api/departments');
         const detail = await apiGetDepartment(editingDept.id);
         updateMutation.mutate({
           id: editingDept.id,
@@ -273,7 +273,7 @@ export function DepartmentManagement({
   const handleToggleStatus = (record: DepartmentListItem): void => {
     // 需要获取 lock_version
     void (async () => {
-      const { apiGetDepartment } = await import('@/api/client');
+      const { apiGetDepartment } = await import('@/api/departments');
       const detail = await apiGetDepartment(record.id);
       statusMutation.mutate({
         id: record.id,

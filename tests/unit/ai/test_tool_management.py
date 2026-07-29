@@ -14,7 +14,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -22,9 +22,8 @@ from uuid import uuid4
 import pytest
 
 from packages.ai.tool_repository import AIToolRow, ToolRepository
-from packages.ai.tools import ALL_TOOLS, ToolRegistry, ToolSpec
+from packages.ai.tools import ALL_TOOLS, ToolRegistry
 from packages.common.errors import AppError
-
 
 # ============================================================
 # 辅助函数：构建测试用 AIToolRow
@@ -51,8 +50,8 @@ def _make_row(
         parameters_schema={"type": "object", "properties": {}},
         enabled=enabled,
         lock_version=lock_version,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         updated_by=None,
     )
 
@@ -95,9 +94,7 @@ class TestReloadFromDb:
             _make_row(name="tool_b", enabled=False),
             _make_row(name="tool_c", enabled=True, candidate=True),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         # _tools 包含全部 3 个（含禁用）
@@ -114,9 +111,7 @@ class TestReloadFromDb:
         assert len(registry.list_tools()) == 12
 
         rows = [_make_row(name="only_tool", enabled=True)]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         # 旧 12 个工具被替换为 1 个
@@ -130,9 +125,7 @@ class TestReloadFromDb:
             _make_row(name="enabled_tool", enabled=True),
             _make_row(name="disabled_tool", enabled=False),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         # list_tools() 返回全部（含禁用）
@@ -156,9 +149,7 @@ class TestReloadFromDb:
             candidate=True,
             enabled=True,
         )
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=[row]
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=[row]):
             await registry.reload_from_db(MagicMock())
 
         spec = registry.get("custom_tool")
@@ -182,9 +173,7 @@ class TestValidateDisabledTool:
         """禁用工具 validate() 抛 unknown_tool。"""
         registry = ToolRegistry()
         rows = [_make_row(name="my_tool", enabled=False)]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         with pytest.raises(AppError, match="已被禁用") as exc_info:
@@ -195,9 +184,7 @@ class TestValidateDisabledTool:
         """启用工具 validate() 正常返回 ToolSpec。"""
         registry = ToolRegistry()
         rows = [_make_row(name="my_tool", enabled=True)]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         spec = registry.validate("my_tool")
@@ -207,9 +194,7 @@ class TestValidateDisabledTool:
         """未知工具（不在 _tools 中）validate() 抛 unknown_tool。"""
         registry = ToolRegistry()
         rows = [_make_row(name="known_tool", enabled=True)]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         with pytest.raises(AppError, match="未知工具") as exc_info:
@@ -239,9 +224,7 @@ class TestEnabledFiltering:
             _make_row(name="b", enabled=False),
             _make_row(name="c", enabled=True),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         names = registry.enabled_names()
@@ -257,9 +240,7 @@ class TestEnabledFiltering:
             _make_row(name="a", enabled=True),
             _make_row(name="b", enabled=False),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         assert set(registry.names()) == set(registry.enabled_names())
@@ -272,9 +253,7 @@ class TestEnabledFiltering:
             _make_row(name="b", enabled=False),
             _make_row(name="c", enabled=True, candidate=True),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         enabled = registry.list_enabled_tools()
@@ -291,9 +270,7 @@ class TestEnabledFiltering:
             _make_row(name="a", enabled=True),
             _make_row(name="b", enabled=False),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         all_tools = registry.list_tools()
@@ -311,8 +288,8 @@ class TestBuildToolSchemas:
 
     async def test_build_schemas_excludes_disabled(self) -> None:
         """_build_tool_schemas 不为禁用工具生成 schema。"""
-        from packages.ai.service import AIService
         from packages.ai.offline_provider import OfflineProvider
+        from packages.ai.service import AIService
 
         registry = ToolRegistry()
         rows = [
@@ -331,9 +308,7 @@ class TestBuildToolSchemas:
                 enabled=False,
             ),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         service = AIService(
@@ -348,8 +323,8 @@ class TestBuildToolSchemas:
 
     async def test_build_schemas_format(self) -> None:
         """_build_tool_schemas 输出 OpenAI tools JSON schema 格式。"""
-        from packages.ai.service import AIService
         from packages.ai.offline_provider import OfflineProvider
+        from packages.ai.service import AIService
 
         registry = ToolRegistry()
         rows = [
@@ -361,9 +336,7 @@ class TestBuildToolSchemas:
                 enabled=True,
             ),
         ]
-        with patch.object(
-            ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows
-        ):
+        with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
 
         service = AIService(

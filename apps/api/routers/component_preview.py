@@ -29,9 +29,7 @@ from packages.common.artifacts import ArtifactService
 from packages.common.errors import AppError
 
 #: 路由实例。
-component_preview_router = APIRouter(
-    prefix="/api/v1/component-preview", tags=["component-preview"]
-)
+component_preview_router = APIRouter(prefix="/api/v1/component-preview", tags=["component-preview"])
 
 #: 需 flow:read 权限的当前用户依赖。
 ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
@@ -45,17 +43,20 @@ ArtifactServiceDep = Annotated[ArtifactService, Depends(get_artifact_service)]
 
 class PromptRecommendRequest(BaseModel):
     """提示词推荐请求。"""
+
     artifact_id: str = Field(..., description="预加载文件的 artifact ID")
     filename: str = Field(..., description="原始文件名（用于推断后缀）")
 
 
 class PromptRecommendResponse(BaseModel):
     """提示词推荐响应。"""
+
     prompt: str = Field(..., description="大模型生成的推荐提示词")
 
 
 class ExtractPreviewRequest(BaseModel):
     """数据抽取预览请求。"""
+
     artifact_id: str = Field(..., description="预加载文件的 artifact ID")
     filename: str = Field(..., description="原始文件名（用于推断后缀）")
     prompt: str = Field("", description="当前 LLM 提示词（xrd_tool 模式下可空）")
@@ -64,6 +65,7 @@ class ExtractPreviewRequest(BaseModel):
 
 class ExtractPreviewResponse(BaseModel):
     """数据抽取预览响应。"""
+
     result: str = Field(..., description="大模型返回的抽取结果（JSON 文本）")
 
 
@@ -116,7 +118,7 @@ def _extract_file_content(file_path: Path) -> str | list[str]:
 async def _call_llm(
     config: dict[str, str],
     messages: list[dict[str, Any]],
-    timeout: int = 120,
+    timeout: int = 120,  # noqa: ASYNC109
 ) -> str:
     """调用大模型，返回文本回答。
 
@@ -161,9 +163,7 @@ async def _call_llm(
 # ---- 端点 ----
 
 
-@component_preview_router.post(
-    "/prompt-recommend", response_model=PromptRecommendResponse
-)
+@component_preview_router.post("/prompt-recommend", response_model=PromptRecommendResponse)
 async def recommend_prompt(
     body: PromptRecommendRequest,
     current_user: ReadUserDep,
@@ -182,9 +182,7 @@ async def recommend_prompt(
         )
 
     # 下载文件
-    file_path = await _download_artifact(
-        artifact_service, body.artifact_id, body.filename
-    )
+    file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
     try:
         content = _extract_file_content(file_path)
     finally:
@@ -192,7 +190,9 @@ async def recommend_prompt(
 
     # 构建大模型请求：让 AI 分析文件并生成提示词
     is_image_mode = isinstance(content, list)
-    meta_prompt = (
+
+    # 优先从数据库读自定义 meta_prompt，没有才用内置默认
+    _default_meta_prompt = (
         "你是一个工业数据分析助手。请阅读上传文件的实际内容，"
         "并生成一段可直接使用的数据提取提示词，"
         "用于指导另一个大模型从该文件及同类文件中提取结构化数据。\n\n"
@@ -205,7 +205,7 @@ async def recommend_prompt(
         "2. 哪些字段属于报告级公共信息；\n"
         "3. 哪些字段属于单值检测指标；\n"
         "4. 哪些数据属于连续多行、重复测量、分布曲线或成组结果；\n"
-        "5. 是否存在合并单元格、空白继承、横向宽表、纵向长表、重复表头、单位列或单位写在字段名中的情况；\n"
+        "5. 是否存在合并单元格、空白继承、横向宽表、纵向长表、重复表头、单位列或单位写在字段名中的情况；\n"  # noqa: E501
         "6. 是否存在文本、空值、异常字符或数字与文本混合的结果。\n\n"
         "你生成的提示词必须包含以下内容：\n\n"
         "一、角色设定\n"
@@ -214,7 +214,7 @@ async def recommend_prompt(
         "要求另一个模型根据当前文件实际结构执行以下分类：\n\n"
         "* metadata：仅存放报告级单值信息，例如委托单号、样品名称、客户名称、申请日期、检测日期、"
         "设备、试验员、检查项目、文件名等。\n"
-        '* points：存放独立的单值检测指标，每项格式为：\n'
+        "* points：存放独立的单值检测指标，每项格式为：\n"
         '  {"name": "实际指标名称", "value": 实际值, "unit": "实际单位或空字符串"}\n'
         "* series：存放具有多行、多列、重复测量、连续序列或分组关系的数据，每项格式为：\n"
         '  {"name": "实际序列名称", "columns": ["实际列名"], "rows": [[实际值]]}\n\n'
@@ -223,8 +223,8 @@ async def recommend_prompt(
         "2. 一个指标只有一个结果时，通常放入 points。\n"
         "3. 同一指标对应多个连续结果、多个测点、多个时间点或多次重复测量时，"
         "应整体放入 series，不得拆成互不相关的单值。\n"
-        "4. 多行表格、粒径分布、元素含量、时间序列、曲线数据、工况数据及成组试验结果均放入 series。\n"
-        "5. 若多个连续结果由合并的\"检测项名称\"或分组标签共同标识，应向下继承该名称，并保留原始顺序。\n"
+        "4. 多行表格、粒径分布、元素含量、时间序列、曲线数据、工况数据及成组试验结果均放入 series。\n"  # noqa: E501
+        '5. 若多个连续结果由合并的"检测项名称"或分组标签共同标识，应向下继承该名称，并保留原始顺序。\n'  # noqa: E501
         "6. 若一组数据只有一个结果列，也应作为单列序列提取，不得因缺少第二列而丢弃。\n"
         "7. 若表格为横向宽表，应根据字段对应关系转换为合理的点或序列，但不得改变数据含义。\n"
         "8. 文件中存在多个独立表格或多个工作表时，应分别生成多个 series，不得强行合并。\n"
@@ -267,15 +267,30 @@ async def recommend_prompt(
         "最终只返回你生成的数据提取提示词本身，不要解释，不要添加任何额外说明。"
     )
 
+    # 从数据库读自定义 meta_prompt
+    meta_prompt = _default_meta_prompt
+    try:
+        ai_cfg = await get_active_ai_config()
+        if ai_cfg and ai_cfg.get("meta_prompt"):
+            meta_prompt = ai_cfg["meta_prompt"].replace("{body.filename}", body.filename)
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "读取自定义 meta_prompt 失败，使用内置默认", exc_info=True
+        )  # noqa: E501
+
     if is_image_mode:
         user_content: list[dict[str, Any]] = [
             {"type": "text", "text": meta_prompt},
         ]
         for img_data_url in content:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": img_data_url},
-            })
+            user_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": img_data_url},
+                }
+            )
         messages = [{"role": "user", "content": user_content}]
     else:
         messages = [
@@ -289,9 +304,7 @@ async def recommend_prompt(
     return PromptRecommendResponse(prompt=answer)
 
 
-@component_preview_router.post(
-    "/extract-preview", response_model=ExtractPreviewResponse
-)
+@component_preview_router.post("/extract-preview", response_model=ExtractPreviewResponse)
 async def extract_preview(
     body: ExtractPreviewRequest,
     current_user: ReadUserDep,
@@ -304,15 +317,15 @@ async def extract_preview(
     """
     # XRD 工具模式：直接调 Python 解析器，不走 LLM
     if body.tool_type == "xrd_tool":
-        file_path = await _download_artifact(
-            artifact_service, body.artifact_id, body.filename
-        )
+        file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
         try:
             import asyncio
             import json
+
             from packages.components.builtin.ingestion.xrd_converter.convert import (
                 convert_xrd_file_to_json,
             )
+
             result = await asyncio.to_thread(convert_xrd_file_to_json, str(file_path))
             return ExtractPreviewResponse(result=json.dumps(result, ensure_ascii=False, indent=2))
         finally:
@@ -328,9 +341,7 @@ async def extract_preview(
         )
 
     # 下载文件
-    file_path = await _download_artifact(
-        artifact_service, body.artifact_id, body.filename
-    )
+    file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
     try:
         content = _extract_file_content(file_path)
     finally:
@@ -343,10 +354,12 @@ async def extract_preview(
             {"type": "text", "text": f"{body.prompt}\n\n请根据以下图片内容提取数据。"},
         ]
         for img_data_url in content:
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": img_data_url},
-            })
+            user_content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {"url": img_data_url},
+                }
+            )
         messages = [{"role": "user", "content": user_content}]
     else:
         user_message = f"{body.prompt}\n\n文件内容：\n{content[:50000]}"

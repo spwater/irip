@@ -72,15 +72,17 @@ class MADOutliers:
                     z_score = abs(float(val) - median) / scaled_mad
                     if z_score > threshold:
                         outlier_count += 1
-                        row_annotations.append({
-                            "row_index": row_idx,
-                            "column": col,
-                            "value": float(val),
-                            "median": median,
-                            "mad": mad,
-                            "z_score": z_score,
-                            "status": "outlier",
-                        })
+                        row_annotations.append(
+                            {
+                                "row_index": row_idx,
+                                "column": col,
+                                "value": float(val),
+                                "median": median,
+                                "mad": mad,
+                                "z_score": z_score,
+                                "status": "outlier",
+                            }
+                        )
                 row_idx += 1
 
         # 输出表 = 原表 + 异常标记列
@@ -93,17 +95,13 @@ class MADOutliers:
         new_rows: list[dict[str, Any]] = []
         outlier_map: dict[int, set[str]] = {}
         for ann in row_annotations:
-            outlier_map.setdefault(ann["row_index"], set()).add(
-                ann["column"]
-            )
+            outlier_map.setdefault(ann["row_index"], set()).add(ann["column"])
 
         for idx, row in enumerate(table.rows):
             new_row = dict(row)
             for col in columns:
                 flag_col = f"{col}_outlier"
-                new_row[flag_col] = (
-                    idx in outlier_map and col in outlier_map[idx]
-                )
+                new_row[flag_col] = idx in outlier_map and col in outlier_map[idx]
             new_rows.append(new_row)
 
         result_table = ObservationTable(

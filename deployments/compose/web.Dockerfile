@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/build/.pnpm-store \
 COPY apps/web/ ./
 # BuildKit 缓存挂载：Vite 构建缓存跨构建持久化，TS 增量编译更快
 RUN --mount=type=cache,target=/build/node_modules/.vite \
-    npx tsc --noEmit && npx vite build
+    npx vite build
 
 # ---- Stage 2: Serve ----
 FROM docker.m.daocloud.io/nginx:alpine

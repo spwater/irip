@@ -17,15 +17,14 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateUser,
   apiDeleteUser,
-  apiListDepartments,
   apiListUsers,
   apiRemoveRole,
   apiUpdateUser,
   apiUpdateUserStatus,
-  extractApiError,
-  type DepartmentListItem,
   type UserListItem,
-} from '@/api/client';
+} from '@/api/governance';
+import { apiListDepartments, type DepartmentListItem } from '@/api/departments';
+import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { ActionBar, DataTableShell } from '@/components/ui';
 

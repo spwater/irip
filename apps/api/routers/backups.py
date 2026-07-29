@@ -70,23 +70,15 @@ BackupsSessionFactoryDep = Annotated[
 class CreateBackupRequest(BaseModel):
     """创建备份作业请求体。"""
 
-    output_dir: str | None = Field(
-        None, description="备份输出目录（留空则使用默认路径）"
-    )
-    encrypt: bool = Field(
-        False, description="是否加密备份包（需配置 age recipient）"
-    )
+    output_dir: str | None = Field(None, description="备份输出目录（留空则使用默认路径）")
+    encrypt: bool = Field(False, description="是否加密备份包（需配置 age recipient）")
 
 
 class CreateRestoreRequest(BaseModel):
     """创建恢复作业请求体。"""
 
-    backup_dir: str = Field(
-        ..., description="备份目录路径（含 manifest.json）"
-    )
-    skip_migrations: bool = Field(
-        False, description="是否跳过迁移步骤"
-    )
+    backup_dir: str = Field(..., description="备份目录路径（含 manifest.json）")
+    skip_migrations: bool = Field(False, description="是否跳过迁移步骤")
 
 
 class BackupJobResponse(BaseModel):
@@ -237,9 +229,7 @@ async def list_backups(
     """
     async with session_factory() as session:
         stmt = (
-            sa.select(Job)
-            .where(Job.kind.in_(BACKUP_RESTORE_KINDS))
-            .order_by(Job.created_at.desc())
+            sa.select(Job).where(Job.kind.in_(BACKUP_RESTORE_KINDS)).order_by(Job.created_at.desc())
         )
 
         if kind is not None:
@@ -301,9 +291,7 @@ async def get_backup_detail(
         AppError: code="not_found"，当作业不存在或非备份/恢复类型时。
     """
     async with session_factory() as session:
-        job: Job | None = await session.scalar(
-            sa.select(Job).where(Job.id == job_id)
-        )
+        job: Job | None = await session.scalar(sa.select(Job).where(Job.id == job_id))
         if job is None:
             raise AppError(
                 code="not_found",

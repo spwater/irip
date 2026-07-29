@@ -81,9 +81,7 @@ class ModelTrainComponent:
             if exc.code == "conflict":
                 # 模型已存在，获取已有模型
                 models = await model_service.list_models()
-                existing = next(
-                    (m for m in models if m.code == code), None
-                )
+                existing = next((m for m in models if m.code == code), None)
                 if existing is None:
                     raise
                 model_id = existing.id
@@ -91,9 +89,7 @@ class ModelTrainComponent:
                 raise
 
         # 提交验证
-        version = await model_service.submit_for_validation(
-            model_id, version_id
-        )
+        version = await model_service.submit_for_validation(model_id, version_id)
 
         return ComponentResult(
             outputs={

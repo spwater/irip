@@ -11,13 +11,14 @@
 - complete 端点校验 S3 对象的 SHA-256 与 size。
 """
 
+import os
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.artifacts import (
     ALLOWED_MEDIA_TYPES,
@@ -32,21 +33,15 @@ uploads_router = APIRouter(prefix="/api/v1", tags=["artifacts"])
 artifacts_router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
 
 #: 需 artifact:upload 权限的当前用户依赖。
-UploadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("artifact:upload"))
-]
+UploadUserDep = Annotated[CurrentUser, Depends(require_permission("artifact:upload"))]
 
 #: 需 artifact:download 权限的当前用户依赖。
-DownloadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("artifact:download"))
-]
+DownloadUserDep = Annotated[CurrentUser, Depends(require_permission("artifact:download"))]
 
 
 def get_artifact_service() -> ArtifactService:
     """获取 ArtifactService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_artifact_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_artifact_service must be overridden via dependency_overrides")
 
 
 ArtifactServiceDep = Annotated[ArtifactService, Depends(get_artifact_service)]
@@ -135,8 +130,7 @@ async def presign_upload(
         raise AppError(
             code="file_too_large",
             message=(
-                f"文件大小 {body.size_bytes} 超过上限 "
-                f"{MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
+                f"文件大小 {body.size_bytes} 超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
             ),
             retryable=False,
             fields={
@@ -145,13 +139,9 @@ async def presign_upload(
             },
         )
 
-    # 从请求 Host header 构建外部端点
-    host = request.headers.get("host", "localhost:9000")
-    if ":" in host:
-        host_base = host.rsplit(":", 1)[0]
-    else:
-        host_base = host
-    minio_external = f"http://{host_base}:9000"
+    # 从请求 Host header 构建外部端点，fallback 用环境变量配置的 MinIO 地址
+    minio_endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+    minio_external = minio_endpoint
 
     artifact_id = new_id()
     object_key = f"uploads/{artifact_id}"
@@ -209,9 +199,7 @@ async def complete_upload(
     )
 
 
-@artifacts_router.get(
-    "/{artifact_id}/download", response_model=DownloadResponse
-)
+@artifacts_router.get("/{artifact_id}/download", response_model=DownloadResponse)
 async def download_artifact(
     artifact_id: UUID,
     request: Request,

@@ -26,13 +26,8 @@ import {
   apiListRecipes,
   apiPublishRecipe,
   apiReplayDerivation,
-  extractApiError,
-  type DerivationRun,
-  type EvidenceSet,
-  type ProvenanceEdge,
-  type ProvenanceNode,
-  type Recipe,
-} from '@/api/client';
+} from '@/api/facts-provenance';
+import { extractApiError, type DerivationRun, type EvidenceSet, type ProvenanceEdge, type ProvenanceNode, type Recipe } from '@/api/types';
 
 const { Title, Text } = Typography;
 

@@ -8,7 +8,6 @@
 - columns: 数值列名列表（必填）。
 """
 
-import math
 import statistics
 from typing import Any
 
@@ -56,15 +55,8 @@ class Descriptive:
 
             # 偏度与峰度
             if n > 2 and std > 0:
-                skew = (
-                    sum((x - mean) ** 3 for x in values)
-                    / (n * std ** 3)
-                )
-                kurt = (
-                    sum((x - mean) ** 4 for x in values)
-                    / (n * std ** 4)
-                    - 3.0
-                )
+                skew = sum((x - mean) ** 3 for x in values) / (n * std**3)
+                kurt = sum((x - mean) ** 4 for x in values) / (n * std**4) - 3.0
             else:
                 skew = 0.0
                 kurt = 0.0

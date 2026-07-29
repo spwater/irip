@@ -8,7 +8,6 @@ export {
   type FactSummary,
   type FactDetail,
   type FactRevision,
-  type FactData,
   type RawObservation,
   type NormalizedObservation,
   type ObservationsResponse,
@@ -19,10 +18,11 @@ export {
   type Recipe,
   type DerivationRun,
   type DerivationRunOutput,
-} from './client';
+} from './types';
 
 // Facts API functions
 export {
+  type FactData,
   apiCreateFact,
   apiListFacts,
   apiSearchFacts,
@@ -31,7 +31,7 @@ export {
   apiGetFactRevision,
   apiGetFactObservations,
   apiGetFactData,
-} from './client';
+} from './facts-provenance';
 
 // Provenance API functions
 export {
@@ -43,4 +43,4 @@ export {
   apiGetRecipe,
   apiGetDerivationRun,
   apiGetProvenanceGraph,
-} from './client';
+} from './facts-provenance';

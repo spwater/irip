@@ -230,7 +230,5 @@ def compute_flow_digest(
         "edges": edges_to_json(edges),
         "random_seed": random_seed,
     }
-    canonical: str = json.dumps(
-        payload, sort_keys=True, ensure_ascii=False
-    )
+    canonical: str = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

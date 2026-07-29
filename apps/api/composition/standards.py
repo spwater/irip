@@ -70,9 +70,7 @@ def register(ctx: CompositionContext) -> None:
             actor_id=current_user.user_id,
         )
 
-    ctx.app.dependency_overrides[get_object_graph_service] = (
-        _get_object_graph_service_dep
-    )
+    ctx.app.dependency_overrides[get_object_graph_service] = _get_object_graph_service_dep
 
     # 事实模板服务
     async def _get_template_service_dep(
@@ -147,6 +145,4 @@ def register(ctx: CompositionContext) -> None:
             organization_id=org_id,
         )
 
-    ctx.app.dependency_overrides[get_user_department_service] = (
-        _get_user_department_service_dep
-    )
+    ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep

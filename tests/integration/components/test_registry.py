@@ -21,13 +21,9 @@ from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
 
-
 #: JSON Schema 路径（相对项目根目录）。
 SCHEMA_PATH: Path = (
-    Path(__file__).resolve().parents[3]
-    / "schemas"
-    / "component-manifest"
-    / "v1.schema.json"
+    Path(__file__).resolve().parents[3] / "schemas" / "component-manifest" / "v1.schema.json"
 )
 
 #: 有效清单 YAML — ingestion 组件 v1。
@@ -96,9 +92,7 @@ def validator() -> ManifestValidator:
 @pytest.fixture
 def fixed_clock() -> FixedClock:
     """固定时钟（确定性测试）。"""
-    return FixedClock(
-        instant=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
-    )
+    return FixedClock(instant=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC))
 
 
 @pytest.fixture
@@ -176,9 +170,7 @@ class TestPublishComponent:
         manifest1 = validator.validate(VALID_YAML_INGESTION)
         await registry_service.publish(manifest1)
 
-        mismatched_yaml = VALID_YAML_INGESTION.replace(
-            "kind: ingestion", "kind: transform"
-        )
+        mismatched_yaml = VALID_YAML_INGESTION.replace("kind: ingestion", "kind: transform")
         manifest2 = validator.validate(mismatched_yaml)
         with pytest.raises(AppError) as exc_info:
             await registry_service.publish(manifest2)
@@ -198,9 +190,7 @@ class TestGetComponent:
         manifest = validator.validate(VALID_YAML_INGESTION)
         await registry_service.publish(manifest)
 
-        version = await registry_service.get(
-            "csv_ingestion", "1.0.0"
-        )
+        version = await registry_service.get("csv_ingestion", "1.0.0")
         assert version.version == "1.0.0"
         assert version.manifest_sha256 == manifest.sha256
 
@@ -235,9 +225,7 @@ class TestGetComponent:
         manifest = validator.validate(VALID_YAML_INGESTION)
         version = await registry_service.publish(manifest)
 
-        comp, ver = await registry_service.get_version_by_id(
-            version.id
-        )
+        comp, ver = await registry_service.get_version_by_id(version.id)
         assert comp.name == "csv_ingestion"
         assert ver.version == "1.0.0"
         assert ver.id == version.id
@@ -264,12 +252,8 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """列出所有组件。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
-        await registry_service.publish(
-            validator.validate(VALID_YAML_TRANSFORM)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
+        await registry_service.publish(validator.validate(VALID_YAML_TRANSFORM))
 
         items = await registry_service.list()
         assert len(items) == 2
@@ -280,15 +264,9 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """按 kind 过滤。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
-        await registry_service.publish(
-            validator.validate(VALID_YAML_TRANSFORM)
-        )
-        await registry_service.publish(
-            validator.validate(VALID_YAML_QUALITY)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
+        await registry_service.publish(validator.validate(VALID_YAML_TRANSFORM))
+        await registry_service.publish(validator.validate(VALID_YAML_QUALITY))
 
         items = await registry_service.list(kind="ingestion")
         assert len(items) == 1
@@ -307,9 +285,7 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """按 status 过滤。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         await registry_service.deprecate("csv_ingestion")
 
         items = await registry_service.list(status="deprecated")
@@ -334,12 +310,8 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """同一组件多版本均出现在列表中。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION_V2)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION_V2))
 
         items = await registry_service.list()
         assert len(items) == 2
@@ -358,9 +330,7 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃已发布组件。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
 
         component = await registry_service.deprecate("csv_ingestion")
         assert component.status == "deprecated"
@@ -380,9 +350,7 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃后仍可通过 status=deprecated 列出。"""
-        await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         await registry_service.deprecate("csv_ingestion")
 
         items = await registry_service.list(status="deprecated")

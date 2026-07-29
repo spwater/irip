@@ -88,7 +88,7 @@ async def get_current_user(
             retryable=False,
             fields={},
         )
-    token = authorization[len("Bearer "):]
+    token = authorization[len("Bearer ") :]
     try:
         payload = decode_access_token(token, token_secret)
     except jwt.ExpiredSignatureError as exc:

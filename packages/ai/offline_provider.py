@@ -16,7 +16,7 @@ OfflineProvider 不调用任何外部 API，基于关键词匹配返回预设回
 """
 
 from packages.ai.citations import Citation
-from packages.ai.providers import AIProvider, AIRequest, AIResponse
+from packages.ai.providers import AIRequest, AIResponse
 
 
 class OfflineProvider:

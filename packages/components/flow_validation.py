@@ -82,31 +82,22 @@ class FlowValidationService:
             seen_ids[node.node_id] = seen_ids.get(node.node_id, 0) + 1
         for node_id, count in seen_ids.items():
             if count > 1:
-                errors.append(
-                    f"节点 ID 重复: {node_id}（出现 {count} 次）"
-                )
+                errors.append(f"节点 ID 重复: {node_id}（出现 {count} 次）")
 
         valid_node_ids: set[str] = set(seen_ids.keys())
 
         # ---- 2. 边引用的节点是否存在 ----
         for edge in edge_list:
             if edge.source_node not in valid_node_ids:
-                errors.append(
-                    f"边引用的源节点不存在: {edge.source_node}"
-                )
+                errors.append(f"边引用的源节点不存在: {edge.source_node}")
             if edge.target_node not in valid_node_ids:
-                errors.append(
-                    f"边引用的目标节点不存在: {edge.target_node}"
-                )
+                errors.append(f"边引用的目标节点不存在: {edge.target_node}")
             if (
                 edge.source_node in valid_node_ids
                 and edge.target_node in valid_node_ids
                 and edge.source_node == edge.target_node
             ):
-                errors.append(
-                    f"自环边不允许: {edge.source_node} → "
-                    f"{edge.target_node}"
-                )
+                errors.append(f"自环边不允许: {edge.source_node} → {edge.target_node}")
 
         # 过滤掉引用不存在节点的边（避免后续分析出错）
         valid_edges: list[FlowEdge] = [
@@ -118,20 +109,14 @@ class FlowValidationService:
         ]
 
         # ---- 3. Kahn 拓扑排序 + 环检测 ----
-        in_degree: dict[str, int] = {
-            n.node_id: 0 for n in node_list
-        }
-        adjacency: dict[str, list[str]] = {
-            n.node_id: [] for n in node_list
-        }
+        in_degree: dict[str, int] = {n.node_id: 0 for n in node_list}
+        adjacency: dict[str, list[str]] = {n.node_id: [] for n in node_list}
 
         for edge in valid_edges:
             adjacency[edge.source_node].append(edge.target_node)
             in_degree[edge.target_node] += 1
 
-        queue: list[str] = [
-            nid for nid, deg in in_degree.items() if deg == 0
-        ]
+        queue: list[str] = [nid for nid, deg in in_degree.items() if deg == 0]
         sorted_count: int = 0
 
         while queue:
@@ -143,13 +128,8 @@ class FlowValidationService:
                     queue.append(neighbor)
 
         if sorted_count != len(node_list):
-            cycle_nodes: list[str] = [
-                nid for nid, deg in in_degree.items() if deg > 0
-            ]
-            errors.append(
-                f"流程存在环（DAG 校验失败），"
-                f"涉及节点: {sorted(cycle_nodes)}"
-            )
+            cycle_nodes: list[str] = [nid for nid, deg in in_degree.items() if deg > 0]
+            errors.append(f"流程存在环（DAG 校验失败），涉及节点: {sorted(cycle_nodes)}")
 
         # ---- 4. 警告：孤立节点 ----
         connected: set[str] = set()
@@ -158,10 +138,7 @@ class FlowValidationService:
             connected.add(edge.target_node)
         for node in node_list:
             if node.node_id not in connected:
-                warnings.append(
-                    f"节点 {node.node_id} 无任何输入/输出边"
-                    f"（孤立节点）"
-                )
+                warnings.append(f"节点 {node.node_id} 无任何输入/输出边（孤立节点）")
 
         return ValidationResult(
             valid=len(errors) == 0,
@@ -213,12 +190,12 @@ class FlowValidationService:
 
         # 校验每条边的端口类型兼容性
         for edge in edge_list:
-            source_ports: list[dict[str, Any]] = node_ports.get(
-                edge.source_node, {}
-            ).get("outputs", [])
-            target_ports: list[dict[str, Any]] = node_ports.get(
-                edge.target_node, {}
-            ).get("inputs", [])
+            source_ports: list[dict[str, Any]] = node_ports.get(edge.source_node, {}).get(
+                "outputs", []
+            )
+            target_ports: list[dict[str, Any]] = node_ports.get(edge.target_node, {}).get(
+                "inputs", []
+            )
 
             source_port: dict[str, Any] | None = next(
                 (p for p in source_ports if p["name"] == edge.source_port),
@@ -248,11 +225,7 @@ class FlowValidationService:
             target_type: str = target_port.get("data_type", "")
 
             # 类型兼容：相同类型或源为 "any"
-            if (
-                source_type != target_type
-                and source_type != "any"
-                and target_type != "any"
-            ):
+            if source_type != target_type and source_type != "any" and target_type != "any":
                 errors.append(
                     f"端口类型不兼容: "
                     f"{edge.source_node}:{edge.source_port}"
@@ -293,18 +266,12 @@ class FlowValidationService:
             try:
                 jsonschema.validate(instance=node.params, schema=schema)
             except jsonschema.ValidationError as exc:
-                errors.append(
-                    f"节点 {node.node_id} 参数校验失败: "
-                    f"{exc.message}"
-                )
+                errors.append(f"节点 {node.node_id} 参数校验失败: {exc.message}")
 
         # ---- 2. 必需输入端口绑定检查 ----
         for port in manifest.inputs:
             if port.required and port.name not in node.input_bindings:
-                errors.append(
-                    f"节点 {node.node_id} 必需输入端口 "
-                    f"'{port.name}' 未绑定"
-                )
+                errors.append(f"节点 {node.node_id} 必需输入端口 '{port.name}' 未绑定")
 
         # ---- 3. 警告：未使用的可选输出端口 ----
         bound_targets: set[str] = set()
@@ -314,8 +281,7 @@ class FlowValidationService:
             output_ref = f"{node.node_id}:{port.name}"
             if port.required and output_ref not in bound_targets:
                 warnings.append(
-                    f"节点 {node.node_id} 的必需输出端口 "
-                    f"'{port.name}' 未被任何下游节点引用"
+                    f"节点 {node.node_id} 的必需输出端口 '{port.name}' 未被任何下游节点引用"
                 )
 
         return ValidationResult(
