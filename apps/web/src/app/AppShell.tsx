@@ -86,35 +86,50 @@ export function AppShell(): JSX.Element | null {
           >
             <div
               style={{
-                height: 56,
+                minHeight: 88,
                 display: 'flex',
                 alignItems: 'center',
-                padding: '0 20px',
-                gap: 10,
+                padding: '12px 20px',
+                gap: 8,
                 borderBottom: '1px solid var(--ocean-border-subtle)',
               }}
             >
               <span
                 style={{
-                  fontSize: 20,
+                  fontSize: 22,
                   fontWeight: 700,
                   letterSpacing: 1,
                   color: 'var(--ocean-action-primary)',
+                  lineHeight: 1,
                 }}
               >
                 IRIP
               </span>
-              <span
-                style={{
-                  fontSize: 10,
-                  letterSpacing: 2,
-                  textTransform: 'uppercase',
-                  color: 'var(--ocean-text-muted)',
-                  fontFamily: 'var(--ocean-font-mono)',
-                }}
-              >
-                Data Ocean
-              </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span
+                  style={{
+                    fontSize: 9,
+                    letterSpacing: 1.5,
+                    textTransform: 'uppercase',
+                    color: 'var(--ocean-text-muted)',
+                    fontFamily: 'var(--ocean-font-mono)',
+                    lineHeight: 1,
+                  }}
+                >
+                  Data Ocean
+                </span>
+                <span
+                  style={{
+                    fontSize: 8,
+                    color: 'var(--ocean-text-muted)',
+                    fontFamily: 'var(--ocean-font-mono)',
+                    lineHeight: 1,
+                    opacity: 0.7,
+                  }}
+                >
+                  工业研究智能平台
+                </span>
+              </div>
             </div>
             <Menu
               mode="inline"
@@ -154,6 +169,7 @@ function DynamicHeader({
   onLogout: () => void;
 }): JSX.Element {
   const { header } = usePageHeader();
+  const hasTabs = header.tabs && header.tabs.length > 0;
 
   return (
     <Header
@@ -172,22 +188,9 @@ function DynamicHeader({
         gap: 8,
       }}
     >
-      {/* 第一行：index + title + 右侧操作 */}
+      {/* 第一行：中文标题(大) + 英文索引(小) + 右侧操作 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-          {header.index && (
-            <Text
-              style={{
-                fontSize: 11,
-                letterSpacing: 2,
-                textTransform: 'uppercase',
-                color: 'var(--ocean-text-muted)',
-                fontFamily: 'var(--ocean-font-mono)',
-              }}
-            >
-              {header.index}
-            </Text>
-          )}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
           {header.title && (
             <Title
               level={4}
@@ -201,6 +204,19 @@ function DynamicHeader({
             >
               {header.title}
             </Title>
+          )}
+          {header.index && (
+            <Text
+              style={{
+                fontSize: 11,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                color: 'var(--ocean-text-muted)',
+                fontFamily: 'var(--ocean-font-mono)',
+              }}
+            >
+              {header.index}
+            </Text>
           )}
         </div>
         <Space size="middle" align="center">
@@ -226,21 +242,21 @@ function DynamicHeader({
         </Space>
       </div>
 
-      {/* 第二行：tabs（如果有） */}
-      {header.tabs && header.tabs.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-          {header.tabs.map((tab) => (
+      {/* 第二行：tabs（如果有）—— 无 tabs 时保留等高占位 */}
+      <div style={{ display: 'flex', gap: 12, marginTop: 4, minHeight: hasTabs ? undefined : 28 }}>
+        {hasTabs &&
+          header.tabs!.map((tab) => (
             <Button
               key={tab.key}
               type={header.activeTab === tab.key ? 'primary' : 'default'}
               size="small"
+              style={{ minWidth: 80 }}
               onClick={() => header.onTabChange?.(tab.key)}
             >
               {tab.label}
             </Button>
           ))}
-        </div>
-      )}
+      </div>
     </Header>
   );
 }
