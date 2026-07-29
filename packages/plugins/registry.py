@@ -47,7 +47,7 @@ def list_plugins() -> list[str]:
 
 def _auto_register() -> None:
     """注册全部内置解析器插件。"""
-    from packages.plugins.converters.llm_converter.plugin import LlmConverter
+    from packages.plugins.converters.llm_converter.converter import LlmConverter
     from packages.plugins.converters.xrd_converter.converter import XrdConverter
 
     register("xrd_converter", XrdConverter())

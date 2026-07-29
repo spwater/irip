@@ -111,7 +111,7 @@ def _extract_file_content(file_path: Path) -> str | list[str]:
     Returns:
         str | list[str]: 文本内容或 base64 图片列表。
     """
-    from packages.plugins.converters.llm_converter.plugin import (
+    from packages.plugins.converters.llm_converter.converter import (
         _extract_text,
     )
 
