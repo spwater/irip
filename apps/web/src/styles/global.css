@@ -82,7 +82,7 @@
   --ocean-motion-control: 180ms;
   --ocean-motion-enter: 240ms;
   --ocean-motion-focus: 320ms;
-  --ocean-motion-page: 360ms;
+  --ocean-motion-page: 480ms;
   --ocean-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
 
   /* 字体 */
