@@ -138,9 +138,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const objectCodeToDeptId = new Map<string, string | null>(
     (objectData?.items ?? []).map((o) => [o.code, o.department_id ?? null]),
   );
-  const objectCodeToEquipmentId = new Map<string, string | null>(
-    (objectData?.items ?? []).map((o) => [o.code, o.equipment_id ?? null]),
-  );
 
   useEffect(() => {
     if (prefillObject && modalOpen && objectOptions.length > 0) {
@@ -184,10 +181,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     });
   }
   if (equipmentFilter) {
-    currentItems = currentItems.filter((i) => {
-      const eqId = i.experimental_object_code ? objectCodeToEquipmentId.get(i.experimental_object_code) : null;
-      return eqId === equipmentFilter;
-    });
+    currentItems = currentItems.filter((i) => i.equipment_id === equipmentFilter);
   }
 
   const { data: detail, isLoading: detailLoading } = useQuery({
