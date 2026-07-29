@@ -27,7 +27,7 @@ import {
 import { apiListDepartments, type DepartmentListItem } from '@/api/departments';
 import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
-import { ActionBar, DataTableShell } from '@/components/ui';
+import { DataTableShell } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -52,6 +52,7 @@ export function UsersPage(): JSX.Element {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [assignTarget, setAssignTarget] = useState<UserListItem | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form] = Form.useForm();
@@ -83,7 +84,11 @@ export function UsersPage(): JSX.Element {
     return dept?.display_name ?? null;
   };
 
-  const items: UserListItem[] = data?.items ?? [];
+  const items: UserListItem[] = (data?.items ?? []).filter((u) => {
+    if (!deptFilter) return true;
+    if (deptFilter === '__none__') return !u.department_id;
+    return u.department_id === deptFilter;
+  });
 
   // ---- 编辑用户 Mutation ----
   // ---- 新建用户 Mutation ----
@@ -345,7 +350,7 @@ export function UsersPage(): JSX.Element {
 
   return (
     <div>
-      <ActionBar style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16 }}>
         <Select
           placeholder="状态筛选"
           style={{ width: 140 }}
@@ -357,10 +362,24 @@ export function UsersPage(): JSX.Element {
             { value: 'disabled', label: '禁用' },
           ]}
         />
+        <Select
+          placeholder="按单位筛选"
+          style={{ width: 180 }}
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          value={deptFilter ?? '__all__'}
+          onChange={(val: string | undefined) => setDeptFilter(val === '__all__' || !val ? undefined : val)}
+          options={[
+            { value: '__all__', label: '全部单位' },
+            { value: '__none__', label: '未分配单位' },
+            ...departments.map((d) => ({ value: d.id, label: d.display_name })),
+          ]}
+        />
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
           新建账号
         </Button>
-      </ActionBar>
+      </Space>
 
       <DataTableShell bodyPadding={0}>
         <Table<UserListItem>

@@ -16,7 +16,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { apiCancelJob, type JobStatus } from '@/api/client';
 import { apiListJobs, apiRetryJob, type JobListItem } from '@/api/governance';
 import { extractApiError } from '@/api/types';
-import { ActionBar, DataTableShell, StatusMark } from '@/components/ui';
+import { DataTableShell, StatusMark } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 
 const { Text } = Typography;
@@ -215,7 +215,7 @@ export function JobsPage(): JSX.Element {
 
   return (
     <div>
-      <ActionBar style={{ marginBottom: 16 }}>
+      <Space style={{ marginBottom: 16 }}>
         <Space wrap>
           <Select
             placeholder="状态筛选"
@@ -242,7 +242,7 @@ export function JobsPage(): JSX.Element {
             ]}
           />
         </Space>
-      </ActionBar>
+      </Space>
 
       <DataTableShell bodyPadding={0}>
         <Table<JobListItem>

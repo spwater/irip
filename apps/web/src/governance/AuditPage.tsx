@@ -21,7 +21,7 @@ import {
 } from '@/api/governance';
 import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
-import { ActionBar, DataTableShell } from '@/components/ui';
+import { DataTableShell } from '@/components/ui';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -214,8 +214,8 @@ export function AuditPage(): JSX.Element {
   return (
     <div>
       {/* 筛选区 */}
-      <ActionBar style={{ marginBottom: 16, flexDirection: 'column', alignItems: 'flex-start' }}>
-        <Space wrap>
+      <div style={{ marginBottom: 16 }}>
+        <Space wrap style={{ marginBottom: 8 }}>
           <Select
             placeholder="对象类型"
             style={{ width: 160 }}
@@ -278,7 +278,7 @@ export function AuditPage(): JSX.Element {
             导出（异步作业）
           </Button>
         </Space>
-      </ActionBar>
+      </div>
 
       <DataTableShell
         bodyPadding={0}
