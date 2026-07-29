@@ -265,7 +265,7 @@ export function EquipmentPage({
       title: '所属单位',
       dataIndex: 'department_name',
       key: 'department_name',
-      width: 160,
+      width: 107,
       render: (name: string) =>
         name ? (
           <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
@@ -278,7 +278,7 @@ export function EquipmentPage({
     {
       title: '可见单位',
       key: 'visible_departments',
-      width: 220,
+      width: 293,
       render: (_: unknown, record: EquipmentListItem) => {
         const ids = record.visible_departments ?? [];
         if (!ids.length) {
