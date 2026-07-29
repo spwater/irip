@@ -34,7 +34,7 @@ import {
   type ObjectTypeDictItem,
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
-import { apiListComponents, type ComponentSummary } from '@/api/equipment-flows';
+import { apiListComponents, apiListEquipment, type ComponentSummary } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { ComponentsPage } from '@/components/ComponentsPage';
 
@@ -165,18 +165,29 @@ export function ExperimentalObjectPage({
     label: d.display_name,
   }));
 
-  // ---- 组件列表查询：构建 experimental_object_code → ComponentSummary 映射 ----
-  // 一个实验对象最多绑定一个接口，用于操作列展示"接口"/"+接口"按钮
+  // ---- 组件列表查询：构建 experimental_object_code → ComponentSummary[] 映射 ----
+  // 一个实验对象可绑定多个接口，用于树形展开和操作列
   const { data: componentsData } = useQuery({
     queryKey: ['components-for-object-binding'],
     queryFn: () => apiListComponents(),
   });
-  const objectCodeToComponent = new Map<string, ComponentSummary>();
+  const objectCodeToComponents = new Map<string, ComponentSummary[]>();
   for (const comp of componentsData?.items ?? []) {
     if (comp.experimental_object_code) {
-      objectCodeToComponent.set(comp.experimental_object_code, comp);
+      const list = objectCodeToComponents.get(comp.experimental_object_code) ?? [];
+      list.push(comp);
+      objectCodeToComponents.set(comp.experimental_object_code, list);
     }
   }
+
+  // ---- 设备列表查询（用于接口行的关联设备列）----
+  const { data: equipmentData } = useQuery({
+    queryKey: ['equipment-for-object-tree'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  const equipmentMap = new Map(
+    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
+  );
 
   // ---- 筛选逻辑 ----
   let filteredItems = items;
@@ -330,8 +341,8 @@ export function ExperimentalObjectPage({
     deleteMutation.mutate(editingItem.id);
   };
 
-  // ---- 构建树形数据：第一层是类型，第二层是对象 ----
-  type TreeRow = IndustrialObject & { children?: TreeRow[] };
+  // ---- 构建树形数据：第一层是类型，第二层是对象，第三层是接口 ----
+  type TreeRow = IndustrialObject & { children?: TreeRow[]; isComponent?: boolean; compData?: ComponentSummary };
   const treeData: TreeRow[] = (() => {
     // 按 object_type 分组
     const typeMap = new Map<string, IndustrialObject[]>();
@@ -341,12 +352,25 @@ export function ExperimentalObjectPage({
       typeMap.set(item.object_type, list);
     }
     const tree: TreeRow[] = [];
-    // 按 objectTypeData 的顺序构建类型行，应用类型筛选
     for (const typeItem of objectTypeData ?? []) {
-      // 如果选了类型筛选，只显示选中的类型
       if (typeFilter && typeItem.code !== typeFilter) continue;
       const objs = typeMap.get(typeItem.code);
       if (objs && objs.length > 0) {
+        // 对象行，每个对象下挂载其关联的接口
+        const objRows: TreeRow[] = objs.map((obj) => {
+          const comps = objectCodeToComponents.get(obj.code) ?? [];
+          const compChildren: TreeRow[] = comps.map((comp) => ({
+            ...obj,
+            id: `comp_${comp.id}`,
+            display_name: comp.display_name,
+            code: comp.name,
+            description: comp.description ?? null,
+            status: comp.status,
+            isComponent: true,
+            compData: comp,
+          } as TreeRow));
+          return { ...obj, children: compChildren } as TreeRow;
+        });
         tree.push({
           id: `type_${typeItem.code}`,
           code: typeItem.code,
@@ -360,16 +384,26 @@ export function ExperimentalObjectPage({
           created_at: '',
           updated_at: '',
           lock_version: 0,
-          children: objs as TreeRow[],
+          children: objRows,
         } as TreeRow);
         typeMap.delete(typeItem.code);
       }
     }
-    // 未匹配类型的对象放顶层（仅在无类型筛选时显示）
     if (!typeFilter) {
       for (const [, objs] of typeMap) {
         for (const obj of objs) {
-          tree.push(obj as TreeRow);
+          const comps = objectCodeToComponents.get(obj.code) ?? [];
+          const compChildren: TreeRow[] = comps.map((comp) => ({
+            ...obj,
+            id: `comp_${comp.id}`,
+            display_name: comp.display_name,
+            code: comp.name,
+            description: comp.description ?? null,
+            status: comp.status,
+            isComponent: true,
+            compData: comp,
+          } as TreeRow));
+          tree.push({ ...obj, children: compChildren } as TreeRow);
         }
       }
     }
@@ -377,6 +411,7 @@ export function ExperimentalObjectPage({
   })();
 
   const isTypeRow = (record: TreeRow): boolean => record.id.startsWith('type_');
+  const isComponentRow = (record: TreeRow): boolean => record.isComponent === true;
 
   // ---- 表格列定义 ----
   const columns: ColumnsType<TreeRow> = [
@@ -395,6 +430,13 @@ export function ExperimentalObjectPage({
             </Space>
           );
         }
+        if (isComponentRow(record)) {
+          return (
+            <Text type="secondary" style={{ fontSize: 13 }}>
+              {record.display_name}
+            </Text>
+          );
+        }
         return (
           <Tooltip title={record.description || undefined} placement="topLeft">
             <Space size={6}>
@@ -408,12 +450,22 @@ export function ExperimentalObjectPage({
       },
     },
     {
+      title: '关联设备',
+      key: 'equipment',
+      width: 140,
+      render: (_: unknown, record: TreeRow) => {
+        if (isTypeRow(record) || !isComponentRow(record)) return null;
+        const eqName = record.compData?.equipment_id ? equipmentMap.get(record.compData.equipment_id) : null;
+        return eqName ? <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eqName}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
       title: '所属单位',
       dataIndex: 'department_id',
       key: 'department_id',
       width: 140,
       render: (deptId: string | null, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
+        if (isTypeRow(record) || isComponentRow(record)) return null;
         const name = deptId ? deptMap.get(deptId) : null;
         return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
       },
@@ -424,7 +476,7 @@ export function ExperimentalObjectPage({
       key: 'visible_departments',
       width: 300,
       render: (deptIds: string[] | null, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
+        if (isTypeRow(record) || isComponentRow(record)) return null;
         if (!deptIds || deptIds.length === 0) {
           return <Text type="secondary">-</Text>;
         }
@@ -444,7 +496,7 @@ export function ExperimentalObjectPage({
       key: 'status',
       width: 80,
       render: (s: string, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
+        if (isTypeRow(record) || isComponentRow(record)) return null;
         return (
           <Tag color={STATUS_COLOR[s] ?? 'default'}>
             {STATUS_LABEL[s] ?? s}
@@ -457,7 +509,7 @@ export function ExperimentalObjectPage({
       key: 'action',
       width: 200,
       render: (_: unknown, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
+        if (isTypeRow(record) || isComponentRow(record)) return null;
         return (
           <Space size="small">
             <Button
@@ -471,20 +523,12 @@ export function ExperimentalObjectPage({
               type="link"
               size="small"
               onClick={() => {
-                const boundComp = objectCodeToComponent.get(record.code);
-                if (boundComp) {
-                  // 已绑定接口：就地打开编辑弹窗
-                  setCompDrawerEditId(boundComp.id);
-                  setCompDrawerPrefill(undefined);
-                } else {
-                  // 未绑定接口：就地打开新建弹窗并预填实验对象
-                  setCompDrawerEditId(undefined);
-                  setCompDrawerPrefill(record.code);
-                }
+                setCompDrawerEditId(undefined);
+                setCompDrawerPrefill(record.code);
                 setCompDrawerOpen(true);
               }}
             >
-              {objectCodeToComponent.has(record.code) ? '接口' : '+接口'}
+              +接口
             </Button>
             <Popconfirm
               title={
