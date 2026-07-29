@@ -20,7 +20,7 @@ import type { AIToolDTO } from './types';
 import type { ToolFilter } from './types';
 import { ToolEditDrawer } from './ToolEditDrawer';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 /**
  * AI 工具与插件管理页面
@@ -206,7 +206,6 @@ export function AIToolsPage(): JSX.Element {
 
   return (
     <div>
-      <Title level={5}>AI 工具与插件管理</Title>
       <Space style={{ marginBottom: 16 }} wrap>
         <Input.Search
           placeholder="搜索工具名 / 显示名"

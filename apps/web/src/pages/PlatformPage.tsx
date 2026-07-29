@@ -53,7 +53,7 @@ export function PlatformPage(): JSX.Element {
       ? [
           {
             key: 'ai-tools',
-            label: 'AI 工具管理',
+            label: '工具插件',
             children: <AIToolsPage />,
           },
         ]
