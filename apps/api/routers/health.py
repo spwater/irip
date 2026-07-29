@@ -188,7 +188,6 @@ async def readiness(
 
         import redis
 
-        redis_url = os.getenv("IRIP_REDIS_URL", "redis://redis:6379/0")
         r = redis.from_url(redis_url)
         raw = r.get("irip:worker:heartbeat")
 

@@ -136,7 +136,7 @@ export function ComponentFormFields({
           </Form.Item>
         </Col>
         <Col span={8}>
-          <Form.Item name="experimental_object_code" label="关联实验对象">
+          <Form.Item name="experimental_object_code" label="实验对象">
             <Select
               placeholder="请选择实验对象"
               allowClear

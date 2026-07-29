@@ -141,6 +141,8 @@ export type FactSummary = {
   task_name: string | null;
   department_name: string | null;
   operator: string | null;
+  run_operator: string | null;
+  equipment_name: string | null;
   data_summary: string | null;
 };
 

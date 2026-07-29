@@ -115,7 +115,6 @@ class ComponentListItemResponse(BaseModel):
     version: str
     kind: str
     runtime: str
-    engine: str
     experimental_object_code: str
     equipment_id: str | None = None
     status: str
@@ -123,6 +122,7 @@ class ComponentListItemResponse(BaseModel):
     published_at: datetime | None
     created_at: datetime
     prompt: str | None = None
+    tool_type: str | None = None
 
 
 class ComponentListResponse(BaseModel):
@@ -150,17 +150,12 @@ class ComponentDetailResponse(BaseModel):
     created_at: datetime
 
 
-def _detect_engine(manifest_yaml: str) -> str:
-    """从 manifest YAML 判断组件引擎类型。
-
-    LLM 驱动的组件 parameters 里必然包含 prompt 参数。
-    返回 "llm" 或 "code"。
-    """
+def _parse_tool_type(manifest_yaml: str) -> str | None:
+    """从 manifest YAML 提取 tool_type 参数的默认值。"""
     import re
 
-    if re.search(r"^\s+prompt:\s*$", manifest_yaml, re.MULTILINE):
-        return "llm"
-    return "code"
+    match = re.search(r'tool_type:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["\']?(.*?)["\']?\s*$', manifest_yaml, re.MULTILINE)
+    return match.group(1) if match else None
 
 
 def _parse_display_name(manifest_yaml: str) -> str:
@@ -279,7 +274,6 @@ async def publish_component(
         version=version.version,
         kind=manifest.kind,
         runtime=version.runtime,
-        engine=_detect_engine(version.manifest_yaml),
         status=version.status,
         manifest_sha256=version.manifest_sha256,
         published_at=version.published_at,
@@ -355,7 +349,6 @@ async def list_components(
                 version=ver.version,
                 kind=comp.kind,
                 runtime=ver.runtime,
-                engine=_detect_engine(ver.manifest_yaml),
                 experimental_object_code=ver.experimental_object_code
                 or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
                 equipment_id=getattr(ver, "equipment_id", None),
@@ -364,6 +357,7 @@ async def list_components(
                 published_at=ver.published_at,
                 created_at=ver.created_at,
                 prompt=_parse_prompt_from_yaml(ver.manifest_yaml),
+                tool_type=_parse_tool_type(ver.manifest_yaml),
             )
             for comp, ver in items
         ]

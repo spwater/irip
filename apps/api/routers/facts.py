@@ -124,6 +124,8 @@ class FactRevisionResponse(BaseModel):
     task_name: str | None = None
     department_name: str | None = None
     operator: str | None = None
+    run_operator: str | None = None
+    equipment_name: str | None = None
     data_summary: str | None = None
 
 
@@ -358,6 +360,8 @@ async def list_facts(
                     sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
                     FactRevision.department_name,
                     FactRevision.operator,
+                    FactRevision.run_operator,
+                    FactRevision.equipment_name,
                 )
                 .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
@@ -365,9 +369,9 @@ async def list_facts(
                 .where(FactRevision.id.in_(revision_ids))
             )
             snap_result = await session.execute(snap_stmt)
-            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
+            snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6])
             for item in items:
                 snap = snap_map.get(item.revision_id)
                 if snap:
@@ -375,6 +379,8 @@ async def list_facts(
                     item.task_name = snap[1]
                     item.department_name = snap[2]
                     item.operator = snap[3]
+                    item.run_operator = snap[4]
+                    item.equipment_name = snap[5]
 
             # 查每个 task_code 的总数（不受分页限制）
             if should_filter_by_department(current_user):
@@ -409,28 +415,30 @@ async def list_facts(
             count_result = await session.execute(count_stmt)
             group_counts = {str(row[0]): row[1] for row in count_result}
 
-            # 查数据摘要（从 artifact JSON 取前3行）
-            import json as json_mod
+    # 查数据摘要（在独立 session 中执行，避免 ResourceClosedError）
+    if items:
+        import json as json_mod
 
-            from apps.api.main import _build_s3_repo
-            from packages.common.artifacts import Artifact, ArtifactService
-            from packages.facts.entities import FactArtifact
+        from apps.api.main import _build_s3_repo
+        from packages.common.artifacts import Artifact, ArtifactService
+        from packages.facts.entities import FactArtifact
 
-            s3_repo = _build_s3_repo()
-            artifact_svc = ArtifactService(
-                s3_repo=s3_repo,
-                session_factory=service.session_factory,
-                organization_id=service.organization_id,
-                uploaded_by=current_user.user_id,
-            )
+        s3_repo = _build_s3_repo()
+        artifact_svc = ArtifactService(
+            s3_repo=s3_repo,
+            session_factory=service.session_factory,
+            organization_id=service.organization_id,
+            uploaded_by=current_user.user_id,
+        )
+        async with service.session_factory() as session:
             for item in items:
                 try:
                     fa_stmt = (
                         sa.select(FactArtifact.artifact_id)
+                        .join(Artifact, FactArtifact.artifact_id == Artifact.id)
                         .where(
                             FactArtifact.fact_revision_id
                             == __import__("uuid").UUID(item.revision_id),  # noqa: E501
-                            FactArtifact.artifact_id == Artifact.id,
                             Artifact.media_type == "application/json",
                         )
                         .limit(1)
@@ -440,13 +448,22 @@ async def list_facts(
                     if artifact_id:
                         data_bytes = await artifact_svc.get_bytes(artifact_id)
                         parsed = json_mod.loads(data_bytes.decode("utf-8"))
-                        pts = parsed.get("points", [])[:3]
+                        pts = parsed.get("points", [])
+                        srs = parsed.get("series", [])
                         if pts:
                             pairs = [f"{p.get('name', '')}={p.get('value', '')}" for p in pts[:3]]
-                            total = len(parsed.get("points", []))
+                            total = len(pts)
                             item.data_summary = (
                                 f"共{total}个指标："
                                 + "，".join(pairs)
+                                + ("..." if total > 3 else "")
+                            )  # noqa: E501
+                        elif srs:
+                            names = [s.get("name", f"序列{i+1}") for i, s in enumerate(srs[:3])]
+                            total = len(srs)
+                            item.data_summary = (
+                                f"共{total}组序列："
+                                + "，".join(names)
                                 + ("..." if total > 3 else "")
                             )  # noqa: E501
                 except Exception:
@@ -511,6 +528,8 @@ async def search_facts(
                     sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
                     FactRevision.department_name,
                     FactRevision.operator,
+                    FactRevision.run_operator,
+                    FactRevision.equipment_name,
                 )
                 .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
@@ -518,9 +537,9 @@ async def search_facts(
                 .where(FactRevision.id.in_(revision_ids))
             )
             snap_result = await session.execute(snap_stmt)
-            snap_map: dict[str, tuple[str | None, str | None, str | None]] = {}
+            snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6])
             for item in items:
                 snap = snap_map.get(item.revision_id)
                 if snap:
@@ -528,6 +547,8 @@ async def search_facts(
                     item.task_name = snap[1]
                     item.department_name = snap[2]
                     item.operator = snap[3]
+                    item.run_operator = snap[4]
+                    item.equipment_name = snap[5]
 
             count_stmt = (
                 sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
@@ -628,6 +649,8 @@ async def search_facts_by_data(
                 sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
                 FactRevision.department_name,
                 FactRevision.operator,
+                FactRevision.run_operator,
+                FactRevision.equipment_name,
             )
             .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
             .outerjoin(_FV, _FR.flow_version_id == _FV.id)
@@ -650,6 +673,8 @@ async def search_facts_by_data(
                     task_name=row[6],
                     department_name=row[7],
                     operator=row[8],
+                    run_operator=row[9],
+                    equipment_name=row[10],
                 )
             )
 
@@ -695,15 +720,22 @@ async def search_facts_by_data(
                 if artifact_id:
                     data_bytes = await artifact_svc.get_bytes(artifact_id)
                     parsed = json_mod.loads(data_bytes.decode("utf-8"))
-                    pts = parsed.get("points", [])[:3]
+                    pts = parsed.get("points", [])
+                    srs = parsed.get("series", [])
                     if pts:
                         pairs = [f"{p.get('name', '')}={p.get('value', '')}" for p in pts[:3]]
-                        total = len(parsed.get("points", []))
+                        total = len(pts)
                         item.data_summary = (
                             f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
                         )  # noqa: E501
-            except Exception:
-                _logger.warning("生成 data_summary 失败", exc_info=True)
+                    elif srs:
+                        names = [s.get("name", f"序列{i+1}") for i, s in enumerate(srs[:3])]
+                        total = len(srs)
+                        item.data_summary = (
+                            f"共{total}组序列：" + "，".join(names) + ("..." if total > 3 else "")
+                        )  # noqa: E501
+            except Exception as _e:
+                _logger.warning("生成 data_summary 失败: %s", _e, exc_info=True)
 
     return FactListResponse(
         items=items,
@@ -834,6 +866,8 @@ async def get_fact_data(
                     "task_name": rev_record.task_name,
                     "task_source": rev_record.department_name,
                     "operator": rev_record.operator,
+                    "run_operator": rev_record.run_operator,
+                    "equipment_name": rev_record.equipment_name,
                     "project_name": None,
                     "data_interface": None,
                     "created_at": None,
@@ -1016,6 +1050,8 @@ async def get_fact_data(
                                 task_info = {
                                     "task_name": fd.display_name,
                                     "task_source": dept_name,
+                                    "operator": fd.operator,
+                                    "run_operator": (run.input_snapshot or {}).get("_operator") if run else None,
                                     "project_name": fd.project_name,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,

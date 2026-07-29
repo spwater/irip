@@ -89,14 +89,14 @@ export function AppShell(): JSX.Element | null {
           >
             <div
               style={{
-                minHeight: 88,
+                minHeight: 143,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center',
                 padding: '12px 20px',
                 gap: 4,
                 borderBottom: '1px solid transparent',
-                backgroundImage: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+                backgroundImage: 'linear-gradient(to right, transparent 0%, var(--ocean-border-subtle) 100%)',
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: '100% 1px',
                 backgroundPosition: 'bottom',
@@ -261,17 +261,6 @@ function DynamicHeader({
           </Button>
         </Space>
       </div>
-
-      {/* 渐变分隔线：左深右浅（hero模式不显示） */}
-      {!isHero && (
-        <div
-          style={{
-            height: 1,
-            marginTop: 12,
-            background: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
-          }}
-        />
-      )}
 
       {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐（hero模式不显示） */}
       {!isHero && (

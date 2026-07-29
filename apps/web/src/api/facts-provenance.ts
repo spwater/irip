@@ -111,6 +111,8 @@ export type TaskInfo = {
   task_name: string | null;
   task_source: string | null;
   operator: string | null;
+  run_operator: string | null;
+  equipment_name: string | null;
   project_name: string | null;
   department_name: string | null;
   data_interface: string | null;

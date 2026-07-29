@@ -36,7 +36,7 @@ export async function apiDeleteEquipment(id: string): Promise<void> { await http
 // V2 Components API
 // ============================================================
 
-export type ComponentSummary = { id: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; engine: string; experimental_object_code: string; equipment_id: string | null; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; };
+export type ComponentSummary = { id: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; experimental_object_code: string; equipment_id: string | null; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; tool_type?: string | null; };
 export type ComponentDetail = ComponentSummary & { manifest_yaml: string; active_version_id?: string | null; parameters?: Record<string, unknown>; inputs?: unknown[]; outputs?: unknown[]; };
 export type ComponentVersionItem = { id: string; version: string; status: string; manifest_sha256: string; created_at: string; };
 export type PersistFactResult = { fact_id: string; revision: number; subject_id: string; raw_count: number; artifact_id: string | null; };
@@ -55,16 +55,16 @@ export async function apiPersistRunAsFact(runId: string, body: { object_id: stri
 // V2 Flows API
 // ============================================================
 
-export type FlowSummary = { id: string; code: string; display_name: string; status: string; lock_version: number; department_id: string | null; project_name: string | null; operator: string | null; created_at: string; updated_at: string; latest_version: { id: string; version: number; digest: string; status: string; published_at: string | null; nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[]; random_seed?: number; } | null; };
+export type FlowSummary = { id: string; code: string; display_name: string; status: string; lock_version: number; department_id: string | null; project_name: string | null; operator: string | null; experimental_object_code: string | null; created_at: string; updated_at: string; latest_version: { id: string; version: number; digest: string; status: string; published_at: string | null; nodes?: Record<string, unknown>[]; edges?: Record<string, unknown>[]; random_seed?: number; } | null; };
 export type FlowVersion = { id: string; flow_definition_id: string; version: number; digest: string; random_seed: number; status: string; published_at: string | null; created_at: string; nodes: unknown[]; edges: unknown[]; };
-export type FlowRunSummary = { id: string; flow_version_id: string; status: string; job_id: string | null; output_digest: string | null; output_summary: Record<string, unknown> | null; error_message?: string | null; started_at: string | null; completed_at: string | null; created_at: string; persisted_as_fact?: boolean; };
+export type FlowRunSummary = { id: string; flow_version_id: string; status: string; job_id: string | null; output_digest: string | null; output_summary: Record<string, unknown> | null; error_message?: string | null; started_at: string | null; completed_at: string | null; created_at: string; persisted_as_fact?: boolean; operator?: string | null; };
 export type FlowNodeExecution = { id: string; node_id: string; status: string; input_summary: Record<string, unknown> | null; output_summary: Record<string, unknown> | null; diagnostics: Record<string, unknown> | null; duration_ms: number | null; started_at: string | null; completed_at: string | null; };
 export type FlowRunDetail = FlowRunSummary & { node_executions: FlowNodeExecution[]; nodes: FlowNodeExecution[]; };
 export type FlowNodeSchema = { node_id: string; component_name: string; component_version: string; params?: Record<string, unknown>; input_bindings?: Record<string, string>; };
 export type FlowEdgeSchema = { source_node: string; source_port: string; target_node: string; target_port: string; };
 export type FactTemplateVersionItem = { id: string; code: string; display_name: string; fact_type: string; status: string; version_count: number; latest_version: { id: string; template_id: string; version: number; display_name: string; fact_type: string; } | null; };
 
-export async function apiCreateFlow(body: { display_name: string; department_id?: string | null; project_name?: string | null; operator: string; nodes?: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; }): Promise<FlowSummary> { const res = await http.post<FlowSummary>('/flows/', body); return res.data; }
+export async function apiCreateFlow(body: { display_name: string; department_id?: string | null; project_name?: string | null; operator: string; experimental_object_code?: string | null; nodes?: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; }): Promise<FlowSummary> { const res = await http.post<FlowSummary>('/flows/', body); return res.data; }
 export async function apiPublishFlow(flowId: string, body: { nodes: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; random_seed?: number; }): Promise<FlowSummary> { await http.post(`/flows/${flowId}/publish`, body); return apiGetFlow(flowId); }
 export async function apiListFlows(params?: { status?: string; }): Promise<CursorPage<FlowSummary>> { const res = await http.get<{ items: FlowSummary[] }>('/flows/', { params }); return { items: res.data.items, next_cursor: null, has_more: false }; }
 export async function apiGetFlow(flowId: string): Promise<FlowSummary> { const res = await http.get<FlowSummary>(`/flows/${flowId}`); return { ...res.data, latest_version: res.data.latest_version ?? null }; }

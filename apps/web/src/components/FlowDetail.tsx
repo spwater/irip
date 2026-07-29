@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   Button,
   Card,
+  Col,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Row,
   Select,
   Space,
   Spin,
@@ -15,7 +17,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined, ClusterOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -41,8 +43,8 @@ import {
   type FlowRunSummary,
   type FlowSummary,
 } from '@/api/equipment-flows';
-import { apiUploadFile } from '@/api/models-ai';
-import { apiListObjects } from '@/api/standards-objects';
+import { apiUploadFile, apiListIngestionTools } from '@/api/models-ai';
+import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { FactModal } from './flow/FactModal';
@@ -79,6 +81,11 @@ export function FlowDetail(): JSX.Element {
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null);
+  const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
+  const [runSelectedComp, setRunSelectedComp] = useState<string | undefined>(undefined);
+  const [batchSelectedComp, setBatchSelectedComp] = useState<string | undefined>(undefined);
+  const [batchOperator, setBatchOperator] = useState<string>('');
+  const [runParams, setRunParams] = useState<[string, unknown][]>([]);
 
   /** 比较版本号 */
   const cmpVer = (a: string, b: string): number => {
@@ -115,6 +122,15 @@ export function FlowDetail(): JSX.Element {
         summary: c,
       }));
   })();
+
+  // ---- ingestion tools 查询：构建 tool_type → display_name 映射 ----
+  const { data: ingestionToolsData } = useQuery({
+    queryKey: ['ingestion-tools-for-flow'],
+    queryFn: apiListIngestionTools,
+  });
+  const toolTypeDisplayName = new Map<string, string>(
+    (ingestionToolsData ?? []).map((t) => [t.name, t.display_name]),
+  );
 
   // ---- 流程列表查询 ----
   const [showArchived, setShowArchived] = useState(false);
@@ -161,6 +177,35 @@ export function FlowDetail(): JSX.Element {
     (objListData?.items ?? []).map((o) => [o.code, o]),
   );
 
+  // 监听新建任务表单中实验对象的选择值，用于自动填充任务名称
+  const watchedExpCodeForName = Form.useWatch('experimental_object_code', createForm);
+  useEffect(() => {
+    if (watchedExpCodeForName) {
+      const obj = objMap.get(watchedExpCodeForName);
+      if (obj) {
+        const now = new Date();
+        const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+        createForm.setFieldsValue({ display_name: `${obj.display_name}_${ts}` });
+      }
+    }
+  }, [watchedExpCodeForName, objMap, createForm]);
+
+  // ---- 实验对象类型字典（用于新建任务类型筛选）----
+  const { data: objectTypeData } = useQuery({
+    queryKey: ['object-types-for-flow-create'],
+    queryFn: apiListObjectTypes,
+  });
+  const objectTypeOptions = (objectTypeData ?? []).map((t) => ({
+    value: t.code,
+    label: t.display_name,
+  }));
+  // 实验对象下拉选项（带 object_type 字段以便按类型过滤）
+  const objectOptions = (objListData?.items ?? []).map((o) => ({
+    value: o.code,
+    label: `${o.display_name} (${o.code})`,
+    object_type: o.object_type,
+  }));
+
   const { data: equipListData } = useQuery({
     queryKey: ['equipment-for-flow-list'],
     queryFn: () => apiListEquipment({ limit: 100 }),
@@ -198,7 +243,7 @@ export function FlowDetail(): JSX.Element {
   const runParamEntries = (() => {
     if (!runNode) return [];
     const params = (runNode.params as Record<string, unknown>) ?? {};
-    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code');
+    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type');
     const orderedKeys = ['path', 'file_engine', 'prompt'];
     return entries.sort((a, b) => {
       const ai = orderedKeys.indexOf(a[0]);
@@ -209,6 +254,24 @@ export function FlowDetail(): JSX.Element {
       return 0;
     });
   })();
+
+  // 当前选中任务的实验对象编码（优先从 flow 字段取，其次从 published node 的组件取）
+  const currentExpCode = (() => {
+    if (!selectedFlowId) return undefined;
+    // 从 flow 的 experimental_object_code 字段取
+    if (flow?.experimental_object_code) return flow.experimental_object_code;
+    // 已发布版本：从组件的 experimental_object_code 取
+    if (runNode?.component_name) {
+      const comp = compMap.get(runNode.component_name);
+      if (comp?.experimental_object_code) return comp.experimental_object_code;
+    }
+    return undefined;
+  })();
+
+  // 按当前任务的实验对象筛选接口选项
+  const filteredCompOptions = currentExpCode
+    ? componentOptions.filter((c) => c.summary.experimental_object_code === currentExpCode)
+    : componentOptions;
 
   // ---- 选中流程的运行列表查询 ----
   const { data: runsList, isLoading: runsLoading } = useQuery({
@@ -236,18 +299,6 @@ export function FlowDetail(): JSX.Element {
       createForm.resetFields();
       message.success('流程创建成功');
       setSelectedFlowId(data.id);
-    },
-    onError: (err: unknown) => message.error(extractApiError(err)),
-  });
-
-  // ---- 发布流程 Mutation ----
-  const publishMutation = useMutation({
-    mutationFn: (vars: { flowId: string; body: Parameters<typeof apiPublishFlow>[1] }) =>
-      apiPublishFlow(vars.flowId, vars.body),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['flows'] });
-      void queryClient.invalidateQueries({ queryKey: ['flow', selectedFlowId] });
-      message.success('流程发布成功');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
@@ -355,12 +406,104 @@ export function FlowDetail(): JSX.Element {
   const handleCreate = async (): Promise<void> => {
     try {
       const values = await createForm.validateFields();
-      const comp = componentOptions.find((c) => c.value === values.component_name);
+      const expCode = (values.experimental_object_code as string) ?? '';
+      createMutation.mutate({
+        display_name: values.display_name,
+        department_id: (values.department_id as string) ?? null,
+        project_name: (values.project_name as string) ?? null,
+        operator: (values.operator as string) ?? '',
+        experimental_object_code: expCode || null,
+      });
+    } catch {
+      // 校验失败
+    }
+  };
+
+  const handleCreateRun = async (): Promise<void> => {
+    if (!selectedFlowId) return;
+    if (!runSelectedComp) {
+      message.warning('请先选择数据接口');
+      return;
+    }
+    try {
+      const values = await runForm.validateFields();
+
+      // 检查是否需要先发布（component 变了或没有 published 版本）
+      const currentNode = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
+      const needPublish = !currentNode || currentNode.component_name !== runSelectedComp;
+
+      if (needPublish) {
+        const comp = componentOptions.find((c) => c.value === runSelectedComp);
+        if (!comp) {
+          message.error('找不到选中的数据接口');
+          return;
+        }
+        // 获取组件参数定义
+        let params: Record<string, unknown> = {};
+        try {
+          const detail = await apiGetComponent(comp.summary.id);
+          const parsed = parseManifest(detail.manifest_yaml);
+          for (const p of parsed.params) {
+            params[p.name] = p.default ?? '';
+          }
+        } catch {
+          // 获取详情失败时用空 params
+        }
+        const nodes: FlowNodeSchema[] = [{
+          node_id: 'n1',
+          component_name: runSelectedComp,
+          component_version: comp.version,
+          params,
+        }];
+        // 发布
+        await apiPublishFlow(selectedFlowId, { nodes });
+        await queryClient.refetchQueries({ queryKey: ['flow', selectedFlowId] });
+      }
+
+      // 构建 inputs
+      const inputs: Record<string, unknown> = {};
+      for (const [key] of runParams) {
+        if (key === 'experimental_object_code' || key === 'tool_type') continue;
+        const formKey = `n1__${key}`;
+        const artifactVal = artifactMapRef.current[formKey];
+        if (artifactVal) {
+          inputs[key] = artifactVal;
+          continue;
+        }
+        const formValue = values[formKey];
+        if (formValue !== undefined && formValue !== '') {
+          inputs[key] = formValue;
+        }
+      }
+      // 执行人存入元信息
+      inputs['_operator'] = values.run_operator;
+      createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
+    } catch (err) {
+      message.error(`参数解析失败: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // ---- 批量执行 ----
+  const handleBatchExecute = async (): Promise<void> => {
+    if (!selectedFlowId || batchFiles.length === 0) return;
+    if (!batchSelectedComp) {
+      message.warning('请先选择数据接口');
+      return;
+    }
+    setBatchRunning(true);
+    setBatchProgress({ current: 0, total: batchFiles.length, status: '准备执行...' });
+
+    // 检查是否需要先发布
+    const currentNode = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
+    const needPublish = !currentNode || currentNode.component_name !== batchSelectedComp;
+
+    if (needPublish) {
+      const comp = componentOptions.find((c) => c.value === batchSelectedComp);
       if (!comp) {
-        message.error('找不到选中的工具组件');
+        message.error('找不到选中的数据接口');
+        setBatchRunning(false);
         return;
       }
-      // 从组件详情获取参数定义，填充到 node.params（值为空）
       let params: Record<string, unknown> = {};
       try {
         const detail = await apiGetComponent(comp.summary.id);
@@ -373,73 +516,25 @@ export function FlowDetail(): JSX.Element {
       }
       const nodes: FlowNodeSchema[] = [{
         node_id: 'n1',
-        component_name: values.component_name,
+        component_name: batchSelectedComp,
         component_version: comp.version,
         params,
       }];
-      createMutation.mutate(
-        {
-          display_name: values.display_name,
-          department_id: (values.department_id as string) ?? null,
-          project_name: (values.project_name as string) ?? null,
-          operator: (values.operator as string) ?? '',
-          nodes,
-        },
-        {
-          onSuccess: async (data) => {
-            // 创建成功后立即发布
-            publishMutation.mutate(
-              { flowId: data.id, body: { nodes } },
-              {
-                onSuccess: () => {
-                  message.success('流程创建并发布成功');
-                  setSelectedFlowId(data.id);
-                },
-              },
-            );
-          },
-        },
-      );
-    } catch {
-      // 校验失败
-    }
-  };
-
-  const handleCreateRun = async (): Promise<void> => {
-    if (!selectedFlowId) return;
-    try {
-      const values = await runForm.validateFields();
-      const inputs: Record<string, unknown> = {};
-      const node = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
-      if (node) {
-        const prefix = `${node.node_id}__`;
-        for (const key of Object.keys(node.params ?? {})) {
-          if (key === 'experimental_object_code') continue;
-          const formKey = `${prefix}${key}`;
-          const artifactVal = artifactMapRef.current[formKey];
-          if (artifactVal) {
-            inputs[key] = artifactVal;
-            continue;
-          }
-          const formValue = values[formKey];
-          if (formValue !== undefined && formValue !== '') {
-            inputs[key] = formValue;
-          }
-        }
+      try {
+        await apiPublishFlow(selectedFlowId, { nodes });
+        await queryClient.refetchQueries({ queryKey: ['flow', selectedFlowId] });
+      } catch (err) {
+        message.error(`发布失败: ${err instanceof Error ? err.message : String(err)}`);
+        setBatchRunning(false);
+        return;
       }
-      createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
-    } catch (err) {
-      message.error(`参数解析失败: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
 
-  // ---- 批量执行 ----
-  const handleBatchExecute = async (): Promise<void> => {
-    if (!selectedFlowId || batchFiles.length === 0) return;
-    setBatchRunning(true);
-    setBatchProgress({ current: 0, total: batchFiles.length, status: '开始执行...' });
+    // 从 published 版本获取 node 信息（从 queryClient 获取最新数据，确保发布后拿到最新 node）
+    const updatedFlow = queryClient.getQueryData<FlowSummary>(['flow', selectedFlowId]);
+    const node = (updatedFlow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
+    const comp = node?.component_name ? compMap.get(node.component_name) : undefined;
 
-    const node = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
     for (let i = 0; i < batchFiles.length; i++) {
       const file = batchFiles[i];
       setBatchProgress({ current: i, total: batchFiles.length, status: `正在上传: ${file.name}` });
@@ -448,7 +543,6 @@ export function FlowDetail(): JSX.Element {
         const uploadRes = await apiUploadFile(file);
         // 2. 构建 inputs（prompt 用组件当前活跃版本的值，不用 flow 快照）
         const inputs: Record<string, unknown> = {};
-        const comp = node?.component_name ? compMap.get(node.component_name) : undefined;
         if (node) {
           for (const key of Object.keys(node.params ?? {})) {
             if (key === 'path') {
@@ -463,6 +557,8 @@ export function FlowDetail(): JSX.Element {
             }
           }
         }
+        // 执行人存入元信息
+        inputs['_operator'] = batchOperator;
         // 3. 创建运行
         setBatchProgress({ current: i, total: batchFiles.length, status: `正在执行: ${file.name}` });
         const run = await apiCreateFlowRun(selectedFlowId, { inputs });
@@ -517,7 +613,7 @@ export function FlowDetail(): JSX.Element {
       render: (v: string) => fmtTime(v),
     },
     {
-      title: '执行人',
+      title: '负责人',
       dataIndex: 'operator',
       key: 'operator',
       width: 100,
@@ -545,44 +641,6 @@ export function FlowDetail(): JSX.Element {
               <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                 {deptName}
               </Tag>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: '数据来源',
-      key: 'data_source',
-      width: 400,
-      render: (_: unknown, record: FlowSummary) => {
-        const node = (record.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
-        const compName = node?.component_name;
-        if (!compName) return <Text type="secondary">-</Text>;
-        const comp = compMap.get(compName);
-        const compLabel = comp?.display_name ?? compName;
-        const objCode = comp?.experimental_object_code;
-        const obj = objCode ? objMap.get(objCode) : null;
-        const eqName = comp?.equipment_id ? equipMap.get(comp.equipment_id) : null;
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-              {compLabel}
-            </Tag>
-            {obj && (
-              <>
-                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
-                <Tag color="green" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                  {obj.display_name}
-                </Tag>
-              </>
-            )}
-            {eqName && (
-              <>
-                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 12 }}>&#10142;</span>
-                <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                  {eqName}
-                </Tag>
-              </>
             )}
           </div>
         );
@@ -652,14 +710,12 @@ export function FlowDetail(): JSX.Element {
               onClick={(e) => {
                 e.stopPropagation();
                 setEditFlowId(record.id);
-                const currentNode = (record.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
                 editForm.setFieldsValue({
                   display_name: record.display_name,
                   code: record.code,
                   department_id: record.department_id ?? undefined,
                   project_name: record.project_name ?? undefined,
                   operator: record.operator ?? undefined,
-                  component_name: currentNode?.component_name ?? undefined,
                 });
                 setEditModalOpen(true);
               }}
@@ -691,7 +747,7 @@ export function FlowDetail(): JSX.Element {
   ];
 
 
-  const canExecute = flow?.status === 'published' || !!flow?.latest_version;
+  const canExecute = !!selectedFlowId;
 
   return (
     <div>
@@ -758,16 +814,20 @@ export function FlowDetail(): JSX.Element {
                 type="primary"
                 size="small"
                 disabled={!canExecute}
+                icon={<PlayCircleOutlined />}
                 onClick={() => {
                   runForm.resetFields();
                   artifactMapRef.current = {};
-                  // 手动设置初始值，prompt 用组件当前活跃版本的值
-                  if (runNode && runParamEntries.length > 0) {
+                  // 如果已有 published 版本，预填组件
+                  if (runNode?.component_name) {
+                    setRunSelectedComp(runNode.component_name);
+                    setRunParams(runParamEntries);
+                    // 预填表单值
                     const comp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
                     const initialValues: Record<string, unknown> = {};
                     for (const [key, defaultVal] of runParamEntries) {
                       const formKey = `${runNode.node_id}__${key}`;
-                      if (key === 'experimental_object_code') continue;
+                      if (key === 'experimental_object_code' || key === 'tool_type') continue;
                       if (key === 'prompt' && comp?.prompt) {
                         initialValues[formKey] = comp.prompt;
                       } else {
@@ -775,6 +835,9 @@ export function FlowDetail(): JSX.Element {
                       }
                     }
                     runForm.setFieldsValue(initialValues);
+                  } else {
+                    setRunSelectedComp(undefined);
+                    setRunParams([]);
                   }
                   setRunModalOpen(true);
                 }}
@@ -784,13 +847,16 @@ export function FlowDetail(): JSX.Element {
               <Button
                 size="small"
                 disabled={!canExecute}
+                icon={<ClusterOutlined />}
                 onClick={() => {
                   setBatchFiles([]);
                   setBatchProgress(null);
+                  setBatchSelectedComp(runNode?.component_name ?? undefined);
+                  setBatchOperator('');
                   setBatchModalOpen(true);
                 }}
               >
-                批量执行
+                批处理
               </Button>
             </Space>
           }
@@ -839,18 +905,24 @@ export function FlowDetail(): JSX.Element {
                   );
                 },
               },
-              { title: '数据接口', key: 'component', width: 220,
+              { title: '数据来源', key: 'component', width: 280,
                 render: () => {
                   const node = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
                   if (!node?.component_name) return <Text type="secondary">-</Text>;
                   const comp = compMap.get(node.component_name);
+                  const eqName = comp?.equipment_id ? equipMap.get(comp.equipment_id) : null;
                   return (
                     <Space size={4}>
                       <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
                         {comp?.display_name ?? node.component_name}
                       </Tag>
-                      {comp?.version && (
-                        <Text type="secondary" style={{ fontSize: 12 }}>v{comp.version}</Text>
+                      {eqName && (
+                        <>
+                          <Text type="secondary" style={{ fontSize: 12 }}>→</Text>
+                          <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                            {eqName}
+                          </Tag>
+                        </>
                       )}
                     </Space>
                   );
@@ -861,12 +933,14 @@ export function FlowDetail(): JSX.Element {
                   s === 'failed' && record.error_message
                     ? <Tooltip title={record.error_message}><Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag></Tooltip>
                     : <Tag color={RUN_STATUS_COLOR[s] ?? 'default'}>{RUN_STATUS_LABEL[s] ?? s}</Tag> },
+              { title: '执行人', dataIndex: 'operator', key: 'operator', width: 100,
+                render: (v: string | null) => v ?? <Text type="secondary">-</Text> },
               { title: '创建时间', dataIndex: 'created_at', key: 'created_at', width: 180,
                 render: (v: string) => fmtTime(v) },
               { title: '耗时', key: 'duration', width: 100,
                 render: (_: unknown, record: FlowRunSummary) => {
-                  if (!record.started_at || !record.completed_at) return '-';
-                  const ms = new Date(record.completed_at).getTime() - new Date(record.started_at).getTime();
+                  if (!record.created_at || !record.completed_at) return '-';
+                  const ms = new Date(record.completed_at).getTime() - new Date(record.created_at).getTime();
                   if (ms < 1000) return `${ms}ms`;
                   return `${(ms / 1000).toFixed(1)}s`;
                 },
@@ -954,12 +1028,47 @@ export function FlowDetail(): JSX.Element {
         onCancel={() => {
           setCreateModalOpen(false);
           createForm.resetFields();
+          setSelectedType(undefined);
         }}
         confirmLoading={createMutation.isPending}
         okText="创建"
         cancelText="取消"
       >
         <Form form={createForm} layout="vertical">
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item label="类型">
+                <Select
+                  placeholder="全部"
+                  allowClear
+                  value={selectedType}
+                  onChange={(val: string | undefined) => {
+                    setSelectedType(val);
+                    // 如果当前选中的实验对象类型不匹配，清空
+                    const currentObj = createForm.getFieldValue('experimental_object_code');
+                    if (currentObj) {
+                      const obj = objMap.get(currentObj);
+                      if (obj && val && obj.object_type !== val) {
+                        createForm.setFieldsValue({ experimental_object_code: undefined });
+                      }
+                    }
+                  }}
+                  options={objectTypeOptions}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={18}>
+              <Form.Item name="experimental_object_code" label="实验对象">
+                <Select
+                  placeholder="请选择实验对象"
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  options={objectOptions.filter((o) => !selectedType || o.object_type === selectedType)}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item
             name="department_id"
             label="所属单位"
@@ -973,28 +1082,6 @@ export function FlowDetail(): JSX.Element {
             />
           </Form.Item>
           <Form.Item
-            name="component_name"
-            label="数据接口"
-            rules={[{ required: true, message: '请选择数据接口' }]}
-          >
-            <Select
-              placeholder="选择数据接口"
-              showSearch
-              optionFilterProp="label"
-              options={componentOptions}
-              onChange={(value: string, option: any) => {
-                const opt = option as { label?: string } | undefined;
-                const now = new Date();
-                const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-                const compLabel = opt?.label ? opt.label.split(' (')[0] : value;
-                createForm.setFieldsValue({
-                  code: `${value}_${ts}`,
-                  display_name: `${compLabel}_${ts}`,
-                });
-              }}
-            />
-          </Form.Item>
-          <Form.Item
             name="display_name"
             label="任务名称"
             rules={[{ required: true, message: '请输入任务名称' }]}
@@ -1003,8 +1090,8 @@ export function FlowDetail(): JSX.Element {
           </Form.Item>
           <Form.Item
             name="operator"
-            label="执行人"
-            rules={[{ required: true, message: '请输入执行人' }]}
+            label="负责人"
+            rules={[{ required: true, message: '请输入负责人' }]}
           >
             <Input placeholder="如：宋昊" maxLength={100} />
           </Form.Item>
@@ -1020,7 +1107,7 @@ export function FlowDetail(): JSX.Element {
         open={editModalOpen}
         onOk={async () => {
           try {
-            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name', 'operator', 'component_name']);
+            const values = await editForm.validateFields(['display_name', 'department_id', 'project_name', 'operator']);
             if (editFlowId) {
               updateFlowMutation.mutate(
                 {
@@ -1029,39 +1116,6 @@ export function FlowDetail(): JSX.Element {
                   departmentId: (values.department_id as string) ?? null,
                   projectName: (values.project_name as string) ?? null,
                   operator: (values.operator as string) ?? null,
-                },
-                {
-                  onSuccess: async () => {
-                    // 如果数据接口变了，重新发布
-                    const newCompName = values.component_name as string | undefined;
-                    const flow = editFlowId ? queryClient.getQueryData<FlowSummary>(['flow', editFlowId]) : undefined;
-                    const currentNode = (flow?.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
-                    if (newCompName && newCompName !== currentNode?.component_name) {
-                      const comp = componentOptions.find((c) => c.value === newCompName);
-                      if (comp) {
-                        try {
-                          const detail = await apiGetComponent(comp.summary.id);
-                          const parsed = parseManifest(detail.manifest_yaml);
-                          const params: Record<string, unknown> = {};
-                          for (const p of parsed.params) {
-                            params[p.name] = p.default ?? '';
-                          }
-                          const nodes: FlowNodeSchema[] = [{
-                            node_id: 'n1',
-                            component_name: newCompName,
-                            component_version: comp.version,
-                            params,
-                          }];
-                          await apiPublishFlow(editFlowId, { nodes });
-                          void queryClient.invalidateQueries({ queryKey: ['flows'] });
-                          void queryClient.invalidateQueries({ queryKey: ['flow', editFlowId] });
-                          message.success('任务已更新并重新发布');
-                        } catch (err) {
-                          message.error(`重新发布失败: ${err instanceof Error ? err.message : String(err)}`);
-                        }
-                      }
-                    }
-                  },
                 },
               );
             }
@@ -1099,18 +1153,10 @@ export function FlowDetail(): JSX.Element {
           </Form.Item>
           <Form.Item
             name="operator"
-            label="执行人"
-            rules={[{ required: true, message: '请输入执行人' }]}
+            label="负责人"
+            rules={[{ required: true, message: '请输入负责人' }]}
           >
             <Input placeholder="如：宋昊" maxLength={100} />
-          </Form.Item>
-          <Form.Item name="component_name" label="数据接口">
-            <Select
-              placeholder="选择数据接口"
-              showSearch
-              optionFilterProp="label"
-              options={componentOptions}
-            />
           </Form.Item>
         </Form>
       </Modal>
@@ -1123,6 +1169,8 @@ export function FlowDetail(): JSX.Element {
         onCancel={() => {
           setRunModalOpen(false);
           runForm.resetFields();
+          setRunSelectedComp(undefined);
+          setRunParams([]);
         }}
         confirmLoading={createRunMutation.isPending}
         okText="执行"
@@ -1130,24 +1178,91 @@ export function FlowDetail(): JSX.Element {
         width={600}
       >
         <Form form={runForm} layout="vertical">
-          {runNode && (() => {
-            const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
-            return runComp ? (
-              <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
+          {runSelectedComp && (() => {
+            const runComp = runSelectedComp ? compMap.get(runSelectedComp) : undefined;
+            const compOpt = componentOptions.find((c) => c.value === runSelectedComp);
+            const eqName = runComp?.equipment_id ? equipMap.get(runComp.equipment_id) : null;
+            const converterName = runComp?.tool_type ? toolTypeDisplayName.get(runComp.tool_type) : null;
+            return (runComp || compOpt) ? (
+              <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Space size={6}>
-                  <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
                   <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                    {runComp.display_name ?? runNode.component_name}
+                    {runComp?.display_name ?? compOpt?.label ?? runSelectedComp}
                   </Tag>
-                  <Text type="secondary" style={{ fontSize: 12 }}>v{runComp.version}</Text>
+                  {eqName && (
+                    <>
+                      <Text type="secondary" style={{ fontSize: 12 }}>→</Text>
+                      <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                        {eqName}
+                      </Tag>
+                    </>
+                  )}
                 </Space>
+                {converterName && (
+                  <Tag color="orange" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                    {converterName}
+                  </Tag>
+                )}
               </div>
             ) : null;
           })()}
-          {runNode && runParamEntries.length > 0 && (
-            <div key={runNode.node_id}>
-              {runParamEntries.map(([key, defaultVal]) => {
-                const formKey = `${runNode.node_id}__${key}`;
+          <Form.Item label="数据来源" required>
+            <Select
+              placeholder="请选择数据接口"
+              showSearch
+              optionFilterProp="label"
+              options={filteredCompOptions}
+              value={runSelectedComp}
+              onChange={async (value: string) => {
+                setRunSelectedComp(value);
+                // 获取组件参数，填充表单
+                const comp = componentOptions.find((c) => c.value === value);
+                if (comp) {
+                  try {
+                    const detail = await apiGetComponent(comp.summary.id);
+                    const parsed = parseManifest(detail.manifest_yaml);
+                    const initialValues: Record<string, unknown> = {};
+                    const paramEntries: [string, unknown][] = [];
+                    for (const p of parsed.params) {
+                      if (p.name === 'experimental_object_code' || p.name === 'tool_type') continue;
+                      const formKey = `n1__${p.name}`;
+                      if (p.name === 'prompt' && comp.summary.prompt) {
+                        initialValues[formKey] = comp.summary.prompt;
+                      } else {
+                        initialValues[formKey] = p.default ?? '';
+                      }
+                      paramEntries.push([p.name, p.default ?? '']);
+                    }
+                    // 排序
+                    const orderedKeys = ['path', 'file_engine', 'prompt'];
+                    paramEntries.sort((a, b) => {
+                      const ai = orderedKeys.indexOf(a[0] as string);
+                      const bi = orderedKeys.indexOf(b[0] as string);
+                      if (ai >= 0 && bi >= 0) return ai - bi;
+                      if (ai >= 0) return -1;
+                      if (bi >= 0) return 1;
+                      return 0;
+                    });
+                    setRunParams(paramEntries);
+                    runForm.setFieldsValue(initialValues);
+                  } catch {
+                    // 获取详情失败
+                  }
+                }
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="run_operator"
+            label="执行人"
+            rules={[{ required: true, message: '请输入执行人' }]}
+          >
+            <Input placeholder="如：宋昊" maxLength={100} />
+          </Form.Item>
+          {runSelectedComp && runParams.length > 0 && (
+            <div key="n1">
+              {runParams.map(([key, defaultVal]) => {
+                const formKey = `n1__${key}`;
                   const isPath = key === 'path';
                   const isFileEngine = key === 'file_engine';
                   // 参数标签映射
@@ -1193,10 +1308,9 @@ export function FlowDetail(): JSX.Element {
                     );
                   }
 
-                  // 其余参数（含 prompt）—— prompt 用当前活跃组件版本的值，不用 flow 快照
-                  const displayVal = key === 'prompt' && runNode?.component_name
-                    ? (compMap.get(runNode.component_name)?.prompt ?? defaultVal)
-                    : defaultVal;
+                  // 其余参数（含 prompt）—— prompt 用当前选中组件的值
+                  const comp = runSelectedComp ? compMap.get(runSelectedComp) : undefined;
+                  const displayVal = key === 'prompt' && comp?.prompt ? comp.prompt : defaultVal;
                   return (
                     <Form.Item
                       key={formKey}
@@ -1216,15 +1330,17 @@ export function FlowDetail(): JSX.Element {
         </Form>
       </Modal>
 
-      {/* 批量执行 Modal */}
+      {/* 批处理 Modal */}
       <Modal
-        title="批量执行"
+        title="批处理"
         open={batchModalOpen}
         onCancel={() => {
           if (!batchRunning) {
             setBatchModalOpen(false);
             setBatchFiles([]);
             setBatchProgress(null);
+            setBatchSelectedComp(undefined);
+            setBatchOperator('');
           }
         }}
         footer={
@@ -1257,20 +1373,53 @@ export function FlowDetail(): JSX.Element {
           </div>
         ) : (
           <>
-            {runNode && (() => {
-              const runComp = runNode.component_name ? compMap.get(runNode.component_name) : undefined;
-              return runComp ? (
-                <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
+            {batchSelectedComp && (() => {
+              const runComp = batchSelectedComp ? compMap.get(batchSelectedComp) : undefined;
+              const compOpt = componentOptions.find((c) => c.value === batchSelectedComp);
+              const eqName = runComp?.equipment_id ? equipMap.get(runComp.equipment_id) : null;
+              const converterName = runComp?.tool_type ? toolTypeDisplayName.get(runComp.tool_type) : null;
+              return (runComp || compOpt) ? (
+                <div style={{ marginBottom: 16, padding: '8px 12px', background: 'var(--ocean-surface-structural)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Space size={6}>
-                    <Text type="secondary" style={{ fontSize: 13 }}>数据接口：</Text>
                     <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                      {runComp.display_name ?? runNode.component_name}
+                      {runComp?.display_name ?? compOpt?.label ?? batchSelectedComp}
                     </Tag>
-                    <Text type="secondary" style={{ fontSize: 12 }}>v{runComp.version}</Text>
+                    {eqName && (
+                      <>
+                        <Text type="secondary" style={{ fontSize: 12 }}>→</Text>
+                        <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                          {eqName}
+                        </Tag>
+                      </>
+                    )}
                   </Space>
+                  {converterName && (
+                    <Tag color="orange" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
+                      {converterName}
+                    </Tag>
+                  )}
                 </div>
               ) : null;
             })()}
+            <Form layout="vertical">
+            <Form.Item label="数据来源" required>
+              <Select
+                placeholder="请选择数据接口"
+                showSearch
+                optionFilterProp="label"
+                options={filteredCompOptions}
+                value={batchSelectedComp}
+                onChange={(value: string) => setBatchSelectedComp(value)}
+              />
+            </Form.Item>
+            <Form.Item label="执行人" required>
+              <Input
+                value={batchOperator}
+                onChange={(e) => setBatchOperator(e.target.value)}
+                placeholder="如：宋昊"
+                maxLength={100}
+              />
+            </Form.Item>
             <input
               type="file"
               multiple
@@ -1314,6 +1463,7 @@ export function FlowDetail(): JSX.Element {
             <Text type="secondary" style={{ fontSize: 12 }}>
               将使用当前任务的数据接口，逐个上传文件并执行。文件合规性由用户自行负责。
             </Text>
+            </Form>
           </>
         )}
       </Modal>

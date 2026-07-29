@@ -40,6 +40,8 @@ type TreeNode = {
   totalCount?: number;
   department_name?: string | null;
   operator?: string | null;
+  run_operator?: string | null;
+  equipment_name?: string | null;
   children?: TreeNode[];
 };
 
@@ -82,6 +84,8 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
         task_name: f.task_name,
         department_name: f.department_name,
         operator: f.operator,
+        run_operator: f.run_operator,
+        equipment_name: f.equipment_name,
         isGroup: false,
       }));
       tree.push({
@@ -225,19 +229,32 @@ export function FactsPage(): JSX.Element {
       key: 'department_name',
       width: 160,
       render: (_: unknown, record: TreeNode) => {
-        if (record.isGroup) return null;
+        if (!record.isGroup) return null;
         return record.department_name
           ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{record.department_name}</Tag>
           : <Text type="secondary">-</Text>;
       },
     },
     {
-      title: '执行人',
+      title: '测量设备',
+      key: 'equipment_name',
+      width: 140,
+      render: (_: unknown, record: TreeNode) => {
+        if (record.isGroup) return null;
+        return record.equipment_name
+          ? <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{record.equipment_name}</Tag>
+          : <Text type="secondary">-</Text>;
+      },
+    },
+    {
+      title: '责任人',
       key: 'operator',
       width: 100,
       render: (_: unknown, record: TreeNode) => {
-        if (record.isGroup) return null;
-        return record.operator ? <Text>{record.operator}</Text> : <Text type="secondary">-</Text>;
+        if (record.isGroup) {
+          return record.operator ? <Text>{record.operator}</Text> : <Text type="secondary">-</Text>;
+        }
+        return record.run_operator ? <Text>{record.run_operator}</Text> : <Text type="secondary">-</Text>;
       },
     },
     {

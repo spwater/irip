@@ -110,6 +110,7 @@ class CreateFlowRequest(BaseModel):
     department_id: UUID | None = Field(None, description="执行实验部门 ID")
     project_name: str | None = Field(None, max_length=200, description="项目名称")
     operator: str = Field(..., min_length=1, max_length=100, description="执行人")
+    experimental_object_code: str | None = Field(None, description="关联实验对象编码")
     nodes: list[FlowNodeSchema] = Field(default_factory=list)
     edges: list[FlowEdgeSchema] = Field(default_factory=list)
 
@@ -151,6 +152,7 @@ class FlowDefinitionResponse(BaseModel):
     department_id: str | None = None
     project_name: str | None = None
     operator: str | None = None
+    experimental_object_code: str | None = None
     created_at: datetime
     updated_at: datetime
     latest_version: dict[str, Any] | None = None
@@ -191,6 +193,7 @@ class FlowRunResponse(BaseModel):
     completed_at: datetime | None
     created_at: datetime
     persisted_as_fact: bool = False
+    operator: str | None = None
 
 
 class FlowNodeExecutionResponse(BaseModel):
@@ -264,6 +267,7 @@ def _definition_to_response(
         department_id=str(definition.department_id) if definition.department_id else None,
         project_name=definition.project_name,
         operator=definition.operator,
+        experimental_object_code=definition.experimental_object_code,
         created_at=definition.created_at,
         updated_at=definition.updated_at,
         latest_version=latest_version,
@@ -303,6 +307,7 @@ def _run_to_response(run: FlowRun) -> FlowRunResponse:
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
+        operator=(run.input_snapshot or {}).get("_operator"),
     )
 
 
@@ -364,6 +369,7 @@ async def create_flow(
         department_id=body.department_id,
         project_name=body.project_name,
         operator=body.operator,
+        experimental_object_code=body.experimental_object_code,
     )
     return _definition_to_response(definition, None)
 
@@ -1000,6 +1006,8 @@ async def persist_run_as_fact(
     task_name: str | None = None
     department_name: str | None = None
     operator: str | None = None
+    run_operator: str | None = None
+    equipment_name: str | None = None
     try:
         import sqlalchemy as sa
 
@@ -1021,13 +1029,35 @@ async def persist_run_as_fact(
                     task_code = fd.code
                     task_name = fd.display_name
                     operator = fd.operator
+                    run_operator = (run.input_snapshot or {}).get("_operator")
+                    # 从 nodes_json 获取 component_name，查 equipment_name
+                    nodes = fv.nodes_json or []
+                    if isinstance(nodes, list) and len(nodes) > 0:
+                        comp_name = (nodes[0] or {}).get("component_name") if isinstance(nodes[0], dict) else None
+                        if comp_name:
+                            from packages.components.registry import Component as _C, ComponentVersion as _CV
+                            from packages.equipment.entities import Equipment as _EQ
+                            eq_stmt = (
+                                sa.select(_EQ.display_name)
+                                .select_from(_C)
+                                .join(_CV, _CV.component_id == _C.id)
+                                .outerjoin(_EQ, _CV.equipment_id == sa.cast(_EQ.id, sa.Text))
+                                .where(_C.name == comp_name)
+                                .where(_CV.equipment_id.isnot(None))
+                                .order_by(_CV.version.desc())
+                                .limit(1)
+                            )
+                            eq_row = (await sess.execute(eq_stmt)).first()
+                            if eq_row:
+                                equipment_name = eq_row[0]
                     if fd.department_id:
                         dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
                         dept_record = (await sess.execute(dept_stmt)).scalar_one_or_none()
                         if dept_record:
                             department_name = dept_record.display_name
-    except Exception:
-        pass
+    except Exception as _e:
+        import logging
+        logging.getLogger(__name__).warning("fact ingest snapshot failed: %s", _e)
 
     # 7. 创建事实
     fact_service = FactService(
@@ -1063,6 +1093,8 @@ async def persist_run_as_fact(
         task_name=group_name,
         department_name=department_name,
         operator=operator,
+        run_operator=run_operator,
+        equipment_name=equipment_name,
         flow_run_id=run_id,
     )
 

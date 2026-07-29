@@ -54,10 +54,10 @@ celery_app.conf.update(
     result_expires=7 * 24 * 3600,
     # Celery Beat 调度配置（F-04：Outbox 闭环）
     beat_schedule={
-        # Outbox 事件投递调度：每 5 秒拉取未投递事件发送到 Celery
+        # Outbox 事件投递调度：每 1 秒拉取未投递事件发送到 Celery
         "dispatch-outbox": {
             "task": "outbox.dispatch",
-            "schedule": 5.0,
+            "schedule": 1.0,
         },
         # Worker 心跳：每 10 秒发送心跳
         "worker-heartbeat": {

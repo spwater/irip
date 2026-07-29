@@ -431,14 +431,20 @@ export function ExperimentalObjectPage({
           );
         }
         if (isComponentRow(record)) {
+          const eqName = record.compData?.equipment_id ? equipmentMap.get(record.compData.equipment_id) : null;
           return (
             <Space size={6}>
               <Tag color="purple" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 13 }}>
                 {record.display_name}
               </Tag>
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {record.code}
-              </Text>
+              {eqName && (
+                <>
+                  <Text type="secondary" style={{ fontSize: 13 }}>→</Text>
+                  <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 12 }}>
+                    {eqName}
+                  </Tag>
+                </>
+              )}
             </Space>
           );
         }
@@ -452,16 +458,6 @@ export function ExperimentalObjectPage({
             </Space>
           </Tooltip>
         );
-      },
-    },
-    {
-      title: '关联设备',
-      key: 'equipment',
-      width: 140,
-      render: (_: unknown, record: TreeRow) => {
-        if (isTypeRow(record) || !isComponentRow(record)) return null;
-        const eqName = record.compData?.equipment_id ? equipmentMap.get(record.compData.equipment_id) : null;
-        return eqName ? <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eqName}</Tag> : <Text type="secondary">-</Text>;
       },
     },
     {

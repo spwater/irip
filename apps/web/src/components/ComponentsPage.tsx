@@ -167,7 +167,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     return Array.from(latestByName.values());
   })();
 
-  const modernItems = allItems.filter((i) => i.engine === 'llm' && i.status !== 'deprecated');
+  const modernItems = allItems.filter((i) => i.status !== 'deprecated');
   const archivedItems = allItems.filter((i) => i.status === 'deprecated');
   let currentItems = activeTab === 'modern' ? modernItems : archivedItems;
 
@@ -319,6 +319,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       description: parsed.description,
       prompt: parsed.prompt,
       experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
+      equipment_id: compDetail.equipment_id,
       tool_type: parsed.tool_type ?? 'llm_converter',
     });
     setEditAdvancedMode(false);
