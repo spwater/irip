@@ -179,6 +179,7 @@ function DynamicHeader({
 }): JSX.Element {
   const { header } = usePageHeader();
   const hasTabs = header.tabs && header.tabs.length > 0;
+  const isHero = header.heroTitle === true;
 
   return (
     <Header
@@ -187,12 +188,14 @@ function DynamicHeader({
         flexDirection: 'column',
         background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)',
         backdropFilter: 'blur(6px)',
-        padding: '12px 24px',
+        padding: isHero ? '16px 24px' : '12px 24px',
         borderBottom: '1px solid transparent',
-        backgroundImage: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%), linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
-        backgroundRepeat: 'no-repeat, no-repeat',
-        backgroundSize: '100% 100%, 100% 1px',
-        backgroundPosition: '0 0, bottom',
+        backgroundImage: isHero
+          ? 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)'
+          : 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%), linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+        backgroundRepeat: isHero ? 'no-repeat' : 'no-repeat, no-repeat',
+        backgroundSize: isHero ? '100% 100%' : '100% 100%, 100% 1px',
+        backgroundPosition: isHero ? '0 0' : '0 0, bottom',
         position: 'sticky',
         top: 0,
         zIndex: 100,
@@ -202,12 +205,12 @@ function DynamicHeader({
       }}
     >
       {/* 第一行：英文索引(小字在上) + 中文标题(大字在下) + 右侧操作 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flex: isHero ? 1 : undefined, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, justifyContent: isHero ? 'center' : undefined, height: isHero ? '100%' : undefined }}>
           {header.index && (
             <Text
               style={{
-                fontSize: 11,
+                fontSize: isHero ? 12 : 11,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
                 color: 'var(--ocean-text-muted)',
@@ -223,7 +226,7 @@ function DynamicHeader({
               level={2}
               style={{
                 margin: 0,
-                fontSize: 32,
+                fontSize: isHero ? 40 : 32,
                 fontWeight: 650,
                 lineHeight: 1.15,
                 color: 'var(--ocean-text-primary)',
@@ -256,17 +259,20 @@ function DynamicHeader({
         </Space>
       </div>
 
-      {/* 渐变分隔线：左深右浅 */}
-      <div
-        style={{
-          height: 1,
-          marginTop: 12,
-          background: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
-        }}
-      />
+      {/* 渐变分隔线：左深右浅（hero模式不显示） */}
+      {!isHero && (
+        <div
+          style={{
+            height: 1,
+            marginTop: 12,
+            background: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+          }}
+        />
+      )}
 
-      {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐 */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 9, marginBottom: 8, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
+      {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐（hero模式不显示） */}
+      {!isHero && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 9, marginBottom: 8, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
           header.tabs!.map((tab) => {
             const isActive = header.activeTab === tab.key;
@@ -310,7 +316,8 @@ function DynamicHeader({
               </button>
             );
           })}
-      </div>
+        </div>
+      )}
     </Header>
   );
 }

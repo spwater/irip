@@ -77,6 +77,7 @@ export function WorkbenchPage(): JSX.Element {
     setHeader({
       index: 'MODULE 01 / RESEARCH WORKBENCH',
       title: '研发看板',
+      heroTitle: true,
     });
   }, [setHeader]);
 

@@ -19,6 +19,8 @@ export interface PageHeaderState {
   activeTab?: string;
   onTabChange?: (key: string) => void;
   actions?: ReactNode;
+  /** 大标题模式：无渐变线、无 Tab 占位，标题居中填满 Header 高度 */
+  heroTitle?: boolean;
 }
 
 interface PageHeaderContextValue {
