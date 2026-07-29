@@ -220,12 +220,14 @@ function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues> {
 /** 组件表单字段（表单模式共用，绑定到外层 Form 上下文） */
 function ComponentFormFields({
   objectOptions,
+  objectTypeOptions,
   objectMap,
   deptMap,
   objectCodeToDeptId,
   originalName,
 }: {
-  objectOptions: { label: string; options: { value: string; label: string }[] }[];
+  objectOptions: { value: string; label: string; object_type: string }[];
+  objectTypeOptions: { value: string; label: string }[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
   deptMap: Map<string, string>;
@@ -238,6 +240,7 @@ function ComponentFormFields({
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const formInstance = Form.useFormInstance();
 
   // 监听关联实验对象变化，自动填充所属单位 + 组件名称默认值
@@ -306,14 +309,34 @@ function ComponentFormFields({
         </Col>
       </Row>
       <Row gutter={16}>
-        <Col span={12}>
+        <Col span={6}>
+          <Form.Item label="对象类型">
+            <Select
+              placeholder="全部类型"
+              allowClear
+              value={selectedType}
+              onChange={(val: string | undefined) => {
+                setSelectedType(val);
+                // 如果当前选的对象不属于新类型，清空
+                if (watchedExpCode) {
+                  const obj = objectMap.get(watchedExpCode);
+                  if (obj && val && obj.object_type !== val) {
+                    formInstance.setFieldsValue({ experimental_object_code: undefined });
+                  }
+                }
+              }}
+              options={objectTypeOptions}
+            />
+          </Form.Item>
+        </Col>
+        <Col span={6}>
           <Form.Item name="experimental_object_code" label="关联实验对象">
             <Select
               placeholder="请选择实验对象"
               allowClear
               showSearch
               optionFilterProp="label"
-              options={objectOptions}
+              options={objectOptions.filter((o) => !selectedType || o.object_type === selectedType)}
             />
           </Form.Item>
         </Col>
@@ -596,29 +619,18 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const objectMap = new Map<string, IndustrialObject>(
     (objectData?.items ?? []).map((o) => [o.code, o]),
   );
-  // 实验对象下拉选项：按类型分组，label 含编码便于搜索
-  const objectOptions = (() => {
-    const items = objectData?.items ?? [];
-    // 按 object_type 分组
-    const groups = new Map<string, { value: string; label: string }[]>();
-    for (const o of items) {
-      const list = groups.get(o.object_type) ?? [];
-      list.push({
-        value: o.code,
-        label: `${o.display_name} (${o.code})`,
-      });
-      groups.set(o.object_type, list);
-    }
-    // 转为 OptGroup 格式
-    const typeLabels = objectTypeData?.reduce(
-      (m, t) => m.set(t.code, t.display_name),
-      new Map<string, string>(),
-    ) ?? new Map<string, string>();
-    return Array.from(groups.entries()).map(([typeCode, options]) => ({
-      label: typeLabels.get(typeCode) ?? typeCode,
-      options,
+  // 实验对象下拉选项（扁平列表，含类型字段供前端筛选）
+  const objectOptions: { value: string; label: string; object_type: string }[] =
+    (objectData?.items ?? []).map((o) => ({
+      value: o.code,
+      label: `${o.display_name} (${o.code})`,
+      object_type: o.object_type,
     }));
-  })();
+  // 实验对象类型下拉选项
+  const objectTypeOptions = (objectTypeData ?? []).map((t) => ({
+    value: t.code,
+    label: t.display_name,
+  }));
 
   // ---- 实验室列表查询（用于单位筛选）----
   const { data: deptData } = useQuery({
@@ -1176,7 +1188,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               />
             </Form.Item>
           ) : (
-            <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} />
+            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} />
           )}
         </Form>
       </Modal>
@@ -1252,7 +1264,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} />
+              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} />
             </>
           )}
         </Form>
