@@ -315,58 +315,47 @@ async def extract_preview(
 ) -> ExtractPreviewResponse:
     """用当前提示词对预加载文件进行数据抽取预览。
 
-    tool_type=llm_converter：下载文件 → 提取文本 → 用用户提示词调用大模型 → 返回抽取结果。
-    tool_type=xrd_converter：下载文件 → 调用 XRD 确定性解析器 → 返回 JSON 结果。
+    通过插件注册表统一调用解析器：
+    - llm_converter：下载文件 → 调用插件（含文本提取+LLM调用）→ 返回 JSON。
+    - xrd_converter：下载文件 → 调用插件（确定性解析）→ 返回 JSON。
     """
-    # XRD 工具模式：直接调 Python 解析器，不走 LLM
-    if body.tool_type == "xrd_converter":
-        file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
-        try:
-            import asyncio
-            import json
+    import json
 
-            from packages.components.builtin.ingestion.xrd_converter.convert import (
-                convert_xrd_file_to_json,
-            )
-
-            result = await asyncio.to_thread(convert_xrd_file_to_json, str(file_path))
-            return ExtractPreviewResponse(result=json.dumps(result, ensure_ascii=False, indent=2))
-        finally:
-            file_path.unlink(missing_ok=True)
-
-    # LLM 模式
-    config = await get_active_ai_config()
-    if config is None or not config.get("base_url") or not config.get("api_key"):
-        raise AppError(
-            code="ai_not_configured",
-            message="AI 大模型未配置，请先在治理 → AI 配置中开启",
-            retryable=False,
-        )
+    from packages.plugins import registry as plugin_registry
 
     # 下载文件
     file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
     try:
-        content = _extract_file_content(file_path)
+        # 获取 AI 配置（llm_converter 需要）
+        ai_config: dict[str, Any] | None = None
+        if body.tool_type == "llm_converter":
+            config = await get_active_ai_config()
+            if config is None or not config.get("base_url") or not config.get("api_key"):
+                raise AppError(
+                    code="ai_not_configured",
+                    message="AI 大模型未配置，请先在治理 → AI 配置中开启",
+                    retryable=False,
+                )
+            ai_config = config
+
+        # 通过插件注册表调用解析器
+        converter = plugin_registry.get(body.tool_type)
+        if converter is None:
+            raise AppError(
+                code="missing_dependency",
+                message=f"解析器插件 '{body.tool_type}' 未注册",
+                retryable=False,
+                fields={"tool_type": body.tool_type},
+            )
+
+        result: dict[str, Any] = await converter.execute(
+            {
+                "file_path": str(file_path),
+                "prompt": body.prompt,
+                "ai_config": ai_config,
+            }
+        )
+
+        return ExtractPreviewResponse(result=json.dumps(result, ensure_ascii=False, indent=2))
     finally:
         file_path.unlink(missing_ok=True)
-
-    is_image_mode = isinstance(content, list)
-
-    if is_image_mode:
-        user_content: list[dict[str, Any]] = [
-            {"type": "text", "text": f"{body.prompt}\n\n请根据以下图片内容提取数据。"},
-        ]
-        for img_data_url in content:
-            user_content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": img_data_url},
-                }
-            )
-        messages = [{"role": "user", "content": user_content}]
-    else:
-        user_message = f"{body.prompt}\n\n文件内容：\n{content[:50000]}"
-        messages = [{"role": "user", "content": user_message}]
-
-    answer = await _call_llm(config, messages)
-    return ExtractPreviewResponse(result=answer)

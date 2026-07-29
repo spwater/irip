@@ -35,73 +35,79 @@ class EZScanExtractor:
         path_str: str = params["path"]
 
         # 支持 artifact:{artifact_id} 格式
+        is_temp_file = False
         if path_str.startswith("artifact:"):
             file_path = await self._download_artifact_to_temp(context, path_str[len("artifact:") :])
+            is_temp_file = True
         else:
             file_path = Path(path_str)
 
-        # 获取 AI 配置（llm_converter 需要）
-        ai_config: dict[str, Any] | None = None
-        if tool_type == "llm_converter":
-            if context.ai_config_provider is None:
+        try:
+            # 获取 AI 配置（llm_converter 需要）
+            ai_config: dict[str, Any] | None = None
+            if tool_type == "llm_converter":
+                if context.ai_config_provider is None:
+                    raise AppError(
+                        code="ai_not_configured",
+                        message="AI 配置提供器未注入，无法获取大模型配置",
+                        retryable=False,
+                    )
+                ai_config = await context.ai_config_provider()
+                if ai_config is None:
+                    raise AppError(
+                        code="ai_not_configured",
+                        message="AI 大模型未配置，请在平台治理 → AI 配置中开启",
+                        retryable=False,
+                    )
+
+            # 通过插件注册表调用解析器
+            converter = plugin_registry.get(tool_type)
+            if converter is None:
                 raise AppError(
-                    code="ai_not_configured",
-                    message="AI 配置提供器未注入，无法获取大模型配置",
+                    code="missing_dependency",
+                    message=f"解析器插件 '{tool_type}' 未注册",
                     retryable=False,
-                )
-            ai_config = await context.ai_config_provider()
-            if ai_config is None:
-                raise AppError(
-                    code="ai_not_configured",
-                    message="AI 大模型未配置，请在平台治理 → AI 配置中开启",
-                    retryable=False,
+                    fields={"tool_type": tool_type},
                 )
 
-        # 通过插件注册表调用解析器
-        converter = plugin_registry.get(tool_type)
-        if converter is None:
-            raise AppError(
-                code="missing_dependency",
-                message=f"解析器插件 '{tool_type}' 未注册",
-                retryable=False,
-                fields={"tool_type": tool_type},
+            result: dict[str, Any] = await converter.execute(
+                {
+                    **params,
+                    "file_path": str(file_path),
+                    "ai_config": ai_config,
+                }
             )
 
-        result: dict[str, Any] = await converter.execute(
-            {
-                **params,
-                "file_path": str(file_path),
-                "ai_config": ai_config,
-            }
-        )
+            # 构建 ObservationTable
+            points: list[dict[str, Any]] = result.get("points", [])
+            series: list[dict[str, Any]] = result.get("series", [])
+            header: dict[str, Any] = result.get("metadata", {})
 
-        # 构建 ObservationTable
-        points: list[dict[str, Any]] = result.get("points", [])
-        series: list[dict[str, Any]] = result.get("series", [])
-        header: dict[str, Any] = result.get("metadata", {})
+            columns: tuple[str, ...] = ("name", "value", "unit") if points else ()
+            rows: tuple[dict[str, Any], ...] = tuple(points)
+            source_locs: list[dict[str, Any]] = [
+                {"file": file_path.name, "row": idx} for idx in range(1, len(rows) + 1)
+            ]
 
-        columns: tuple[str, ...] = ("name", "value", "unit") if points else ()
-        rows: tuple[dict[str, Any], ...] = tuple(points)
-        source_locs: list[dict[str, Any]] = [
-            {"file": file_path.name, "row": idx} for idx in range(1, len(rows) + 1)
-        ]
+            table = ObservationTable(
+                columns=columns,
+                rows=rows,
+                source_locations=tuple(source_locs),
+            )
 
-        table = ObservationTable(
-            columns=columns,
-            rows=rows,
-            source_locations=tuple(source_locs),
-        )
-
-        return ComponentResult(
-            outputs={"observations": table},
-            summary=f"提取 {len(points)} 个指标，{len(series)} 组序列",
-            metadata={
-                "row_count": len(points),
-                "header": header,
-                "points": points,
-                "series": series,
-            },
-        )
+            return ComponentResult(
+                outputs={"observations": table},
+                summary=f"提取 {len(points)} 个指标，{len(series)} 组序列",
+                metadata={
+                    "row_count": len(points),
+                    "header": header,
+                    "points": points,
+                    "series": series,
+                },
+            )
+        finally:
+            if is_temp_file:
+                file_path.unlink(missing_ok=True)
 
     @staticmethod
     async def _download_artifact_to_temp(

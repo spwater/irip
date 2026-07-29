@@ -2,7 +2,7 @@
 XRD 转换工具入口 —— 供 IRIP 组件及外部调用的入口函数。
 
 使用方式：
-    from packages.components.builtin.ingestion.xrd_converter.convert import convert_xrd_file_to_json
+    from packages.plugins.converters.xrd_converter.convert import convert_xrd_file_to_json
     result = convert_xrd_file_to_json("/path/to/SMX1.txt")
 """
 
@@ -10,8 +10,8 @@ import json
 import logging
 from typing import Any
 
-from packages.components.builtin.ingestion.xrd_converter.ras_raw_parser import parse_ras_raw
-from packages.components.builtin.ingestion.xrd_converter.validator import XRDConverterError
+from packages.plugins.converters.xrd_converter.ras_raw_parser import parse_ras_raw
+from packages.plugins.converters.xrd_converter.validator import XRDConverterError
 
 # 配置日志
 logging.basicConfig(
@@ -83,8 +83,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print(
-            "用法: python -m packages.components.builtin.ingestion.xrd_converter.convert"
-            " <RAS_RAW 文件路径>"
+            "用法: python -m packages.plugins.converters.xrd_converter.convert <RAS_RAW 文件路径>"
         )
         sys.exit(1)
 

@@ -88,35 +88,14 @@ export type UnifiedToolDTO = {
   name: string;
   display_name: string;
   description: string;
-  /** 数据来源：ai_tool 或 component */
-  source: 'ai_tool' | 'component';
-  /** 是否启用（AI 工具为真实状态；组件为 status===published） */
   enabled: boolean;
-  /** 状态：AI 工具 enabled/disabled；组件 published/deprecated */
   status: string;
-  /** 类型：AI 工具 readonly/candidate；组件 ingestion 等 */
-  kind: string;
-  /** 是否候选（仅 AI 工具有意义） */
   candidate: boolean;
-  /** 乐观锁版本号（仅 AI 工具有意义） */
   lock_version: number;
-  /** 更新时间 ISO 字符串 */
   updated_at: string;
-  /** 最后修改人（仅 AI 工具有意义） */
   updated_by: string | null;
-  /** 所需权限（仅 AI 工具有意义） */
   required_permission: string;
-  /** 参数 JSON Schema（仅 AI 工具有意义） */
   parameters_schema: Record<string, unknown>;
-  /** 组件版本号（仅组件有意义） */
-  version: string;
-  /** 组件运行时类型（仅组件有意义） */
-  runtime: string;
-  /** 组件 UUID（仅组件有意义，用于归档/恢复操作） */
-  component_id: string;
-  /** 组件版本 UUID（仅组件有意义，用于编辑跳转） */
-  version_id: string;
-  /** 工具分类：ai_tool 或 ingestion */
   category: string;
 };
 

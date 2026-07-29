@@ -94,54 +94,37 @@ class AIToolToggleRequest(BaseModel):
 
 
 class UnifiedToolDTO(BaseModel):
-    """统一工具/插件 DTO（AI 工具 + 组件插件汇总）。
+    """统一工具 DTO（ai_tool 表）。
 
-    将 ``ai_tool`` 表的工具与 ``component`` 表的已发布组件汇总为统一格式，
-    供 AI 工具管理页面统一展示。
+    字段与 ai_tool 表对齐，供工具插件管理页面使用。
 
     Attributes:
-        name: 工具/插件唯一键。
+        name: 工具唯一键。
         display_name: 显示名。
         description: 描述。
-        source: 数据来源（``"ai_tool"`` 或 ``"component"``）。
-        enabled: 是否启用（AI 工具为真实状态；组件为 status==published）。
-        status: 状态字符串
-            （AI 工具: enabled/disabled；组件: published/deprecated）。
-        kind: 类型
-            （AI 工具: readonly/candidate；组件: ingestion 等）。
-        candidate: 是否为候选工具（仅 AI 工具有意义，组件固定 False）。
-        lock_version: 乐观锁版本号（仅 AI 工具有意义）。
+        enabled: 是否启用。
+        status: 状态字符串（enabled/disabled）。
+        candidate: 是否为候选工具（历史遗留，当前无实际用途）。
+        lock_version: 乐观锁版本号。
         updated_at: 更新时间 ISO 字符串。
-        updated_by: 最后修改人（仅 AI 工具有意义）。
-        required_permission: 所需权限（仅 AI 工具有意义）。
-        parameters_schema: 参数 JSON Schema（仅 AI 工具有意义）。
-        version: 组件版本号（仅组件有意义）。
-        runtime: 组件运行时类型（仅组件有意义）。
+        updated_by: 最后修改人。
+        required_permission: 所需权限。
+        parameters_schema: 参数 JSON Schema。
+        category: 工具分类（ai_tool / ingestion）。
     """
 
     name: str
     display_name: str
     description: str
-    source: str = Field(..., description='"ai_tool" 或 "component"')
     enabled: bool
-    status: str = Field(
-        ...,
-        description="AI 工具: enabled/disabled; 组件: published/deprecated",
-    )
-    kind: str = Field(..., description="AI 工具: readonly/candidate; 组件: ingestion 等")
+    status: str
     candidate: bool = False
     lock_version: int = 0
     updated_at: str = ""
     updated_by: str | None = None
     required_permission: str = ""
     parameters_schema: dict[str, Any] = Field(default_factory=dict)
-    version: str = ""
-    runtime: str = ""
     category: str = "ai_tool"
-    component_id: str = Field(
-        default="", description="组件主表 UUID（仅组件有意义，用于归档/恢复操作）"
-    )
-    version_id: str = Field(default="", description="组件版本 UUID（仅组件有意义，用于编辑跳转）")
 
 
 # ---- 辅助函数 ----
@@ -288,18 +271,14 @@ async def list_unified_tools(
                 name=row.name,
                 display_name=row.display_name,
                 description=row.description,
-                source="ai_tool",
                 enabled=row.enabled,
                 status="enabled" if row.enabled else "disabled",
-                kind="candidate" if row.candidate else "readonly",
                 candidate=row.candidate,
                 lock_version=row.lock_version,
                 updated_at=row.updated_at.isoformat() if row.updated_at else "",
                 updated_by=str(row.updated_by) if row.updated_by else None,
                 required_permission=row.required_permission,
                 parameters_schema=row.parameters_schema,
-                version="",
-                runtime="",
                 category=row.category,
             )
         )
@@ -327,18 +306,14 @@ async def list_ingestion_tools(
                 name=row.name,
                 display_name=row.display_name,
                 description=row.description,
-                source="ai_tool",
                 enabled=row.enabled,
                 status="enabled" if row.enabled else "disabled",
-                kind="readonly",
                 candidate=row.candidate,
                 lock_version=row.lock_version,
                 updated_at=row.updated_at.isoformat() if row.updated_at else "",
                 updated_by=str(row.updated_by) if row.updated_by else None,
                 required_permission=row.required_permission,
                 parameters_schema=row.parameters_schema,
-                version="",
-                runtime="",
                 category=row.category,
             )
         )
