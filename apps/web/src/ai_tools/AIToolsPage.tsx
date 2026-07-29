@@ -259,7 +259,7 @@ export function AIToolsPage(): JSX.Element {
       {activeTab === 'ai_tool' && (
         <>
           <Space style={{ marginBottom: 16 }} wrap>
-            <Input.Search
+            <Input
               placeholder="搜索工具名 / 显示名"
               allowClear
               style={{ width: 240 }}
