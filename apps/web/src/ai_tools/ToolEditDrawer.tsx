@@ -5,8 +5,6 @@ import {
   Drawer,
   Form,
   Input,
-  Modal,
-  Radio,
   Space,
   Typography,
   message,
@@ -19,11 +17,8 @@ import type { AIToolDTO } from './types';
 const { Text } = Typography;
 
 type ToolEditDrawerProps = {
-  /** 抽屉是否打开 */
   open: boolean;
-  /** 编辑的工具；null 表示新建模式 */
   tool: AIToolDTO | null;
-  /** 关闭回调 */
   onClose: () => void;
 };
 
@@ -32,18 +27,8 @@ type FormValues = {
   display_name: string;
   description: string;
   required_permission: string;
-  candidate: boolean;
 };
 
-/**
- * AI 工具编辑/新建抽屉
- *
- * - 新建模式（tool=null）：name 可填 + 黄色 Alert 提示"仅创建声明层"；
- * - 编辑模式（tool≠null）：name 只读，其余字段可改；
- * - parameters_schema 用 TextArea + monospace，JSON.parse 实时校验；
- * - candidate 切换为"候选"时弹 Modal 二次确认（U-5）；
- * - 保存调对应 API，成功后 invalidate ['ai-tools'] + toast。
- */
 export function ToolEditDrawer({
   open,
   tool,
@@ -64,14 +49,12 @@ export function ToolEditDrawer({
         display_name: tool.display_name,
         description: tool.description,
         required_permission: tool.required_permission,
-        candidate: tool.candidate,
       });
       setSchemaText(
         JSON.stringify(tool.parameters_schema, null, 2) ?? '{}',
       );
     } else {
       form.resetFields();
-      form.setFieldsValue({ candidate: false });
       setSchemaText('{}');
     }
     setSchemaError(null);
@@ -108,7 +91,7 @@ export function ToolEditDrawer({
           display_name: values.display_name,
           description: values.description,
           required_permission: values.required_permission,
-          candidate: values.candidate,
+          candidate: false,
           parameters_schema: schema,
         });
       }
@@ -117,7 +100,7 @@ export function ToolEditDrawer({
         display_name: values.display_name,
         description: values.description,
         required_permission: values.required_permission,
-        candidate: values.candidate,
+        candidate: currentTool.candidate,
         parameters_schema: schema,
         lock_version: currentTool.lock_version,
       });
@@ -134,26 +117,6 @@ export function ToolEditDrawer({
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
-
-  const handleCandidateChange = (value: boolean): void => {
-    if (value && !isCreate && tool !== null && !tool.candidate) {
-      Modal.confirm({
-        title: '切换为候选工具',
-        content:
-          '将工具切换为"候选"后，AI 不会自动执行此工具，仅返回建议供人工审批。确认切换？',
-        okText: '确认切换',
-        cancelText: '取消',
-        onOk: () => {
-          form.setFieldsValue({ candidate: true });
-        },
-        onCancel: () => {
-          form.setFieldsValue({ candidate: false });
-        },
-      });
-    } else {
-      form.setFieldsValue({ candidate: value });
-    }
-  };
 
   const handleSave = async (): Promise<void> => {
     try {
@@ -251,19 +214,6 @@ export function ToolEditDrawer({
           ]}
         >
           <Input placeholder="如 standard:read" />
-        </Form.Item>
-
-        <Form.Item
-          name="candidate"
-          label="类型"
-          rules={[{ required: true, message: '请选择工具类型' }]}
-        >
-          <Radio.Group
-            onChange={(e) => handleCandidateChange(e.target.value)}
-          >
-            <Radio value={false}>只读（白名单，可直接执行）</Radio>
-            <Radio value={true}>候选（需人工审批）</Radio>
-          </Radio.Group>
         </Form.Item>
 
         <Form.Item
