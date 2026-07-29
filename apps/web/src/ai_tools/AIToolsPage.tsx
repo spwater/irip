@@ -3,6 +3,7 @@ import {
   Button,
   Input,
   Modal,
+  Segmented,
   Select,
   Space,
   Switch,
@@ -23,28 +24,20 @@ import { ToolEditDrawer } from './ToolEditDrawer';
 const { Text } = Typography;
 
 /**
- * AI 工具与插件管理页面
+ * 工具插件管理页面
  *
- * 展示 ai_tool 表中的全部工具：
- * - AI 工具白名单（小艾对话调用的只读工具）
- * - 候选工具（需审批的写操作建议）
- * - 插件工具（XRD 解析器等专门编写的工具，可编辑描述）
- *
- * 功能：
- * - 类型/状态筛选 + 名称搜索；
- * - 启用/禁用开关（二次确认）+ 编辑按钮。
- *
- * 仅 platform_administrator 可见（由 PlatformPage Tab 条件渲染保证），
- * 后端端点另由 system:manage 权限守卫。
+ * 两个分区：
+ * - AItool：ai_tool 表中 category=ai_tool 的工具，可启用/禁用/编辑
+ * - 内置工具：category=ingestion 等内置插件，只读列表 + 仅编辑描述
  */
 export function AIToolsPage(): JSX.Element {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'ai_tool' | 'builtin'>('ai_tool');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<AIToolDTO | null>(null);
   const [filter, setFilter] = useState<ToolFilter>({
     type: 'all',
     status: 'all',
-    category: 'all',
     keyword: '',
   });
 
@@ -118,18 +111,23 @@ export function AIToolsPage(): JSX.Element {
     setEditingTool(null);
   };
 
-  const filteredTools = useMemo<UnifiedToolDTO[]>(() => {
-    const all = tools ?? [];
-    return all.filter((t) => {
-      // 分类筛选
-      if (filter.category !== 'all' && t.category !== filter.category) return false;
-      // 类型筛选
+  // 按分类分组
+  const aiTools = useMemo(
+    () => (tools ?? []).filter((t) => t.category === 'ai_tool'),
+    [tools],
+  );
+  const builtinTools = useMemo(
+    () => (tools ?? []).filter((t) => t.category !== 'ai_tool'),
+    [tools],
+  );
+
+  // AItool 筛选
+  const filteredAiTools = useMemo(() => {
+    return aiTools.filter((t) => {
       if (filter.type === 'whitelist' && t.candidate) return false;
       if (filter.type === 'candidate' && !t.candidate) return false;
-      // 状态筛选
       if (filter.status === 'enabled' && !t.enabled) return false;
       if (filter.status === 'disabled' && t.enabled) return false;
-      // 关键词搜索
       if (filter.keyword.trim()) {
         const kw = filter.keyword.trim().toLowerCase();
         if (
@@ -141,9 +139,10 @@ export function AIToolsPage(): JSX.Element {
       }
       return true;
     });
-  }, [tools, filter]);
+  }, [aiTools, filter]);
 
-  const columns: ColumnsType<UnifiedToolDTO> = [
+  // AItool 列定义（含状态开关）
+  const aiColumns: ColumnsType<UnifiedToolDTO> = [
     {
       title: '工具名',
       dataIndex: 'name',
@@ -164,28 +163,15 @@ export function AIToolsPage(): JSX.Element {
       ellipsis: true,
     },
     {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 100,
-      render: (cat: string) =>
-        cat === 'ingestion' ? (
-          <Tag color="cyan">ingestion</Tag>
-        ) : (
-          <Tag color="blue">AItool</Tag>
-        ),
-    },
-    {
       title: '类型',
       key: 'type',
       width: 100,
-      render: (_: unknown, r: UnifiedToolDTO) => {
-        return r.candidate ? (
+      render: (_: unknown, r: UnifiedToolDTO) =>
+        r.candidate ? (
           <Tag color="orange">候选</Tag>
         ) : (
           <Tag color="blue">只读</Tag>
-        );
-      },
+        ),
     },
     {
       title: '状态',
@@ -219,60 +205,116 @@ export function AIToolsPage(): JSX.Element {
     },
   ];
 
+  // 内置工具列定义（无状态开关，仅编辑描述）
+  const builtinColumns: ColumnsType<UnifiedToolDTO> = [
+    {
+      title: '工具名',
+      dataIndex: 'name',
+      key: 'name',
+      width: 200,
+      render: (name: string) => <Text code>{name}</Text>,
+    },
+    {
+      title: '显示名',
+      dataIndex: 'display_name',
+      key: 'display_name',
+      width: 160,
+    },
+    {
+      title: '描述',
+      dataIndex: 'description',
+      key: 'description',
+      ellipsis: true,
+    },
+    {
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 120,
+      render: (cat: string) => <Tag color="cyan">{cat}</Tag>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      render: (_: unknown, r: UnifiedToolDTO) => (
+        <Button size="small" onClick={() => handleEdit(r)}>
+          编辑
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Input.Search
-          placeholder="搜索工具名 / 显示名"
-          allowClear
-          style={{ width: 240 }}
-          value={filter.keyword}
-          onChange={(e) =>
-            setFilter((f) => ({ ...f, keyword: e.target.value }))
-          }
-        />
-        <Select
-          style={{ width: 140 }}
-          value={filter.category}
-          onChange={(v) => setFilter((f) => ({ ...f, category: v }))}
-          options={[
-            { value: 'all', label: '全部分类' },
-            { value: 'ai_tool', label: 'AItool' },
-            { value: 'ingestion', label: 'ingestion' },
-          ]}
-        />
-        <Select
-          style={{ width: 120 }}
-          value={filter.type}
-          onChange={(v) => setFilter((f) => ({ ...f, type: v }))}
-          options={[
-            { value: 'all', label: '全部类型' },
-            { value: 'whitelist', label: '只读' },
-            { value: 'candidate', label: '候选' },
-          ]}
-        />
-        <Select
-          style={{ width: 120 }}
-          value={filter.status}
-          onChange={(v) => setFilter((f) => ({ ...f, status: v }))}
-          options={[
-            { value: 'all', label: '全部状态' },
-            { value: 'enabled', label: '已启用' },
-            { value: 'disabled', label: '已禁用' },
-          ]}
-        />
-        <Button type="primary" onClick={handleCreate}>
-          新建工具
-        </Button>
-      </Space>
-      <Table
-        columns={columns}
-        dataSource={filteredTools}
-        rowKey="name"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
+      <Segmented
+        value={activeTab}
+        onChange={(v) => setActiveTab(v as 'ai_tool' | 'builtin')}
+        options={[
+          { label: 'AItool', value: 'ai_tool' },
+          { label: '内置工具', value: 'builtin' },
+        ]}
+        style={{ marginBottom: 16 }}
       />
+
+      {activeTab === 'ai_tool' && (
+        <>
+          <Space style={{ marginBottom: 16 }} wrap>
+            <Input.Search
+              placeholder="搜索工具名 / 显示名"
+              allowClear
+              style={{ width: 240 }}
+              value={filter.keyword}
+              onChange={(e) =>
+                setFilter((f) => ({ ...f, keyword: e.target.value }))
+              }
+            />
+            <Select
+              style={{ width: 120 }}
+              value={filter.type}
+              onChange={(v) => setFilter((f) => ({ ...f, type: v }))}
+              options={[
+                { value: 'all', label: '全部类型' },
+                { value: 'whitelist', label: '只读' },
+                { value: 'candidate', label: '候选' },
+              ]}
+            />
+            <Select
+              style={{ width: 120 }}
+              value={filter.status}
+              onChange={(v) => setFilter((f) => ({ ...f, status: v }))}
+              options={[
+                { value: 'all', label: '全部状态' },
+                { value: 'enabled', label: '已启用' },
+                { value: 'disabled', label: '已禁用' },
+              ]}
+            />
+            <Button type="primary" onClick={handleCreate}>
+              新建工具
+            </Button>
+          </Space>
+          <Table
+            columns={aiColumns}
+            dataSource={filteredAiTools}
+            rowKey="name"
+            loading={isLoading}
+            pagination={false}
+            size="middle"
+          />
+        </>
+      )}
+
+      {activeTab === 'builtin' && (
+        <Table
+          columns={builtinColumns}
+          dataSource={builtinTools}
+          rowKey="name"
+          loading={isLoading}
+          pagination={false}
+          size="middle"
+        />
+      )}
+
       <ToolEditDrawer
         open={drawerOpen}
         tool={editingTool}
