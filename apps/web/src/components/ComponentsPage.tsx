@@ -136,7 +136,7 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
   const expCode = v.experimental_object_code ?? '';
-  const toolType = v.tool_type ?? 'llm';
+  const toolType = v.tool_type ?? 'llm_converter';
   const nameLine = originalName
     ? `name: ${originalName}`
     : 'name: iface_ffffffff  # 自动生成，无需修改';
@@ -433,7 +433,7 @@ function ComponentFormFields({
               setPreviewOpen(true);
               try {
                 const currentPrompt = formInstance.getFieldValue('prompt') as string ?? '';
-                const currentToolType = formInstance.getFieldValue('tool_type') as string ?? 'llm';
+                const currentToolType = formInstance.getFieldValue('tool_type') as string ?? 'llm_converter';
                 const res = await apiExtractPreview({
                   artifact_id: uploadedFile.artifactId,
                   filename: uploadedFile.name,
@@ -804,7 +804,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
-        tool_type: (formValues.tool_type as string) ?? 'llm',
+        tool_type: (formValues.tool_type as string) ?? 'llm_converter',
       });
       form.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
     } else {
@@ -817,7 +817,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         description: parsed.description,
         prompt: parsed.prompt,
         experimental_object_code: parsed.experimental_object_code,
-        tool_type: parsed.tool_type ?? 'llm',
+        tool_type: parsed.tool_type ?? 'llm_converter',
         manifest_yaml: undefined,
       });
     }
@@ -839,7 +839,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           description: values.description as string,
           prompt: values.prompt as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
-          tool_type: (values.tool_type as string) ?? 'llm',
+          tool_type: (values.tool_type as string) ?? 'llm_converter',
         });
         publishMutation.mutate({
           manifest_yaml: yaml,
@@ -875,7 +875,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       description: parsed.description,
       prompt: parsed.prompt,
       experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
-      tool_type: parsed.tool_type ?? 'llm',
+      tool_type: parsed.tool_type ?? 'llm_converter',
     });
     // 编辑默认表单模式
     setEditAdvancedMode(false);
@@ -896,7 +896,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
         experimental_object_code: (formValues.experimental_object_code as string) ?? '',
-        tool_type: (formValues.tool_type as string) ?? 'llm',
+        tool_type: (formValues.tool_type as string) ?? 'llm_converter',
       }, editOriginalName);
       editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
     } else {
@@ -909,7 +909,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         description: parsed.description,
         prompt: parsed.prompt,
         experimental_object_code: parsed.experimental_object_code,
-        tool_type: parsed.tool_type ?? 'llm',
+        tool_type: parsed.tool_type ?? 'llm_converter',
         manifest_yaml: undefined,
       });
     }
@@ -928,7 +928,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           description: values.description as string,
           prompt: values.prompt as string,
           experimental_object_code: (values.experimental_object_code as string) ?? '',
-          tool_type: (values.tool_type as string) ?? 'llm',
+          tool_type: (values.tool_type as string) ?? 'llm_converter',
         }, editOriginalName);
         publishMutation.mutate({ manifest_yaml: yaml });
       }
