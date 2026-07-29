@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button,
+  Drawer,
   Form,
   Input,
   Modal,
@@ -16,7 +17,6 @@ import {
 } from 'antd';
 
 const { Text } = Typography;
-import { useNavigate } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -35,6 +35,7 @@ import {
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
 import { apiListComponents, apiListEquipment, type ComponentSummary } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
+import { ComponentsPage } from '@/components/ComponentsPage';
 
 /**
  * 实验对象管理页面（要素管理第 3 个 Tab）
@@ -91,7 +92,6 @@ export function ExperimentalObjectPage({
   onPresetConsumed?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
   const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
@@ -104,6 +104,10 @@ export function ExperimentalObjectPage({
   const [editTypeName, setEditTypeName] = useState('');
   const [editTypeDesc, setEditTypeDesc] = useState('');
   const [form] = Form.useForm();
+  // 接口抽屉：就地编辑/新建组件，不跳转页面
+  const [compDrawerOpen, setCompDrawerOpen] = useState(false);
+  const [compDrawerEditId, setCompDrawerEditId] = useState<string | undefined>(undefined);
+  const [compDrawerPrefill, setCompDrawerPrefill] = useState<string | undefined>(undefined);
 
   // 动态加载类型字典
   const { data: objectTypeData } = useQuery({
@@ -511,12 +515,15 @@ export function ExperimentalObjectPage({
               onClick={() => {
                 const boundComp = objectCodeToComponent.get(record.code);
                 if (boundComp) {
-                  // 已绑定接口：跳转到数据接口编辑页
-                  void navigate({ to: '/platform', search: { tab: 'components', edit_id: boundComp.id } });
+                  // 已绑定接口：就地打开编辑弹窗
+                  setCompDrawerEditId(boundComp.id);
+                  setCompDrawerPrefill(undefined);
                 } else {
-                  // 未绑定接口：跳转到数据接口新建页并预填实验对象
-                  void navigate({ to: '/platform', search: { tab: 'components', prefill_object: record.code } });
+                  // 未绑定接口：就地打开新建弹窗并预填实验对象
+                  setCompDrawerEditId(undefined);
+                  setCompDrawerPrefill(record.code);
                 }
+                setCompDrawerOpen(true);
               }}
             >
               {objectCodeToComponent.has(record.code) ? '接口' : '+接口'}
@@ -814,6 +821,26 @@ export function ExperimentalObjectPage({
           </div>
         )}
       </Modal>
+
+      {/* 接口编辑/新建抽屉：就地操作，不跳转页面 */}
+      <Drawer
+        title="数据接口"
+        open={compDrawerOpen}
+        onClose={() => {
+          setCompDrawerOpen(false);
+          setCompDrawerEditId(undefined);
+          setCompDrawerPrefill(undefined);
+          // 刷新组件列表，更新"接口"/"+接口"按钮状态
+          void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
+        }}
+        width={960}
+        destroyOnClose
+      >
+        <ComponentsPage
+          editId={compDrawerEditId}
+          prefillObject={compDrawerPrefill}
+        />
+      </Drawer>
 
     </div>
   );
