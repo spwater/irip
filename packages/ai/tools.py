@@ -294,6 +294,15 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         },
         category="ingestion",
     ),
+    ToolSpec(
+        name="llm_converter",
+        display_name="大模型解析器",
+        description="用于大模型对数据的解析。",
+        required_permission="",
+        candidate=False,
+        parameters_schema={},
+        category="ingestion",
+    ),
 )
 
 #: 全部工具（白名单 + 候选 + 插件）。
