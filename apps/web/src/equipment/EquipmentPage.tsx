@@ -487,6 +487,7 @@ export function EquipmentPage({
             >
               <Button
                 danger
+                type="primary"
                 loading={deleteMutation.isPending}
               >
                 删除仪器
