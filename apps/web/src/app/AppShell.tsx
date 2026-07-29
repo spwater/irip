@@ -243,8 +243,8 @@ function DynamicHeader({
         </Space>
       </div>
 
-      {/* 第二行：tabs（如果有）—— 无 tabs 时保留等高占位 */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 4, minHeight: hasTabs ? undefined : 28 }}>
+      {/* 第二行：tabs（如果有）—— 无 tabs 时保留等高占位，左边距与内容区对齐 */}
+      <div style={{ display: 'flex', gap: 12, marginTop: 4, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
           header.tabs!.map((tab) => (
             <Button
