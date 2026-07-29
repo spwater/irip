@@ -32,7 +32,7 @@ import {
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
 import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { extractApiError } from '@/api/types';
-import { ActionBar, DataTableShell } from '@/components/ui';
+import { DataTableShell } from '@/components/ui';
 
 /**
  * 设备仪器管理页面
@@ -364,8 +364,7 @@ export function EquipmentPage({
 
   return (
     <div>
-      <ActionBar style={{ marginBottom: 16 }}>
-        <Space wrap>
+      <Space style={{ marginBottom: 16 }} wrap>
           <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
             新建仪器或方法
           </Button>
@@ -387,8 +386,7 @@ export function EquipmentPage({
             onChange={(val: string) => setDeptFilter(val === '__all__' ? undefined : val)}
             options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
           />
-        </Space>
-      </ActionBar>
+      </Space>
 
       <DataTableShell bodyPadding={0}>
         <Table<EquipmentListItem>
