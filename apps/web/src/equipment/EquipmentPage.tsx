@@ -405,15 +405,58 @@ export function EquipmentPage({
       <Modal
         title={editingItem ? '编辑仪器或方法' : '新建仪器或方法'}
         open={modalOpen}
-        onOk={handleSubmit}
         onCancel={() => {
           setModalOpen(false);
           setEditingItem(null);
           form.resetFields();
         }}
-        confirmLoading={createMutation.isPending || updateMutation.isPending}
-        okText="保存"
-        cancelText="取消"
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            {editingItem ? (
+              <Popconfirm
+                title="确定删除该仪器？"
+                description="将同时删除仪器及其关联，此操作不可撤销。"
+                onConfirm={() => {
+                  deleteMutation.mutate(editingItem.id);
+                  setModalOpen(false);
+                  setEditingItem(null);
+                  form.resetFields();
+                }}
+                okText="确定删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  danger
+                  type="primary"
+                  loading={deleteMutation.isPending}
+                >
+                  删除仪器
+                </Button>
+              </Popconfirm>
+            ) : (
+              <span />
+            )}
+            <Space>
+              <Button
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingItem(null);
+                  form.resetFields();
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                type="primary"
+                onClick={handleSubmit}
+                loading={createMutation.isPending || updateMutation.isPending}
+              >
+                保存
+              </Button>
+            </Space>
+          </div>
+        }
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -470,31 +513,6 @@ export function EquipmentPage({
             <InputNumber min={0} style={{ width: '100%' }} placeholder="默认 0" />
           </Form.Item>
         </Form>
-        {editingItem && (
-          <div style={{ marginTop: 16, borderTop: '1px solid var(--ocean-border-subtle)', paddingTop: 12 }}>
-            <Popconfirm
-              title="确定删除该仪器？"
-              description="将同时删除仪器及其关联，此操作不可撤销。"
-              onConfirm={() => {
-                deleteMutation.mutate(editingItem.id);
-                setModalOpen(false);
-                setEditingItem(null);
-                form.resetFields();
-              }}
-              okText="删除"
-              cancelText="取消"
-              okButtonProps={{ danger: true }}
-            >
-              <Button
-                danger
-                type="primary"
-                loading={deleteMutation.isPending}
-              >
-                删除仪器
-              </Button>
-            </Popconfirm>
-          </div>
-        )}
       </Modal>
 
       {/* 物理量管理 Drawer */}
