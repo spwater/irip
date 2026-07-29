@@ -243,8 +243,17 @@ function DynamicHeader({
         </Space>
       </div>
 
+      {/* 渐变分隔线：左深右浅 */}
+      <div
+        style={{
+          height: 1,
+          marginTop: 12,
+          background: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+        }}
+      />
+
       {/* 第二行：tabs（如果有）—— 无 tabs 时保留等高占位，左边距与内容区对齐 */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 4, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
+      <div style={{ display: 'flex', gap: 12, marginTop: 10, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
           header.tabs!.map((tab) => (
             <Button
