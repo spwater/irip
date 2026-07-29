@@ -34,8 +34,8 @@ class TestToolWhitelist:
         assert len(CANDIDATE_TOOLS) == 4
 
     def test_all_tools_is_union(self) -> None:
-        """全部工具 = 白名单 + 候选。"""
-        assert len(ALL_TOOL_NAMES) == 12
+        """全部工具 = 白名单 + 候选 + 插件。"""
+        assert len(ALL_TOOL_NAMES) == 14
 
     def test_whitelist_tool_names_match(self) -> None:
         """白名单工具名称集合正确。"""
@@ -95,7 +95,7 @@ class TestToolRegistryValidation:
     def test_default_registry_has_all_tools(self) -> None:
         """默认注册表包含全部 12 个工具。"""
         registry = ToolRegistry()
-        assert len(registry.list_tools()) == 12
+        assert len(registry.list_tools()) == 14
 
     def test_get_known_tool(self) -> None:
         """按名称获取已知工具。"""
@@ -162,10 +162,10 @@ class TestCandidateToolMarking:
         assert all(s.candidate for s in candidates)
 
     def test_list_whitelist_tools(self) -> None:
-        """list_whitelist_tools 返回 8 个只读工具。"""
+        """list_whitelist_tools 返回 10 个非候选工具（8 只读 + 2 插件）。"""
         registry = ToolRegistry()
         whitelist = registry.list_whitelist_tools()
-        assert len(whitelist) == 8
+        assert len(whitelist) == 10
         assert all(not s.candidate for s in whitelist)
 
 
@@ -173,18 +173,21 @@ class TestToolParametersRecord:
     """工具参数记录验证。"""
 
     def test_all_tools_have_parameters_schema(self) -> None:
-        """所有工具有 parameters_schema（非空字典）。"""
+        """所有工具有 parameters_schema（字典类型）。"""
         registry = ToolRegistry()
         for spec in registry.list_tools():
             assert isinstance(spec.parameters_schema, dict)
-            assert "type" in spec.parameters_schema
+            # AI 工具应有 type 字段，插件工具可为空 schema
+            if spec.category == "ai_tool":
+                assert "type" in spec.parameters_schema
 
     def test_all_tools_have_required_permission(self) -> None:
-        """所有工具声明了所需权限。"""
+        """AI 工具声明了所需权限，插件工具可为空。"""
         registry = ToolRegistry()
         for spec in registry.list_tools():
-            assert spec.required_permission != ""
-            assert ":" in spec.required_permission
+            if spec.category == "ai_tool":
+                assert spec.required_permission != ""
+                assert ":" in spec.required_permission
 
     def test_all_tools_have_display_name(self) -> None:
         """所有工具有中文显示名。"""
@@ -204,7 +207,7 @@ class TestToolParametersRecord:
         """names() 返回全部工具名称元组。"""
         registry = ToolRegistry()
         names = registry.names()
-        assert len(names) == 12
+        assert len(names) == 14
         assert "search_standards" in names
         assert "suggest_mapping" in names
         assert "extract_data" in names

@@ -85,9 +85,9 @@ class TestReloadFromDb:
     async def test_reload_rebuilds_tools_and_enabled(self) -> None:
         """reload_from_db 后 _tools 和 _enabled 从 DB 重建。"""
         registry = ToolRegistry()
-        # 初始状态：12 个工具全部启用
-        assert len(registry.list_tools()) == 12
-        assert len(registry.enabled_names()) == 12
+        # 初始状态：14 个工具全部启用（12 AI + 2 插件）
+        assert len(registry.list_tools()) == 14
+        assert len(registry.enabled_names()) == 14
 
         rows = [
             _make_row(name="tool_a", enabled=True),
@@ -108,7 +108,7 @@ class TestReloadFromDb:
     async def test_reload_replaces_previous_state(self) -> None:
         """reload_from_db 是全量替换，旧工具声明被清除。"""
         registry = ToolRegistry()
-        assert len(registry.list_tools()) == 12
+        assert len(registry.list_tools()) == 14
 
         rows = [_make_row(name="only_tool", enabled=True)]
         with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
@@ -361,8 +361,8 @@ class TestSeedDataIntegrity:
     """验证 ALL_TOOLS 种子源完整性。"""
 
     def test_all_tools_count_is_12(self) -> None:
-        """ALL_TOOLS 包含 12 个工具。"""
-        assert len(ALL_TOOLS) == 12
+        """ALL_TOOLS 包含 14 个工具（12 AI + 2 插件）。"""
+        assert len(ALL_TOOLS) == 14
 
     def test_all_tools_have_unique_names(self) -> None:
         """ALL_TOOLS 中工具名唯一。"""
@@ -375,7 +375,7 @@ class TestSeedDataIntegrity:
             assert spec.name
             assert spec.display_name
             assert spec.description
-            assert spec.required_permission
+            # required_permission 对 AI 工具必填，插件工具可为空
             assert isinstance(spec.candidate, bool)
             assert isinstance(spec.parameters_schema, dict)
 
@@ -437,8 +437,8 @@ class TestSeedToolsIfEmpty:
     """
 
     @pytest.mark.integration
-    async def test_seed_writes_12_tools_on_empty_table(self) -> None:
-        """表空时写入 12 条种子数据。"""
+    async def test_seed_writes_14_tools_on_empty_table(self) -> None:
+        """表空时写入 14 条种子数据（12 AI + 2 插件）。"""
         pytest.skip("需要 PostgreSQL 数据库环境")
 
     @pytest.mark.integration
