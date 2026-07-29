@@ -20,8 +20,6 @@ export type AIToolDTO = {
 
 /** 工具筛选条件 */
 export type ToolFilter = {
-  /** 类型筛选：all=全部 / whitelist=只读 / candidate=候选 */
-  type: 'all' | 'whitelist' | 'candidate';
   /** 状态筛选：all=全部 / enabled=已启用 / disabled=已禁用 */
   status: 'all' | 'enabled' | 'disabled';
   /** 搜索关键词（匹配 name / display_name） */

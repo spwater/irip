@@ -39,7 +39,6 @@ export function AIToolsPage(): JSX.Element {
   const [builtinDrawerOpen, setBuiltinDrawerOpen] = useState(false);
   const [editingBuiltin, setEditingBuiltin] = useState<AIToolDTO | null>(null);
   const [filter, setFilter] = useState<ToolFilter>({
-    type: 'all',
     status: 'all',
     keyword: '',
   });
@@ -137,8 +136,6 @@ export function AIToolsPage(): JSX.Element {
   // AItool 筛选
   const filteredAiTools = useMemo(() => {
     return aiTools.filter((t) => {
-      if (filter.type === 'whitelist' && t.candidate) return false;
-      if (filter.type === 'candidate' && !t.candidate) return false;
       if (filter.status === 'enabled' && !t.enabled) return false;
       if (filter.status === 'disabled' && t.enabled) return false;
       if (filter.keyword.trim()) {
@@ -174,17 +171,6 @@ export function AIToolsPage(): JSX.Element {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
-    },
-    {
-      title: '类型',
-      key: 'type',
-      width: 100,
-      render: (_: unknown, r: UnifiedToolDTO) =>
-        r.candidate ? (
-          <Tag color="orange">候选</Tag>
-        ) : (
-          <Tag color="blue">只读</Tag>
-        ),
     },
     {
       title: '状态',
@@ -281,16 +267,6 @@ export function AIToolsPage(): JSX.Element {
               onChange={(e) =>
                 setFilter((f) => ({ ...f, keyword: e.target.value }))
               }
-            />
-            <Select
-              style={{ width: 120 }}
-              value={filter.type}
-              onChange={(v) => setFilter((f) => ({ ...f, type: v }))}
-              options={[
-                { value: 'all', label: '全部类型' },
-                { value: 'whitelist', label: '只读' },
-                { value: 'candidate', label: '候选' },
-              ]}
             />
             <Select
               style={{ width: 120 }}
