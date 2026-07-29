@@ -88,24 +88,15 @@ export function AppShell(): JSX.Element | null {
               style={{
                 minHeight: 88,
                 display: 'flex',
-                alignItems: 'center',
+                flexDirection: 'column',
+                justifyContent: 'center',
                 padding: '12px 20px',
-                gap: 8,
+                gap: 4,
                 borderBottom: '1px solid var(--ocean-border-subtle)',
               }}
             >
-              <span
-                style={{
-                  fontSize: 28,
-                  fontWeight: 800,
-                  letterSpacing: 1.5,
-                  color: 'var(--ocean-action-primary)',
-                  lineHeight: 1,
-                }}
-              >
-                IRIP
-              </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* 英文行：Data Ocean (左) + IRIP (右)，底部对齐 */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
                 <span
                   style={{
                     fontSize: 10,
@@ -121,16 +112,29 @@ export function AppShell(): JSX.Element | null {
                 </span>
                 <span
                   style={{
-                    fontSize: 9,
-                    color: 'var(--ocean-text-secondary)',
-                    fontFamily: 'var(--ocean-font-mono)',
+                    fontSize: 28,
+                    fontWeight: 800,
+                    letterSpacing: 1.5,
+                    color: 'var(--ocean-action-primary)',
                     lineHeight: 1,
-                    opacity: 0.85,
                   }}
                 >
-                  工业研究智能平台
+                  IRIP
                 </span>
               </div>
+              {/* 中文行：工业研究智能平台，与英文等宽 */}
+              <span
+                style={{
+                  fontSize: 11,
+                  color: 'var(--ocean-text-secondary)',
+                  fontWeight: 500,
+                  lineHeight: 1,
+                  letterSpacing: 3,
+                  width: 'fit-content',
+                }}
+              >
+                工业研究智能平台
+              </span>
             </div>
             <Menu
               mode="inline"
