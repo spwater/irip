@@ -12,6 +12,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiListUnifiedTools, apiToggleAITool } from '@/api/models-ai';
@@ -260,6 +261,7 @@ export function AIToolsPage(): JSX.Element {
         <>
           <Space style={{ marginBottom: 16 }} wrap>
             <Input
+              prefix={<SearchOutlined />}
               placeholder="搜索工具名 / 显示名"
               allowClear
               style={{ width: 240 }}
