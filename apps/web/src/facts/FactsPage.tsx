@@ -23,7 +23,7 @@ import {
 } from '@/api/facts-provenance';
 import { apiListDepartments } from '@/api/departments';
 import type { FactSummary } from '@/api/types';
-import { ActionBar, DataTableShell, FeedbackState } from '@/components/ui';
+import { DataTableShell, FeedbackState } from '@/components/ui';
 
 const { Text } = Typography;
 
@@ -306,8 +306,7 @@ export function FactsPage(): JSX.Element {
   return (
     <div>
       {/* 筛选与操作区 */}
-      <ActionBar style={{ marginBottom: 16 }}>
-        <Space>
+      <Space style={{ marginBottom: 16 }}>
           <Input
             prefix={<SearchOutlined />}
             placeholder="搜索事实..."
@@ -323,7 +322,6 @@ export function FactsPage(): JSX.Element {
             options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
           />
         </Space>
-      </ActionBar>
 
       {/* 表格外壳 */}
       <DataTableShell
