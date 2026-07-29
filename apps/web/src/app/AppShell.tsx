@@ -190,7 +190,7 @@ function DynamicHeader({
     >
       {/* 第一行：英文索引(小字在上) + 中文标题(大字在下) + 右侧操作 */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {header.index && (
             <Text
               style={{
