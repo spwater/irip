@@ -143,6 +143,8 @@ async def _call_llm(
         "model": config["model_name"],
         "messages": messages,
         "chat_template_kwargs": {"enable_thinking": False},
+        "temperature": 0.0,
+        "seed": 42,
     }
     async with httpx.AsyncClient(timeout=float(timeout), proxy=None) as client:
         resp = await client.post(url, headers=headers, json=body)

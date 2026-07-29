@@ -92,6 +92,8 @@ class LlmConverter:
             "model": config["model_name"],
             "messages": messages,
             "chat_template_kwargs": {"enable_thinking": False},
+            "temperature": 0.0,
+            "seed": 42,
         }
 
         base_url: str = str(config["base_url"]).rstrip("/")

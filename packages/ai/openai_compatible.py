@@ -215,6 +215,8 @@ class OpenAICompatibleProvider:
             "model": self._model,
             "messages": messages,
             "max_tokens": 8192,
+            "temperature": 0.0,
+            "seed": 42,
         }
         # 工具调用：将 tool_schemas 转为 OpenAI tools 格式
         if request.tool_schemas:
