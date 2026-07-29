@@ -6,9 +6,10 @@ import { useAuthStore } from '@/auth/AuthProvider';
 import { JobDrawer, JobDrawerButton } from '@/jobs/JobDrawer';
 import { OceanBackdrop } from '@/components/layout/OceanBackdrop';
 import { ContentFrame } from '@/components/layout/ContentFrame';
+import { PageHeaderProvider, usePageHeader } from './PageHeaderContext';
 
 const { Sider, Header, Content } = Layout;
-const { Text } = Typography;
+const { Title, Text } = Typography;
 
 /** 导航菜单项（一级入口，文案与跳转保持不变） */
 const NAV_ITEMS: MenuProps['items'] = [
@@ -22,13 +23,11 @@ const NAV_ITEMS: MenuProps['items'] = [
 /**
  * 主布局：
  * OceanBackdrop 包裹 → AppShell
- *   ├─ Sider（浅雾蓝结构层，选中项中蓝光带 + 左侧细线）
+ *   ├─ Sider（固定定位，不随滚动）
  *   ├─ Layout
- *   │  ├─ Header（降低视觉重量，保留作业、用户、登出）
+ *   │  ├─ Header（动态：显示当前页面的 index/title/tabs/actions）
  *   │  └─ Content（ContentFrame → Outlet）
  *   └─ JobDrawer
- *
- * 认证重定向、菜单点击、用户信息、登出和 JobDrawer 行为保持不变。
  */
 export function AppShell(): JSX.Element | null {
   const user = useAuthStore((s) => s.user);
@@ -36,7 +35,6 @@ export function AppShell(): JSX.Element | null {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // 未认证时重定向到登录页（仅依赖 user，避免导航循环）
   useEffect(() => {
     if (!user) {
       void navigate({ to: '/login', search: { redirect: location.pathname } });
@@ -54,7 +52,6 @@ export function AppShell(): JSX.Element | null {
     void navigate({ to: key });
   };
 
-  // 详情路由进入时，所属一级模块导航保持视觉选中（前缀映射）
   const matchedItem = NAV_ITEMS?.find((item) =>
     item && 'key' in item && typeof item.key === 'string'
       ? location.pathname.startsWith(item.key)
@@ -67,139 +64,183 @@ export function AppShell(): JSX.Element | null {
 
   return (
     <>
-      {/* 全局极地雾蓝背景：固定定位，z-index 0，不承载业务数据 */}
       <OceanBackdrop />
-
-      <Layout style={{ minHeight: '100vh', background: 'transparent', position: 'relative', zIndex: 10 }}>
-        {/* 导航：浅雾蓝结构层，选中项中蓝光带 + 左侧细线 + 文字增强 */}
-        <Sider
-          width={212}
-          breakpoint="lg"
-          collapsedWidth={0}
-          theme="light"
-          style={{
-            background: 'var(--ocean-surface-structural)',
-            borderRight: '1px solid var(--ocean-border-subtle)',
-            backdropFilter: 'none',
-          }}
-        >
-          {/* IRIP 品牌索引 */}
-          <div
+      <PageHeaderProvider>
+        <Layout style={{ minHeight: '100vh', background: 'transparent', position: 'relative', zIndex: 10 }}>
+          {/* 导航：固定定位，不随滚动 */}
+          <Sider
+            width={212}
+            breakpoint="lg"
+            collapsedWidth={0}
+            theme="light"
             style={{
-              height: 56,
-              display: 'flex',
-              alignItems: 'center',
-              padding: '0 20px',
-              gap: 10,
-              borderBottom: '1px solid var(--ocean-border-subtle)',
+              background: 'var(--ocean-surface-structural)',
+              borderRight: '1px solid var(--ocean-border-subtle)',
+              position: 'fixed',
+              left: 0,
+              top: 0,
+              bottom: 0,
+              overflow: 'auto',
+              zIndex: 200,
             }}
           >
-            <span
+            <div
               style={{
-                fontSize: 20,
-                fontWeight: 700,
-                letterSpacing: 1,
-                color: 'var(--ocean-action-primary)',
+                height: 56,
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 20px',
+                gap: 10,
+                borderBottom: '1px solid var(--ocean-border-subtle)',
               }}
             >
-              IRIP
-            </span>
-            <span
+              <span
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  color: 'var(--ocean-action-primary)',
+                }}
+              >
+                IRIP
+              </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: 2,
+                  textTransform: 'uppercase',
+                  color: 'var(--ocean-text-muted)',
+                  fontFamily: 'var(--ocean-font-mono)',
+                }}
+              >
+                Data Ocean
+              </span>
+            </div>
+            <Menu
+              mode="inline"
+              selectedKeys={[selectedKey]}
+              items={NAV_ITEMS}
+              onClick={handleMenuClick}
               style={{
-                fontSize: 10,
+                background: 'transparent',
+                borderInlineEnd: 'none',
+                padding: '8px 12px',
+              }}
+            />
+          </Sider>
+
+          <Layout style={{ background: 'transparent', marginLeft: 212 }}>
+            <DynamicHeader user={user} onLogout={handleLogout} />
+
+            <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
+              <ContentFrame>
+                <Outlet />
+              </ContentFrame>
+            </Content>
+          </Layout>
+        </Layout>
+      </PageHeaderProvider>
+      <JobDrawer />
+    </>
+  );
+}
+
+/** 动态 Header：从 PageHeaderContext 读取当前页面注册的内容 */
+function DynamicHeader({
+  user,
+  onLogout,
+}: {
+  user: { displayName: string };
+  onLogout: () => void;
+}): JSX.Element {
+  const { header } = usePageHeader();
+
+  return (
+    <Header
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        background: 'rgba(232, 246, 249, 0.5)',
+        backdropFilter: 'blur(6px)',
+        padding: '12px 24px',
+        borderBottom: '1px solid var(--ocean-border-subtle)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 100,
+        height: 'auto',
+        lineHeight: 'normal',
+        gap: 8,
+      }}
+    >
+      {/* 第一行：index + title + 右侧操作 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          {header.index && (
+            <Text
+              style={{
+                fontSize: 11,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
                 color: 'var(--ocean-text-muted)',
                 fontFamily: 'var(--ocean-font-mono)',
               }}
             >
-              Data Ocean
-            </span>
-          </div>
-          <Menu
-            mode="inline"
-            selectedKeys={[selectedKey]}
-            items={NAV_ITEMS}
-            onClick={handleMenuClick}
-            style={{
-              background: 'transparent',
-              borderInlineEnd: 'none',
-              padding: '8px 12px',
-            }}
-          />
-        </Sider>
-
-        <Layout style={{ background: 'transparent' }}>
-          {/* 顶栏：降低视觉重量，透明背景 + 底部分隔线 */}
-          <Header
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              background: 'rgba(232, 246, 249, 0.5)',
-              backdropFilter: 'blur(6px)',
-              padding: '0 24px',
-              borderBottom: '1px solid var(--ocean-border-subtle)',
-              position: 'sticky',
-              top: 0,
-              zIndex: 100,
-            }}
-          >
-            <Text
+              {header.index}
+            </Text>
+          )}
+          {header.title && (
+            <Title
+              level={4}
               style={{
-                fontSize: 15,
-                fontWeight: 600,
+                margin: 0,
+                fontSize: 22,
+                fontWeight: 650,
                 color: 'var(--ocean-text-primary)',
-                letterSpacing: 0.3,
+                lineHeight: 1.2,
               }}
             >
-              工业研究智能平台
-              <span
-                style={{
-                  marginLeft: 10,
-                  fontSize: 11,
-                  letterSpacing: 1.5,
-                  color: 'var(--ocean-text-muted)',
-                  fontFamily: 'var(--ocean-font-mono)',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Industrial Research Intelligence Platform
-              </span>
+              {header.title}
+            </Title>
+          )}
+        </div>
+        <Space size="middle" align="center">
+          {header.actions}
+          <JobDrawerButton />
+          <Space size="small" align="center">
+            <Avatar
+              size="small"
+              style={{
+                backgroundColor: 'var(--ocean-action-primary)',
+                color: '#FFFFFF',
+              }}
+            >
+              {user.displayName.charAt(0)}
+            </Avatar>
+            <Text style={{ color: 'var(--ocean-text-primary)' }}>
+              {user.displayName}
             </Text>
-            <Space size="middle">
-              <JobDrawerButton />
-              <Space size="small" align="center">
-                <Avatar
-                  size="small"
-                  style={{
-                    backgroundColor: 'var(--ocean-action-primary)',
-                    color: '#FFFFFF',
-                  }}
-                >
-                  {user.displayName.charAt(0)}
-                </Avatar>
-                <Text style={{ color: 'var(--ocean-text-primary)' }}>
-                  {user.displayName}
-                </Text>
-              </Space>
-              <Button type="link" onClick={handleLogout}>
-                登出
-              </Button>
-            </Space>
-          </Header>
+          </Space>
+          <Button type="link" onClick={onLogout}>
+            登出
+          </Button>
+        </Space>
+      </div>
 
-          {/* 内容区：统一内容框架，移除 #f0f2f5 硬编码 */}
-          <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
-            <ContentFrame>
-              <Outlet />
-            </ContentFrame>
-          </Content>
-        </Layout>
-      </Layout>
-
-      {/* 全局作业抽屉 */}
-      <JobDrawer />
-    </>
+      {/* 第二行：tabs（如果有） */}
+      {header.tabs && header.tabs.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+          {header.tabs.map((tab) => (
+            <Button
+              key={tab.key}
+              type={header.activeTab === tab.key ? 'primary' : 'default'}
+              size="small"
+              onClick={() => header.onTabChange?.(tab.key)}
+            >
+              {tab.label}
+            </Button>
+          ))}
+        </div>
+      )}
+    </Header>
   );
 }

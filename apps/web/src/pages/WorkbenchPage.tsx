@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import { Button, Table, Typography } from 'antd';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -8,8 +8,9 @@ import { apiListFlows } from '@/api/flows';
 import { apiListJobs } from '@/api/jobs';
 import type { JobListItem } from '@/api/governance';
 import { apiGetSystemHealth, type SystemHealth } from '@/api/system';
-import { PageIntro, DataHero, MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/components/ui';
+import { DataHero, MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';
+import { usePageHeader } from '@/app/PageHeaderContext';
 
 const { Text } = Typography;
 
@@ -70,6 +71,14 @@ const QUICK_ENTRIES: { label: string; desc: string; to: string; search?: Record<
  */
 export function WorkbenchPage(): JSX.Element {
   const navigate = useNavigate();
+  const { setHeader } = usePageHeader();
+
+  useEffect(() => {
+    setHeader({
+      index: 'MODULE 01 / RESEARCH WORKBENCH',
+      title: '研发看板',
+    });
+  }, [setHeader]);
 
   // ---- 独立查询 1：事实列表（最近记录） ----
   const { data: factsData } = useQuery({
@@ -162,24 +171,13 @@ export function WorkbenchPage(): JSX.Element {
 
   return (
     <div className="ocean-page-enter">
-      {/* 页面标题区 */}
-      <PageIntro
-        index="MODULE 01 / RESEARCH WORKBENCH"
-        title="研发看板"
-        actions={
-          <Button type="primary" onClick={() => void navigate({ to: '/lab-ops' })}>
-            进入实验
-          </Button>
-        }
-      >
-        {/* 平台态势 DataHero：活跃作业数 */}
-        <DataHero
-          value={activeJobCount}
-          label="当前活跃作业"
-          unit="个"
-          status={activeJobCount > 0 ? 'info' : 'neutral'}
-        />
-      </PageIntro>
+      {/* 平台态势 DataHero：活跃作业数 */}
+      <DataHero
+        value={activeJobCount}
+        label="当前活跃作业"
+        unit="个"
+        status={activeJobCount > 0 ? 'info' : 'neutral'}
+      />
 
       {/* 摘要指标条 */}
       <div style={{ marginBottom: 24 }}>
