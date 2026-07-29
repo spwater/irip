@@ -191,11 +191,10 @@ export function AIConfigPage(): JSX.Element {
           rules={[{ required: true, message: '请输入模型名称' }]}
         >
           <Space.Compact style={{ width: '100%' }}>
-            <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" style={{ flex: 1 }} />
+            <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
             <Button
               onClick={() => void handleTestModel('extract')}
               loading={testExtractLoading}
-              style={{ flexShrink: 0, height: 32 }}
             >
               测试
             </Button>
@@ -207,11 +206,10 @@ export function AIConfigPage(): JSX.Element {
           extra="AI 助手对话使用的模型，留空则与数据提取模型相同"
         >
           <Space.Compact style={{ width: '100%' }}>
-            <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" style={{ flex: 1 }} />
+            <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
             <Button
               onClick={() => void handleTestModel('assistant')}
               loading={testAssistantLoading}
-              style={{ flexShrink: 0, height: 32 }}
             >
               测试
             </Button>
