@@ -3,17 +3,14 @@ import {
   Button,
   Form,
   Input,
-  Switch,
-  Space,
   Typography,
   message,
 } from 'antd';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { http } from '@/api/client';
 import { extractApiError } from '@/api/types';
-import { StatusMark } from '@/components/ui';
 
-const { Title, Paragraph, Text } = Typography;
+const { Title, Paragraph } = Typography;
 
 /** AI 配置类型 */
 type AIConfig = {
@@ -59,7 +56,6 @@ export function AIConfigPage(): JSX.Element {
         api_key: '',
         model_name: config.model_name,
         assistant_model_name: config.assistant_model_name || '',
-        enabled: config.enabled,
       });
     }
   }, [config, form]);
@@ -148,7 +144,7 @@ export function AIConfigPage(): JSX.Element {
         api_key: values.api_key,
         model_name: values.model_name,
         assistant_model_name: values.assistant_model_name,
-        enabled: values.enabled ?? false,
+        enabled: true,
         meta_prompt: existingPrompt,
       });
     } catch {
@@ -171,28 +167,6 @@ export function AIConfigPage(): JSX.Element {
       <Paragraph type="secondary">
         配置 OpenAI 兼容的 API 地址和密钥。
       </Paragraph>
-
-      {/* ---- 状态行（精简，无测试按钮） ---- */}
-      {config && (
-        <div style={{ marginBottom: 16 }}>
-          <Space size="large" align="center">
-            <Text>当前状态: </Text>
-            <StatusMark
-              semantic={config.enabled ? 'success' : 'neutral'}
-              label={config.enabled ? '已启用' : '未启用'}
-            />
-            {config.model_name && (
-              <>
-                <Text type="secondary">数据提取: {config.model_name}</Text>
-                {config.assistant_model_name && (
-                  <Text type="secondary">AI助手: {config.assistant_model_name}</Text>
-                )}
-                <Text type="secondary">密钥: {config.api_key_masked || '-'}</Text>
-              </>
-            )}
-          </Space>
-        </div>
-      )}
 
       {/* ---- 大模型配置区 ---- */}
       <Form form={form} layout="vertical" style={{ maxWidth: 600 }}>
@@ -220,7 +194,7 @@ export function AIConfigPage(): JSX.Element {
             <Button
               onClick={() => void handleTestModel('extract')}
               loading={testExtractLoading}
-              style={{ flexShrink: 0 }}
+              style={{ flexShrink: 0, height: 32 }}
             >
               测试
             </Button>
@@ -236,21 +210,16 @@ export function AIConfigPage(): JSX.Element {
             <Button
               onClick={() => void handleTestModel('assistant')}
               loading={testAssistantLoading}
-              style={{ flexShrink: 0 }}
+              style={{ flexShrink: 0, height: 32 }}
             >
               测试
             </Button>
           </Space.Compact>
         </Form.Item>
-        <Form.Item label="启用">
-          <Space>
-            <Form.Item name="enabled" valuePropName="checked" noStyle>
-              <Switch />
-            </Form.Item>
-            <Button type="primary" onClick={handleSaveModel} loading={saveMutation.isPending}>
-              保存大模型配置
-            </Button>
-          </Space>
+        <Form.Item>
+          <Button type="primary" onClick={handleSaveModel} loading={saveMutation.isPending}>
+            保存大模型配置
+          </Button>
         </Form.Item>
       </Form>
 
