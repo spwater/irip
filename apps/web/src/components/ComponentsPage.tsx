@@ -359,8 +359,8 @@ function ComponentFormFields({
       <Form.Item name="tool_type" label="解析工具">
         <Select
           options={[
-            { value: 'llm', label: 'LLM 提取（摩登）' },
-            { value: 'xrd_tool', label: 'XRD 解析工具（确定性）' },
+            { value: 'llm', label: '大模型' },
+            { value: 'xrd_tool', label: 'XRD 解析器' },
           ]}
         />
       </Form.Item>
