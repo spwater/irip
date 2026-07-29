@@ -43,6 +43,6 @@ describe('LoginPage', () => {
     const loginButton = await screen.findByRole('button', { name: /登\s*录/ });
     await userEvent.click(loginButton);
 
-    expect(await screen.findByRole('heading', { name: '实验事实' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: '实验室运营' })).toBeVisible();
   });
 });
