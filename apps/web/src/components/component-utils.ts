@@ -47,6 +47,7 @@ export const FORM_FIELD_NAMES = [
   'description',
   'prompt',
   'experimental_object_code',
+  'equipment_id',
   'tool_type',
 ] as const;
 

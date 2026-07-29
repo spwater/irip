@@ -119,6 +119,7 @@ class ComponentVersion(Base):
     manifest_sha256: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 从 manifest 提取的实验对象编码（独立列，便于查询关联）
     experimental_object_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    equipment_id: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     runtime: Mapped[str] = mapped_column(sa.Text, nullable=False)
     port_schemas: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(
@@ -228,6 +229,7 @@ class ComponentRegistryService:
         self,
         manifest: ComponentManifest,
         experimental_object_code: str | None = None,
+        equipment_id: str | None = None,
     ) -> ComponentVersion:
         """发布组件版本。
 
@@ -339,6 +341,7 @@ class ComponentRegistryService:
                 manifest_yaml=updated_yaml,
                 manifest_sha256=manifest.sha256,
                 experimental_object_code=experimental_object_code,
+                equipment_id=equipment_id,
                 runtime=manifest.runtime,
                 port_schemas=port_schemas,
                 status="published",

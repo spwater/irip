@@ -80,6 +80,10 @@ class PublishComponentRequest(BaseModel):
         None,
         description="关联实验对象编码（独立字段，不再从 YAML 解析）",
     )
+    equipment_id: str | None = Field(
+        None,
+        description="关联设备 UUID（独立字段）",
+    )
 
 
 # ---- 响应模型 ----
@@ -113,6 +117,7 @@ class ComponentListItemResponse(BaseModel):
     runtime: str
     engine: str
     experimental_object_code: str
+    equipment_id: str | None = None
     status: str
     manifest_sha256: str
     published_at: datetime | None
@@ -138,6 +143,7 @@ class ComponentDetailResponse(BaseModel):
     status: str
     active_version_id: str | None = None
     experimental_object_code: str | None = None
+    equipment_id: str | None = None
     manifest_sha256: str
     manifest_yaml: str
     published_at: datetime | None
@@ -260,7 +266,11 @@ async def publish_component(
                     fields={"experimental_object_code": exp_code},
                 )
 
-    version = await service.publish(manifest, experimental_object_code=exp_code or None)
+    version = await service.publish(
+        manifest,
+        experimental_object_code=exp_code or None,
+        equipment_id=body.equipment_id or None,
+    )
 
     return ComponentVersionResponse(
         id=str(version.id),
@@ -341,6 +351,7 @@ async def list_components(
                 engine=_detect_engine(ver.manifest_yaml),
                 experimental_object_code=ver.experimental_object_code
                 or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
+                equipment_id=getattr(ver, "equipment_id", None),
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
@@ -383,6 +394,7 @@ async def get_component(
         active_version_id=str(comp.active_version_id) if comp.active_version_id else None,
         experimental_object_code=ver.experimental_object_code
         or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
+        equipment_id=getattr(ver, "equipment_id", None),
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,
         published_at=ver.published_at,

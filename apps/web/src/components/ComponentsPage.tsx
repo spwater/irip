@@ -131,9 +131,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     queryKey: ['departments-for-component-filter'],
     queryFn: () => apiListDepartments({ limit: 100 }),
   });
-  const deptMap = new Map<string, string>(
-    (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
-  );
   const deptOptions = (deptData?.items ?? []).map((d) => ({
     value: d.id,
     label: d.display_name,
@@ -303,6 +300,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         publishMutation.mutate({
           manifest_yaml: yaml,
           experimental_object_code: (values.experimental_object_code as string) ?? null,
+          equipment_id: (values.equipment_id as string) ?? null,
         });
       }
     } catch {
@@ -438,15 +436,12 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       },
     },
     {
-      title: '所属单位',
-      key: 'department',
+      title: '关联设备',
+      key: 'equipment',
       width: 140,
       render: (_: unknown, record: ComponentSummary) => {
-        const deptId = record.experimental_object_code
-          ? objectCodeToDeptId.get(record.experimental_object_code)
-          : null;
-        const name = deptId ? deptMap.get(deptId) : null;
-        return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
+        const eqName = record.equipment_id ? equipmentMap.get(record.equipment_id) : null;
+        return eqName ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eqName}</Tag> : <Text type="secondary">-</Text>;
       },
     },
     {
@@ -643,7 +638,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               />
             </Form.Item>
           ) : (
-            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} ingestionToolOptions={ingestionToolOptions} />
+            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} ingestionToolOptions={ingestionToolOptions} />
           )}
         </Form>
       </Modal>
@@ -668,7 +663,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
 
       {/* 编辑组件 Modal */}
       <Modal
-        title="编辑组件"
+        title="编辑接口"
         open={editModalOpen}
         onOk={handleEditPublish}
         onCancel={() => {
@@ -719,7 +714,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} ingestionToolOptions={ingestionToolOptions} />
+              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} originalName={editOriginalName} ingestionToolOptions={ingestionToolOptions} />
             </>
           )}
         </Form>

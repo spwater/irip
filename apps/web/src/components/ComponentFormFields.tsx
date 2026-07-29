@@ -35,9 +35,8 @@ const { Text } = Typography;
 export function ComponentFormFields({
   objectOptions,
   objectTypeOptions,
+  equipmentOptions,
   objectMap,
-  deptMap,
-  objectCodeToDeptId,
   originalName,
   ingestionToolOptions,
 }: {
@@ -45,8 +44,6 @@ export function ComponentFormFields({
   objectTypeOptions: { value: string; label: string }[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
-  deptMap: Map<string, string>;
-  objectCodeToDeptId: Map<string, string | null>;
   originalName?: string;
   ingestionToolOptions: { value: string; label: string }[];
 }): JSX.Element {
@@ -61,11 +58,6 @@ export function ComponentFormFields({
 
   const watchedExpCode = Form.useWatch('experimental_object_code', formInstance);
   const watchedToolType = Form.useWatch('tool_type', formInstance);
-  const inheritedDeptName = (() => {
-    if (!watchedExpCode) return null;
-    const deptId = objectCodeToDeptId.get(watchedExpCode);
-    return deptId ? deptMap.get(deptId) : null;
-  })();
 
   useEffect(() => {
     if (watchedExpCode) {
@@ -107,11 +99,13 @@ export function ComponentFormFields({
     <>
       <Row gutter={16}>
         <Col span={12}>
-          <Form.Item label="所属单位">
-            <Input
-              value={inheritedDeptName ?? ''}
-              disabled
-              placeholder="选择关联实验对象后自动填充"
+          <Form.Item name="equipment_id" label="关联设备">
+            <Select
+              placeholder="请选择关联设备"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={equipmentOptions}
             />
           </Form.Item>
         </Col>

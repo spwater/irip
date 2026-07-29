@@ -36,14 +36,14 @@ export async function apiDeleteEquipment(id: string): Promise<void> { await http
 // V2 Components API
 // ============================================================
 
-export type ComponentSummary = { id: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; engine: string; experimental_object_code: string; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; };
+export type ComponentSummary = { id: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; engine: string; experimental_object_code: string; equipment_id: string | null; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; };
 export type ComponentDetail = ComponentSummary & { manifest_yaml: string; active_version_id?: string | null; parameters?: Record<string, unknown>; inputs?: unknown[]; outputs?: unknown[]; };
 export type ComponentVersionItem = { id: string; version: string; status: string; manifest_sha256: string; created_at: string; };
 export type PersistFactResult = { fact_id: string; revision: number; subject_id: string; raw_count: number; artifact_id: string | null; };
 
 export async function apiListComponents(params?: { kind?: string; status?: string; }): Promise<CursorPage<ComponentSummary>> { const res = await http.get<{ items: ComponentSummary[] }>('/components/', { params }); return { items: res.data.items, next_cursor: null, has_more: false }; }
 export async function apiGetComponent(id: string): Promise<ComponentDetail> { const res = await http.get<ComponentDetail>(`/components/${id}`); return res.data; }
-export async function apiPublishComponent(body: { manifest_yaml: string; experimental_object_code?: string | null; }): Promise<ComponentSummary> { const res = await http.post<ComponentSummary>('/components/', body); return res.data; }
+export async function apiPublishComponent(body: { manifest_yaml: string; experimental_object_code?: string | null; equipment_id?: string | null; }): Promise<ComponentSummary> { const res = await http.post<ComponentSummary>('/components/', body); return res.data; }
 export async function apiListComponentVersions(componentId: string): Promise<ComponentVersionItem[]> { const res = await http.get<ComponentVersionItem[]>(`/components/${componentId}/versions`); return res.data; }
 export async function apiArchiveComponent(componentId: string): Promise<void> { await http.patch(`/components/${componentId}/archive`); }
 export async function apiRestoreComponent(componentId: string): Promise<void> { await http.patch(`/components/${componentId}/restore`); }
