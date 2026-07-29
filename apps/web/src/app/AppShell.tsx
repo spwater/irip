@@ -76,7 +76,7 @@ export function AppShell(): JSX.Element | null {
             style={{
               background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0px, rgba(232, 243, 245, 0.15) 100px, rgba(232, 243, 245, 0) 150px), linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)',
               backgroundRepeat: 'no-repeat, no-repeat',
-              backgroundSize: '100% 100%, 1px 100%',
+              backgroundSize: '100% 100%, 2px 100%',
               backgroundPosition: '0 0, right 0',
               borderRight: 'none',
               position: 'fixed',
@@ -156,7 +156,7 @@ export function AppShell(): JSX.Element | null {
             />
           </Sider>
 
-          <Layout style={{ background: 'linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)', backgroundRepeat: 'no-repeat', backgroundSize: '1px 100%', backgroundPosition: 'left 0', marginLeft: 212 }}>
+          <Layout style={{ background: 'linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)', backgroundRepeat: 'no-repeat', backgroundSize: '2px 100%', backgroundPosition: 'left 0', marginLeft: 212 }}>
             <DynamicHeader user={user} onLogout={handleLogout} />
 
             <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
