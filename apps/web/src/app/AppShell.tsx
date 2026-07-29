@@ -232,7 +232,7 @@ function DynamicHeader({
                 fontSize: isHero ? 40 : 32,
                 fontWeight: 800,
                 lineHeight: 1.15,
-                color: 'var(--ocean-text-primary)',
+                color: 'var(--ocean-action-primary)',
               }}
             >
               {header.title}
@@ -291,10 +291,10 @@ function DynamicHeader({
                     ? 'var(--ocean-action-primary)'
                     : 'var(--ocean-text-secondary)',
                   background: isActive
-                    ? 'rgba(20, 118, 214, 0.15)'
+                    ? 'rgba(20, 118, 214, 0.25)'
                     : 'transparent',
                   border: isActive
-                    ? '1px solid rgba(20, 118, 214, 0.4)'
+                    ? '1px solid rgba(20, 118, 214, 0.6)'
                     : '1px solid transparent',
                   borderRadius: 20,
                   cursor: 'pointer',
