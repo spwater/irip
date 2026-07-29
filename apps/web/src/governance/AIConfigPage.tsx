@@ -20,6 +20,7 @@ type AIConfig = {
   base_url: string;
   api_key_masked: string;
   model_name: string;
+  assistant_model_name: string;
   enabled: boolean;
   meta_prompt: string | null;
   updated_at: string | null;
@@ -56,6 +57,7 @@ export function AIConfigPage(): JSX.Element {
         base_url: config.base_url,
         api_key: '',
         model_name: config.model_name,
+        assistant_model_name: config.assistant_model_name || '',
         enabled: config.enabled,
       });
     }
@@ -76,6 +78,7 @@ export function AIConfigPage(): JSX.Element {
       base_url: string;
       api_key: string;
       model_name: string;
+      assistant_model_name: string;
       enabled: boolean;
       meta_prompt: string;
     }) => {
@@ -135,6 +138,7 @@ export function AIConfigPage(): JSX.Element {
         base_url: values.base_url,
         api_key: values.api_key,
         model_name: values.model_name,
+        assistant_model_name: values.assistant_model_name,
         enabled: values.enabled ?? false,
         meta_prompt: existingPrompt,
       });
@@ -172,7 +176,10 @@ export function AIConfigPage(): JSX.Element {
             />
             {config.model_name && (
               <>
-                <Text type="secondary">模型: {config.model_name}</Text>
+                <Text type="secondary">数据提取: {config.model_name}</Text>
+                {config.assistant_model_name && (
+                  <Text type="secondary">AI助手: {config.assistant_model_name}</Text>
+                )}
                 <Text type="secondary">密钥: {config.api_key_masked || '-'}</Text>
               </>
             )}
@@ -198,10 +205,17 @@ export function AIConfigPage(): JSX.Element {
         </Form.Item>
         <Form.Item
           name="model_name"
-          label="模型名称"
+          label="数据提取模型"
           rules={[{ required: true, message: '请输入模型名称' }]}
         >
           <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
+        </Form.Item>
+        <Form.Item
+          name="assistant_model_name"
+          label="AI助手模型"
+          extra="AI 助手对话使用的模型，留空则与数据提取模型相同"
+        >
+          <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
         </Form.Item>
         <Form.Item label="启用">
           <Space>

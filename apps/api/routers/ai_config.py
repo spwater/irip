@@ -49,6 +49,7 @@ _ai_config_table = sa.Table(
     sa.Column("base_url", sa.Text, nullable=False),
     sa.Column("api_key", sa.Text, nullable=False),
     sa.Column("model_name", sa.Text, nullable=False),
+    sa.Column("assistant_model_name", sa.Text, nullable=True),
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
     sa.Column("meta_prompt", sa.Text, nullable=True),
     sa.Column("updated_at", UTCDateTime, server_default=sa.func.now(), nullable=False),
@@ -67,7 +68,10 @@ class AIConfigUpdateRequest(BaseModel):
         ..., max_length=500, description="API 基础地址，如 https://api.openai.com/v1"
     )
     api_key: str = Field(..., max_length=500, description="API 密钥")
-    model_name: str = Field(..., max_length=200, description="模型名称，如 gpt-4o")
+    model_name: str = Field(..., max_length=200, description="数据提取模型名称，如 gpt-4o")
+    assistant_model_name: str = Field(
+        "", max_length=200, description="AI助手模型名称，如 qwen-plus"
+    )
     enabled: bool = Field(True, description="是否启用")
     meta_prompt: str | None = Field(None, description="提示词推荐的系统提示词，留空则用内置默认")
 
@@ -78,6 +82,7 @@ class AIConfigResponse(BaseModel):
     base_url: str
     api_key_masked: str
     model_name: str
+    assistant_model_name: str
     enabled: bool
     meta_prompt: str | None = None
     updated_at: str | None = None
@@ -207,6 +212,7 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
                 base_url="",
                 api_key_masked="",
                 model_name="",
+                assistant_model_name="",
                 enabled=False,
                 meta_prompt=_DEFAULT_META_PROMPT,
             )
@@ -214,6 +220,7 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
             base_url=row["base_url"],
             api_key_masked=_mask_key(row["api_key"]),
             model_name=row["model_name"],
+            assistant_model_name=row.get("assistant_model_name") or "",
             enabled=row["enabled"],
             meta_prompt=row.get("meta_prompt") or _DEFAULT_META_PROMPT,
             updated_at=str(row["updated_at"]) if row["updated_at"] else None,
@@ -267,6 +274,7 @@ async def update_ai_config(
                     base_url=body.base_url,
                     api_key=encrypted_api_key,
                     model_name=body.model_name,
+                    assistant_model_name=body.assistant_model_name,
                     enabled=body.enabled,
                     meta_prompt=body.meta_prompt,
                     updated_at=now,
@@ -281,6 +289,7 @@ async def update_ai_config(
                     base_url=body.base_url,
                     api_key=encrypted_api_key,
                     model_name=body.model_name,
+                    assistant_model_name=body.assistant_model_name,
                     enabled=body.enabled,
                     meta_prompt=body.meta_prompt,
                     updated_at=now,
@@ -292,6 +301,7 @@ async def update_ai_config(
         base_url=body.base_url,
         api_key_masked=_mask_key(body.api_key),
         model_name=body.model_name,
+        assistant_model_name=body.assistant_model_name,
         enabled=body.enabled,
         meta_prompt=body.meta_prompt,
         updated_at=str(now),
@@ -468,6 +478,7 @@ async def get_active_ai_config() -> dict[str, str] | None:
             "base_url": row["base_url"],
             "api_key": decrypted_key,
             "model_name": row["model_name"],
+            "assistant_model_name": row.get("assistant_model_name") or row["model_name"],
             "meta_prompt": row.get("meta_prompt") or "",
         }
 
