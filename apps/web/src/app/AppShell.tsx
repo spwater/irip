@@ -95,8 +95,19 @@ export function AppShell(): JSX.Element | null {
                 borderBottom: '1px solid var(--ocean-border-subtle)',
               }}
             >
-              {/* 英文行：Data Ocean (左) + IRIP (右)，底部对齐 */}
+              {/* 英文行：IRIP (左) + Data Ocean (右)，底部对齐 */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 800,
+                    letterSpacing: 1.5,
+                    color: 'var(--ocean-action-primary)',
+                    lineHeight: 1,
+                  }}
+                >
+                  IRIP
+                </span>
                 <span
                   style={{
                     fontSize: 10,
@@ -109,17 +120,6 @@ export function AppShell(): JSX.Element | null {
                   }}
                 >
                   Data Ocean
-                </span>
-                <span
-                  style={{
-                    fontSize: 28,
-                    fontWeight: 800,
-                    letterSpacing: 1.5,
-                    color: 'var(--ocean-action-primary)',
-                    lineHeight: 1,
-                  }}
-                >
-                  IRIP
                 </span>
               </div>
               {/* 中文行：工业研究智能平台，与英文等宽 */}
