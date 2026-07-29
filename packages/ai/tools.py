@@ -6,8 +6,6 @@
 
 安全原则：
 - 工具名称必须在白名单中，未知工具一律拒绝（防注入）；
-- 候选工具标记为 ``candidate=True``，AIService 不会自动执行，
-  只返回建议供用户审核；
 - 每个工具声明所需权限（``required_permission``），执行前由 AIService
   通过授权服务检查当前用户是否拥有该权限。
 """
@@ -28,8 +26,6 @@ class ToolSpec:
         display_name: 中文显示名（如 ``"搜索标准变量"``）。
         description: 工具描述（供 AI 理解工具用途）。
         required_permission: 执行此工具所需的权限字符串（如 ``"standard:read"``）。
-        candidate: 是否为候选工具（需审批）。True 表示写操作建议工具，
-            False 表示只读工具可直接执行。
         parameters_schema: 工具参数的 JSON Schema 描述（供 AI 生成参数）。
     """
 
@@ -37,7 +33,6 @@ class ToolSpec:
     display_name: str
     description: str
     required_permission: str
-    candidate: bool = False
     parameters_schema: dict[str, Any] = field(default_factory=dict)
     category: str = "ai_tool"
 
@@ -47,20 +42,16 @@ class ToolDefinition:
     """工具定义（不可变值对象，安全控制层用）。
 
     与 ``ToolSpec`` 对应，用于 ``validate_invocation`` 安全验证流程。
-    ``auto_executable`` 对应 ``ToolSpec.candidate`` 的反值。
 
     Attributes:
         name: 工具唯一名称。
         description: 工具描述。
         required_permission: 调用此工具所需的权限字符串。
-        auto_executable: 是否允许 AI 自动执行。True 表示低风险只读操作，
-            False 表示需用户显式确认。
     """
 
     name: str
     description: str
     required_permission: str
-    auto_executable: bool = False
 
 
 @dataclass
@@ -89,7 +80,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="搜索标准变量",
         description="按编码、名称或别名搜索已发布标准变量。",
         required_permission="standard:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -103,7 +93,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="搜索事实",
         description="按主体、类型或时间范围搜索实验事实及其最新修订。",
         required_permission="fact:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -117,7 +106,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="搜索参数",
         description="按变量编码或状态搜索已发布参数及其版本。",
         required_permission="parameter:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -130,7 +118,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="解释溯源链路",
         description="解释指定参数的溯源链路：事实修订 → 推导运行 → 参数版本。",
         required_permission="provenance:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -144,7 +131,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="对比实验",
         description="对比两个或多个实验事实的关键观察值差异。",
         required_permission="fact:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -162,7 +148,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="运行已发布模型",
         description="使用已发布模型版本对给定输入执行预测。",
         required_permission="model:predict",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -177,7 +162,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="生成报告草稿",
         description="根据给定事实和参数生成结构化报告草稿（只读，不落库）。",
         required_permission="fact:read",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -195,7 +179,6 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
         display_name="数据提取",
         description="根据文件路径和提取指令，用大模型从文件中提取结构化数据",
         required_permission="ingestion:write",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -215,7 +198,6 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
         display_name="建议映射",
         description="为原始数据字段建议标准变量映射（候选，需人工审批）。",
         required_permission="ingestion:write",
-        candidate=True,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -230,7 +212,6 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
         display_name="建议事实修订",
         description="建议对指定事实创建新修订（候选，需人工审批）。",
         required_permission="fact:write",
-        candidate=True,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -245,7 +226,6 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
         display_name="创建参数候选",
         description="根据推导结果创建参数候选（候选，需人工审批）。",
         required_permission="parameter:write",
-        candidate=True,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -261,7 +241,6 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
         display_name="创建模型发布请求",
         description="为已验证模型版本创建发布请求（候选，需人工审批）。",
         required_permission="model:publish",
-        candidate=True,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -281,7 +260,6 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         description="解析 XRD RAS/RAW 文件，提取衍射数据（metadata/points/series）。"
         "支持 Rigaku 等仪器的原始数据格式，输出结构化 JSON。",
         required_permission="",
-        candidate=False,
         parameters_schema={
             "type": "object",
             "properties": {
@@ -299,20 +277,16 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         display_name="大模型解析器",
         description="用于大模型对数据的解析。",
         required_permission="",
-        candidate=False,
         parameters_schema={},
         category="ingestion",
     ),
 )
 
-#: 全部工具（白名单 + 候选 + 插件）。
+#: 全部工具（AI 工具 + 插件）。
 ALL_TOOLS: tuple[ToolSpec, ...] = WHITELIST_TOOLS + CANDIDATE_TOOLS + PLUGIN_TOOLS
 
-#: 白名单工具名称集合（只读，可直接执行）。
-WHITELIST_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in WHITELIST_TOOLS)
-
-#: 候选工具名称集合（需审批）。
-CANDIDATE_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in CANDIDATE_TOOLS)
+#: AI 工具名称集合。
+AI_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in WHITELIST_TOOLS + CANDIDATE_TOOLS)
 
 #: 全部合法工具名称集合。
 ALL_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in ALL_TOOLS)
@@ -354,8 +328,6 @@ class ToolRegistry:
         """注册一个工具规格。
 
         接受 ``ToolSpec`` 或 ``ToolDefinition``（向后兼容 tool_registry.py）。
-        ``ToolDefinition`` 会被转换为 ``ToolSpec``：``auto_executable`` 的反值
-        映射为 ``candidate``。
 
         Args:
             spec: 工具规格（ToolSpec 或 ToolDefinition）。
@@ -370,7 +342,6 @@ class ToolRegistry:
                 display_name=spec.name,
                 description=spec.description,
                 required_permission=spec.required_permission,
-                candidate=not spec.auto_executable,
                 parameters_schema={},
             )
         if spec.name in self._tools:
@@ -437,35 +408,6 @@ class ToolRegistry:
             )
         return spec
 
-    def is_candidate(self, name: str) -> bool:
-        """检查工具是否为候选工具（需审批）。
-
-        Args:
-            name: 工具名称。
-
-        Returns:
-            bool: 候选工具返回 True，只读工具返回 False。
-            未知工具也返回 False（应先通过 validate 检查）。
-        """
-        spec = self._tools.get(name)
-        if spec is None:
-            return False
-        return spec.candidate
-
-    def is_whitelist(self, name: str) -> bool:
-        """检查工具是否为白名单工具（只读，可直接执行）。
-
-        Args:
-            name: 工具名称。
-
-        Returns:
-            bool: 白名单工具返回 True。
-        """
-        spec = self._tools.get(name)
-        if spec is None:
-            return False
-        return not spec.candidate
-
     def list_tools(self) -> list[ToolSpec]:
         """列出全部已注册工具（含禁用工具，供管理 API 使用）。"""
         return list(self._tools.values())
@@ -488,14 +430,6 @@ class ToolRegistry:
             list[ToolSpec]: 已启用工具规格列表。
         """
         return [s for n, s in self._tools.items() if n in self._enabled]
-
-    def list_whitelist_tools(self) -> list[ToolSpec]:
-        """列出白名单工具（只读）。"""
-        return [s for s in self._tools.values() if not s.candidate]
-
-    def list_candidate_tools(self) -> list[ToolSpec]:
-        """列出现选工具（需审批）。"""
-        return [s for s in self._tools.values() if s.candidate]
 
     def names(self) -> tuple[str, ...]:
         """返回全部已启用工具名称元组（D-3：禁用工具不包含）。
@@ -537,7 +471,6 @@ class ToolRegistry:
                 display_name=row.display_name,
                 description=row.description,
                 required_permission=row.required_permission,
-                candidate=row.candidate,
                 parameters_schema=row.parameters_schema,
                 category=row.category,
             )
@@ -556,18 +489,16 @@ class ToolRegistry:
                 name=s.name,
                 description=s.description,
                 required_permission=s.required_permission,
-                auto_executable=not s.candidate,
             )
             for s in self._tools.values()
         ]
 
     def validate_invocation(self, invocation: ToolInvocation) -> ToolDefinition:
-        """验证工具调用请求（四道安全防线）。
+        """验证工具调用请求（三道安全防线）。
 
         1. 未知工具拒绝：注册表外的工具名一律拒绝；
-        2. 候选工具确认：``auto_executable=False`` 的工具需用户确认；
-        3. 权限检查：基于用户角色检查所需权限；
-        4. 全部通过 → 返回 ToolDefinition。
+        2. 权限检查：基于用户角色检查所需权限；
+        3. 全部通过 → 返回 ToolDefinition。
 
         Args:
             invocation: 工具调用请求。
@@ -577,7 +508,6 @@ class ToolRegistry:
 
         Raises:
             AppError: code="unknown_tool"，当工具名不在注册表中。
-            AppError: code="confirmation_required"，当工具需确认但未确认。
             AppError: code="forbidden"，当用户无所需权限。
         """
         spec = self._tools.get(invocation.tool_name)
@@ -585,15 +515,6 @@ class ToolRegistry:
             raise AppError(
                 code="unknown_tool",
                 message=f"未知工具: {invocation.tool_name}",
-                retryable=False,
-                fields={"tool_name": invocation.tool_name},
-            )
-
-        # 候选工具（非 auto_executable）需用户确认
-        if spec.candidate and not invocation.confirmed:
-            raise AppError(
-                code="confirmation_required",
-                message=(f"工具 {invocation.tool_name} 需要用户确认后才能执行"),
                 retryable=False,
                 fields={"tool_name": invocation.tool_name},
             )
@@ -618,7 +539,6 @@ class ToolRegistry:
             name=spec.name,
             description=spec.description,
             required_permission=spec.required_permission,
-            auto_executable=not spec.candidate,
         )
 
     @staticmethod

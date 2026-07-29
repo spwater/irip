@@ -35,7 +35,6 @@ def _make_row(
     display_name: str = "搜索标准变量",
     description: str = "按编码、名称或别名搜索已发布标准变量。",
     required_permission: str = "standard:read",
-    candidate: bool = False,
     enabled: bool = True,
     lock_version: int = 0,
 ) -> AIToolRow:
@@ -46,7 +45,6 @@ def _make_row(
         display_name=display_name,
         description=description,
         required_permission=required_permission,
-        candidate=candidate,
         parameters_schema={"type": "object", "properties": {}},
         enabled=enabled,
         lock_version=lock_version,
@@ -92,7 +90,7 @@ class TestReloadFromDb:
         rows = [
             _make_row(name="tool_a", enabled=True),
             _make_row(name="tool_b", enabled=False),
-            _make_row(name="tool_c", enabled=True, candidate=True),
+            _make_row(name="tool_c", enabled=True),
         ]
         with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
@@ -146,7 +144,6 @@ class TestReloadFromDb:
             display_name="自定义工具",
             description="测试用",
             required_permission="test:read",
-            candidate=True,
             enabled=True,
         )
         with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=[row]):
@@ -157,7 +154,6 @@ class TestReloadFromDb:
         assert spec.display_name == "自定义工具"
         assert spec.description == "测试用"
         assert spec.required_permission == "test:read"
-        assert spec.candidate is True
         assert isinstance(spec.parameters_schema, dict)
 
 
@@ -251,7 +247,7 @@ class TestEnabledFiltering:
         rows = [
             _make_row(name="a", enabled=True),
             _make_row(name="b", enabled=False),
-            _make_row(name="c", enabled=True, candidate=True),
+            _make_row(name="c", enabled=True),
         ]
         with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
             await registry.reload_from_db(MagicMock())
@@ -375,8 +371,6 @@ class TestSeedDataIntegrity:
             assert spec.name
             assert spec.display_name
             assert spec.description
-            # required_permission 对 AI 工具必填，插件工具可为空
-            assert isinstance(spec.candidate, bool)
             assert isinstance(spec.parameters_schema, dict)
 
 

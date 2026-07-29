@@ -10,7 +10,6 @@ AIService 是 AI 助手的业务编排层，职责：
 
 核心不变量：
 - tool_permission_checked: 每个工具调用前必须检查 required_permission；
-- candidate_not_executed: 候选工具（candidate=True）不自动执行，仅记录建议；
 - no_credential_leak: AI 回答中不包含密码、密钥、令牌等凭据信息。
 """
 
@@ -687,28 +686,6 @@ class AIService:
                         "tool_call_id": tool_call_id,
                         "content": json.dumps(
                             {"error": f"权限不足: 需要 {spec.required_permission}"},
-                            ensure_ascii=False,
-                        ),
-                    }
-                )
-                continue
-
-            # 候选工具不自动执行
-            if spec.candidate:
-                executed_tool_calls.append(
-                    {
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "summary": (f"候选工具建议（需人工审批）：{spec.display_name}"),
-                        "status": "candidate",
-                    }
-                )
-                tool_result_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            {"message": f"候选工具 {spec.display_name} 需人工审批后执行"},
                             ensure_ascii=False,
                         ),
                     }
@@ -1462,20 +1439,8 @@ class AIService:
                     "display_name": s.display_name,
                     "description": s.description,
                     "required_permission": s.required_permission,
-                    "candidate": s.candidate,
                 }
                 for s in enabled
-                if not s.candidate
             ],
-            "candidate_tools": [
-                {
-                    "name": s.name,
-                    "display_name": s.display_name,
-                    "description": s.description,
-                    "required_permission": s.required_permission,
-                    "candidate": s.candidate,
-                }
-                for s in enabled
-                if s.candidate
-            ],
+            "candidate_tools": [],
         }

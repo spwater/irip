@@ -91,7 +91,6 @@ export function AIToolsPage(): JSX.Element {
     display_name: tool.display_name,
     description: tool.description,
     required_permission: tool.required_permission,
-    candidate: tool.candidate,
     parameters_schema: tool.parameters_schema,
     enabled: tool.enabled,
     lock_version: tool.lock_version,

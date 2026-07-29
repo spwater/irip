@@ -44,7 +44,6 @@ export function BuiltinToolEditDrawer({
         display_name: values.display_name,
         description: values.description,
         required_permission: tool.required_permission,
-        candidate: tool.candidate,
         parameters_schema: tool.parameters_schema,
         lock_version: tool.lock_version,
       });

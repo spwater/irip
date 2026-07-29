@@ -10,7 +10,6 @@ export type AIToolDTO = {
   display_name: string;
   description: string;
   required_permission: string;
-  candidate: boolean;
   parameters_schema: Record<string, unknown>;
   enabled: boolean;
   lock_version: number;
@@ -32,7 +31,6 @@ export type ToolFormValues = {
   display_name: string;
   description: string;
   required_permission: string;
-  candidate: boolean;
   /** parameters_schema 的 JSON 文本（TextArea 编辑用） */
   parameters_schema_text: string;
 };

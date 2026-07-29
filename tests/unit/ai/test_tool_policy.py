@@ -3,7 +3,6 @@
 覆盖：
 - 工具白名单验证（8 个只读工具 + 4 个候选工具已注册）；
 - 未知工具拒绝（防注入）；
-- 候选工具标记为 candidate=True；
 - 工具参数 schema 记录（parameters_schema 非空）；
 - 权限声明正确（required_permission 与权限矩阵一致）。
 """
@@ -12,9 +11,8 @@ import pytest
 
 from packages.ai.tools import (
     ALL_TOOL_NAMES,
-    CANDIDATE_TOOL_NAMES,
+    AI_TOOL_NAMES,
     CANDIDATE_TOOLS,
-    WHITELIST_TOOL_NAMES,
     WHITELIST_TOOLS,
     ToolRegistry,
     ToolSpec,
@@ -29,7 +27,6 @@ class TestToolWhitelist:
         """白名单包含 8 个只读工具。"""
         assert len(WHITELIST_TOOLS) == 8
 
-    def test_candidate_has_four_tools(self) -> None:
         """候选工具包含 4 个需审批工具。"""
         assert len(CANDIDATE_TOOLS) == 4
 
@@ -38,7 +35,7 @@ class TestToolWhitelist:
         assert len(ALL_TOOL_NAMES) == 14
 
     def test_whitelist_tool_names_match(self) -> None:
-        """白名单工具名称集合正确。"""
+        """AI 工具名称集合正确。"""
         expected = {
             "search_standards",
             "search_facts",
@@ -48,10 +45,13 @@ class TestToolWhitelist:
             "run_published_model",
             "draft_report",
             "extract_data",
+            "suggest_mapping",
+            "suggest_fact_revision",
+            "create_parameter_candidate",
+            "create_model_publish_request",
         }
-        assert WHITELIST_TOOL_NAMES == expected
+        assert AI_TOOL_NAMES == expected
 
-    def test_candidate_tool_names_match(self) -> None:
         """候选工具名称集合正确。"""
         expected = {
             "suggest_mapping",
@@ -59,18 +59,18 @@ class TestToolWhitelist:
             "create_parameter_candidate",
             "create_model_publish_request",
         }
-        assert CANDIDATE_TOOL_NAMES == expected
+        assert frozenset(spec.name for spec in CANDIDATE_TOOLS) == expected
 
-    def test_whitelist_and_candidate_disjoint(self) -> None:
         """白名单与候选工具不重叠。"""
-        assert WHITELIST_TOOL_NAMES.isdisjoint(CANDIDATE_TOOL_NAMES)
+        whitelist_names = frozenset(spec.name for spec in WHITELIST_TOOLS)
+        candidate_names = frozenset(spec.name for spec in CANDIDATE_TOOLS)
+        assert whitelist_names.isdisjoint(candidate_names)
 
     def test_extract_data_tool_properties(self) -> None:
         """extract_data 工具属性正确（V2-T03 新增白名单工具）。"""
         registry = ToolRegistry()
         spec = registry.get("extract_data")
         assert spec.name == "extract_data"
-        assert spec.candidate is False
         assert spec.required_permission == "ingestion:write"
         # 参数 schema 包含 path/prompt/schema 三个必填参数
         assert spec.parameters_schema["type"] == "object"
@@ -84,9 +84,6 @@ class TestToolWhitelist:
         assert "schema" in required
         # 显示名含中文
         assert any("\u4e00" <= ch <= "\u9fff" for ch in spec.display_name)
-        # 属于白名单工具（可直接执行）
-        assert registry.is_whitelist("extract_data") is True
-        assert registry.is_candidate("extract_data") is False
 
 
 class TestToolRegistryValidation:
@@ -103,7 +100,6 @@ class TestToolRegistryValidation:
         spec = registry.get("search_standards")
         assert spec.name == "search_standards"
         assert spec.display_name == "搜索标准变量"
-        assert spec.candidate is False
 
     def test_get_unknown_tool_raises(self) -> None:
         """获取未知工具抛出 AppError。"""
@@ -135,38 +131,6 @@ class TestToolRegistryValidation:
                     required_permission="standard:read",
                 )
             )
-
-
-class TestCandidateToolMarking:
-    """候选工具标记验证。"""
-
-    def test_candidate_tools_marked(self) -> None:
-        """候选工具标记为 candidate=True。"""
-        registry = ToolRegistry()
-        for spec in CANDIDATE_TOOLS:
-            assert registry.is_candidate(spec.name) is True
-            assert registry.is_whitelist(spec.name) is False
-
-    def test_whitelist_tools_not_candidate(self) -> None:
-        """白名单工具标记为 candidate=False。"""
-        registry = ToolRegistry()
-        for spec in WHITELIST_TOOLS:
-            assert registry.is_candidate(spec.name) is False
-            assert registry.is_whitelist(spec.name) is True
-
-    def test_list_candidate_tools(self) -> None:
-        """list_candidate_tools 返回 4 个候选工具。"""
-        registry = ToolRegistry()
-        candidates = registry.list_candidate_tools()
-        assert len(candidates) == 4
-        assert all(s.candidate for s in candidates)
-
-    def test_list_whitelist_tools(self) -> None:
-        """list_whitelist_tools 返回 10 个非候选工具（8 只读 + 2 插件）。"""
-        registry = ToolRegistry()
-        whitelist = registry.list_whitelist_tools()
-        assert len(whitelist) == 10
-        assert all(not s.candidate for s in whitelist)
 
 
 class TestToolParametersRecord:

@@ -36,7 +36,6 @@ class AITool(Base):
         display_name: 中文显示名。
         description: 工具描述（供 AI 理解工具用途）。
         required_permission: 执行此工具所需的权限字符串。
-        candidate: 是否为候选工具（需审批）。
         parameters_schema: 工具参数的 JSON Schema。
         enabled: 是否启用（禁用后 AI 不可见、不可调用）。
         lock_version: 乐观锁版本号。
@@ -52,12 +51,6 @@ class AITool(Base):
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str] = mapped_column(sa.Text, nullable=False)
     required_permission: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    candidate: Mapped[bool] = mapped_column(
-        sa.Boolean,
-        nullable=False,
-        default=False,
-        server_default=sa.text("false"),
-    )
     parameters_schema: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
@@ -104,7 +97,6 @@ class AIToolRow:
         display_name: 中文显示名。
         description: 工具描述。
         required_permission: 所需权限字符串。
-        candidate: 是否为候选工具。
         parameters_schema: 参数 JSON Schema。
         enabled: 是否启用。
         lock_version: 乐观锁版本号。
@@ -118,7 +110,6 @@ class AIToolRow:
     display_name: str
     description: str
     required_permission: str
-    candidate: bool
     parameters_schema: dict[str, Any]
     enabled: bool
     lock_version: int
@@ -145,7 +136,6 @@ def _to_row(entity: AITool) -> AIToolRow:
         display_name=entity.display_name,
         description=entity.description,
         required_permission=entity.required_permission,
-        candidate=entity.candidate,
         parameters_schema=schema_dict,
         enabled=entity.enabled,
         lock_version=entity.lock_version,
@@ -209,7 +199,6 @@ class ToolRepository:
         Args:
             session: 异步会话。
             data: 工具字段（name / display_name / description /
-                required_permission / candidate / parameters_schema）。
             updated_by: 创建人 UUID。
 
         Returns:
@@ -232,7 +221,6 @@ class ToolRepository:
             display_name=data["display_name"],
             description=data["description"],
             required_permission=data["required_permission"],
-            candidate=data.get("candidate", False),
             parameters_schema=data.get("parameters_schema", {}),
             enabled=True,
             lock_version=0,
@@ -258,7 +246,6 @@ class ToolRepository:
             session: 异步会话。
             name: 工具名称（不可改）。
             data: 更新字段（display_name / description /
-                required_permission / candidate / parameters_schema）。
             lock_version: 调用方持有的乐观锁版本号。
             updated_by: 修改人 UUID。
 
@@ -288,7 +275,6 @@ class ToolRepository:
         entity.display_name = data["display_name"]
         entity.description = data["description"]
         entity.required_permission = data["required_permission"]
-        entity.candidate = data["candidate"]
         entity.parameters_schema = data["parameters_schema"]
         entity.lock_version = entity.lock_version + 1
         entity.updated_by = updated_by

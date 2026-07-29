@@ -48,7 +48,6 @@ class AIToolDTO(BaseModel):
     display_name: str
     description: str
     required_permission: str
-    candidate: bool
     parameters_schema: dict[str, Any]
     enabled: bool
     lock_version: int
@@ -69,7 +68,6 @@ class AIToolCreateRequest(BaseModel):
     display_name: str = Field(..., max_length=128, description="中文显示名")
     description: str = Field(..., max_length=2000, description="工具描述")
     required_permission: str = Field(..., max_length=64, description="执行此工具所需权限")
-    candidate: bool = Field(False, description="是否为候选工具（需审批）")
     parameters_schema: dict[str, Any] = Field(
         default_factory=dict, description="工具参数 JSON Schema"
     )
@@ -81,7 +79,6 @@ class AIToolUpdateRequest(BaseModel):
     display_name: str = Field(..., max_length=128)
     description: str = Field(..., max_length=2000)
     required_permission: str = Field(..., max_length=64)
-    candidate: bool
     parameters_schema: dict[str, Any]
     lock_version: int = Field(..., description="乐观锁版本号")
 
@@ -104,7 +101,6 @@ class UnifiedToolDTO(BaseModel):
         description: 描述。
         enabled: 是否启用。
         status: 状态字符串（enabled/disabled）。
-        candidate: 是否为候选工具（历史遗留，当前无实际用途）。
         lock_version: 乐观锁版本号。
         updated_at: 更新时间 ISO 字符串。
         updated_by: 最后修改人。
@@ -118,7 +114,6 @@ class UnifiedToolDTO(BaseModel):
     description: str
     enabled: bool
     status: str
-    candidate: bool = False
     lock_version: int = 0
     updated_at: str = ""
     updated_by: str | None = None
@@ -144,7 +139,6 @@ def _to_dto(row: AIToolRow) -> AIToolDTO:
         display_name=row.display_name,
         description=row.description,
         required_permission=row.required_permission,
-        candidate=row.candidate,
         parameters_schema=row.parameters_schema,
         enabled=row.enabled,
         lock_version=row.lock_version,
@@ -198,7 +192,6 @@ def _row_to_audit_payload(row: AIToolRow) -> dict[str, Any]:
         "display_name": row.display_name,
         "description": row.description,
         "required_permission": row.required_permission,
-        "candidate": row.candidate,
         "parameters_schema": row.parameters_schema,
         "enabled": row.enabled,
         "lock_version": row.lock_version,
@@ -273,7 +266,6 @@ async def list_unified_tools(
                 description=row.description,
                 enabled=row.enabled,
                 status="enabled" if row.enabled else "disabled",
-                candidate=row.candidate,
                 lock_version=row.lock_version,
                 updated_at=row.updated_at.isoformat() if row.updated_at else "",
                 updated_by=str(row.updated_by) if row.updated_by else None,
@@ -308,7 +300,6 @@ async def list_ingestion_tools(
                 description=row.description,
                 enabled=row.enabled,
                 status="enabled" if row.enabled else "disabled",
-                candidate=row.candidate,
                 lock_version=row.lock_version,
                 updated_at=row.updated_at.isoformat() if row.updated_at else "",
                 updated_by=str(row.updated_by) if row.updated_by else None,
@@ -455,7 +446,6 @@ def _compute_diff(before: AIToolRow, after: AIToolRow) -> dict[str, Any]:
         "display_name",
         "description",
         "required_permission",
-        "candidate",
         "parameters_schema",
     ]
     for field_name in fields_to_compare:

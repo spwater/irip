@@ -91,7 +91,6 @@ export function ToolEditDrawer({
           display_name: values.display_name,
           description: values.description,
           required_permission: values.required_permission,
-          candidate: false,
           parameters_schema: schema,
         });
       }
@@ -100,7 +99,6 @@ export function ToolEditDrawer({
         display_name: values.display_name,
         description: values.description,
         required_permission: values.required_permission,
-        candidate: currentTool.candidate,
         parameters_schema: schema,
         lock_version: currentTool.lock_version,
       });

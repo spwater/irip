@@ -48,7 +48,7 @@ export type Citation = { object_type: string; object_id: string; version: string
 export type ConversationSummary = { id: string; title: string; provider_mode: string; pinned: boolean; archived: boolean; created_at: string; updated_at: string; system_context: string | null; };
 export type AssistantMessage = { id: string; conversation_id: string; role: 'user' | 'assistant' | 'tool'; content: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; created_at: string; };
 export type AskResponse = { conversation_id: string; answer: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; provider_mode: string; };
-export type ToolInfo = { name: string; display_name: string; description: string; required_permission: string; candidate: boolean; };
+export type ToolInfo = { name: string; display_name: string; description: string; required_permission: string; };
 export type ProviderStatus = { provider_mode: string; whitelist_tools: ToolInfo[]; candidate_tools: ToolInfo[]; };
 
 type ConversationApiResponse = { id: string; title: string; provider_mode: string; pinned: boolean; archived: boolean; created_at: string; updated_at: string; system_context: string | null; };
@@ -71,12 +71,12 @@ export async function apiGetProviderStatus(): Promise<ProviderStatus> { const re
 // AI Tools + Component Preview API
 // ============================================================
 
-export type AIToolDTO = { name: string; display_name: string; description: string; required_permission: string; candidate: boolean; parameters_schema: Record<string, unknown>; enabled: boolean; lock_version: number; updated_at: string; updated_by: string | null; };
+export type AIToolDTO = { name: string; display_name: string; description: string; required_permission: string; parameters_schema: Record<string, unknown>; enabled: boolean; lock_version: number; updated_at: string; updated_by: string | null; };
 
 export async function apiListAITools(): Promise<AIToolDTO[]> { const res = await http.get<AIToolDTO[]>('/ai-tools'); return res.data; }
 export async function apiGetAITool(name: string): Promise<AIToolDTO> { const res = await http.get<AIToolDTO>(`/ai-tools/${encodeURIComponent(name)}`); return res.data; }
-export async function apiCreateAITool(body: { name: string; display_name: string; description: string; required_permission: string; candidate: boolean; parameters_schema: Record<string, unknown>; }): Promise<AIToolDTO> { const res = await http.post<AIToolDTO>('/ai-tools', body); return res.data; }
-export async function apiUpdateAITool(name: string, body: { display_name: string; description: string; required_permission: string; candidate: boolean; parameters_schema: Record<string, unknown>; lock_version: number; }): Promise<AIToolDTO> { const res = await http.patch<AIToolDTO>(`/ai-tools/${encodeURIComponent(name)}`, body); return res.data; }
+export async function apiCreateAITool(body: { name: string; display_name: string; description: string; required_permission: string; parameters_schema: Record<string, unknown>; }): Promise<AIToolDTO> { const res = await http.post<AIToolDTO>('/ai-tools', body); return res.data; }
+export async function apiUpdateAITool(name: string, body: { display_name: string; description: string; required_permission: string; parameters_schema: Record<string, unknown>; lock_version: number; }): Promise<AIToolDTO> { const res = await http.patch<AIToolDTO>(`/ai-tools/${encodeURIComponent(name)}`, body); return res.data; }
 export async function apiToggleAITool(name: string, body: { enabled: boolean; lock_version: number; }): Promise<AIToolDTO> { const res = await http.patch<AIToolDTO>(`/ai-tools/${encodeURIComponent(name)}/enabled`, body); return res.data; }
 
 // ============================================================
@@ -90,7 +90,6 @@ export type UnifiedToolDTO = {
   description: string;
   enabled: boolean;
   status: string;
-  candidate: boolean;
   lock_version: number;
   updated_at: string;
   updated_by: string | null;
