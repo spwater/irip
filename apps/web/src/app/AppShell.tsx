@@ -188,23 +188,9 @@ function DynamicHeader({
         gap: 8,
       }}
     >
-      {/* 第一行：中文标题(大) + 英文索引(小) + 右侧操作 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-          {header.title && (
-            <Title
-              level={4}
-              style={{
-                margin: 0,
-                fontSize: 22,
-                fontWeight: 650,
-                color: 'var(--ocean-text-primary)',
-                lineHeight: 1.2,
-              }}
-            >
-              {header.title}
-            </Title>
-          )}
+      {/* 第一行：英文索引(小字在上) + 中文标题(大字在下) + 右侧操作 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {header.index && (
             <Text
               style={{
@@ -213,13 +199,28 @@ function DynamicHeader({
                 textTransform: 'uppercase',
                 color: 'var(--ocean-text-muted)',
                 fontFamily: 'var(--ocean-font-mono)',
+                lineHeight: 1,
               }}
             >
               {header.index}
             </Text>
           )}
+          {header.title && (
+            <Title
+              level={2}
+              style={{
+                margin: 0,
+                fontSize: 32,
+                fontWeight: 650,
+                lineHeight: 1.15,
+                color: 'var(--ocean-text-primary)',
+              }}
+            >
+              {header.title}
+            </Title>
+          )}
         </div>
-        <Space size="middle" align="center">
+        <Space size="middle" align="center" style={{ paddingBottom: 4 }}>
           {header.actions}
           <JobDrawerButton />
           <Space size="small" align="center">
