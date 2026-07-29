@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Button,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -28,6 +29,7 @@ import {
 } from '@/api/departments';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
+import { EquipmentPage } from '@/equipment/EquipmentPage';
 
 /**
  * 树形节点类型：DepartmentListItem + children 数组。
@@ -103,15 +105,14 @@ function getDescendantIds(
   return result;
 }
 
-export function DepartmentManagement({
-  onAddEquipment,
-}: {
-  onAddEquipment?: (deptId: string) => void;
-}): JSX.Element {
+export function DepartmentManagement(): JSX.Element {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
+  // 仪器抽屉：就地新建设备仪器，不跳转页面
+  const [equipDrawerOpen, setEquipDrawerOpen] = useState(false);
+  const [equipDrawerDeptId, setEquipDrawerDeptId] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<DepartmentListItem | null>(null);
   const [memberDrawerDept, setMemberDrawerDept] = useState<DepartmentListItem | null>(null);
@@ -363,7 +364,10 @@ export function DepartmentManagement({
           <Button
             type="link"
             size="small"
-            onClick={() => onAddEquipment?.(record.id)}
+            onClick={() => {
+              setEquipDrawerDeptId(record.id);
+              setEquipDrawerOpen(true);
+            }}
             disabled={!isAdmin}
           >
             +仪器
@@ -541,6 +545,24 @@ export function DepartmentManagement({
           onClose={() => setMemberDrawerDept(null)}
         />
       )}
+
+      {/* 新建设备仪器抽屉：就地操作，不跳转页面 */}
+      <Drawer
+        title="新建设备仪器"
+        open={equipDrawerOpen}
+        onClose={() => {
+          setEquipDrawerOpen(false);
+          setEquipDrawerDeptId(undefined);
+          void queryClient.invalidateQueries({ queryKey: ['equipment'] });
+        }}
+        width={960}
+        destroyOnClose
+      >
+        <EquipmentPage
+          presetDeptId={equipDrawerDeptId}
+          onPresetDeptIdConsumed={() => setEquipDrawerDeptId(undefined)}
+        />
+      </Drawer>
     </div>
   );
 }

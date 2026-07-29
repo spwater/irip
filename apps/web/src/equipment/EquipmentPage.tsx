@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button,
+  Drawer,
   Form,
   Input,
   InputNumber,
@@ -28,6 +29,7 @@ import {
   type EquipmentListItem,
 } from '@/api/equipment-flows';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
+import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
 import { extractApiError } from '@/api/types';
 import { ActionBar, DataTableShell } from '@/components/ui';
 
@@ -44,17 +46,18 @@ import { ActionBar, DataTableShell } from '@/components/ui';
 export function EquipmentPage({
   presetDeptId,
   onPresetDeptIdConsumed,
-  onAddObject,
 }: {
   presetDeptId?: string;
   onPresetDeptIdConsumed?: () => void;
-  onAddObject?: (equipmentId: string) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<EquipmentListItem | null>(null);
+  // 对象抽屉：就地新建实验对象，不跳转页面
+  const [objDrawerOpen, setObjDrawerOpen] = useState(false);
+  const [objDrawerEquipId, setObjDrawerEquipId] = useState<string | undefined>(undefined);
   const [form] = Form.useForm();
 
   // 当 presetDeptId 变化时，自动打开新建弹窗并预填
@@ -328,7 +331,10 @@ export function EquipmentPage({
           <Button
             type="link"
             size="small"
-            onClick={() => onAddObject?.(record.id)}
+            onClick={() => {
+              setObjDrawerEquipId(record.id);
+              setObjDrawerOpen(true);
+            }}
           >
             +对象
           </Button>
@@ -490,6 +496,24 @@ export function EquipmentPage({
       </Modal>
 
       {/* 物理量管理 Drawer */}
+
+      {/* 新建实验对象抽屉：就地操作，不跳转页面 */}
+      <Drawer
+        title="新建实验对象"
+        open={objDrawerOpen}
+        onClose={() => {
+          setObjDrawerOpen(false);
+          setObjDrawerEquipId(undefined);
+          void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
+        }}
+        width={960}
+        destroyOnClose
+      >
+        <ExperimentalObjectPage
+          presetEquipmentId={objDrawerEquipId}
+          onPresetConsumed={() => setObjDrawerEquipId(undefined)}
+        />
+      </Drawer>
     </div>
   );
 }

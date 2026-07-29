@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Tabs } from 'antd';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { ExperimentalObjectPage } from '@/objects/ExperimentalObjectPage';
@@ -14,8 +13,7 @@ type StandardsTab = (typeof VALID_TABS)[number];
  * 实验室建设页面（设计文档第 10.4 节）
  *
  * 三个 Tab：组织机构 / 设备仪器 / 实验对象
- * PageIntro 下增加"组织机构 → 设备仪器 → 实验对象"建设链路提示。
- * 数据接口 Tab 已移至平台应用页面。
+ * 跨 Tab 的"+仪器"/"+对象"操作已改为就地打开抽屉，不再切换 Tab。
  */
 export function StandardsPage(): JSX.Element {
   const navigate = useNavigate();
@@ -27,25 +25,8 @@ export function StandardsPage(): JSX.Element {
     ? (tabRaw as StandardsTab)
     : 'departments';
 
-  const [presetDeptId, setPresetDeptId] = useState<string | undefined>(undefined);
-  const [presetEquipmentId, setPresetEquipmentId] = useState<string | undefined>(undefined);
-
   const handleTabChange = (key: string): void => {
     void navigate({ to: '/standards', search: { tab: key }, replace: true });
-  };
-
-  // 从组织机构跳到设备仪器，预填 department_id
-  const handleAddEquipmentForDept = (deptId: string): void => {
-    setPresetDeptId(deptId);
-    setPresetEquipmentId(undefined);
-    handleTabChange('equipment');
-  };
-
-  // 从设备仪器跳到实验对象，预填 equipment_id
-  const handleAddObjectForEquipment = (equipmentId: string): void => {
-    setPresetEquipmentId(equipmentId);
-    setPresetDeptId(undefined);
-    handleTabChange('exp-objects');
   };
 
   return (
@@ -62,28 +43,17 @@ export function StandardsPage(): JSX.Element {
           {
             key: 'departments',
             label: '组织机构',
-            children: <DepartmentManagement onAddEquipment={handleAddEquipmentForDept} />,
+            children: <DepartmentManagement />,
           },
           {
             key: 'equipment',
             label: '设备仪器',
-            children: (
-              <EquipmentPage
-                presetDeptId={presetDeptId}
-                onPresetDeptIdConsumed={() => setPresetDeptId(undefined)}
-                onAddObject={handleAddObjectForEquipment}
-              />
-            ),
+            children: <EquipmentPage />,
           },
           {
             key: 'exp-objects',
             label: '实验对象',
-            children: (
-              <ExperimentalObjectPage
-                presetEquipmentId={presetEquipmentId}
-                onPresetConsumed={() => setPresetEquipmentId(undefined)}
-              />
-            ),
+            children: <ExperimentalObjectPage />,
           },
         ]}
       />
