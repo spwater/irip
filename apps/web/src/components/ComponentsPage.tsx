@@ -309,10 +309,10 @@ function ComponentFormFields({
         </Col>
       </Row>
       <Row gutter={16}>
-        <Col span={6}>
-          <Form.Item label="对象类型">
+        <Col span={4}>
+          <Form.Item label="类型">
             <Select
-              placeholder="全部类型"
+              placeholder="全部"
               allowClear
               value={selectedType}
               onChange={(val: string | undefined) => {
@@ -329,7 +329,7 @@ function ComponentFormFields({
             />
           </Form.Item>
         </Col>
-        <Col span={6}>
+        <Col span={8}>
           <Form.Item name="experimental_object_code" label="关联实验对象">
             <Select
               placeholder="请选择实验对象"
