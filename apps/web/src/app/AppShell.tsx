@@ -258,7 +258,7 @@ function DynamicHeader({
       />
 
       {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐 */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 14, marginBottom: 12, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
+      <div style={{ display: 'flex', gap: 10, marginTop: 9, marginBottom: 8, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
           header.tabs!.map((tab) => {
             const isActive = header.activeTab === tab.key;
