@@ -172,7 +172,7 @@ export function AIToolsPage(): JSX.Element {
         cat === 'ingestion' ? (
           <Tag color="cyan">ingestion</Tag>
         ) : (
-          <Tag color="blue">ai_tool</Tag>
+          <Tag color="blue">AItool</Tag>
         ),
     },
     {
@@ -237,7 +237,7 @@ export function AIToolsPage(): JSX.Element {
           onChange={(v) => setFilter((f) => ({ ...f, category: v }))}
           options={[
             { value: 'all', label: '全部分类' },
-            { value: 'ai_tool', label: 'ai_tool' },
+            { value: 'ai_tool', label: 'AItool' },
             { value: 'ingestion', label: 'ingestion' },
           ]}
         />
