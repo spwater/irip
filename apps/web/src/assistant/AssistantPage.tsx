@@ -14,6 +14,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import {
   useQuery,
   useQueryClient,
@@ -689,7 +690,8 @@ export function AssistantPage(): JSX.Element {
         <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 280px)' }}>
           {/* 搜索栏 */}
           <div style={{ padding: '12px 16px 8px', borderBottom: '1px solid var(--ocean-border-subtle)' }}>
-            <Input.Search
+            <Input
+              prefix={<SearchOutlined />}
               placeholder="搜索样品名称或任务名称..."
               value={factSearchText}
               onChange={(e) => setFactSearchText(e.target.value)}

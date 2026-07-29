@@ -15,6 +15,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -555,7 +556,7 @@ export function ExperimentalObjectPage({
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           新建实验对象
         </Button>
         <Button onClick={() => setTypeMgrOpen(true)}>

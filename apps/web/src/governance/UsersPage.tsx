@@ -12,6 +12,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -356,7 +357,7 @@ export function UsersPage(): JSX.Element {
             { value: 'disabled', label: '禁用' },
           ]}
         />
-        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
           新建账号
         </Button>
       </ActionBar>

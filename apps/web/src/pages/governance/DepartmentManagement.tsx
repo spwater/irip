@@ -15,6 +15,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -401,7 +402,7 @@ export function DepartmentManagement(): JSX.Element {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate} disabled={!isAdmin}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate} disabled={!isAdmin}>
           新建组织机构
         </Button>
         <Select

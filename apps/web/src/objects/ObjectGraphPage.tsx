@@ -13,6 +13,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
@@ -238,7 +239,7 @@ export function ObjectGraphPage(): JSX.Element {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleCreate}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           新建对象
         </Button>
         <Select

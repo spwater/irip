@@ -15,6 +15,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -365,7 +366,7 @@ export function EquipmentPage({
     <div>
       <ActionBar style={{ marginBottom: 16 }}>
         <Space wrap>
-          <Button type="primary" onClick={handleCreate}>
+          <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
             新建仪器或方法
           </Button>
           <Select

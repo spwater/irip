@@ -12,7 +12,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiListUnifiedTools, apiToggleAITool } from '@/api/models-ai';
@@ -280,7 +280,7 @@ export function AIToolsPage(): JSX.Element {
                 { value: 'disabled', label: '已禁用' },
               ]}
             />
-            <Button type="primary" onClick={handleCreate}>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
               新建工具
             </Button>
           </Space>

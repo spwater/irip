@@ -13,6 +13,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { ColumnsType } from 'antd/es/table';
@@ -269,7 +270,7 @@ export function ModelsPage(): JSX.Element {
   return (
     <div>
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
           新建模型
         </Button>
         <Button onClick={() => void navigate({ to: '/models/predict' })}>

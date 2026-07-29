@@ -10,6 +10,7 @@ import {
   Tag,
   Typography,
 } from 'antd';
+import { SearchOutlined, DeleteOutlined, DownOutlined } from '@ant-design/icons';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import type { ColumnsType } from 'antd/es/table';
@@ -275,7 +276,7 @@ export function FactsPage(): JSX.Element {
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
               >
-                <Button type="link" size="small" danger loading={batchDeleteMutation.isPending}>
+                <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={batchDeleteMutation.isPending}>
                   全部删除
                 </Button>
               </Popconfirm>
@@ -292,7 +293,7 @@ export function FactsPage(): JSX.Element {
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <Button type="link" size="small" danger loading={deleteMutation.isPending}>
+              <Button type="link" size="small" danger icon={<DeleteOutlined />} loading={deleteMutation.isPending}>
                 删除
               </Button>
             </Popconfirm>
@@ -307,11 +308,12 @@ export function FactsPage(): JSX.Element {
       {/* 筛选与操作区 */}
       <ActionBar style={{ marginBottom: 16 }}>
         <Space>
-          <Input.Search
+          <Input
+            prefix={<SearchOutlined />}
             placeholder="搜索事实..."
             allowClear
             style={{ width: 300 }}
-            onSearch={handleSearch}
+            onPressEnter={() => handleSearch(searchQuery)}
           />
           <Select
             placeholder="实验室筛选"
@@ -329,7 +331,7 @@ export function FactsPage(): JSX.Element {
         footer={
           hasNextPage ? (
             <div style={{ textAlign: 'center' }}>
-              <Button loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
+              <Button icon={<DownOutlined />} loading={isFetchingNextPage} onClick={() => void fetchNextPage()}>
                 加载更多
               </Button>
             </div>

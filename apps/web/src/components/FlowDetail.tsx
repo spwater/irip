@@ -15,6 +15,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -696,7 +697,7 @@ export function FlowDetail(): JSX.Element {
   return (
     <div>
       <Space style={{ marginBottom: 16, alignItems: 'center' }}>
-        <Button type="primary" onClick={() => setCreateModalOpen(true)}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
           新建任务
         </Button>
         <Button

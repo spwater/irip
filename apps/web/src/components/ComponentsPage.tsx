@@ -21,6 +21,7 @@ import {
   Upload,
   message,
 } from 'antd';
+import { PlusOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -1101,7 +1102,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     <div>
       {!hideList && (
       <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" onClick={handleOpenModal}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenModal}>
           新建接口
         </Button>
         <Select
