@@ -2465,6 +2465,8 @@ export type JobListItem = {
   created_at: string;
   attempt: number;
   max_attempts: number;
+  flow_name: string;
+  dept_name: string;
 };
 
 /** 作业列表分页响应 */
@@ -2555,6 +2557,8 @@ export async function apiListJobs(params?: {
       created_at: j.created_at,
       attempt: j.attempt ?? 0,
       max_attempts: j.max_attempts ?? 3,
+      flow_name: j.flow_name ?? '',
+      dept_name: j.dept_name ?? '',
     })),
     next_cursor: res.data.next_cursor,
     has_more: res.data.has_more,

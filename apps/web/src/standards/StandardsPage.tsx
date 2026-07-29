@@ -56,29 +56,7 @@ export function StandardsPage(): JSX.Element {
       <PageIntro
         index="MODULE 02 / LAB STANDARDS"
         title="实验室建设"
-        subtitle="建立组织机构、设备仪器与实验对象，三者构成实验数据的来源链路。"
-      >
-        {/* 建设链路提示 */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 0',
-            fontSize: 13,
-            color: 'var(--ocean-text-secondary)',
-          }}
-        >
-          <span style={{ fontWeight: 600, color: 'var(--ocean-text-primary)' }}>建设链路</span>
-          <span style={{ color: 'var(--ocean-action-primary)' }}>组织机构</span>
-          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
-          <span style={{ color: 'var(--ocean-action-primary)' }}>设备仪器</span>
-          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
-          <span style={{ color: 'var(--ocean-action-primary)' }}>实验对象</span>
-          <span style={{ color: 'var(--ocean-text-muted)' }}>→</span>
-          <span style={{ color: 'var(--ocean-action-primary)' }}>数据接口</span>
-        </div>
-      </PageIntro>
+      />
 
       <Tabs
         activeKey={activeTab}

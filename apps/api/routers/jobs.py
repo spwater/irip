@@ -100,6 +100,8 @@ class JobListItem(BaseModel):
     created_at: datetime
     attempt: int = 0
     max_attempts: int = 3
+    flow_name: str = ""
+    dept_name: str = ""
 
 
 class JobListResponse(BaseModel):
@@ -205,8 +207,10 @@ async def list_jobs(
                 created_at=job.created_at,
                 attempt=job.attempt,
                 max_attempts=job.max_attempts,
+                flow_name=flow_name,
+                dept_name=dept_name,
             )
-            for job, stage, progress, retryable in items
+            for job, stage, progress, retryable, flow_name, dept_name in items
         ],
         next_cursor=next_cursor,
         has_more=has_more,

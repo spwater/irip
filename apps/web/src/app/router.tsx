@@ -14,9 +14,6 @@ import { LabOpsPage } from '@/pages/LabOpsPage';
 import { PlatformPage } from '@/pages/PlatformPage';
 import { FactDetail } from '@/facts/FactDetail';
 import { ComponentsPage } from '@/components/ComponentsPage';
-import { ModelsPage } from '@/models/ModelsPage';
-import { ModelDetail } from '@/models/ModelDetail';
-import { PredictionWorkbench } from '@/models/PredictionWorkbench';
 import { GovernanceConsole } from '@/governance/GovernanceConsole';
 import { JobsPage } from '@/jobs/JobsPage';
 import { JobDetail } from '@/jobs/JobDetail';
@@ -129,28 +126,6 @@ export function createAppRouter() {
     },
   });
 
-  // V2 模型管理路由（替换 V0 占位页面）
-  const modelsRoute = createRoute({
-    getParentRoute: () => protectedLayoutRoute,
-    path: '/models',
-    component: ModelsPage,
-  });
-
-  const modelDetailRoute = createRoute({
-    getParentRoute: () => protectedLayoutRoute,
-    path: '/models/$modelId',
-    component: ModelDetail,
-  });
-
-  const predictionRoute = createRoute({
-    getParentRoute: () => protectedLayoutRoute,
-    path: '/models/predict',
-    component: PredictionWorkbench,
-    validateSearch: (search: Record<string, unknown>): { modelId?: string } => ({
-      modelId: typeof search.modelId === 'string' ? search.modelId : undefined,
-    }),
-  });
-
   // V2 组件管理路由
   const componentsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
@@ -223,9 +198,6 @@ export function createAppRouter() {
       flowsRoute,
       labOpsRoute,
       platformRoute,
-      modelsRoute,
-      modelDetailRoute,
-      predictionRoute,
       governanceRoute,
       jobsRoute,
       jobDetailRoute,

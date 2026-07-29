@@ -51,7 +51,6 @@ const QUICK_ENTRIES: { label: string; desc: string; to: string; search?: Record<
   { label: '实验执行', desc: '流程编排与运行', to: '/lab-ops', search: { tab: 'flows' } },
   { label: '实验记录', desc: '原始数据浏览', to: '/lab-ops', search: { tab: 'facts' } },
   { label: 'AI 助手', desc: '对话与数据查询', to: '/platform', search: { tab: 'assistant' } },
-  { label: '模型管理', desc: '模型版本与预测', to: '/models' },
   { label: '作业中心', desc: '作业追踪与重试', to: '/jobs' },
 ];
 
@@ -88,15 +87,7 @@ export function WorkbenchPage(): JSX.Element {
   const flowsCount = flowsItems.length;
   const activeFlows = flowsItems.filter((f) => f.status === 'published').length;
 
-  // ---- 独立查询 3：模型列表 ----
-  const { data: modelsData } = useQuery({
-    queryKey: ['workbench', 'models'],
-    queryFn: () => apiListModels(),
-  });
-  const modelsItems = modelsData?.items ?? [];
-  const modelsCount = modelsItems.length;
-
-  // ---- 独立查询 4：作业列表（最近记录） ----
+  // ---- 独立查询 3：作业列表（最近记录） ----
   const { data: jobsData, isLoading: jobsLoading, error: jobsError } = useQuery({
     queryKey: ['workbench', 'jobs'],
     queryFn: () => apiListJobs({ limit: 50 }),
@@ -120,6 +111,22 @@ export function WorkbenchPage(): JSX.Element {
   const jobColumns: ColumnsType<JobListItem> = useMemo(
     () => [
       {
+        title: '项目名称',
+        dataIndex: 'flow_name',
+        key: 'flow_name',
+        width: 200,
+        ellipsis: true,
+        render: (v: string) => v || <Text type="secondary">-</Text>,
+      },
+      {
+        title: '部门',
+        dataIndex: 'dept_name',
+        key: 'dept_name',
+        width: 120,
+        ellipsis: true,
+        render: (v: string) => v || <Text type="secondary">-</Text>,
+      },
+      {
         title: '作业 ID',
         dataIndex: 'id',
         key: 'id',
@@ -128,21 +135,6 @@ export function WorkbenchPage(): JSX.Element {
         render: (v: string) => (
           <span style={{ fontFamily: 'var(--ocean-font-mono)', fontSize: 12 }}>{v}</span>
         ),
-      },
-      {
-        title: '类型',
-        dataIndex: 'kind',
-        key: 'kind',
-        width: 100,
-        ellipsis: true,
-      },
-      {
-        title: '阶段',
-        dataIndex: 'stage',
-        key: 'stage',
-        width: 120,
-        ellipsis: true,
-        render: (v: string) => v || <Text type="secondary">-</Text>,
       },
       {
         title: '状态',
@@ -164,7 +156,6 @@ export function WorkbenchPage(): JSX.Element {
   const metrics = [
     { label: '事实记录（最近返回）', value: factsCount, unit: '条' },
     { label: '流程（已发布）', value: activeFlows, unit: `/${flowsCount}` },
-    { label: '模型总数', value: modelsCount, unit: '个' },
     { label: '活跃作业', value: activeJobCount, unit: '个' },
   ];
 

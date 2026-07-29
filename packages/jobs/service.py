@@ -282,7 +282,7 @@ class JobService:
         kind: str | None = None,
         cursor: str | None = None,
         limit: int = 50,
-    ) -> tuple[list[tuple[Job, str, int, bool]], str | None, bool]:
+    ) -> tuple[list[tuple[Job, str, int, bool, str, str]], str | None, bool]:
         """分页查询作业列表。
 
         按创建时间倒序排列，支持按状态和类型过滤。
@@ -322,23 +322,38 @@ class JobService:
             conditions.append(Job.created_at < cursor_dt)
 
         async with self._factory() as session:
+            # JOIN flow_run + flow_definition + department 获取流程名称和部门
+            from packages.components.flow_runtime import (
+                FlowRun as FlowRunORM,
+                FlowDefinitionVersionORM,
+                FlowDefinition as FlowDefORM,
+            )
+            from packages.departments.entities import Department
             stmt = (
-                sa.select(Job)
+                sa.select(
+                    Job,
+                    FlowDefORM.display_name.label("flow_name"),
+                    Department.display_name.label("dept_name"),
+                )
+                .outerjoin(FlowRunORM, FlowRunORM.job_id == Job.id)
+                .outerjoin(FlowDefinitionVersionORM, FlowDefinitionVersionORM.id == FlowRunORM.flow_version_id)
+                .outerjoin(FlowDefORM, FlowDefORM.id == FlowDefinitionVersionORM.flow_definition_id)
+                .outerjoin(Department, Department.id == FlowDefORM.department_id)
                 .where(*conditions)
                 .order_by(Job.created_at.desc())
                 .limit(limit + 1)
             )
             result = await session.execute(stmt)
-            rows: list[Job] = list(result.scalars().all())
+            rows: list[tuple[Job, str | None, str | None]] = list(result.all())
 
         has_more: bool = len(rows) > limit
-        page_rows: list[Job] = rows[:limit]
+        page_rows: list[tuple[Job, str | None, str | None]] = rows[:limit]
         next_cursor: str | None = None
         if has_more and page_rows:
-            next_cursor = page_rows[-1].created_at.isoformat()
+            next_cursor = page_rows[-1][0].created_at.isoformat()
 
-        items: list[tuple[Job, str, int, bool]] = []
-        for job in page_rows:
+        items: list[tuple[Job, str, int, bool, str, str]] = []
+        for job, flow_name, dept_name in page_rows:
             job_status = JobStatus(job.status)
             retryable = (
                 job.attempt < job.max_attempts
@@ -350,7 +365,7 @@ class JobService:
                 if job_status in TERMINAL_STATUSES
                 else (50 if job_status == JobStatus.RUNNING else 0)
             )
-            items.append((job, stage, progress, retryable))
+            items.append((job, stage, progress, retryable, flow_name or "", dept_name or ""))
 
         return items, next_cursor, has_more
 
