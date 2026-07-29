@@ -282,10 +282,10 @@ function DynamicHeader({
                     ? 'var(--ocean-action-primary)'
                     : 'var(--ocean-text-secondary)',
                   background: isActive
-                    ? 'rgba(20, 118, 214, 0.08)'
+                    ? 'rgba(20, 118, 214, 0.15)'
                     : 'transparent',
                   border: isActive
-                    ? '1px solid rgba(20, 118, 214, 0.25)'
+                    ? '1px solid rgba(20, 118, 214, 0.4)'
                     : '1px solid transparent',
                   borderRadius: 20,
                   cursor: 'pointer',
