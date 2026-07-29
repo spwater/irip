@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Badge, Card, Descriptions, Modal, Tag, Typography } from 'antd';
+import { Badge, Card, Descriptions, Modal, Typography } from 'antd';
 import {
   useQuery,
 } from '@tanstack/react-query';
 import { apiGetProviderStatus, type ToolInfo } from '@/api/models-ai';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 /**
  * Provider 状态组件
  *
  * 展示当前 AI Provider 模式（离线模拟/OpenAI 兼容），
- * 点击可展开查看可用工具列表（白名单 + 候选）。
+ * 点击可展开查看可用工具列表。
  */
 export function ProviderStatus(): JSX.Element {
   const [detailOpen, setDetailOpen] = useState(false);
@@ -26,6 +26,7 @@ export function ProviderStatus(): JSX.Element {
 
   const providerMode = data?.provider_mode ?? 'offline';
   const isOffline = providerMode === 'offline';
+  const toolCount = (data?.whitelist_tools.length ?? 0) + (data?.candidate_tools.length ?? 0);
 
   return (
     <>
@@ -45,8 +46,7 @@ export function ProviderStatus(): JSX.Element {
             />
           </Descriptions.Item>
           <Descriptions.Item label="可用工具">
-            <Tag color="green">只读 {data?.whitelist_tools.length ?? 0}</Tag>
-            <Tag color="orange">候选 {data?.candidate_tools.length ?? 0}</Tag>
+            <Text>{toolCount} 个工具</Text>
           </Descriptions.Item>
         </Descriptions>
       </Card>
@@ -64,21 +64,19 @@ export function ProviderStatus(): JSX.Element {
           <div>
             <Descriptions size="small" column={1} style={{ marginBottom: 16 }}>
               <Descriptions.Item label="运行模式">
-                <Tag color={isOffline ? 'default' : 'blue'}>{providerMode}</Tag>
+                <Text>{providerMode}</Text>
               </Descriptions.Item>
             </Descriptions>
 
-            <Title level={5}>白名单工具（只读，可直接执行）</Title>
-            {data.whitelist_tools.map((tool: ToolInfo) => (
-              <ToolCard key={tool.name} tool={tool} />
-            ))}
-
-            <Title level={5} style={{ marginTop: 16 }}>
-              候选工具（需人工审批）
-            </Title>
-            {data.candidate_tools.map((tool: ToolInfo) => (
-              <ToolCard key={tool.name} tool={tool} />
-            ))}
+            <Text strong>可用工具</Text>
+            <div style={{ marginTop: 8 }}>
+              {data.whitelist_tools.map((tool: ToolInfo) => (
+                <ToolCard key={tool.name} tool={tool} />
+              ))}
+              {data.candidate_tools.map((tool: ToolInfo) => (
+                <ToolCard key={tool.name} tool={tool} />
+              ))}
+            </div>
           </div>
         ) : (
           <Text type="secondary">无法获取 Provider 状态</Text>
@@ -98,9 +96,6 @@ function ToolCard({ tool }: { tool: ToolInfo }): JSX.Element {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
         <Text strong>{tool.display_name}</Text>
-        <Tag color={tool.candidate ? 'orange' : 'green'}>
-          {tool.candidate ? '候选' : '只读'}
-        </Tag>
       </div>
       <div>
         <Text type="secondary" style={{ fontSize: 12 }}>
@@ -111,7 +106,7 @@ function ToolCard({ tool }: { tool: ToolInfo }): JSX.Element {
         <Text style={{ fontSize: 13 }}>{tool.description}</Text>
       </div>
       <div>
-        <Tag style={{ fontSize: 11 }}>{tool.required_permission}</Tag>
+        <Text style={{ fontSize: 11 }}>{tool.required_permission}</Text>
       </div>
     </Card>
   );
