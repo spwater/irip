@@ -34,7 +34,7 @@ import {
   type ObjectTypeDictItem,
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
-import { apiListComponents, apiListEquipment, type ComponentSummary } from '@/api/equipment-flows';
+import { apiListComponents, apiListEquipment, apiArchiveComponent, apiRestoreComponent, type ComponentSummary } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { ComponentsPage } from '@/components/ComponentsPage';
 
@@ -432,9 +432,14 @@ export function ExperimentalObjectPage({
         }
         if (isComponentRow(record)) {
           return (
-            <Tag color="purple" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 13 }}>
-              {record.display_name}
-            </Tag>
+            <Space size={6}>
+              <Tag color="purple" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 13 }}>
+                {record.display_name}
+              </Tag>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {record.code}
+              </Text>
+            </Space>
           );
         }
         return (
@@ -509,7 +514,54 @@ export function ExperimentalObjectPage({
       key: 'action',
       width: 200,
       render: (_: unknown, record: TreeRow) => {
-        if (isTypeRow(record) || isComponentRow(record)) return null;
+        if (isTypeRow(record)) return null;
+        if (isComponentRow(record)) {
+          return (
+            <Space size="small">
+              <Button
+                type="link"
+                size="small"
+                onClick={() => {
+                  if (record.compData) {
+                    setCompDrawerEditId(record.compData.id);
+                    setCompDrawerPrefill(undefined);
+                    setCompDrawerOpen(true);
+                  }
+                }}
+              >
+                编辑
+              </Button>
+              <Popconfirm
+                title={
+                  record.compData?.status === 'published'
+                    ? '确定归档该接口？'
+                    : '确定恢复该接口？'
+                }
+                onConfirm={() => {
+                  if (record.compData?.status === 'published') {
+                    void apiArchiveComponent(record.compData.id).then(() => {
+                      void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
+                    });
+                  } else if (record.compData) {
+                    void apiRestoreComponent(record.compData.id).then(() => {
+                      void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
+                    });
+                  }
+                }}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger={record.compData?.status === 'published'}
+                >
+                  {record.compData?.status === 'published' ? '归档' : '恢复'}
+                </Button>
+              </Popconfirm>
+            </Space>
+          );
+        }
         return (
           <Space size="small">
             <Button
