@@ -59,8 +59,11 @@ class ExtractPreviewRequest(BaseModel):
 
     artifact_id: str = Field(..., description="预加载文件的 artifact ID")
     filename: str = Field(..., description="原始文件名（用于推断后缀）")
-    prompt: str = Field("", description="当前 LLM 提示词（xrd_tool 模式下可空）")
-    tool_type: str = Field("llm", description="解析工具类型：llm 或 xrd_tool")
+    prompt: str = Field("", description="当前 LLM 提示词（xrd_converter 模式下可空）")
+    tool_type: str = Field(  # noqa: E501
+        "llm_converter",
+        description="解析工具类型：llm_converter 或 xrd_converter",
+    )
 
 
 class ExtractPreviewResponse(BaseModel):
@@ -312,11 +315,11 @@ async def extract_preview(
 ) -> ExtractPreviewResponse:
     """用当前提示词对预加载文件进行数据抽取预览。
 
-    tool_type=llm：下载文件 → 提取文本 → 用用户提示词调用大模型 → 返回抽取结果。
-    tool_type=xrd_tool：下载文件 → 调用 XRD 确定性解析器 → 返回 JSON 结果。
+    tool_type=llm_converter：下载文件 → 提取文本 → 用用户提示词调用大模型 → 返回抽取结果。
+    tool_type=xrd_converter：下载文件 → 调用 XRD 确定性解析器 → 返回 JSON 结果。
     """
     # XRD 工具模式：直接调 Python 解析器，不走 LLM
-    if body.tool_type == "xrd_tool":
+    if body.tool_type == "xrd_converter":
         file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
         try:
             import asyncio

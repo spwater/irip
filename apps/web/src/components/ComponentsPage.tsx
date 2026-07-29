@@ -39,7 +39,7 @@ import {
 } from '@/api/equipment-flows';
 import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
-import { apiUploadFile, apiRecommendPrompt, apiExtractPreview } from '@/api/models-ai';
+import { apiUploadFile, apiRecommendPrompt, apiExtractPreview, apiListIngestionTools } from '@/api/models-ai';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import type { UploadProps } from 'antd';
 
@@ -96,7 +96,7 @@ const FRESH_FORM_VALUES: Record<string, string | undefined> = {
   description: undefined,
   prompt: undefined,
   experimental_object_code: undefined,
-  tool_type: 'llm',
+  tool_type: 'llm_converter',
 };
 
 /** 表单模式提交时的字段值 */
@@ -169,7 +169,7 @@ function buildManifestYaml(v: ComponentFormValues, originalName?: string): strin
     `      default: "${yamlEscapeDouble(expCode)}"`,
     '    tool_type:',
     '      type: string',
-    '      description: "解析工具类型：llm（LLM 提取）或 xrd_tool（XRD 确定性解析）"',
+    '      description: "解析工具类型：llm_converter（大模型）或 xrd_converter（XRD 确定性解析）"',
     `      default: "${yamlEscapeDouble(toolType)}"`,
     'timeout_seconds: 300',
   ];
@@ -225,6 +225,7 @@ function ComponentFormFields({
   deptMap,
   objectCodeToDeptId,
   originalName,
+  ingestionToolOptions,
 }: {
   objectOptions: { value: string; label: string; object_type: string }[];
   objectTypeOptions: { value: string; label: string }[];
@@ -233,6 +234,7 @@ function ComponentFormFields({
   deptMap: Map<string, string>;
   objectCodeToDeptId: Map<string, string | null>;
   originalName?: string;
+  ingestionToolOptions: { value: string; label: string }[];
 }): JSX.Element {
   const [uploadedFile, setUploadedFile] = useState<{ name: string; artifactId: string } | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -358,10 +360,7 @@ function ComponentFormFields({
       </Form.Item>
       <Form.Item name="tool_type" label="解析工具">
         <Select
-          options={[
-            { value: 'llm', label: '大模型' },
-            { value: 'xrd_tool', label: 'XRD 解析器' },
-          ]}
+          options={ingestionToolOptions}
         />
       </Form.Item>
       <Form.Item label="文件预加载">
@@ -395,12 +394,12 @@ function ComponentFormFields({
         </Space>
       </Form.Item>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <Text>{watchedToolType === 'xrd_tool' ? 'LLM 提示词（XRD 工具无需填写）' : 'LLM 提示词'}</Text>
+        <Text>{watchedToolType === 'xrd_converter' ? 'LLM 提示词（XRD 工具无需填写）' : 'LLM 提示词'}</Text>
         <Space>
           <Button
             type="link"
             size="small"
-            disabled={!uploadedFile || watchedToolType === 'xrd_tool'}
+            disabled={!uploadedFile || watchedToolType === 'xrd_converter'}
             loading={recommending}
             onClick={async () => {
               if (!uploadedFile) return;
@@ -458,7 +457,7 @@ function ComponentFormFields({
         wrapperCol={{ span: 24 }}
         rules={[{ required: false, message: '请输入 LLM 提示词' }]}
       >
-        <Input.TextArea rows={6} placeholder={watchedToolType === 'xrd_tool' ? 'XRD 工具不需要提示词' : '请输入 LLM 提示词，支持多行'} />
+        <Input.TextArea rows={6} placeholder={watchedToolType === 'xrd_converter' ? 'XRD 工具不需要提示词' : '请输入 LLM 提示词，支持多行'} />
       </Form.Item>
       <Modal
         title="数据抽取预览"
@@ -615,6 +614,15 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     queryKey: ['object-types'],
     queryFn: apiListObjectTypes,
   });
+  // 解析工具下拉选项（从 ai_tool 表 category=ingestion 动态拉取）
+  const { data: ingestionToolsData } = useQuery({
+    queryKey: ['ingestion-tools'],
+    queryFn: apiListIngestionTools,
+  });
+  const ingestionToolOptions = (ingestionToolsData ?? []).map((t) => ({
+    value: t.name,
+    label: t.display_name,
+  }));
   // code → 实验对象（含 equipment_id，用于间接查设备名称）
   const objectMap = new Map<string, IndustrialObject>(
     (objectData?.items ?? []).map((o) => [o.code, o]),
@@ -1188,7 +1196,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               />
             </Form.Item>
           ) : (
-            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} />
+            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} ingestionToolOptions={ingestionToolOptions} />
           )}
         </Form>
       </Modal>
@@ -1264,7 +1272,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} />
+              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} deptMap={deptMap} objectCodeToDeptId={objectCodeToDeptId} originalName={editOriginalName} ingestionToolOptions={ingestionToolOptions} />
             </>
           )}
         </Form>

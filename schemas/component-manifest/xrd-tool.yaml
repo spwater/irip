@@ -1,4 +1,4 @@
-name: xrd_tool
+name: xrd_converter
 version: "1.0.0"
 kind: ingestion
 runtime: python

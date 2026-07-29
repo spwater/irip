@@ -35,6 +35,7 @@ ai_tools_router = APIRouter(prefix="/api/v1/ai-tools", tags=["ai-tools"])
 
 #: 需 system:manage 权限的当前用户依赖（D-1）。
 ManageUserDep = Annotated[CurrentUser, Depends(require_permission("system:manage"))]
+AnyUserDep = Annotated[CurrentUser, Depends()]
 
 
 # ---- 请求/响应模型（架构设计文档 §3.3） ----
@@ -305,6 +306,44 @@ async def list_unified_tools(
 
     ai_tools.sort(key=lambda t: t.name)
     return ai_tools
+
+
+@ai_tools_router.get("/ingestion/list", response_model=list[UnifiedToolDTO])
+async def list_ingestion_tools(
+    current_user: AnyUserDep,
+) -> list[UnifiedToolDTO]:
+    """列出 ingestion 分类的内置工具（供解析工具下拉框使用）。
+
+    返回 category=ingestion 的工具，前端用 name 作 value、display_name 作 label。
+    """
+    tools: list[UnifiedToolDTO] = []
+    async with session_scope(_get_session_factory()) as session:
+        ai_rows = await ToolRepository.list_all(session)
+    for row in ai_rows:
+        if row.category != "ingestion":
+            continue
+        tools.append(
+            UnifiedToolDTO(
+                name=row.name,
+                display_name=row.display_name,
+                description=row.description,
+                source="ai_tool",
+                enabled=row.enabled,
+                status="enabled" if row.enabled else "disabled",
+                kind="readonly",
+                candidate=row.candidate,
+                lock_version=row.lock_version,
+                updated_at=row.updated_at.isoformat() if row.updated_at else "",
+                updated_by=str(row.updated_by) if row.updated_by else None,
+                required_permission=row.required_permission,
+                parameters_schema=row.parameters_schema,
+                version="",
+                runtime="",
+                category=row.category,
+            )
+        )
+    tools.sort(key=lambda t: t.name)
+    return tools
 
 
 @ai_tools_router.get("/{name}", response_model=AIToolDTO)

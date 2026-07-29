@@ -20,6 +20,7 @@ import { extractApiError } from '@/api/types';
 import type { AIToolDTO } from './types';
 import type { ToolFilter } from './types';
 import { ToolEditDrawer } from './ToolEditDrawer';
+import { BuiltinToolEditDrawer } from './BuiltinToolEditDrawer';
 
 const { Text } = Typography;
 
@@ -35,6 +36,8 @@ export function AIToolsPage(): JSX.Element {
   const [activeTab, setActiveTab] = useState<'ai_tool' | 'builtin'>('ai_tool');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<AIToolDTO | null>(null);
+  const [builtinDrawerOpen, setBuiltinDrawerOpen] = useState(false);
+  const [editingBuiltin, setEditingBuiltin] = useState<AIToolDTO | null>(null);
   const [filter, setFilter] = useState<ToolFilter>({
     type: 'all',
     status: 'all',
@@ -109,6 +112,16 @@ export function AIToolsPage(): JSX.Element {
   const handleCloseDrawer = (): void => {
     setDrawerOpen(false);
     setEditingTool(null);
+  };
+
+  const handleEditBuiltin = (tool: UnifiedToolDTO): void => {
+    setEditingBuiltin(toAIToolDTO(tool));
+    setBuiltinDrawerOpen(true);
+  };
+
+  const handleCloseBuiltinDrawer = (): void => {
+    setBuiltinDrawerOpen(false);
+    setEditingBuiltin(null);
   };
 
   // 按分类分组
@@ -231,7 +244,7 @@ export function AIToolsPage(): JSX.Element {
       key: 'action',
       width: 80,
       render: (_: unknown, r: UnifiedToolDTO) => (
-        <Button size="small" onClick={() => handleEdit(r)}>
+        <Button size="small" onClick={() => handleEditBuiltin(r)}>
           编辑
         </Button>
       ),
@@ -312,6 +325,11 @@ export function AIToolsPage(): JSX.Element {
         open={drawerOpen}
         tool={editingTool}
         onClose={handleCloseDrawer}
+      />
+      <BuiltinToolEditDrawer
+        open={builtinDrawerOpen}
+        tool={editingBuiltin}
+        onClose={handleCloseBuiltinDrawer}
       />
     </div>
   );

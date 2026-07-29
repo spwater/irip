@@ -52,8 +52,8 @@ class EZScanExtractor:
     ) -> ComponentResult:
         """读取文件 → 提取文本 → 调用 LLM → 返回 ObservationTable。"""
         # 检查是否指定了专用解析工具
-        tool_type: str = params.get("tool_type", "llm")
-        if tool_type == "xrd_tool":
+        tool_type: str = params.get("tool_type", "llm_converter")
+        if tool_type == "xrd_converter":
             # 委托给 XRD 确定性解析组件
             from packages.components.builtin.ingestion.xrd_tool_component import (
                 XrdToolComponent,

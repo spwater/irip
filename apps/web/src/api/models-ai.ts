@@ -38,6 +38,11 @@ export async function apiDeprecateModel(modelId: string): Promise<ModelSummary> 
 // AI Assistant API
 // ============================================================
 
+export async function apiListIngestionTools(): Promise<UnifiedToolDTO[]> {
+  const res = await http.get<UnifiedToolDTO[]>('/ai-tools/ingestion/list');
+  return res.data;
+}
+
 export type ToolCallSummary = { tool: string; args: Record<string, unknown>; summary: string; status: string; };
 export type Citation = { object_type: string; object_id: string; version: string; label: string; href: string; };
 export type ConversationSummary = { id: string; title: string; provider_mode: string; pinned: boolean; archived: boolean; created_at: string; updated_at: string; system_context: string | null; };
