@@ -37,7 +37,7 @@ import {
   type ComponentSummary,
   type ComponentVersionItem,
 } from '@/api/equipment-flows';
-import { apiListObjects } from '@/api/standards-objects';
+import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { apiUploadFile, apiRecommendPrompt, apiExtractPreview } from '@/api/models-ai';
 import { extractApiError, type IndustrialObject } from '@/api/types';
@@ -225,7 +225,7 @@ function ComponentFormFields({
   objectCodeToDeptId,
   originalName,
 }: {
-  objectOptions: ObjectOption[];
+  objectOptions: { label: string; options: { value: string; label: string }[] }[];
   equipmentOptions: ObjectOption[];
   objectMap: Map<string, IndustrialObject>;
   deptMap: Map<string, string>;
@@ -588,15 +588,37 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     staleTime: 0,
     refetchOnMount: true,
   });
+  const { data: objectTypeData } = useQuery({
+    queryKey: ['object-types'],
+    queryFn: apiListObjectTypes,
+  });
   // code → 实验对象（含 equipment_id，用于间接查设备名称）
   const objectMap = new Map<string, IndustrialObject>(
     (objectData?.items ?? []).map((o) => [o.code, o]),
   );
-  // 实验对象下拉选项（显示 display_name，值为 code，用于表单模式的选择器）
-  const objectOptions: ObjectOption[] = (objectData?.items ?? []).map((o) => ({
-    value: o.code,
-    label: o.display_name,
-  }));
+  // 实验对象下拉选项：按类型分组，label 含编码便于搜索
+  const objectOptions = (() => {
+    const items = objectData?.items ?? [];
+    // 按 object_type 分组
+    const groups = new Map<string, { value: string; label: string }[]>();
+    for (const o of items) {
+      const list = groups.get(o.object_type) ?? [];
+      list.push({
+        value: o.code,
+        label: `${o.display_name} (${o.code})`,
+      });
+      groups.set(o.object_type, list);
+    }
+    // 转为 OptGroup 格式
+    const typeLabels = objectTypeData?.reduce(
+      (m, t) => m.set(t.code, t.display_name),
+      new Map<string, string>(),
+    ) ?? new Map<string, string>();
+    return Array.from(groups.entries()).map(([typeCode, options]) => ({
+      label: typeLabels.get(typeCode) ?? typeCode,
+      options,
+    }));
+  })();
 
   // ---- 实验室列表查询（用于单位筛选）----
   const { data: deptData } = useQuery({
