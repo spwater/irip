@@ -1841,12 +1841,21 @@ class FlowRuntimeService:
             return run, executions
 
     async def delete_run(self, run_id: UUID) -> None:
-        """删除执行记录及其所有节点执行记录。
+        """删除执行记录及其所有节点执行记录和关联的作业。
 
         Args:
             run_id: 执行记录 ID。
         """
         async with session_scope(self._factory) as session:
+            # 先查出关联的 job_id
+            run = await session.scalar(
+                sa.select(FlowRun).where(
+                    FlowRun.organization_id == self._org_id,
+                    FlowRun.id == run_id,
+                )
+            )
+            job_id = run.job_id if run else None
+
             # 删除节点执行记录
             await session.execute(
                 sa.delete(FlowNodeExecution).where(
@@ -1860,6 +1869,12 @@ class FlowRuntimeService:
                     FlowRun.id == run_id,
                 )
             )
+            # 删除关联的作业（避免残留 job 在看板显示空名称）
+            if job_id is not None:
+                from packages.jobs.entities import Job
+                await session.execute(
+                    sa.delete(Job).where(Job.id == job_id)
+                )
             await session.flush()
 
     async def delete_flow(self, flow_id: UUID) -> None:

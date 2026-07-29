@@ -41,8 +41,10 @@ const JOB_STATUS_LABEL: Record<string, string> = {
 /** 系统健康状态 → 语义映射 */
 const HEALTH_SEMANTIC: Record<string, StatusSemantic> = {
   healthy: 'success',
+  ok: 'success',
   degraded: 'warning',
   unhealthy: 'danger',
+  error: 'danger',
 };
 
 /** 快捷入口配置 */
@@ -202,9 +204,6 @@ export function WorkbenchPage(): JSX.Element {
             <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
               最近作业
             </Typography.Title>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              最近 {jobsItems.length} 条记录
-            </Text>
           </div>
           <div style={{ padding: 0 }}>
             {jobsError ? (
@@ -254,7 +253,7 @@ export function WorkbenchPage(): JSX.Element {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <StatusMark
                 semantic={HEALTH_SEMANTIC[health.status] ?? 'neutral'}
-                label={health.status === 'healthy' ? '正常' : health.status === 'degraded' ? '降级' : '异常'}
+                label={health.status === 'healthy' || health.status === 'ok' ? '正常' : health.status === 'degraded' ? '降级' : '异常'}
                 shape="dot"
               />
               {health.migration_version && (
@@ -271,8 +270,8 @@ export function WorkbenchPage(): JSX.Element {
                     <div key={c.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>{c.name}</Text>
                       <StatusMark
-                        semantic={c.status === 'healthy' ? 'success' : c.status === 'degraded' ? 'warning' : 'danger'}
-                        label={c.status === 'healthy' ? '正常' : c.status}
+                        semantic={c.status === 'healthy' || c.status === 'ok' ? 'success' : c.status === 'degraded' ? 'warning' : 'danger'}
+                        label={c.status === 'healthy' || c.status === 'ok' ? '正常' : c.status}
                         shape="dot"
                       />
                     </div>
