@@ -92,7 +92,11 @@ export function AppShell(): JSX.Element | null {
                 justifyContent: 'center',
                 padding: '12px 20px',
                 gap: 4,
-                borderBottom: '1px solid var(--ocean-border-subtle)',
+                borderBottom: '1px solid transparent',
+                backgroundImage: 'linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: '100% 1px',
+                backgroundPosition: 'bottom',
               }}
             >
               {/* 英文行：IRIP (左) + Data Ocean (右)，底部对齐 */}
@@ -184,7 +188,11 @@ function DynamicHeader({
         background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)',
         backdropFilter: 'blur(6px)',
         padding: '12px 24px',
-        borderBottom: '1px solid var(--ocean-border-subtle)',
+        borderBottom: '1px solid transparent',
+        backgroundImage: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%), linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
+        backgroundRepeat: 'no-repeat, no-repeat',
+        backgroundSize: '100% 100%, 100% 1px',
+        backgroundPosition: '0 0, bottom',
         position: 'sticky',
         top: 0,
         zIndex: 100,
