@@ -272,8 +272,30 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
     ),
 )
 
-#: 全部工具（白名单 + 候选）。
-ALL_TOOLS: tuple[ToolSpec, ...] = WHITELIST_TOOLS + CANDIDATE_TOOLS
+#: 插件工具（专门编写的解析器，只读，可编辑描述）。
+PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
+    ToolSpec(
+        name="xrd_converter",
+        display_name="XRD 解析器",
+        description="解析 XRD RAS/RAW 文件，提取衍射数据（metadata/points/series）。"
+        "支持 Rigaku 等仪器的原始数据格式，输出结构化 JSON。",
+        required_permission="ingestion:read",
+        candidate=False,
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "XRD RAS/RAW 文件路径（artifact: 前缀或本地路径）",
+                },
+            },
+            "required": ["file_path"],
+        },
+    ),
+)
+
+#: 全部工具（白名单 + 候选 + 插件）。
+ALL_TOOLS: tuple[ToolSpec, ...] = WHITELIST_TOOLS + CANDIDATE_TOOLS + PLUGIN_TOOLS
 
 #: 白名单工具名称集合（只读，可直接执行）。
 WHITELIST_TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in WHITELIST_TOOLS)

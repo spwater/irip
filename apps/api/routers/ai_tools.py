@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.routers.components import ComponentRegistryServiceDep
+from apps.api.routers.components import ComponentRegistryServiceDep  # noqa: F401
 from packages.ai.tool_repository import AIToolRow, ToolRepository
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
@@ -264,24 +264,18 @@ async def list_ai_tools(
 @ai_tools_router.get("/unified", response_model=list[UnifiedToolDTO])
 async def list_unified_tools(
     current_user: ManageUserDep,
-    component_service: ComponentRegistryServiceDep,
 ) -> list[UnifiedToolDTO]:
-    """列出统一工具/插件（AI 工具 + 组件插件汇总）。
+    """列出全部工具/插件（ai_tool 表）。
 
-    汇总两个数据源：
-    - AI 工具白名单（``ai_tool`` 表全部工具）；
-    - 已发布组件（``component`` 表 kind=ingestion, status=published）。
-
-    组件插件在列表中只读展示，不可编辑/启用禁用。
+    包括 AI 工具白名单、候选工具和插件工具（如 XRD 解析器）。
+    组件插件不再在此页面展示，由数据接口页面单独管理。
 
     Args:
         current_user: 当前操作用户（需 ``system:manage`` 权限）。
-        component_service: 组件注册表服务（DI 注入）。
 
     Returns:
-        list[UnifiedToolDTO]: 统一工具列表，按 name 排序。
+        list[UnifiedToolDTO]: 工具列表，按 name 排序。
     """
-    # 1. AI 工具（ai_tool 表全部工具）
     ai_tools: list[UnifiedToolDTO] = []
     async with session_scope(_get_session_factory()) as session:
         ai_rows = await ToolRepository.list_all(session)
@@ -306,38 +300,8 @@ async def list_unified_tools(
             )
         )
 
-    # 2. 组件插件（kind=ingestion，含 published 和 deprecated）
-    components = await component_service.list(kind="ingestion")
-    component_items: list[UnifiedToolDTO] = []
-    for comp, ver in components:
-        display_name = _parse_manifest_display_name(ver.manifest_yaml) or comp.name
-        description = _parse_manifest_description(ver.manifest_yaml)
-        component_items.append(
-            UnifiedToolDTO(
-                name=comp.name,
-                display_name=display_name,
-                description=description,
-                source="component",
-                enabled=comp.status == "published",
-                status=comp.status,
-                kind=comp.kind,
-                candidate=False,
-                lock_version=0,
-                updated_at=comp.updated_at.isoformat() if comp.updated_at else "",
-                updated_by=None,
-                required_permission="",
-                parameters_schema={},
-                version=ver.version,
-                runtime=ver.runtime,
-                component_id=str(comp.id),
-                version_id=str(comp.active_version_id or ver.id),
-            )
-        )
-
-    # 合并并按 name 排序
-    all_tools = ai_tools + component_items
-    all_tools.sort(key=lambda t: t.name)
-    return all_tools
+    ai_tools.sort(key=lambda t: t.name)
+    return ai_tools
 
 
 @ai_tools_router.get("/{name}", response_model=AIToolDTO)

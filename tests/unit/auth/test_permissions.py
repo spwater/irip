@@ -72,42 +72,73 @@ class TestRolePermissionMatrix:
         assert admin_perms == all_perms
 
     def test_lab_director_permissions(self) -> None:
-        """实验室负责人权限：standard:read/write/publish + fact:read/write + artifact:read/upload/download
-        + job:read/submit/cancel + model:read/manage/write/publish/predict + parameter:read/write/review/approve/publish
-        + department:manage/read + equipment:manage/read + ingestion:read/write/publish
-        + provenance:read/write/publish + component:manage/read + flow:manage/execute/read + assistant:use。"""
+        """实验室负责人权限：全实验操作 + 管理 + 审批。"""
         perms = set(BUILTIN_ROLES["lab_director"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "standard:read", "standard:write", "standard:publish",
-            "fact:read", "fact:write",
-            "artifact:read", "artifact:upload", "artifact:download",
-            "job:read", "job:submit", "job:cancel",
-            "model:read", "model:manage", "model:write", "model:publish", "model:predict",
-            "parameter:read", "parameter:write", "parameter:review", "parameter:approve", "parameter:publish",
-            "department:manage", "department:read",
-            "equipment:manage", "equipment:read",
-            "ingestion:read", "ingestion:write", "ingestion:publish",
-            "provenance:read", "provenance:write", "provenance:publish",
-            "component:manage", "component:read",
-            "flow:manage", "flow:execute", "flow:read",
+            "standard:read",
+            "standard:write",
+            "standard:publish",
+            "fact:read",
+            "fact:write",
+            "artifact:read",
+            "artifact:upload",
+            "artifact:download",
+            "job:read",
+            "job:submit",
+            "job:cancel",
+            "model:read",
+            "model:manage",
+            "model:write",
+            "model:publish",
+            "model:predict",
+            "parameter:read",
+            "parameter:write",
+            "parameter:review",
+            "parameter:approve",
+            "parameter:publish",
+            "department:manage",
+            "department:read",
+            "equipment:manage",
+            "equipment:read",
+            "ingestion:read",
+            "ingestion:write",
+            "ingestion:publish",
+            "provenance:read",
+            "provenance:write",
+            "provenance:publish",
+            "component:manage",
+            "component:read",
+            "flow:manage",
+            "flow:execute",
+            "flow:read",
             "assistant:use",
         }
 
     def test_lab_member_permissions(self) -> None:
-        """实验室成员权限：fact:read/write + artifact:read/upload/download + job:read/submit/cancel
-        + model:read/predict + parameter:read/write + department:read + equipment:read
-        + ingestion:read/write + provenance:read/write + component:read + flow:execute/read + assistant:use。"""
+        """实验室成员权限：实验操作 + 只读管理。"""
         perms = set(BUILTIN_ROLES["lab_member"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "fact:read", "fact:write",
-            "artifact:read", "artifact:upload", "artifact:download",
-            "job:read", "job:submit", "job:cancel",
-            "model:read", "model:predict",
-            "parameter:read", "parameter:write",
-            "department:read", "equipment:read",
-            "ingestion:read", "ingestion:write",
-            "provenance:read", "provenance:write",
-            "component:read", "flow:execute", "flow:read",
+            "fact:read",
+            "fact:write",
+            "artifact:read",
+            "artifact:upload",
+            "artifact:download",
+            "job:read",
+            "job:submit",
+            "job:cancel",
+            "model:read",
+            "model:predict",
+            "parameter:read",
+            "parameter:write",
+            "department:read",
+            "equipment:read",
+            "ingestion:read",
+            "ingestion:write",
+            "provenance:read",
+            "provenance:write",
+            "component:read",
+            "flow:execute",
+            "flow:read",
             "assistant:use",
         }
 
@@ -117,11 +148,19 @@ class TestRolePermissionMatrix:
         + ingestion:read + provenance:read + component:read + flow:read + assistant:use。"""
         perms = set(BUILTIN_ROLES["lab_viewer"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
-            "standard:read", "fact:read", "artifact:read", "job:read",
-            "model:read", "parameter:read",
-            "department:read", "equipment:read",
-            "ingestion:read", "provenance:read",
-            "component:read", "flow:read", "assistant:use",
+            "standard:read",
+            "fact:read",
+            "artifact:read",
+            "job:read",
+            "model:read",
+            "parameter:read",
+            "department:read",
+            "equipment:read",
+            "ingestion:read",
+            "provenance:read",
+            "component:read",
+            "flow:read",
+            "assistant:use",
         }
 
     def test_lab_viewer_cannot_write(self) -> None:

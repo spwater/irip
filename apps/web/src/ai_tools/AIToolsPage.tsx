@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
 import {
   Button,
   Input,
   Modal,
-  Popconfirm,
   Select,
   Space,
   Switch,
@@ -17,7 +15,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiListUnifiedTools, apiToggleAITool } from '@/api/models-ai';
 import type { UnifiedToolDTO } from '@/api/models-ai';
-import { apiArchiveComponent, apiRestoreComponent } from '@/api/equipment-flows';
 import { extractApiError } from '@/api/types';
 import type { AIToolDTO } from './types';
 import type { ToolFilter } from './types';
@@ -26,28 +23,25 @@ import { ToolEditDrawer } from './ToolEditDrawer';
 const { Title, Text } = Typography;
 
 /**
- * AI 工具与插件管理页面（统一视图）
+ * AI 工具与插件管理页面
  *
- * 汇总展示两套工具体系：
- * - AI 工具白名单（ai_tool 表，小艾对话调用）
- * - 组件插件（component 表，流程引擎调用）
+ * 展示 ai_tool 表中的全部工具：
+ * - AI 工具白名单（小艾对话调用的只读工具）
+ * - 候选工具（需审批的写操作建议）
+ * - 插件工具（XRD 解析器等专门编写的工具，可编辑描述）
  *
  * 功能：
- * - 统一列表，"来源"列区分 AI 工具（蓝色）和组件插件（绿色）；
- * - 来源/类型/状态筛选 + 名称搜索；
- * - AI 工具：启用/禁用开关（二次确认）+ 编辑按钮；
- * - 组件插件：只读展示（开关仅显示状态，无编辑按钮）。
+ * - 类型/状态筛选 + 名称搜索；
+ * - 启用/禁用开关（二次确认）+ 编辑按钮。
  *
  * 仅 platform_administrator 可见（由 PlatformPage Tab 条件渲染保证），
  * 后端端点另由 system:manage 权限守卫。
  */
 export function AIToolsPage(): JSX.Element {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTool, setEditingTool] = useState<AIToolDTO | null>(null);
   const [filter, setFilter] = useState<ToolFilter>({
-    source: 'all',
     type: 'all',
     status: 'all',
     keyword: '',
@@ -76,26 +70,6 @@ export function AIToolsPage(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  // ---- 组件归档 Mutation ----
-  const archiveCompMutation = useMutation({
-    mutationFn: (componentId: string) => apiArchiveComponent(componentId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['ai-tools'] });
-      message.success('组件已归档');
-    },
-    onError: (err: unknown) => message.error(extractApiError(err)),
-  });
-
-  // ---- 组件恢复 Mutation ----
-  const restoreCompMutation = useMutation({
-    mutationFn: (componentId: string) => apiRestoreComponent(componentId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['ai-tools'] });
-      message.success('组件已恢复');
-    },
-    onError: (err: unknown) => message.error(extractApiError(err)),
-  });
-
   const handleToggle = (tool: UnifiedToolDTO, newEnabled: boolean): void => {
     Modal.confirm({
       title: newEnabled ? '启用工具' : '禁用工具',
@@ -115,10 +89,6 @@ export function AIToolsPage(): JSX.Element {
     });
   };
 
-  /**
-   * 将 UnifiedToolDTO（AI 工具）转换为 AIToolDTO，
-   * 供 ToolEditDrawer 使用。
-   */
   const toAIToolDTO = (tool: UnifiedToolDTO): AIToolDTO => ({
     name: tool.name,
     display_name: tool.display_name,
@@ -150,14 +120,9 @@ export function AIToolsPage(): JSX.Element {
   const filteredTools = useMemo<UnifiedToolDTO[]>(() => {
     const all = tools ?? [];
     return all.filter((t) => {
-      // 来源筛选
-      if (filter.source === 'ai_tool' && t.source !== 'ai_tool') return false;
-      if (filter.source === 'component' && t.source !== 'component') return false;
-      // 类型筛选（仅对 AI 工具有效）
-      if (t.source === 'ai_tool') {
-        if (filter.type === 'whitelist' && t.candidate) return false;
-        if (filter.type === 'candidate' && !t.candidate) return false;
-      }
+      // 类型筛选
+      if (filter.type === 'whitelist' && t.candidate) return false;
+      if (filter.type === 'candidate' && !t.candidate) return false;
       // 状态筛选
       if (filter.status === 'enabled' && !t.enabled) return false;
       if (filter.status === 'disabled' && t.enabled) return false;
@@ -196,45 +161,28 @@ export function AIToolsPage(): JSX.Element {
       ellipsis: true,
     },
     {
-      title: '来源',
-      key: 'source',
-      width: 110,
-      render: (_: unknown, r: UnifiedToolDTO) =>
-        r.source === 'ai_tool' ? (
-          <Tag color="blue">AI 工具</Tag>
-        ) : (
-          <Tag color="green">组件插件</Tag>
-        ),
-    },
-    {
       title: '类型',
       key: 'type',
       width: 100,
       render: (_: unknown, r: UnifiedToolDTO) => {
-        if (r.source === 'ai_tool') {
-          return r.candidate ? (
-            <Tag color="orange">候选</Tag>
-          ) : (
-            <Tag color="blue">只读</Tag>
-          );
-        }
-        return <Tag color="cyan">{r.kind}</Tag>;
+        return r.candidate ? (
+          <Tag color="orange">候选</Tag>
+        ) : (
+          <Tag color="blue">只读</Tag>
+        );
       },
     },
     {
       title: '状态',
       key: 'enabled',
       width: 90,
-      render: (_: unknown, r: UnifiedToolDTO) =>
-        r.source === 'ai_tool' ? (
-          <Switch
-            checked={r.enabled}
-            onChange={(v) => handleToggle(r, v)}
-            loading={toggleMutation.isPending}
-          />
-        ) : (
-          <Switch checked={r.enabled} disabled />
-        ),
+      render: (_: unknown, r: UnifiedToolDTO) => (
+        <Switch
+          checked={r.enabled}
+          onChange={(v) => handleToggle(r, v)}
+          loading={toggleMutation.isPending}
+        />
+      ),
     },
     {
       title: '更新时间',
@@ -247,70 +195,12 @@ export function AIToolsPage(): JSX.Element {
     {
       title: '操作',
       key: 'action',
-      width: 140,
-      render: (_: unknown, r: UnifiedToolDTO) => {
-        if (r.source === 'ai_tool') {
-          return (
-            <Button size="small" onClick={() => handleEdit(r)}>
-              编辑
-            </Button>
-          );
-        }
-        // 组件插件：归档/恢复
-        if (r.status === 'deprecated') {
-          return (
-            <Space size="small">
-              <Button
-                type="link"
-                size="small"
-                onClick={() => void navigate({ to: '/platform', search: { tab: 'components', edit_id: r.version_id } })}
-              >
-                编辑
-              </Button>
-              <Popconfirm
-                title="确定恢复该组件？"
-                onConfirm={() => restoreCompMutation.mutate(r.component_id)}
-                okText="恢复"
-                cancelText="取消"
-              >
-                <Button
-                  type="link"
-                  size="small"
-                  loading={restoreCompMutation.isPending}
-                >
-                  恢复
-                </Button>
-              </Popconfirm>
-            </Space>
-          );
-        }
-        return (
-          <Space size="small">
-            <Button
-              type="link"
-              size="small"
-              onClick={() => void navigate({ to: '/platform', search: { tab: 'components', edit_id: r.version_id } })}
-            >
-              编辑
-            </Button>
-            <Popconfirm
-              title="确定归档该组件？"
-              onConfirm={() => archiveCompMutation.mutate(r.component_id)}
-              okText="归档"
-              cancelText="取消"
-            >
-              <Button
-                type="link"
-                size="small"
-                danger
-                loading={archiveCompMutation.isPending}
-              >
-                归档
-              </Button>
-            </Popconfirm>
-          </Space>
-        );
-      },
+      width: 80,
+      render: (_: unknown, r: UnifiedToolDTO) => (
+        <Button size="small" onClick={() => handleEdit(r)}>
+          编辑
+        </Button>
+      ),
     },
   ];
 
@@ -326,16 +216,6 @@ export function AIToolsPage(): JSX.Element {
           onChange={(e) =>
             setFilter((f) => ({ ...f, keyword: e.target.value }))
           }
-        />
-        <Select
-          style={{ width: 140 }}
-          value={filter.source}
-          onChange={(v) => setFilter((f) => ({ ...f, source: v }))}
-          options={[
-            { value: 'all', label: '全部来源' },
-            { value: 'ai_tool', label: 'AI 工具' },
-            { value: 'component', label: '组件插件' },
-          ]}
         />
         <Select
           style={{ width: 120 }}
