@@ -46,7 +46,7 @@ export function LabOpsPage(): JSX.Element {
   }, [activeTab]);
 
   return (
-    <div className="ocean-page-enter">
+    <div className="ocean-page-enter" key={activeTab}>
       {activeTab === 'flows' && <FlowDetail />}
       {activeTab === 'facts' && <FactsPage />}
       {activeTab === 'parameters' && <ParameterPage />}

@@ -32,7 +32,7 @@ export function GovernanceConsole(): JSX.Element {
   }, [activeTab, setHeader]);
 
   return (
-    <div className="ocean-page-enter">
+    <div className="ocean-page-enter" key={activeTab}>
       {activeTab === 'system-config' && (
         <Row gutter={24}>
           <Col xs={24} lg={12}>

@@ -62,7 +62,7 @@ export function PlatformPage(): JSX.Element {
   }, [activeTab, tabs]);
 
   return (
-    <div className="ocean-page-enter">
+    <div className="ocean-page-enter" key={activeTab}>
       {activeTab === 'assistant' && <AssistantPage />}
       {activeTab === 'ai-tools' && isAdmin && <AIToolsPage />}
       {activeTab === 'components' && <ComponentsPage prefillObject={prefillObject} editId={editId} />}

@@ -46,7 +46,7 @@ export function StandardsPage(): JSX.Element {
   }, [activeTab]);
 
   return (
-    <div className="ocean-page-enter">
+    <div className="ocean-page-enter" key={activeTab}>
       {activeTab === 'departments' && <DepartmentManagement />}
       {activeTab === 'equipment' && <EquipmentPage />}
       {activeTab === 'exp-objects' && <ExperimentalObjectPage />}
