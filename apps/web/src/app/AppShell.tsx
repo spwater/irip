@@ -96,23 +96,24 @@ export function AppShell(): JSX.Element | null {
             >
               <span
                 style={{
-                  fontSize: 22,
-                  fontWeight: 700,
-                  letterSpacing: 1,
+                  fontSize: 28,
+                  fontWeight: 800,
+                  letterSpacing: 1.5,
                   color: 'var(--ocean-action-primary)',
                   lineHeight: 1,
                 }}
               >
                 IRIP
               </span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <span
                   style={{
-                    fontSize: 9,
-                    letterSpacing: 1.5,
+                    fontSize: 10,
+                    letterSpacing: 2,
                     textTransform: 'uppercase',
-                    color: 'var(--ocean-text-muted)',
+                    color: 'var(--ocean-text-secondary)',
                     fontFamily: 'var(--ocean-font-mono)',
+                    fontWeight: 600,
                     lineHeight: 1,
                   }}
                 >
@@ -120,11 +121,11 @@ export function AppShell(): JSX.Element | null {
                 </span>
                 <span
                   style={{
-                    fontSize: 8,
-                    color: 'var(--ocean-text-muted)',
+                    fontSize: 9,
+                    color: 'var(--ocean-text-secondary)',
                     fontFamily: 'var(--ocean-font-mono)',
                     lineHeight: 1,
-                    opacity: 0.7,
+                    opacity: 0.85,
                   }}
                 >
                   工业研究智能平台
