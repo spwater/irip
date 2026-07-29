@@ -136,10 +136,9 @@ export function FlowDetail(): JSX.Element {
     flows = flows.filter((f) => {
       const node = (f.latest_version?.nodes ?? [])[0] as { component_name?: string } | undefined;
       const compName = node?.component_name;
-      const objCode = compName ? compMap.get(compName)?.experimental_object_code : undefined;
-      if (!objCode) return false;
-      const obj = objMap.get(objCode);
-      return obj?.equipment_id === equipFilter;
+      if (!compName) return false;
+      const comp = compMap.get(compName);
+      return comp?.equipment_id === equipFilter;
     });
   }
 
@@ -563,7 +562,7 @@ export function FlowDetail(): JSX.Element {
         const compLabel = comp?.display_name ?? compName;
         const objCode = comp?.experimental_object_code;
         const obj = objCode ? objMap.get(objCode) : null;
-        const eqName = obj?.equipment_id ? equipMap.get(obj.equipment_id) : null;
+        const eqName = comp?.equipment_id ? equipMap.get(comp.equipment_id) : null;
         return (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>

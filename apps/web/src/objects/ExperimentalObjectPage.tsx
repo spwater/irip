@@ -34,7 +34,7 @@ import {
   type ObjectTypeDictItem,
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
-import { apiListComponents, apiListEquipment, type ComponentSummary } from '@/api/equipment-flows';
+import { apiListComponents, type ComponentSummary } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { ComponentsPage } from '@/components/ComponentsPage';
 
@@ -94,7 +94,6 @@ export function ExperimentalObjectPage({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [typeFilter, setTypeFilter] = useState<string | undefined>(undefined);
-  const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<IndustrialObject | null>(null);
@@ -130,7 +129,6 @@ export function ExperimentalObjectPage({
     if (presetEquipmentId) {
       setEditingItem(null);
       form.resetFields();
-      form.setFieldsValue({ equipment_id: presetEquipmentId });
       setModalOpen(true);
       onPresetConsumed?.();
     }
@@ -149,25 +147,6 @@ export function ExperimentalObjectPage({
 
   const items: IndustrialObject[] = data?.items ?? [];
 
-  // ---- 设备列表查询（用于关联设备下拉框）----
-  const { data: equipmentData } = useQuery({
-    queryKey: ['equipment-for-object-link'],
-    queryFn: () => apiListEquipment({ limit: 100 }),
-  });
-  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
-    value: e.id,
-    label: `${e.display_name} (${e.code})`,
-  }));
-  const equipmentMap = new Map(
-    (equipmentData?.items ?? []).map((e) => [e.id, e]),
-  );
-
-  // 查部门列表，用于显示设备所属单位
-  const { data: deptData } = useQuery({
-    queryKey: ['departments-for-object-equipment'],
-    queryFn: () => apiListDepartments({ limit: 100 }),
-  });
-
   // 全部门名称映射（不受部门隔离限制），用于所属单位/可见单位列名称展示
   const { data: deptNameMapData } = useQuery({
     queryKey: ['department-name-map'],
@@ -176,6 +155,15 @@ export function ExperimentalObjectPage({
   const deptMap = new Map(
     (deptNameMapData ?? []).map((d) => [d.id, d.display_name]),
   );
+
+  const { data: deptData } = useQuery({
+    queryKey: ['departments-for-object-filter'],
+    queryFn: () => apiListDepartments({ limit: 100 }),
+  });
+  const deptOptions = (deptData?.items ?? []).map((d) => ({
+    value: d.id,
+    label: d.display_name,
+  }));
 
   // ---- 组件列表查询：构建 experimental_object_code → ComponentSummary 映射 ----
   // 一个实验对象最多绑定一个接口，用于操作列展示"接口"/"+接口"按钮
@@ -191,23 +179,10 @@ export function ExperimentalObjectPage({
   }
 
   // ---- 筛选逻辑 ----
-  // 选了具体设备就按设备筛；否则选了单位就按单位下所有设备筛
   let filteredItems = items;
-  if (equipmentFilter) {
-    filteredItems = items.filter((o) => o.equipment_id === equipmentFilter);
-  } else if (deptFilter) {
-    const deptEquipIds = new Set(
-      (equipmentData?.items ?? [])
-        .filter((e) => e.department_id === deptFilter)
-        .map((e) => e.id),
-    );
-    filteredItems = items.filter((o) => o.equipment_id && deptEquipIds.has(o.equipment_id));
+  if (deptFilter) {
+    filteredItems = items.filter((o) => o.department_id === deptFilter);
   }
-
-  // 部门选项（只列出有设备的部门）
-  const deptOptions = (deptData?.items ?? [])
-    .filter((d) => (equipmentData?.items ?? []).some((e) => e.department_id === d.id))
-    .map((d) => ({ value: d.id, label: d.display_name }));
 
   // 全部部门选项（用于所属单位 + 可见单位选择）
   const allDeptOptions = (deptData?.items ?? []).map((d) => ({
@@ -242,7 +217,6 @@ export function ExperimentalObjectPage({
         display_name: string;
         description?: string | null;
         object_type?: string;
-        equipment_id?: string | null;
         department_id?: string | null;
         visible_departments?: string[] | null;
       };
@@ -308,7 +282,6 @@ export function ExperimentalObjectPage({
       display_name: detail.display_name,
       object_type: record.object_type,
       description: detail.description ?? '',
-      equipment_id: detail.equipment_id ?? undefined,
       department_id: detail.department_id ?? undefined,
       visible_departments: detail.visible_departments ?? [],
     });
@@ -325,7 +298,6 @@ export function ExperimentalObjectPage({
             display_name: values.display_name,
             description: values.description ?? null,
             object_type: values.object_type,
-            equipment_id: values.equipment_id || null,
             department_id: values.department_id,
             visible_departments: values.visible_departments ?? [],
           },
@@ -335,7 +307,6 @@ export function ExperimentalObjectPage({
           display_name: values.display_name,
           object_type: values.object_type,
           description: values.description,
-          equipment_id: values.equipment_id || undefined,
           department_id: values.department_id,
           visible_departments: values.visible_departments ?? [],
         });
@@ -384,7 +355,6 @@ export function ExperimentalObjectPage({
           description: typeItem.description,
           status: '',
           parent_id: null,
-          equipment_id: null,
           department_id: null,
           visible_departments: [],
           created_at: '',
@@ -435,19 +405,6 @@ export function ExperimentalObjectPage({
             </Space>
           </Tooltip>
         );
-      },
-    },
-    {
-      title: '关联设备',
-      dataIndex: 'equipment_id',
-      key: 'equipment_id',
-      width: 150,
-      render: (eid: string | null, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
-        if (!eid) return <Text type="secondary">-</Text>;
-        const eq = equipmentMap.get(eid);
-        if (!eq) return <Text type="secondary">-</Text>;
-        return <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eq.display_name}</Tag>;
       },
     },
     {
@@ -576,20 +533,8 @@ export function ExperimentalObjectPage({
           onChange={(val: string) => {
             const v = val === '__all__' ? undefined : val;
             setDeptFilter(v);
-            if (v) setEquipmentFilter(undefined);
           }}
           options={[{ value: '__all__', label: '全部' }, ...deptOptions]}
-        />
-        <Select
-          placeholder="关联设备筛选"
-          style={{ width: 200 }}
-          value={equipmentFilter ?? '__all__'}
-          onChange={(val: string) => {
-            const v = val === '__all__' ? undefined : val;
-            setEquipmentFilter(v);
-            if (v) setDeptFilter(undefined);
-          }}
-          options={[{ value: '__all__', label: '全部' }, ...equipmentOptions]}
         />
       </Space>
 
@@ -679,15 +624,6 @@ export function ExperimentalObjectPage({
               placeholder="对象描述（可选）"
               rows={3}
               maxLength={2000}
-            />
-          </Form.Item>
-          <Form.Item name="equipment_id" label="关联设备">
-            <Select
-              placeholder="选择关联设备（可选）"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={equipmentOptions}
             />
           </Form.Item>
           <Form.Item name="department_id" label="所属单位" rules={[{ required: true, message: '请选择所属单位' }]}>

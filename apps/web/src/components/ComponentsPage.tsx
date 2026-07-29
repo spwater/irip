@@ -150,9 +150,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     queryKey: ['equipment-for-component'],
     queryFn: () => apiListEquipment({ limit: 100 }),
   });
-  const equipmentMap = new Map(
-    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
-  );
   const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
     value: e.id,
     label: e.display_name,
@@ -413,23 +410,10 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         if (!code) return <Text type="secondary">-</Text>;
         const obj = objectMap.get(code);
         if (!obj) return <Text code>{code}</Text>;
-        const eqName = obj.equipment_id
-          ? equipmentMap.get(obj.equipment_id)
-          : null;
         return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Tag color="green" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
-              {obj.display_name}
-            </Tag>
-            {eqName && (
-              <>
-                <span style={{ color: 'var(--ocean-text-muted)', fontSize: 14, lineHeight: 1 }}>&#10142;</span>
-                <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
-                  {eqName}
-                </Tag>
-              </>
-            )}
-          </div>
+          <Tag color="green" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
+            {obj.display_name}
+          </Tag>
         );
       },
     },

@@ -56,7 +56,6 @@ export type IndustrialObject = {
   description: string | null;
   status: string;
   parent_id: string | null;
-  equipment_id: string | null;
   department_id: string | null;
   visible_departments: string[];
   created_at: string;
