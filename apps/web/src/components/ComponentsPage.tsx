@@ -375,7 +375,11 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           experimental_object_code: (values.experimental_object_code as string) ?? '',
           tool_type: (values.tool_type as string) ?? 'llm_converter',
         }, editOriginalName);
-        publishMutation.mutate({ manifest_yaml: yaml });
+        publishMutation.mutate({
+          manifest_yaml: yaml,
+          experimental_object_code: (values.experimental_object_code as string) ?? null,
+          equipment_id: (values.equipment_id as string) ?? null,
+        });
       }
     } catch {
       // 表单校验失败
