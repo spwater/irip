@@ -156,8 +156,7 @@ export function AIConfigPage(): JSX.Element {
     <div>
       <Title level={5} style={{ color: 'var(--ocean-text-primary)' }}>大模型配置</Title>
       <Paragraph type="secondary">
-        配置 OpenAI 兼容的 API 地址和密钥。配置启用后，小艾将使用真实模型进行对话。
-        未配置或未启用时，小艾使用离线模拟模式。
+        配置 OpenAI 兼容的 API 地址和密钥。
       </Paragraph>
 
       {config && (

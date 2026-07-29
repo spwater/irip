@@ -10,8 +10,8 @@
 import pytest
 
 from packages.ai.tools import (
-    ALL_TOOL_NAMES,
     AI_TOOL_NAMES,
+    ALL_TOOL_NAMES,
     CANDIDATE_TOOLS,
     WHITELIST_TOOLS,
     ToolRegistry,
