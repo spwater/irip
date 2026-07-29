@@ -70,7 +70,6 @@ export function PlatformPage(): JSX.Element {
       <PageIntro
         index="MODULE 04 / PLATFORM APPLICATIONS"
         title="平台应用"
-        subtitle="AI 助手对话、数据抽取工具与平台能力管理。"
       />
       <Tabs
         activeKey={activeTab}

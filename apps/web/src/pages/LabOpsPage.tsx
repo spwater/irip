@@ -34,7 +34,6 @@ export function LabOpsPage(): JSX.Element {
       <PageIntro
         index="MODULE 03 / LAB OPERATIONS"
         title="实验室运营"
-        subtitle="管理实验执行流程、原始数据记录与衍生数据参数。"
       />
       <Tabs
         activeKey={activeTab}

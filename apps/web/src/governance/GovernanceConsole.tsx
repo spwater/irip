@@ -21,7 +21,6 @@ export function GovernanceConsole(): JSX.Element {
       <PageIntro
         index="MODULE 05 / PLATFORM GOVERNANCE"
         title="平台治理"
-        subtitle="系统配置、用户管理、审计事件与作业中心。"
       />
       <Tabs
         activeKey={activeTab}

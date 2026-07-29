@@ -166,7 +166,6 @@ export function WorkbenchPage(): JSX.Element {
       <PageIntro
         index="MODULE 01 / RESEARCH WORKBENCH"
         title="研发看板"
-        subtitle="平台全局态势与最近活动，所有指标均来自现有接口的真实数据。"
         actions={
           <Button type="primary" onClick={() => void navigate({ to: '/lab-ops' })}>
             进入实验
