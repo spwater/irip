@@ -309,7 +309,7 @@ function ComponentFormFields({
         </Col>
       </Row>
       <Row gutter={16}>
-        <Col span={3}>
+        <Col span={4}>
           <Form.Item label="类型">
             <Select
               placeholder="全部"
