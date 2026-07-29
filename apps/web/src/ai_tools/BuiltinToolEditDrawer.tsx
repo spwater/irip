@@ -14,7 +14,7 @@ type BuiltinToolEditDrawerProps = {
 };
 
 /**
- * 内置工具编辑抽屉（仅编辑描述）
+ * 内置工具编辑抽屉（编辑显示名+描述）
  */
 export function BuiltinToolEditDrawer({
   open,
@@ -22,13 +22,16 @@ export function BuiltinToolEditDrawer({
   onClose,
 }: BuiltinToolEditDrawerProps): JSX.Element {
   const queryClient = useQueryClient();
-  const [form] = Form.useForm<{ description: string }>();
+  const [form] = Form.useForm<{ display_name: string; description: string }>();
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     if (tool !== null) {
-      form.setFieldsValue({ description: tool.description });
+      form.setFieldsValue({
+        display_name: tool.display_name,
+        description: tool.description,
+      });
     }
   }, [open, tool, form]);
 
@@ -38,7 +41,7 @@ export function BuiltinToolEditDrawer({
       const values = await form.validateFields();
       setSaving(true);
       await apiUpdateAITool(tool.name, {
-        display_name: tool.display_name,
+        display_name: values.display_name,
         description: values.description,
         required_permission: tool.required_permission,
         candidate: tool.candidate,
@@ -46,7 +49,8 @@ export function BuiltinToolEditDrawer({
         lock_version: tool.lock_version,
       });
       void queryClient.invalidateQueries({ queryKey: ['ai-tools'] });
-      message.success('描述已保存');
+      void queryClient.invalidateQueries({ queryKey: ['ingestion-tools'] });
+      message.success('已保存');
       onClose();
     } catch (err: unknown) {
       if (err instanceof Error) {
@@ -79,8 +83,15 @@ export function BuiltinToolEditDrawer({
           <Form.Item label="工具名">
             <Text code>{tool.name}</Text>
           </Form.Item>
-          <Form.Item label="显示名">
-            <Text>{tool.display_name}</Text>
+          <Form.Item
+            name="display_name"
+            label="显示名"
+            rules={[
+              { required: true, message: '请输入显示名' },
+              { max: 128, message: '最长 128 字符' },
+            ]}
+          >
+            <Input placeholder="如 XRD 解析器" />
           </Form.Item>
           <Form.Item
             name="description"

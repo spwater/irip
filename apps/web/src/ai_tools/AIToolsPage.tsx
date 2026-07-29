@@ -218,7 +218,7 @@ export function AIToolsPage(): JSX.Element {
     },
   ];
 
-  // 内置工具列定义（无状态开关，仅编辑描述）
+  // 内置工具列定义（无状态开关，仅编辑描述+显示名）
   const builtinColumns: ColumnsType<UnifiedToolDTO> = [
     {
       title: '工具名',
@@ -238,6 +238,13 @@ export function AIToolsPage(): JSX.Element {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
+    },
+    {
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 120,
+      render: (cat: string) => <Tag color="cyan">{cat}</Tag>,
     },
     {
       title: '操作',
