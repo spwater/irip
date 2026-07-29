@@ -74,7 +74,7 @@ export function AppShell(): JSX.Element | null {
             collapsedWidth={0}
             theme="light"
             style={{
-              background: 'var(--ocean-surface-structural)',
+              background: 'linear-gradient(to bottom, rgba(142, 191, 208, 0.46) 0%, rgba(142, 191, 208, 0.28) 100%)',
               borderRight: '1px solid var(--ocean-border-subtle)',
               position: 'fixed',
               left: 0,
@@ -181,7 +181,7 @@ function DynamicHeader({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        background: 'rgba(232, 246, 249, 0.5)',
+        background: 'linear-gradient(to bottom, rgba(142, 191, 208, 0.46) 0%, rgba(142, 191, 208, 0.28) 100%)',
         backdropFilter: 'blur(6px)',
         padding: '12px 24px',
         borderBottom: '1px solid var(--ocean-border-subtle)',
