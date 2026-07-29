@@ -11,7 +11,7 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { http } from '@/api/client';
 import { extractApiError } from '@/api/types';
-import { OceanPanel, StatusMark } from '@/components/ui';
+import { StatusMark } from '@/components/ui';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -40,7 +40,8 @@ export function AIConfigPage(): JSX.Element {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
   const [promptForm] = Form.useForm();
-  const [testLoading, setTestLoading] = useState(false);
+  const [testExtractLoading, setTestExtractLoading] = useState(false);
+  const [testAssistantLoading, setTestAssistantLoading] = useState(false);
 
   const { data: config } = useQuery({
     queryKey: ['ai-config'],
@@ -105,27 +106,35 @@ export function AIConfigPage(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  const handleTest = async (): Promise<void> => {
-    if (!config || !config.base_url || !config.model_name) {
+  const handleTestModel = async (modelType: 'extract' | 'assistant'): Promise<void> => {
+    if (!config || !config.base_url) {
       message.warning('请先保存配置后再测试连接');
       return;
     }
+    const modelName = modelType === 'extract'
+      ? config.model_name
+      : (config.assistant_model_name || config.model_name);
+    if (!modelName) {
+      message.warning('请先保存模型名称');
+      return;
+    }
+    const setLoading = modelType === 'extract' ? setTestExtractLoading : setTestAssistantLoading;
     try {
-      setTestLoading(true);
+      setLoading(true);
       const res = await http.post<AITestResult>('/ai-config/test', {
         base_url: config.base_url,
         api_key: config.api_key_masked ? '__use_saved__' : '',
-        model_name: config.model_name,
+        model_name: modelName,
       });
       if (res.data.success) {
-        message.success(`连接成功！模型回复: ${res.data.model_response ?? 'OK'}`);
+        message.success(`连接成功！${modelType === 'extract' ? '数据提取' : 'AI助手'}模型回复: ${res.data.model_response ?? 'OK'}`);
       } else {
         message.error(`连接失败: ${res.data.message}`);
       }
     } catch (err: unknown) {
       message.error(extractApiError(err));
     } finally {
-      setTestLoading(false);
+      setLoading(false);
     }
   };
 
@@ -163,12 +172,10 @@ export function AIConfigPage(): JSX.Element {
         配置 OpenAI 兼容的 API 地址和密钥。
       </Paragraph>
 
+      {/* ---- 状态行（精简，无测试按钮） ---- */}
       {config && (
-        <OceanPanel variant="default" padding="12px 16px" style={{ marginBottom: 16 }}>
+        <div style={{ marginBottom: 16 }}>
           <Space size="large" align="center">
-            <Button size="small" onClick={handleTest} loading={testLoading}>
-              测试连接
-            </Button>
             <Text>当前状态: </Text>
             <StatusMark
               semantic={config.enabled ? 'success' : 'neutral'}
@@ -184,7 +191,7 @@ export function AIConfigPage(): JSX.Element {
               </>
             )}
           </Space>
-        </OceanPanel>
+        </div>
       )}
 
       {/* ---- 大模型配置区 ---- */}
@@ -208,14 +215,32 @@ export function AIConfigPage(): JSX.Element {
           label="数据提取模型"
           rules={[{ required: true, message: '请输入模型名称' }]}
         >
-          <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
+          <Space.Compact style={{ width: '100%' }}>
+            <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" style={{ flex: 1 }} />
+            <Button
+              onClick={() => void handleTestModel('extract')}
+              loading={testExtractLoading}
+              style={{ flexShrink: 0 }}
+            >
+              测试
+            </Button>
+          </Space.Compact>
         </Form.Item>
         <Form.Item
           name="assistant_model_name"
           label="AI助手模型"
           extra="AI 助手对话使用的模型，留空则与数据提取模型相同"
         >
-          <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
+          <Space.Compact style={{ width: '100%' }}>
+            <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" style={{ flex: 1 }} />
+            <Button
+              onClick={() => void handleTestModel('assistant')}
+              loading={testAssistantLoading}
+              style={{ flexShrink: 0 }}
+            >
+              测试
+            </Button>
+          </Space.Compact>
         </Form.Item>
         <Form.Item label="启用">
           <Space>
