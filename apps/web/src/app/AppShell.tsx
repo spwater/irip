@@ -252,20 +252,51 @@ function DynamicHeader({
         }}
       />
 
-      {/* 第二行：tabs（如果有）—— 无 tabs 时保留等高占位，左边距与内容区对齐 */}
-      <div style={{ display: 'flex', gap: 12, marginTop: 10, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
+      {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐 */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 10, minHeight: hasTabs ? undefined : 28, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
-          header.tabs!.map((tab) => (
-            <Button
-              key={tab.key}
-              type={header.activeTab === tab.key ? 'primary' : 'default'}
-              size="small"
-              style={{ minWidth: 80 }}
-              onClick={() => header.onTabChange?.(tab.key)}
-            >
-              {tab.label}
-            </Button>
-          ))}
+          header.tabs!.map((tab) => {
+            const isActive = header.activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => header.onTabChange?.(tab.key)}
+                style={{
+                  padding: '8px 20px',
+                  fontSize: 14,
+                  fontWeight: isActive ? 600 : 400,
+                  color: isActive
+                    ? 'var(--ocean-action-primary)'
+                    : 'var(--ocean-text-secondary)',
+                  background: isActive
+                    ? 'rgba(20, 118, 214, 0.08)'
+                    : 'transparent',
+                  border: isActive
+                    ? '1px solid rgba(20, 118, 214, 0.25)'
+                    : '1px solid transparent',
+                  borderRadius: 20,
+                  cursor: 'pointer',
+                  transition: 'all 200ms var(--ocean-motion-easing)',
+                  lineHeight: 1.4,
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(20, 118, 214, 0.04)';
+                    e.currentTarget.style.color = 'var(--ocean-text-primary)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--ocean-text-secondary)';
+                  }
+                }}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
       </div>
     </Header>
   );
