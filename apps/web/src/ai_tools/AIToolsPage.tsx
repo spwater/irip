@@ -227,13 +227,6 @@ export function AIToolsPage(): JSX.Element {
       ellipsis: true,
     },
     {
-      title: '分类',
-      dataIndex: 'category',
-      key: 'category',
-      width: 120,
-      render: (cat: string) => <Tag color="cyan">{cat}</Tag>,
-    },
-    {
       title: '操作',
       key: 'action',
       width: 80,

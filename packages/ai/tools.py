@@ -280,7 +280,7 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         display_name="XRD 解析器",
         description="解析 XRD RAS/RAW 文件，提取衍射数据（metadata/points/series）。"
         "支持 Rigaku 等仪器的原始数据格式，输出结构化 JSON。",
-        required_permission="ingestion:read",
+        required_permission="",
         candidate=False,
         parameters_schema={
             "type": "object",
