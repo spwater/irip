@@ -434,15 +434,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       },
     },
     {
-      title: '关联设备',
-      key: 'equipment',
-      width: 140,
-      render: (_: unknown, record: ComponentSummary) => {
-        const eqName = record.equipment_id ? equipmentMap.get(record.equipment_id) : null;
-        return eqName ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{eqName}</Tag> : <Text type="secondary">-</Text>;
-      },
-    },
-    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
