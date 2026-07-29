@@ -21,7 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from apps.api.dependencies.auth import CurrentUser
+from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.dependencies.authorization import require_permission
 from apps.api.routers.components import ComponentRegistryServiceDep  # noqa: F401
 from packages.ai.tool_repository import AIToolRow, ToolRepository
@@ -35,7 +35,7 @@ ai_tools_router = APIRouter(prefix="/api/v1/ai-tools", tags=["ai-tools"])
 
 #: 需 system:manage 权限的当前用户依赖（D-1）。
 ManageUserDep = Annotated[CurrentUser, Depends(require_permission("system:manage"))]
-AnyUserDep = Annotated[CurrentUser, Depends()]
+AnyUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 # ---- 请求/响应模型（架构设计文档 §3.3） ----
