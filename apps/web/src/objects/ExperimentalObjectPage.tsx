@@ -432,9 +432,9 @@ export function ExperimentalObjectPage({
         }
         if (isComponentRow(record)) {
           return (
-            <Text type="secondary" style={{ fontSize: 13 }}>
+            <Tag color="purple" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 13 }}>
               {record.display_name}
-            </Text>
+            </Tag>
           );
         }
         return (
