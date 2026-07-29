@@ -74,7 +74,7 @@ export function AppShell(): JSX.Element | null {
             collapsedWidth={0}
             theme="light"
             style={{
-              background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)',
+              background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 40%, rgba(232, 243, 245, 0) 60%)',
               borderRight: '1px solid var(--ocean-border-subtle)',
               position: 'fixed',
               left: 0,
