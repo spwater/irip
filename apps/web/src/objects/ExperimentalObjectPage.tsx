@@ -413,7 +413,7 @@ export function ExperimentalObjectPage({
     {
       title: '名称',
       key: 'name',
-      width: 500,
+      width: 333,
       render: (_: unknown, record: TreeRow) => {
         if (isTypeRow(record)) {
           return (
@@ -465,7 +465,7 @@ export function ExperimentalObjectPage({
       title: '可见单位',
       dataIndex: 'visible_departments',
       key: 'visible_departments',
-      width: 200,
+      width: 300,
       render: (deptIds: string[] | null, record: TreeRow) => {
         if (isTypeRow(record)) return null;
         if (!deptIds || deptIds.length === 0) {
