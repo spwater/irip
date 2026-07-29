@@ -539,7 +539,7 @@ function ComponentFormFields({
  * - 摩登：基于 LLM 的组件（如 llm_extractor）
  * - 古法：基于代码的经典组件（csv_reader 等）
  */
-export function ComponentsPage({ prefillObject, editId }: { prefillObject?: string; editId?: string }): JSX.Element {
+export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObject?: string; editId?: string; hideList?: boolean }): JSX.Element {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
@@ -1057,6 +1057,7 @@ export function ComponentsPage({ prefillObject, editId }: { prefillObject?: stri
 
   return (
     <div>
+      {!hideList && (
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={handleOpenModal}>
           新建接口
@@ -1094,7 +1095,9 @@ export function ComponentsPage({ prefillObject, editId }: { prefillObject?: stri
           归档
         </Button>
       </Space>
+      )}
 
+      {!hideList && (
       <Table<ComponentSummary>
         columns={columns}
         dataSource={currentItems}
@@ -1107,6 +1110,7 @@ export function ComponentsPage({ prefillObject, editId }: { prefillObject?: stri
           style: { cursor: 'pointer' },
         })}
       />
+      )}
 
       {/* 新建接口 Modal（双模式：表单填空 / 高级 YAML 编辑）*/}
       <Modal

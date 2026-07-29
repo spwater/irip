@@ -839,6 +839,7 @@ export function ExperimentalObjectPage({
         <ComponentsPage
           editId={compDrawerEditId}
           prefillObject={compDrawerPrefill}
+          hideList
         />
       </Drawer>
 
