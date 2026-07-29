@@ -83,6 +83,12 @@ class AITool(Base):
         UTCDateTime, nullable=False, server_default=sa.func.now()
     )
     updated_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    category: Mapped[str] = mapped_column(
+        sa.Text,
+        nullable=False,
+        default="ai_tool",
+        server_default="ai_tool",
+    )
 
 
 @dataclass(frozen=True)
@@ -119,6 +125,7 @@ class AIToolRow:
     created_at: datetime
     updated_at: datetime
     updated_by: UUID | None = None
+    category: str = "ai_tool"
 
 
 def _to_row(entity: AITool) -> AIToolRow:
@@ -145,6 +152,7 @@ def _to_row(entity: AITool) -> AIToolRow:
         created_at=entity.created_at,
         updated_at=entity.updated_at,
         updated_by=entity.updated_by,
+        category=entity.category,
     )
 
 

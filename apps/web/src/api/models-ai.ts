@@ -111,6 +111,8 @@ export type UnifiedToolDTO = {
   component_id: string;
   /** 组件版本 UUID（仅组件有意义，用于编辑跳转） */
   version_id: string;
+  /** 工具分类：ai_tool 或 ingestion */
+  category: string;
 };
 
 /** 列出统一工具/插件（AI 工具 + 组件插件） */

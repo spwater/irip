@@ -53,6 +53,7 @@ class AIToolDTO(BaseModel):
     lock_version: int
     updated_at: str
     updated_by: str | None = None
+    category: str = "ai_tool"
 
 
 class AIToolCreateRequest(BaseModel):
@@ -135,6 +136,7 @@ class UnifiedToolDTO(BaseModel):
     parameters_schema: dict[str, Any] = Field(default_factory=dict)
     version: str = ""
     runtime: str = ""
+    category: str = "ai_tool"
     component_id: str = Field(
         default="", description="组件主表 UUID（仅组件有意义，用于归档/恢复操作）"
     )
@@ -297,6 +299,7 @@ async def list_unified_tools(
                 parameters_schema=row.parameters_schema,
                 version="",
                 runtime="",
+                category=row.category,
             )
         )
 

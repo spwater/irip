@@ -44,6 +44,7 @@ export function AIToolsPage(): JSX.Element {
   const [filter, setFilter] = useState<ToolFilter>({
     type: 'all',
     status: 'all',
+    category: 'all',
     keyword: '',
   });
 
@@ -120,6 +121,8 @@ export function AIToolsPage(): JSX.Element {
   const filteredTools = useMemo<UnifiedToolDTO[]>(() => {
     const all = tools ?? [];
     return all.filter((t) => {
+      // 分类筛选
+      if (filter.category !== 'all' && t.category !== filter.category) return false;
       // 类型筛选
       if (filter.type === 'whitelist' && t.candidate) return false;
       if (filter.type === 'candidate' && !t.candidate) return false;
@@ -159,6 +162,18 @@ export function AIToolsPage(): JSX.Element {
       dataIndex: 'description',
       key: 'description',
       ellipsis: true,
+    },
+    {
+      title: '分类',
+      dataIndex: 'category',
+      key: 'category',
+      width: 100,
+      render: (cat: string) =>
+        cat === 'ingestion' ? (
+          <Tag color="cyan">ingestion</Tag>
+        ) : (
+          <Tag color="blue">ai_tool</Tag>
+        ),
     },
     {
       title: '类型',
@@ -215,6 +230,16 @@ export function AIToolsPage(): JSX.Element {
           onChange={(e) =>
             setFilter((f) => ({ ...f, keyword: e.target.value }))
           }
+        />
+        <Select
+          style={{ width: 140 }}
+          value={filter.category}
+          onChange={(v) => setFilter((f) => ({ ...f, category: v }))}
+          options={[
+            { value: 'all', label: '全部分类' },
+            { value: 'ai_tool', label: 'ai_tool' },
+            { value: 'ingestion', label: 'ingestion' },
+          ]}
         />
         <Select
           style={{ width: 120 }}

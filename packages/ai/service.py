@@ -893,6 +893,8 @@ class AIService:
         """
         schemas: list[dict[str, Any]] = []
         for spec in self._tool_registry.list_enabled_tools():
+            if spec.category != "ai_tool":
+                continue  # ingestion 类工具不暴露给 AI 对话
             schemas.append(
                 {
                     "type": "function",
@@ -1450,8 +1452,8 @@ class AIService:
         Returns:
             dict: 包含 provider_mode、可用工具列表（仅已启用工具）。
         """
-        # 仅展示已启用工具（D-3：禁用工具对 AI 不可见）
-        enabled = self._tool_registry.list_enabled_tools()
+        # 仅展示已启用的 ai_tool 分类工具（ingestion 类不展示给 AI 对话）
+        enabled = [s for s in self._tool_registry.list_enabled_tools() if s.category == "ai_tool"]
         return {
             "provider_mode": getattr(self._provider, "provider_mode", "unknown"),
             "whitelist_tools": [

@@ -53,6 +53,7 @@ def _insert_one(session: AsyncSession, spec: ToolSpec) -> None:
         required_permission=spec.required_permission,
         candidate=spec.candidate,
         parameters_schema=spec.parameters_schema,
+        category=spec.category,
         enabled=True,
         lock_version=0,
         updated_by=None,

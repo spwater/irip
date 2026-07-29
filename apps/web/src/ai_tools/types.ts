@@ -20,6 +20,8 @@ export type AIToolDTO = {
 
 /** 工具筛选条件 */
 export type ToolFilter = {
+  /** 分类筛选：all=全部 / ai_tool / ingestion */
+  category: 'all' | 'ai_tool' | 'ingestion';
   /** 类型筛选：all=全部 / whitelist=只读 / candidate=候选 */
   type: 'all' | 'whitelist' | 'candidate';
   /** 状态筛选：all=全部 / enabled=已启用 / disabled=已禁用 */

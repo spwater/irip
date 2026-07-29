@@ -39,6 +39,7 @@ class ToolSpec:
     required_permission: str
     candidate: bool = False
     parameters_schema: dict[str, Any] = field(default_factory=dict)
+    category: str = "ai_tool"
 
 
 @dataclass(frozen=True)
@@ -291,6 +292,7 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
             },
             "required": ["file_path"],
         },
+        category="ingestion",
     ),
 )
 
@@ -528,6 +530,7 @@ class ToolRegistry:
                 required_permission=row.required_permission,
                 candidate=row.candidate,
                 parameters_schema=row.parameters_schema,
+                category=row.category,
             )
             self._tools[row.name] = spec
             if row.enabled:
