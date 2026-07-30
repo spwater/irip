@@ -240,20 +240,4 @@ button {
   font-family: inherit;
 }
 
-/* ============================================================
- * KaTeX 公式渲染隔离
- *
- * 两件事：
- * 1. 防止 body { line-height: 1.7 } 继承到 .katex（KaTeX 自身设 1.2）
- * 2. 防止 * { box-sizing: border-box } 影响 KaTeX 内部尺寸计算
- *    （KaTeX 期望 content-box，其 CSS 中 .fbox/.fcolorbox 才用 border-box）
- *
- * 绝对不要修改 .vlist, .mfrac, .strut, .msupsub 等 KaTeX 内部元素的其他属性。
- * ========================================================== */
-.katex {
-  line-height: 1.2;
-}
-.katex,
-.katex * {
-  box-sizing: content-box;
-}
+/* KaTeX 隔离规则暂时全部移除 — 测试是否是这些规则在破坏 KaTeX 渲染 */
