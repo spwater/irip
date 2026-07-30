@@ -241,3 +241,24 @@ button {
 }
 
 /* KaTeX 隔离规则暂时全部移除 — 测试是否是这些规则在破坏 KaTeX 渲染 */
+
+/* AI 助手消息中的表格样式 */
+.ai-markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 8px 0;
+  font-size: 13px;
+}
+.ai-markdown-body th,
+.ai-markdown-body td {
+  border: 1px solid var(--ocean-border-subtle, rgba(24, 102, 133, 0.16));
+  padding: 6px 12px;
+  text-align: left;
+}
+.ai-markdown-body th {
+  background: rgba(22, 134, 174, 0.06);
+  font-weight: 600;
+}
+.ai-markdown-body tr:nth-child(even) td {
+  background: rgba(232, 246, 249, 0.4);
+}
