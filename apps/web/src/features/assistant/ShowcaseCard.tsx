@@ -4,7 +4,7 @@
  * 单张橱窗卡片，展示类型图标 + 标题（可编辑）+ 缩略预览 + 数据来源 + 操作入口。
  * 支持：展开全屏 Modal、定位原文、删除（二次确认）、重命名（双击编辑）。
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Button,
   Input,
@@ -32,14 +32,61 @@ import type { ShowcaseItem, ShowcaseBlockType } from '@/api/showcase';
 import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-// KaTeX CSS 通过 index.html <link> 引入
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 const { Text } = Typography;
 
-// KaTeX 样式隔离已在 global.css 中处理
-const katexStyle = '';
+/** 用 KaTeX JS API 渲染公式（绕开 rehype-katex） */
+function renderMath(tex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(tex, { displayMode, throwOnError: false, strict: false });
+  } catch {
+    return `<span style="color:red">${tex}</span>`;
+  }
+}
+
+/** 预处理公式 → 占位符 */
+function preprocessMath(md: string): { html: string; mathMap: Map<string, string> } {
+  const mathMap = new Map<string, string>();
+  let counter = 0;
+  let result = md;
+  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex: string) => {
+    const html = renderMath(tex.trim(), true);
+    const placeholder = `MATHDISPLAY${counter}MATHEND`;
+    mathMap.set(placeholder, html);
+    counter++;
+    return placeholder;
+  });
+  result = result.replace(/\$([^\n$]+?)\$/g, (_, tex: string) => {
+    const html = renderMath(tex.trim(), false);
+    const placeholder = `MATHINLINE${counter}MATHEND`;
+    mathMap.set(placeholder, html);
+    counter++;
+    return placeholder;
+  });
+  return { html: result, mathMap };
+}
+
+/** 替换占位符为 KaTeX HTML */
+function replacePlaceholders(text: string, mathMap: Map<string, string>): React.ReactNode {
+  if (!text.includes('MATH')) return text;
+  const parts: React.ReactNode[] = [];
+  const regex = /(MATH(?:DISPLAY|INLINE)\d+MATHEND)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const html = mathMap.get(match[1]);
+    if (html) parts.push(<span key={`math-${key}`} dangerouslySetInnerHTML={{ __html: html }} />);
+    else parts.push(match[1]);
+    lastIndex = match.index + match[1].length;
+    key++;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
 
 /** 块类型 → 图标映射 */
 const BLOCK_ICONS: Record<ShowcaseBlockType, JSX.Element> = {
@@ -158,12 +205,7 @@ export function ShowcaseCard({
             }}
             className="ai-markdown-body"
           >
-            <ReactMarkdown
-              remarkPlugins={[remarkMath, remarkGfm]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {snapshot.split('\n').slice(0, 4).join('\n')}
-            </ReactMarkdown>
+            <ShowcaseMarkdown content={snapshot.split('\n').slice(0, 4).join('\n')} />
           </div>
         );
       case 'formula':
@@ -177,12 +219,7 @@ export function ShowcaseCard({
             }}
             className="ai-markdown-body"
           >
-            <ReactMarkdown
-              remarkPlugins={[remarkMath, remarkGfm]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {snapshot}
-            </ReactMarkdown>
+            <ShowcaseMarkdown content={snapshot} />
           </div>
         );
       default:
@@ -208,7 +245,7 @@ export function ShowcaseCard({
 
   return (
     <>
-      <style>{katexStyle}</style>
+      {/* KaTeX CSS 通过 main.tsx import 引入 */}
       <div
         style={{
           border: '1px solid var(--ocean-border-subtle)',
@@ -367,16 +404,37 @@ export function ShowcaseCard({
           ) : item.block_type === 'echarts' ? (
             <EchartsFull optionStr={item.content_snapshot} />
           ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkMath, remarkGfm]}
-              rehypePlugins={[rehypeKatex]}
-            >
-              {item.content_snapshot}
-            </ReactMarkdown>
+            <ShowcaseMarkdown content={item.content_snapshot} />
           )}
         </div>
       </Modal>
     </>
+  );
+}
+
+/** 橱窗展开内容渲染：用 KaTeX JS API 渲染公式 + remarkGfm 渲染表格 */
+function ShowcaseMarkdown({ content }: { content: string }): JSX.Element {
+  const { html: preprocessed, mathMap } = useMemo(() => preprocessMath(content), [content]);
+
+  const components = useMemo(() => ({
+    p: ({ children }: { children?: React.ReactNode }) => {
+      if (typeof children === 'string' && children.includes('MATH')) {
+        return <p>{replacePlaceholders(children, mathMap)}</p>;
+      }
+      if (Array.isArray(children)) {
+        const hasMath = children.some(c => typeof c === 'string' && c.includes('MATH'));
+        if (hasMath) {
+          return <p>{children.map(c => typeof c === 'string' && c.includes('MATH') ? replacePlaceholders(c, mathMap) : c)}</p>;
+        }
+      }
+      return <p>{children}</p>;
+    },
+  }), [mathMap]);
+
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {preprocessed}
+    </ReactMarkdown>
   );
 }
 
