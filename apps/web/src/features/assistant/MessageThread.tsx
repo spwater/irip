@@ -186,7 +186,7 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   return (
     <div
       ref={chartRef}
-      style={{ width: '100%', height: 400, margin: '8px 0', position: 'relative' }}
+      style={{ width: '100%', height: 400, margin: '2px 0', position: 'relative' }}
     />
   );
 }
