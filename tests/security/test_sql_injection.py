@@ -117,7 +117,7 @@ class TestRoleSelectOnly:
         self,
         async_session_factory: async_sessionmaker[AsyncSession],
     ) -> None:
-        """irip_readonly 角色不能 INSERT（如果有此角色）。"""
+        """irip_readonly 角色不能 INSERT（仅 SELECT）。"""
         url = os.getenv("IRIP_TEST_DATABASE_URL", "")
         if not url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set")
@@ -126,12 +126,17 @@ class TestRoleSelectOnly:
         async_url = url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         engine = create_async_engine(async_url)
         try:
+            # 创建临时 irip_readonly 角色（仅 SELECT 权限）
             async with engine.connect() as conn:
-                try:
-                    await conn.execute(sa.text("SET ROLE irip_readonly"))
-                except Exception:
-                    pytest.skip("irip_readonly role not found")
-                    return
+                await conn.execute(sa.text("DROP ROLE IF EXISTS irip_readonly"))
+                await conn.execute(sa.text("CREATE ROLE irip_readonly NOLOGIN"))
+                await conn.execute(
+                    sa.text("GRANT SELECT ON audit_event TO irip_readonly")
+                )
+                await conn.commit()
+
+            async with engine.connect() as conn:
+                await conn.execute(sa.text("SET ROLE irip_readonly"))
 
                 from packages.common.ids import new_id
 
@@ -151,6 +156,15 @@ class TestRoleSelectOnly:
                         f"Expected permission denied: {exc}"
                     )
                 await conn.rollback()
+
+            # 清理临时角色
+            async with engine.connect() as conn:
+                await conn.execute(sa.text("RESET ROLE"))
+                await conn.execute(
+                    sa.text("REVOKE SELECT ON audit_event FROM irip_readonly")
+                )
+                await conn.execute(sa.text("DROP ROLE irip_readonly"))
+                await conn.commit()
         finally:
             await engine.dispose()
 

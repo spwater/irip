@@ -191,10 +191,12 @@ vi.mock('@/api/types', () => ({
 
 vi.mock('@/api/models-ai', () => ({
   apiUploadFile: vi.fn(),
+  apiListIngestionTools: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('@/api/standards-objects', () => ({
   apiListObjects: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
+  apiListObjectTypes: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('@/api/departments', () => ({
