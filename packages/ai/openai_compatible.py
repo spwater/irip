@@ -181,6 +181,22 @@ class OpenAICompatibleProvider:
             "数值保留原始精度，不要用字符串。"
             "\n注意：需要把数据点连成线时直接用 line 类型，不要用 scatter + markLine。"
             "line 类型加 smooth:true 可画平滑曲线，加 symbol:'circle' 显示数据点。"
+            "\n\n科研可视化指引："
+            "当需要绘制误差棒图、箱线图、三维散点图、分布图、热力图等"
+            "ECharts 难以胜任的科研图表时，使用 ```plotly 代码块包裹 Plotly JSON 配置。"
+            "Plotly 配置示例（误差棒图）：\n"
+            "```plotly\n"
+            '{"data":[{"x":["A","B","C"],"y":[10,20,15],'
+            '"error_y":{"type":"data","array":[1,2,1.5],"visible":true},"type":"bar"}],'
+            '"layout":{"title":"误差棒图"}}\n'
+            "```"
+            "\n支持的 Plotly 图表类型："
+            "- error bar（误差棒图）: type=\"bar\" + error_y"
+            "- box plot（箱线图）: type=\"box\""
+            "- 3D scatter（三维散点图）: type=\"scatter3d\""
+            "- heatmap（热力图）: type=\"heatmap\""
+            "\n普通二维图表（折线/柱状/饼图/散点图）仍使用 ECharts。"
+            "仅当需要 ECharts 不支持的科研图表时才使用 Plotly。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (

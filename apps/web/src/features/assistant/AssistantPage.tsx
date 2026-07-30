@@ -21,6 +21,8 @@ import {
 } from '@tanstack/react-query';
 import ProviderStatus from '@/features/assistant/ProviderStatus';
 import MessageThread from '@/features/assistant/MessageThread';
+import ConversationSearch from '@/features/assistant/ConversationSearch';
+import ShowcasePanel from '@/features/assistant/ShowcasePanel';
 import {
   apiCancelRequest,
   apiCreateConversation,
@@ -61,6 +63,10 @@ export function AssistantPage(): JSX.Element {
   const [factContextLabel, setFactContextLabel] = useState<string | null>(null);
   const [factSearchText, setFactSearchText] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+
+  // 搜索关键词 + 橱窗收起状态
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [showcaseCollapsed, setShowcaseCollapsed] = useState(false);
 
   // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
@@ -126,10 +132,10 @@ export function AssistantPage(): JSX.Element {
   const streamingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ---- 对话列表查询 ----
+  // ---- 对话列表查询（支持关键词搜索） ----
   const { data: conversations } = useQuery({
-    queryKey: ['assistant-conversations', showArchived],
-    queryFn: () => apiListConversations({ archivedOnly: showArchived }),
+    queryKey: ['assistant-conversations', showArchived, searchKeyword || undefined],
+    queryFn: () => apiListConversations({ archivedOnly: showArchived, keyword: searchKeyword || undefined }),
     retry: false,
   });
 
@@ -221,6 +227,27 @@ export function AssistantPage(): JSX.Element {
     setFactContextLabel(null);
     setSelectedFactIds([]);
   };
+
+  // ---- 定位原文（从橱窗卡片跳转到消息区对应块） ----
+  const handleLocateMessage = useCallback((messageId: string, blockIndex: number): void => {
+    const msgEl = document.getElementById(`msg-${messageId}`);
+    if (!msgEl) {
+      message.warning('原消息已不存在');
+      return;
+    }
+    // 滚动到消息位置
+    msgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // 查找目标块并高亮
+    setTimeout(() => {
+      const blockEl = msgEl.querySelector(`[data-block-id="${messageId}-${blockIndex}"]`);
+      if (blockEl) {
+        blockEl.classList.add('highlight');
+        setTimeout(() => {
+          blockEl.classList.remove('highlight');
+        }, 2500);
+      }
+    }, 300);
+  }, []);
 
   // ---- 发送消息 ----
   const handleSend = useCallback(async (): Promise<void> => {
@@ -359,11 +386,11 @@ export function AssistantPage(): JSX.Element {
           opacity: 1 !important;
         }
       `}</style>
-      {/* ---- 左侧：对话列表 ---- */}
+      {/* ---- 左侧：对话列表 + 搜索 ---- */}
       <Card
         size="small"
-        style={{ width: 260, display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{ padding: 0, flex: 1, overflow: 'auto' }}
+        style={{ width: 260, display: 'flex', flexDirection: 'column', flexShrink: 0 }}
+        bodyStyle={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
         title={
           <Space size={4}>
             <Title level={5} style={{ margin: 0 }}>
@@ -403,6 +430,8 @@ export function AssistantPage(): JSX.Element {
           )
         }
       >
+        <ConversationSearch onSearch={setSearchKeyword} />
+        <div style={{ flex: 1, overflow: 'auto' }}>
         <List
           dataSource={conversationList}
           renderItem={(conv: ConversationSummary) => (
@@ -518,6 +547,7 @@ export function AssistantPage(): JSX.Element {
           )}
           locale={{ emptyText: showArchived ? '暂无归档对话' : '暂无对话，直接输入消息即可开始' }}
         />
+        </div>
       </Card>
 
       {/* ---- 右侧：对话区域 ---- */}
@@ -571,7 +601,11 @@ export function AssistantPage(): JSX.Element {
             </div>
           ) : (
             <>
-              <MessageThread messages={displayMessages} />
+              <MessageThread
+                messages={displayMessages}
+                conversationId={selectedConvId}
+                systemContext={factContext}
+              />
               {isSending && streamingAnswer === '' && (
                 <div style={{ padding: '8px 16px' }}>
                   <Text type="secondary">AI 正在回复...</Text>
@@ -684,6 +718,15 @@ export function AssistantPage(): JSX.Element {
           </div>
         </div>
       </Card>
+
+      {/* ---- 右侧：分析橱窗 ---- */}
+      <ShowcasePanel
+        conversationId={selectedConvId}
+        conversationTitle={conversationList.find((c) => c.id === selectedConvId)?.title ?? ''}
+        collapsed={showcaseCollapsed}
+        onToggleCollapse={() => setShowcaseCollapsed(!showcaseCollapsed)}
+        onLocateMessage={handleLocateMessage}
+      />
 
       {/* 载入实验数据 Modal */}
       <Modal

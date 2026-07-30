@@ -256,8 +256,11 @@ async def list_conversations(
     limit: int = Query(50, ge=1, le=200, description="最大返回数"),
     include_archived: bool = Query(False, description="是否包含已归档对话"),
     archived_only: bool = Query(False, description="是否只返回已归档对话"),
+    keyword: str | None = Query(None, description="搜索关键词（标题 + 消息内容）"),
 ) -> ConversationListResponse:
-    """列出当前用户的对话。
+    """列出当前用户的对话（支持关键词搜索）。
+
+    有 keyword 时走搜索逻辑（ILIKE 标题 + 子查询消息内容），无 keyword 时走原逻辑。
 
     Args:
         current_user: 当前用户。
@@ -265,19 +268,30 @@ async def list_conversations(
         limit: 最大返回数。
         include_archived: 是否包含已归档对话。
         archived_only: 是否只返回已归档对话。
+        keyword: 搜索关键词（可选）。
 
     Returns:
         ConversationListResponse: 对话列表。
     """
     org_id = await _resolve_org_id(current_user)
 
-    refs = await service.list_conversations(
-        user_id=current_user.user_id,
-        organization_id=org_id,
-        limit=limit,
-        include_archived=include_archived,
-        archived_only=archived_only,
-    )
+    if keyword and keyword.strip():
+        refs = await service.search_conversations(
+            user_id=current_user.user_id,
+            organization_id=org_id,
+            keyword=keyword.strip(),
+            include_archived=include_archived,
+            archived_only=archived_only,
+            limit=limit,
+        )
+    else:
+        refs = await service.list_conversations(
+            user_id=current_user.user_id,
+            organization_id=org_id,
+            limit=limit,
+            include_archived=include_archived,
+            archived_only=archived_only,
+        )
     return ConversationListResponse(
         items=[
             ConversationResponse(

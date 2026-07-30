@@ -47,6 +47,7 @@ from apps.api.routers.objects import objects_router
 from apps.api.routers.parameters import parameters_router
 from apps.api.routers.provenance import provenance_router
 from apps.api.routers.standards import standards_router
+from apps.api.routers.showcase import showcase_router
 from apps.api.routers.uploads import artifacts_router, uploads_router
 from apps.api.routers.user_departments import user_departments_router
 from packages.common.database import build_session_factory
@@ -227,6 +228,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(backups_router)
     app.include_router(assistant_router)
+    app.include_router(showcase_router)
     app.include_router(ai_config_router)
     app.include_router(ai_tools_router)
     app.include_router(files_router)

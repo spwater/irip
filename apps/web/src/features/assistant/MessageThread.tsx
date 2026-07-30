@@ -3,12 +3,14 @@ import CitationList from '@/features/assistant/CitationList';
 import ToolTrace from '@/features/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
 import 'katex/dist/katex.min.css';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
+import { BlockWrapper } from '@/features/assistant/BlockWrapper';
+import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 
 const { Text, Paragraph } = Typography;
 
@@ -57,6 +59,23 @@ const sanitizeSchema = {
     href: ['http', 'https'],
   },
 };
+
+/**
+ * 从 React 节点中提取纯文本内容（用于 content_snapshot）。
+ */
+function extractTextFromNode(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof node === 'object' && node !== null && 'props' in (node as any)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const props = (node as any).props as { children?: ReactNode };
+    return extractTextFromNode(props.children);
+  }
+  return '';
+}
 
 /**
  * ECharts chart block component.
@@ -225,61 +244,187 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
 }
 
 /**
- * Code block renderer for react-markdown.
+ * 内容块化 Markdown 渲染器。
  *
- * H-14: Intercepts `echarts` code blocks and renders them as ChartBlock.
- * All other code blocks are rendered normally by react-markdown.
+ * 在 react-markdown 的 components 回调中，对可操作块（echarts/plotly 代码块、
+ * 表格、h2/h3 标题）用 BlockWrapper 包裹，分配 block_index 并设置 data-block-id。
+ *
+ * block_index 规则：按块出现顺序从 0 开始递增，同一消息内唯一。
  */
-function CodeBlockRenderer({
-  className,
-  children,
+function BlockifiedMarkdown({
+  content,
+  messageId,
+  conversationId,
+  systemContext,
 }: {
-  className?: string;
-  children?: React.ReactNode;
+  content: string;
+  messageId: string;
+  conversationId: string | null;
+  systemContext: string | null | undefined;
 }): JSX.Element {
-  const lang = className?.replace('language-', '') || '';
-  const codeStr = String(children || '').replace(/\n$/, '');
+  // 块计数器：每次渲染重置，按出现顺序递增
+  // 使用 ref 避免触发重渲染，react-markdown 同步渲染保证顺序稳定
+  const blockCounterRef = useRef(0);
+  blockCounterRef.current = 0;
+  const getNextIndex = (): number => blockCounterRef.current++;
 
-  if (lang === 'echarts') {
-    return <ChartBlock optionStr={codeStr} />;
-  }
+  // 预处理：从原始 Markdown 提取每个标题对应的完整 section（标题 + 正文直到下一个同级或更高级标题）
+  // 用于 contentSnapshot，使橱窗卡片展开时能看到完整内容而非仅标题
+  const headingSections = useMemo(() => {
+    const sections: Record<string, string> = {};
+    const lines = content.split('\n');
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const h2Match = line.match(/^##\s+(.+)/);
+      const h3Match = line.match(/^###\s+(.+)/);
+      if (h2Match || h3Match) {
+        const headingText = (h2Match || h3Match)![1].trim();
+        const level = h2Match ? 2 : 3;
+        const sectionLines: string[] = [line];
+        i++;
+        // 收集直到下一个同级或更高级标题的正文
+        while (i < lines.length) {
+          const nextLine = lines[i];
+          const nextH2 = nextLine.match(/^##\s+/);
+          const nextH3 = nextLine.match(/^###\s+/);
+          // h2 结束条件：遇到下一个 ## 或 ###
+          // h3 结束条件：遇到下一个 ###（## 也终止，因为 ## 是更高级别）
+          if ((level === 2 && (nextH2 || nextH3)) || (level === 3 && nextH3)) {
+            break;
+          }
+          sectionLines.push(nextLine);
+          i++;
+        }
+        // 用 headingText 做 key（去重：取第一个匹配的）
+        if (!(headingText in sections)) {
+          sections[headingText] = sectionLines.join('\n').trim();
+        }
+      } else {
+        i++;
+      }
+    }
+    return sections;
+  }, [content]);
 
-  return (
-    <pre
-      style={{
-        background: 'rgba(142,191,208,0.16)',
-        padding: '8px 12px',
-        borderRadius: 6,
-        overflow: 'auto',
-        margin: '6px 0',
-        fontSize: 13,
-        fontFamily: 'var(--ocean-font-mono, monospace)',
-      }}
-    >
-      <code className={className}>{children}</code>
-    </pre>
-  );
-}
-
-/**
- * Render Markdown content safely using react-markdown + rehype-sanitize.
- *
- * H-14: Replaces the previous regex-based HTML rendering with:
- * - react-markdown: safe Markdown parsing (no raw HTML by default)
- * - rehype-sanitize: strict allowlist, no event attributes
- * - remark-math + rehype-katex: KaTeX math rendering
- * - remark-gfm: GitHub-flavored Markdown (tables, etc.)
- * - ECharts data parsed independently, not through Markdown
- *
- * No dangerouslySetInnerHTML is used.
- */
-function MarkdownWithMath({ content }: { content: string }): JSX.Element {
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
       rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeKatex]}
       components={{
-        code: CodeBlockRenderer as never,
+        code: ({
+          className,
+          children,
+        }: {
+          className?: string;
+          children?: ReactNode;
+        }) => {
+          const lang = className?.replace('language-', '') || '';
+          const codeStr = String(children || '').replace(/\n$/, '');
+
+          // ECharts 代码块 → BlockWrapper + ChartBlock
+          if (lang === 'echarts') {
+            const idx = getNextIndex();
+            return (
+              <BlockWrapper
+                messageId={messageId}
+                blockIndex={idx}
+                blockType="echarts"
+                conversationId={conversationId}
+                systemContext={systemContext}
+                contentSnapshot={codeStr}
+              >
+                <ChartBlock optionStr={codeStr} />
+              </BlockWrapper>
+            );
+          }
+
+          // Plotly 代码块 → BlockWrapper + PlotlyBlock
+          if (lang === 'plotly') {
+            const idx = getNextIndex();
+            return (
+              <BlockWrapper
+                messageId={messageId}
+                blockIndex={idx}
+                blockType="plotly"
+                conversationId={conversationId}
+                systemContext={systemContext}
+                contentSnapshot={codeStr}
+              >
+                <PlotlyBlock optionStr={codeStr} />
+              </BlockWrapper>
+            );
+          }
+
+          // 普通代码块
+          return (
+            <pre
+              style={{
+                background: 'rgba(142,191,208,0.16)',
+                padding: '8px 12px',
+                borderRadius: 6,
+                overflow: 'auto',
+                margin: '6px 0',
+                fontSize: 13,
+                fontFamily: 'var(--ocean-font-mono, monospace)',
+              }}
+            >
+              <code className={className}>{children}</code>
+            </pre>
+          );
+        },
+        table: ({ children }: { children?: ReactNode }) => {
+          const idx = getNextIndex();
+          const textSnapshot = extractTextFromNode(children);
+          return (
+            <BlockWrapper
+              messageId={messageId}
+              blockIndex={idx}
+              blockType="table"
+              conversationId={conversationId}
+              systemContext={systemContext}
+              contentSnapshot={textSnapshot}
+            >
+              <div style={{ overflowX: 'auto', margin: '8px 0' }}>
+                <table>{children}</table>
+              </div>
+            </BlockWrapper>
+          );
+        },
+        h2: ({ children }: { children?: ReactNode }) => {
+          const idx = getNextIndex();
+          const headingText = extractTextFromNode(children).trim();
+          const sectionSnapshot = headingSections[headingText] ?? headingText;
+          return (
+            <BlockWrapper
+              messageId={messageId}
+              blockIndex={idx}
+              blockType="conclusion"
+              conversationId={conversationId}
+              systemContext={systemContext}
+              contentSnapshot={sectionSnapshot}
+            >
+              <h2>{children}</h2>
+            </BlockWrapper>
+          );
+        },
+        h3: ({ children }: { children?: ReactNode }) => {
+          const idx = getNextIndex();
+          const headingText = extractTextFromNode(children).trim();
+          const sectionSnapshot = headingSections[headingText] ?? headingText;
+          return (
+            <BlockWrapper
+              messageId={messageId}
+              blockIndex={idx}
+              blockType="conclusion"
+              conversationId={conversationId}
+              systemContext={systemContext}
+              contentSnapshot={sectionSnapshot}
+            >
+              <h3>{children}</h3>
+            </BlockWrapper>
+          );
+        },
       }}
     >
       {content}
@@ -320,13 +465,20 @@ const ROLE_LABEL: Record<string, string> = {
  * Displays conversation history, distinguishing user messages,
  * AI responses, and tool messages.
  * AI responses use safe Markdown rendering (react-markdown + rehype-sanitize).
+ * AI 消息内容块化渲染：echarts/plotly/table/conclusion 块可加入橱窗。
  *
  * H-14: No dangerouslySetInnerHTML, no regex-based HTML construction.
  */
 export function MessageThread({
   messages,
+  conversationId,
+  systemContext,
 }: {
   messages: AssistantMessage[];
+  /** 当前对话 ID（传入 BlockWrapper 用于加入橱窗） */
+  conversationId?: string | null;
+  /** 当前对话的 system_context（用于解析 data_source） */
+  systemContext?: string | null;
 }): JSX.Element {
   if (messages.length === 0) {
     return (
@@ -354,6 +506,7 @@ export function MessageThread({
         return (
           <div
             key={msg.id}
+            id={`msg-${msg.id}`}
             style={{
               display: 'flex',
               flexDirection: isUser ? 'row-reverse' : 'row',
@@ -396,7 +549,12 @@ export function MessageThread({
               ) : (
                 <div className="ai-markdown-body">
                   <style>{katexStyle}</style>
-                  <MarkdownWithMath content={msg.content} />
+                  <BlockifiedMarkdown
+                    content={msg.content}
+                    messageId={msg.id}
+                    conversationId={conversationId ?? null}
+                    systemContext={systemContext}
+                  />
                 </div>
               )}
 
