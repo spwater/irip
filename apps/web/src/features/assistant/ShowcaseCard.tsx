@@ -32,6 +32,9 @@ import type { ShowcaseItem, ShowcaseBlockType } from '@/api/showcase';
 import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 const { Text } = Typography;
 
@@ -142,9 +145,44 @@ export function ShowcaseCard({
         );
       case 'conclusion':
       case 'text':
+        // 文本/结论类：用 Markdown 渲染（支持公式），截取前几行
+        return (
+          <div
+            style={{
+              maxHeight: 120,
+              overflow: 'hidden',
+              fontSize: 12,
+            }}
+            className="ai-markdown-body"
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkMath, remarkGfm]}
+              rehypePlugins={[rehypeKatex]}
+            >
+              {snapshot.split('\n').slice(0, 4).join('\n')}
+            </ReactMarkdown>
+          </div>
+        );
       case 'formula':
+        // 公式类：用 Markdown + KaTeX 渲染完整公式
+        return (
+          <div
+            style={{
+              maxHeight: 120,
+              overflow: 'hidden',
+              fontSize: 12,
+            }}
+            className="ai-markdown-body"
+          >
+            <ReactMarkdown
+              remarkPlugins={[remarkMath, remarkGfm]}
+              rehypePlugins={[rehypeKatex]}
+            >
+              {snapshot}
+            </ReactMarkdown>
+          </div>
+        );
       default:
-        // 文本类：前 2 行
         return (
           <Text
             style={{ fontSize: 12, color: 'var(--ocean-text-muted)' }}
@@ -325,7 +363,10 @@ export function ShowcaseCard({
           ) : item.block_type === 'echarts' ? (
             <EchartsFull optionStr={item.content_snapshot} />
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <ReactMarkdown
+              remarkPlugins={[remarkMath, remarkGfm]}
+              rehypePlugins={[rehypeKatex]}
+            >
               {item.content_snapshot}
             </ReactMarkdown>
           )}
