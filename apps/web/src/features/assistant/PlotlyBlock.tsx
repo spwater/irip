@@ -20,32 +20,25 @@ type PlotlyComponentType = React.ComponentType<Record<string, unknown>>;
 let plotlyComponentPromise: Promise<PlotlyComponentType> | null = null;
 
 /**
- * 动态加载 react-plotly.js + plotly.js-dist-min。
+ * 动态加载 react-plotly.js factory + plotly.js-dist-min。
  * 使用模块级缓存确保只加载一次。
+ *
+ * 关键：不能用 react-plotly.js 的默认导出（index.js），
+ * 因为它内部 require('plotly.js/dist/plotly') 会加载完整 plotly.js（~3MB），
+ * 与我们已加载的 plotly.js-dist-min 冲突，导致 "Cannot call a class as a function"。
+ * 正确做法：用 factory 模式，传入我们自己加载的 plotly.js-dist-min 实例。
  */
 async function loadPlotlyComponent(): Promise<PlotlyComponentType> {
   if (plotlyComponentPromise) {
     return plotlyComponentPromise;
   }
   plotlyComponentPromise = (async () => {
-    // 先加载 plotly.js-dist-min，再加载 react-plotly.js
-    // react-plotly.js 的 factory 模式需要显式传入 plotly 实例
+    // 先加载 plotly.js-dist-min
     const Plotly = await import('plotly.js-dist-min');
-    const ReactPlotlyModule = await import('react-plotly.js');
-    // react-plotly.js 默认导出是 createPlotlyComponent(Plotly) 的结果
-    // 但某些版本直接导出 default 组件，需兼容两种情况
-    const mod = ReactPlotlyModule as unknown as {
-      default?: PlotlyComponentType;
-      createPlotlyComponent?: (p: unknown) => PlotlyComponentType;
-    };
-    if (mod.default) {
-      return mod.default;
-    }
-    if (mod.createPlotlyComponent) {
-      return mod.createPlotlyComponent(Plotly);
-    }
-    // 兜底：直接使用 default
-    return ReactPlotlyModule as unknown as PlotlyComponentType;
+    // 用 factory 模式创建组件，传入我们的 Plotly 实例
+    const factoryMod = await import('react-plotly.js/factory');
+    const factory = (factoryMod as unknown as { default: (p: unknown) => PlotlyComponentType }).default;
+    return factory(Plotly);
   })();
   return plotlyComponentPromise;
 }
