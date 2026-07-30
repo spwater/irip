@@ -22,6 +22,7 @@ logout(refresh_token):
 """
 
 from datetime import timedelta
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 

@@ -299,14 +299,15 @@ class SafeHTTPClient:
             if content_length is not None:
                 try:
                     size = int(content_length)
+                except ValueError:
+                    # content-length 不是合法整数，跳过预检
+                    pass
+                else:
                     if size > self._max_size:
                         raise ResponseTooLargeError(
                             f"Response too large: {size} bytes exceeds "
                             f"max {self._max_size} bytes"
                         )
-                except ValueError:
-                    # content-length 不是合法整数，跳过预检
-                    pass
 
             # 流式读取响应体，累计检查大小
             if not response.is_stream_consumed:
