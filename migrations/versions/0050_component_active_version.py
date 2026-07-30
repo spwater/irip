@@ -20,29 +20,26 @@ depends_on = None
 
 def upgrade() -> None:
     """为 component 表添加 active_version_id 列。"""
-    op.add_column(
-        "component",
-        sa.Column(
-            "active_version_id",
-            sa.UUID(),
-            nullable=True,
-        ),
+    op.execute(
+        "ALTER TABLE component ADD COLUMN IF NOT EXISTS active_version_id UUID"
     )
 
     # 外键约束：active_version_id 引用 component_version.id
-    op.create_foreign_key(
-        "fk_component_active_version_id",
-        "component",
-        "component_version",
-        ["active_version_id"],
-        ["id"],
+    op.execute(
+        "DO $$ BEGIN "
+        "IF NOT EXISTS ("
+        "SELECT 1 FROM information_schema.table_constraints "
+        "WHERE constraint_name = 'fk_component_active_version_id') THEN "
+        "ALTER TABLE component "
+        "ADD CONSTRAINT fk_component_active_version_id "
+        "FOREIGN KEY (active_version_id) REFERENCES component_version(id); "
+        "END IF; END $$;"
     )
 
     # 索引：加速按 active_version_id 查询
-    op.create_index(
-        "ix_component_active_version_id",
-        "component",
-        ["active_version_id"],
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_component_active_version_id "
+        "ON component (active_version_id)"
     )
 
 
