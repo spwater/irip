@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Button,
   DatePicker,
@@ -22,9 +22,30 @@ import {
 import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/auth/AuthProvider';
 import { DataTableShell } from '@/components/ui';
+import { QueryStateDisplay } from '@/components/StateDisplay';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
+
+/** 已应用的筛选条件（提交查询后固化，用于构造请求参数） */
+interface AppliedFilters {
+  object_type: string | undefined;
+  object_id: string | undefined;
+  user_id: string | undefined;
+  action: string | undefined;
+  start_date: string | undefined;
+  end_date: string | undefined;
+}
+
+/** 空的已应用筛选条件（用于初始化和重置） */
+const EMPTY_FILTERS: AppliedFilters = {
+  object_type: undefined,
+  object_id: undefined,
+  user_id: undefined,
+  action: undefined,
+  start_date: undefined,
+  end_date: undefined,
+};
 
 /**
  * 审计事件页面
@@ -33,6 +54,11 @@ const { RangePicker } = DatePicker;
  * - 筛选条件（对象类型 / 对象 ID / 用户 / 操作 / 日期范围）
  * - Table: 审计事件列表（游标分页）
  * - 导出按钮（异步作业）
+ *
+ * M-07 整改：
+ * - draft / applied filters 分离：输入时不请求，点击「查询」才提交
+ * - 查询时原子清 cursor 和累积结果，避免新旧筛选数据混用
+ * - 条件切换不拼旧数据
  */
 export function AuditPage(): JSX.Element {
   const queryClient = useQueryClient();
@@ -41,31 +67,38 @@ export function AuditPage(): JSX.Element {
   // 审计读取权限检查
   const canRead: boolean = user?.permissions?.includes('audit:read') ?? false;
 
-  // ---- 筛选状态 ----
-  const [objectType, setObjectType] = useState<string | undefined>(undefined);
-  const [objectId, setObjectId] = useState<string | undefined>(undefined);
-  const [userId, setUserId] = useState<string | undefined>(undefined);
-  const [action, setAction] = useState<string | undefined>(undefined);
-  const [dateRange, setDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  // ---- Draft 筛选状态（仅输入，不触发请求）----
+  const [draftObjectType, setDraftObjectType] = useState<string | undefined>(undefined);
+  const [draftObjectId, setDraftObjectId] = useState<string | undefined>(undefined);
+  const [draftUserId, setDraftUserId] = useState<string | undefined>(undefined);
+  const [draftAction, setDraftAction] = useState<string | undefined>(undefined);
+  const [draftDateRange, setDraftDateRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+
+  // ---- Applied 筛选状态（提交查询后固化，用于构造请求参数）----
+  const [appliedFilters, setAppliedFilters] = useState<AppliedFilters>(EMPTY_FILTERS);
 
   // 累积已加载的所有项（用于游标分页的"加载更多"模式）
   const [allItems, setAllItems] = useState<AuditEventItem[]>([]);
   const [currentCursor, setCurrentCursor] = useState<string | null>(null);
 
-  // ---- 构建查询参数 ----
-  const queryParams = {
-    object_type: objectType || undefined,
-    object_id: objectId || undefined,
-    user_id: userId || undefined,
-    action: action || undefined,
-    start_date: dateRange?.[0]?.toISOString() ?? undefined,
-    end_date: dateRange?.[1]?.toISOString() ?? undefined,
-    cursor: currentCursor ?? undefined,
-    limit: 50,
-  };
+  // ---- 构建查询参数（仅依赖 applied filters + cursor，不依赖 draft）----
+  const queryParams = useMemo(
+    () => ({
+      object_type: appliedFilters.object_type || undefined,
+      object_id: appliedFilters.object_id || undefined,
+      user_id: appliedFilters.user_id || undefined,
+      action: appliedFilters.action || undefined,
+      start_date: appliedFilters.start_date || undefined,
+      end_date: appliedFilters.end_date || undefined,
+      cursor: currentCursor ?? undefined,
+      limit: 50,
+    }),
+    [appliedFilters, currentCursor],
+  );
 
   // ---- 数据查询 ----
-  const { data, isLoading, isFetching } = useQuery({
+  // queryKey 包含 applied filters 和 cursor；draft 变化不触发请求
+  const { data, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['audit-events', queryParams],
     queryFn: () => apiListAuditEvents(queryParams),
     enabled: canRead,
@@ -84,12 +117,12 @@ export function AuditPage(): JSX.Element {
   const exportMutation = useMutation({
     mutationFn: () =>
       apiCreateAuditExport({
-        object_type: objectType || null,
-        object_id: objectId || null,
-        user_id: userId || null,
-        action: action || null,
-        start_date: dateRange?.[0]?.toISOString() ?? null,
-        end_date: dateRange?.[1]?.toISOString() ?? null,
+        object_type: draftObjectType || null,
+        object_id: draftObjectId || null,
+        user_id: draftUserId || null,
+        action: draftAction || null,
+        start_date: draftDateRange?.[0]?.toISOString() ?? null,
+        end_date: draftDateRange?.[1]?.toISOString() ?? null,
         format: 'csv',
       }),
     onSuccess: (result) => {
@@ -103,7 +136,19 @@ export function AuditPage(): JSX.Element {
 
   // ---- 事件处理 ----
 
+  /**
+   * 提交查询：将 draft 固化为 applied，原子清 cursor 和累积结果。
+   * 这样新筛选条件不会与旧筛选的累积数据混用。
+   */
   const handleSearch = (): void => {
+    setAppliedFilters({
+      object_type: draftObjectType,
+      object_id: draftObjectId,
+      user_id: draftUserId,
+      action: draftAction,
+      start_date: draftDateRange?.[0]?.toISOString() ?? undefined,
+      end_date: draftDateRange?.[1]?.toISOString() ?? undefined,
+    });
     setAllItems([]);
     setCurrentCursor(null);
   };
@@ -115,12 +160,16 @@ export function AuditPage(): JSX.Element {
     }
   };
 
+  /**
+   * 重置：清空 draft 和 applied，原子清 cursor 和累积结果。
+   */
   const handleReset = (): void => {
-    setObjectType(undefined);
-    setObjectId(undefined);
-    setUserId(undefined);
-    setAction(undefined);
-    setDateRange(null);
+    setDraftObjectType(undefined);
+    setDraftObjectId(undefined);
+    setDraftUserId(undefined);
+    setDraftAction(undefined);
+    setDraftDateRange(null);
+    setAppliedFilters(EMPTY_FILTERS);
     setAllItems([]);
     setCurrentCursor(null);
   };
@@ -152,7 +201,7 @@ export function AuditPage(): JSX.Element {
       render: (val: string | null) =>
         val ? (
           <Tooltip title={val}>
-            <Text style={{ fontSize: 12 }}>{val.slice(0, 12)}…</Text>
+            <Text style={{ fontSize: 12 }}>{val.slice(0, 12)}...</Text>
           </Tooltip>
         ) : (
           <Text type="secondary">系统</Text>
@@ -181,7 +230,7 @@ export function AuditPage(): JSX.Element {
       render: (val: string | null) =>
         val ? (
           <Tooltip title={val}>
-            <Text style={{ fontSize: 12 }}>{val.slice(0, 12)}…</Text>
+            <Text style={{ fontSize: 12 }}>{val.slice(0, 12)}...</Text>
           </Tooltip>
         ) : (
           <Text type="secondary">-</Text>
@@ -203,7 +252,7 @@ export function AuditPage(): JSX.Element {
       render: (val: Record<string, unknown> | null) =>
         val ? (
           <Tooltip title={JSON.stringify(val, null, 2)}>
-            <Text style={{ fontSize: 12 }}>{JSON.stringify(val).slice(0, 40)}…</Text>
+            <Text style={{ fontSize: 12 }}>{JSON.stringify(val).slice(0, 40)}...</Text>
           </Tooltip>
         ) : (
           <Text type="secondary">-</Text>
@@ -219,8 +268,8 @@ export function AuditPage(): JSX.Element {
           <Select
             placeholder="对象类型"
             style={{ width: 160 }}
-            value={objectType ?? '__all__'}
-            onChange={(val: string) => setObjectType(val === '__all__' ? undefined : val)}
+            value={draftObjectType ?? '__all__'}
+            onChange={(val: string) => setDraftObjectType(val === '__all__' ? undefined : val)}
             options={[
               { value: '__all__', label: '全部' },
               { value: 'app_user', label: '用户' },
@@ -237,15 +286,15 @@ export function AuditPage(): JSX.Element {
             placeholder="对象 ID"
             allowClear
             style={{ width: 280 }}
-            value={objectId}
-            onChange={(e) => setObjectId(e.target.value || undefined)}
+            value={draftObjectId}
+            onChange={(e) => setDraftObjectId(e.target.value || undefined)}
           />
           <Input
             placeholder="操作者 ID"
             allowClear
             style={{ width: 280 }}
-            value={userId}
-            onChange={(e) => setUserId(e.target.value || undefined)}
+            value={draftUserId}
+            onChange={(e) => setDraftUserId(e.target.value || undefined)}
           />
         </Space>
         <Space wrap>
@@ -253,17 +302,17 @@ export function AuditPage(): JSX.Element {
             placeholder="动作（如 governance.user.assign_roles）"
             allowClear
             style={{ width: 320 }}
-            value={action}
-            onChange={(e) => setAction(e.target.value || undefined)}
+            value={draftAction}
+            onChange={(e) => setDraftAction(e.target.value || undefined)}
           />
           <RangePicker
             showTime
-            value={dateRange}
+            value={draftDateRange}
             onChange={(range) => {
               if (range) {
-                setDateRange([range[0], range[1]]);
+                setDraftDateRange([range[0], range[1]]);
               } else {
-                setDateRange(null);
+                setDraftDateRange(null);
               }
             }}
           />
@@ -296,14 +345,23 @@ export function AuditPage(): JSX.Element {
           )
         }
       >
-        <Table<AuditEventItem>
-          columns={columns}
-          dataSource={displayItems}
-          rowKey="id"
-          loading={isLoading}
-          pagination={false}
-          size="middle"
-        />
+        <QueryStateDisplay
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
+          isEmpty={!isLoading && !isError && displayItems.length === 0}
+          emptyText="暂无审计记录"
+          onRetry={() => void refetch()}
+          loadingTitle="加载审计事件…"
+        >
+          <Table<AuditEventItem>
+            columns={columns}
+            dataSource={displayItems}
+            rowKey="id"
+            pagination={false}
+            size="middle"
+          />
+        </QueryStateDisplay>
       </DataTableShell>
     </div>
   );

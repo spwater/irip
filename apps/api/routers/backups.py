@@ -167,7 +167,7 @@ async def create_backup(
     async with session_scope(session_factory) as session:
         job = Job(
             id=job_id,
-            organization_id=current_user.user_id,  # V3 简化：暂用 user_id 作为 org 占位
+            organization_id=current_user.organization_id if current_user.organization_id is not None else current_user.user_id,
             kind=BACKUP_JOB_KIND,
             status=JobStatus.ACCEPTED.value,
             payload={
@@ -373,7 +373,7 @@ async def create_restore(
     async with session_scope(session_factory) as session:
         job = Job(
             id=restore_job_id,
-            organization_id=current_user.user_id,
+            organization_id=current_user.organization_id if current_user.organization_id is not None else current_user.user_id,
             kind=RESTORE_JOB_KIND,
             status=JobStatus.ACCEPTED.value,
             payload={

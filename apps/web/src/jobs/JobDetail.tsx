@@ -13,7 +13,8 @@ import { useNavigate, useParams } from '@tanstack/react-router';
 import { apiCancelJob } from '@/api/client';
 import { apiGetJobDetail, apiRetryJob } from '@/api/governance';
 import { extractApiError } from '@/api/types';
-import { PageIntro, DetailSection, StatusMark, FeedbackState } from '@/components/ui';
+import { PageIntro, DetailSection, StatusMark } from '@/components/ui';
+import { QueryStateDisplay } from '@/components/StateDisplay';
 import type { StatusSemantic } from '@/theme/tokens';
 
 const { Text, Paragraph } = Typography;
@@ -69,7 +70,7 @@ export function JobDetail(): JSX.Element {
   const { jobId } = useParams({ strict: false });
 
   // ---- 数据查询：作业详情 ----
-  const { data, isLoading } = useQuery({
+  const { data, isError, error, refetch } = useQuery({
     queryKey: ['jobs', 'detail', jobId],
     queryFn: () => apiGetJobDetail(jobId as string),
     enabled: !!jobId,
@@ -106,8 +107,43 @@ export function JobDetail(): JSX.Element {
     },
   });
 
-  if (isLoading || !data) {
-    return <FeedbackState state="loading" title="加载作业详情…" style={{ padding: 48 }} />;
+  // 数据未就绪：优先展示错误，其次 loading
+  if (!data) {
+    if (isError) {
+      return (
+        <div className="ocean-page-enter">
+          <PageIntro
+            index="DETAIL / JOB"
+            title="作业详情"
+            subtitle="作业基本信息、执行历史与工件。"
+            actions={
+              <Button onClick={() => void navigate({ to: '/jobs' })}>返回列表</Button>
+            }
+          />
+          <QueryStateDisplay
+            isLoading={false}
+            isError={isError}
+            error={error}
+            onRetry={() => void refetch()}
+            loadingTitle="加载作业详情…"
+            style={{ padding: 48 }}
+          >
+            <span />
+          </QueryStateDisplay>
+        </div>
+      );
+    }
+    return (
+      <QueryStateDisplay
+        isLoading={true}
+        isError={false}
+        error={null}
+        loadingTitle="加载作业详情…"
+        style={{ padding: 48 }}
+      >
+        <span />
+      </QueryStateDisplay>
+    );
   }
 
   const job = data;

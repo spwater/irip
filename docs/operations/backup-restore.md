@@ -22,7 +22,7 @@
   "format_version": 1,
   "created_at": "2026-07-22T10:00:00+00:00",
   "application_version": "0.1.0",
-  "migration_version": "0021_ai_conversations",
+  "migration_version": "0050_component_active_version",
   "database_sha256": "a1b2c3...",
   "object_count": 42,
   "objects_sha256": "d4e5f6...",
@@ -322,7 +322,7 @@ docker compose -p irip-rehearsal down -v
 
 ```bash
 # 若遇到降级场景，错误信息示例：
-# 备份迁移版本 (0025_new_feature) 比当前代码版本 (0021_ai_conversations) 新
+# 备份迁移版本 (0051_new_feature) 比当前代码版本 (0050_component_active_version) 新
 # — 不支持自动降级，请人工处理
 ```
 
@@ -365,7 +365,7 @@ age binary not found
 ### 8.4 迁移版本不兼容
 
 ```
-备份迁移版本 (0025) 比当前代码版本 (0021) 新 — 不支持自动降级
+备份迁移版本 (0051) 比当前代码版本 (0050) 新 — 不支持自动降级
 ```
 
 **原因**：尝试用旧代码恢复新版本的备份。

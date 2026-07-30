@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Avatar, Button, Layout, Menu, Space, Typography } from 'antd';
+import { useEffect, useState } from 'react';
+import { Avatar, Button, Grid, Layout, Menu, Space, Typography } from 'antd';
 import { Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import type { MenuProps } from 'antd';
 import { useAuthStore } from '@/auth/AuthProvider';
@@ -34,6 +34,12 @@ export function AppShell(): JSX.Element | null {
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const location = useLocation();
+  // L-02: 跟踪 Sider 折叠状态，动态调整内容区 marginLeft
+  const screens = Grid.useBreakpoint();
+  const [siderCollapsed, setSiderCollapsed] = useState<boolean>(false);
+  // 当屏幕 < lg（992px）时 Sider 折叠，内容区 marginLeft 应为 0
+  // screens.lg === false 表示明确低于 lg；undefined（首屏未测量）时默认不折叠
+  const contentMarginLeft: number = siderCollapsed || screens.lg === false ? 0 : 212;
 
   useEffect(() => {
     if (!user) {
@@ -73,6 +79,7 @@ export function AppShell(): JSX.Element | null {
             breakpoint="lg"
             collapsedWidth={0}
             theme="light"
+            onCollapse={setSiderCollapsed}
             style={{
               background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0px, rgba(232, 243, 245, 0.15) 100px, rgba(232, 243, 245, 0) 150px), linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)',
               backgroundRepeat: 'no-repeat, no-repeat',
@@ -156,7 +163,7 @@ export function AppShell(): JSX.Element | null {
             />
           </Sider>
 
-          <Layout style={{ background: 'linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)', backgroundRepeat: 'no-repeat', backgroundSize: '4px 100%', backgroundPosition: 'left 0', marginLeft: 212 }}>
+          <Layout style={{ background: 'linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)', backgroundRepeat: 'no-repeat', backgroundSize: '4px 100%', backgroundPosition: 'left 0', marginLeft: contentMarginLeft, transition: 'margin-left 200ms var(--ocean-motion-easing)' }}>
             <DynamicHeader user={user} onLogout={handleLogout} />
 
             <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
@@ -271,6 +278,9 @@ function DynamicHeader({
             return (
               <button
                 key={tab.key}
+                type="button"
+                aria-label={tab.label}
+                aria-pressed={isActive}
                 onClick={() => header.onTabChange?.(tab.key)}
                 style={{
                   padding: '8px 20px',
@@ -298,6 +308,18 @@ function DynamicHeader({
                   }
                 }}
                 onMouseLeave={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = 'var(--ocean-text-secondary)';
+                  }
+                }}
+                onFocus={(e) => {
+                  if (!isActive) {
+                    e.currentTarget.style.background = 'rgba(20, 118, 214, 0.04)';
+                    e.currentTarget.style.color = 'var(--ocean-text-primary)';
+                  }
+                }}
+                onBlur={(e) => {
                   if (!isActive) {
                     e.currentTarget.style.background = 'transparent';
                     e.currentTarget.style.color = 'var(--ocean-text-secondary)';

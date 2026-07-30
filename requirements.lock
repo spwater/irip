@@ -1,11 +1,14 @@
 # IRIP 依赖锁定文件（F-18: 依赖锁定）
 #
-# 此文件由 uv pip compile 或 pip-compile 生成，包含带 hash 的精确依赖版本。
-# 当 uv 可用时，建议使用 uv.lock 替代此文件。
-# 生成命令: uv pip compile pyproject.toml -o requirements.lock
+# 注意：此文件当前为手动维护版本，未包含 hash 校验。
+# 后续应通过 CI 自动生成带 hash 的锁文件以确保可复现性。
+# 生成命令: uv pip compile pyproject.toml -o requirements.lock --generate-hashes
 #
-# 当前为手动维护版本，记录核心依赖的精确版本。
-# 后续应通过 CI 自动生成和验证。
+# 当 uv 可用时，优先使用 uv.lock（已包含 hash）替代此文件。
+# 重新生成命令: uv lock
+#
+# H-11 整改：cryptography 约束已从 <44 放开为 >=44，
+# 需要重新运行 uv lock 或 pip compile 以生成完整的带 hash 锁文件。
 
 fastapi==0.115.6
 uvicorn[standard]==0.34.0

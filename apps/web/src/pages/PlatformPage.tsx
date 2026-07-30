@@ -1,10 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/assistant/AssistantPage';
 import { AIToolsPage } from '@/ai_tools/AIToolsPage';
 import { ComponentsPage } from '@/components/ComponentsPage';
 import { useAuthStore } from '@/auth/AuthProvider';
-import { usePageHeader } from '@/app/PageHeaderContext';
+import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
 const VALID_TABS = ['assistant', 'ai-tools', 'components'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
@@ -14,13 +14,14 @@ type PlatformTab = (typeof VALID_TABS)[number];
  *
  * 三个 Tab：AI助手 / 工具插件 / 数据接口
  * Tab 切换和页面标题注册到 AppShell Header。
+ *
+ * M-09 整改：使用 usePageHeaderRegistration，unmount 时清空 header。
  */
 export function PlatformPage(): JSX.Element {
   const navigate = useNavigate();
   const search = useSearch({ strict: false });
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
-  const { setHeader } = usePageHeader();
 
   const tabRaw = (search as Record<string, unknown>).tab;
   const prefillObjectRaw = (search as Record<string, unknown>).prefill_object;
@@ -50,16 +51,16 @@ export function PlatformPage(): JSX.Element {
     return items;
   }, [isAdmin]);
 
-  useEffect(() => {
-    setHeader({
+  usePageHeaderRegistration(
+    {
       index: 'MODULE 04 / PLATFORM APPLICATIONS',
       title: '平台应用',
       tabs,
       activeTab,
       onTabChange: handleTabChange,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, tabs]);
+    },
+    [activeTab, tabs],
+  );
 
   return (
     <div className="ocean-page-enter" key={activeTab}>

@@ -31,6 +31,7 @@ import {
 import { useAuthStore } from '@/auth/AuthProvider';
 import { MemberDrawer } from '@/pages/governance/MemberDrawer';
 import { EquipmentPage } from '@/equipment/EquipmentPage';
+import { QueryStateDisplay } from '@/components/StateDisplay';
 
 /**
  * 树形节点类型：DepartmentListItem + children 数组。
@@ -120,7 +121,7 @@ export function DepartmentManagement(): JSX.Element {
   const [form] = Form.useForm();
 
   // ---- 数据查询 ----
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['departments', statusFilter],
     queryFn: () => apiListDepartments({ status: statusFilter, limit: 100 }),
   });
@@ -418,19 +419,28 @@ export function DepartmentManagement(): JSX.Element {
         />
       </Space>
 
-      <Table<DepartmentTreeNode>
-        columns={columns}
-        dataSource={treeData}
-        rowKey="id"
-        loading={isLoading}
-        pagination={false}
-        size="middle"
-        scroll={{ y: 600 }}
-        expandable={{
-          childrenColumnName: 'children',
-          defaultExpandAllRows: true,
-        }}
-      />
+      <QueryStateDisplay
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        isEmpty={!isLoading && !isError && treeData.length === 0}
+        emptyText="暂无实验室数据"
+        onRetry={() => void refetch()}
+        loadingTitle="加载实验室列表…"
+      >
+        <Table<DepartmentTreeNode>
+          columns={columns}
+          dataSource={treeData}
+          rowKey="id"
+          pagination={false}
+          size="middle"
+          scroll={{ y: 600 }}
+          expandable={{
+            childrenColumnName: 'children',
+            defaultExpandAllRows: true,
+          }}
+        />
+      </QueryStateDisplay>
 
       <Modal
         title={editingDept ? '编辑组织机构' : '新建组织机构'}

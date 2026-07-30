@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Button, Table, Typography } from 'antd';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import type { JobListItem } from '@/api/governance';
 import { apiGetSystemHealth, type SystemHealth } from '@/api/system';
 import { DataHero, MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/components/ui';
 import type { StatusSemantic } from '@/theme/tokens';
-import { usePageHeader } from '@/app/PageHeaderContext';
+import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
 const { Text } = Typography;
 
@@ -71,15 +71,12 @@ const QUICK_ENTRIES: { label: string; desc: string; to: string; search?: Record<
  */
 export function WorkbenchPage(): JSX.Element {
   const navigate = useNavigate();
-  const { setHeader } = usePageHeader();
 
-  useEffect(() => {
-    setHeader({
-      index: 'MODULE 01 / RESEARCH WORKBENCH',
-      title: '研发看板',
-      heroTitle: true,
-    });
-  }, [setHeader]);
+  usePageHeaderRegistration({
+    index: 'MODULE 01 / RESEARCH WORKBENCH',
+    title: '研发看板',
+    heroTitle: true,
+  }, []);
 
   // ---- 独立查询 1：事实列表（最近记录） ----
   const { data: factsData } = useQuery({
@@ -296,12 +293,25 @@ export function WorkbenchPage(): JSX.Element {
             <OceanPanel
               key={entry.label}
               variant="default"
-              padding={16}
-              style={{ cursor: 'pointer', transition: 'all 180ms var(--ocean-motion-easing)' }}
+              padding={0}
+              style={{ transition: 'all 180ms var(--ocean-motion-easing)' }}
             >
-              <div
+              <button
+                type="button"
+                aria-label={`${entry.label}：${entry.desc}`}
                 onClick={() => void navigate({ to: entry.to, search: entry.search })}
-                style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  width: '100%',
+                  padding: 16,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  borderRadius: 'inherit',
+                }}
               >
                 <Text style={{ fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
                   {entry.label}
@@ -309,7 +319,7 @@ export function WorkbenchPage(): JSX.Element {
                 <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
                   {entry.desc}
                 </Text>
-              </div>
+              </button>
             </OceanPanel>
           ))}
         </div>

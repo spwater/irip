@@ -207,7 +207,8 @@ async def _record_audit(
 ) -> None:
     """记录审计事件（ai_tool.* action）。
 
-    复用 governance.py 的 organization_id 占位约定（V3 简化）。
+    使用 actor.organization_id 作为 organization 字段（M-01 整改）。
+    当 organization_id 为空时回退到 user_id 以保持兼容性。
 
     Args:
         session: 异步会话（与业务写操作同事务）。
@@ -217,7 +218,7 @@ async def _record_audit(
         payload: 审计载荷（before/after/diff 等）。
     """
     event = AuditEventData(
-        organization_id=actor.user_id,  # V3 简化：暂用 user_id 作 org 占位
+        organization_id=actor.organization_id if actor.organization_id is not None else actor.user_id,
         action=action,
         actor_user_id=actor.user_id,
         resource_type="ai_tool",

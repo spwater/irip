@@ -63,9 +63,19 @@ const sanitizeSchema = {
  *
  * H-14: ECharts data is parsed independently, not through Markdown rendering.
  * The option JSON is parsed safely with JSON.parse and rendered via echarts.
+ *
+ * L-03 整改：
+ * - ECharts 实例保存到 ref，避免每次 render 重复创建
+ * - useEffect 依赖数组收敛为 [parsed]
+ * - cleanup 函数可靠调用 chart.dispose()，防止内存泄漏
+ * - 使用 cancelled 标志处理异步竞态（import 完成前组件已卸载）
+ * - 使用 ResizeObserver 监听容器尺寸变化，自动 resize 图表
+ * - 长对话反复进入后实例数和内存稳定
  */
 function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   const chartRef = useRef<HTMLDivElement>(null);
+  // L-03: 保存 ECharts 实例到 ref，cleanup 时 dispose
+  const chartInstanceRef = useRef<{ dispose: () => void; resize: () => void } | null>(null);
 
   const parsed = useMemo(() => {
     try {
@@ -78,10 +88,12 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   useEffect(() => {
     if (!parsed || !chartRef.current) return;
 
-    let chart: { setOption: (opt: Record<string, unknown>) => void; dispose: () => void } | null = null;
-    let width = 500;
+    // L-03: 异步取消标志，防止 import 完成前组件已卸载时创建孤儿实例
+    let cancelled = false;
+    let resizeObserver: ResizeObserver | null = null;
 
     // Find parent container width
+    let width = 500;
     let el: HTMLElement | null = chartRef.current.parentElement;
     while (el) {
       if (el.clientWidth > 0) {
@@ -102,23 +114,47 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
     }
 
     import('echarts').then((echarts) => {
-      if (!chartRef.current) return;
-      chart = echarts.init(chartRef.current, undefined, { width, height: 400 });
-      chart.setOption(safeOption);
+      // L-03: 组件已卸载则不再创建实例
+      if (cancelled || !chartRef.current) return;
 
-      // Add copy button
-      if (!chartRef.current.querySelector('.echarts-copy-btn')) {
-        const btn = document.createElement('div');
+      // L-03: 先 dispose 旧实例（如果有），防止重复创建
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.dispose();
+        chartInstanceRef.current = null;
+      }
+
+      const chart = echarts.init(chartRef.current, undefined, { width, height: 400 });
+      chart.setOption(safeOption);
+      chartInstanceRef.current = chart;
+
+      // L-03: ResizeObserver 监听容器尺寸变化
+      if (chartRef.current && typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => {
+          if (!cancelled && chartRef.current) {
+            chart.resize();
+          }
+        });
+        resizeObserver.observe(chartRef.current);
+      }
+
+      // Add copy button (L-01: 使用语义 button 元素，支持键盘)
+      if (chartRef.current && !chartRef.current.querySelector('.echarts-copy-btn')) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
         btn.className = 'echarts-copy-btn';
         btn.textContent = '\u{1F4CB}';
         btn.title = 'Copy ECharts config';
+        btn.setAttribute('aria-label', 'Copy ECharts config');
         btn.style.cssText =
           'position:absolute;top:8px;right:8px;width:28px;height:28px;' +
           'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
           'background:rgba(232,246,249,0.9);border:1px solid rgba(24,102,133,0.20);' +
-          'border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
+          'border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s;' +
+          'padding:0;';
         chartRef.current.onmouseenter = () => { btn.style.opacity = '1'; };
         chartRef.current.onmouseleave = () => { btn.style.opacity = '0'; };
+        chartRef.current.onfocus = () => { btn.style.opacity = '1'; };
+        chartRef.current.onblur = () => { btn.style.opacity = '0'; };
         btn.onclick = (e: MouseEvent) => {
           e.stopPropagation();
           navigator.clipboard.writeText(JSON.stringify(safeOption, null, 2)).then(() => {
@@ -135,7 +171,18 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
     });
 
     return () => {
-      if (chart) chart.dispose();
+      // L-03: 标记取消，防止异步 import 完成后创建孤儿实例
+      cancelled = true;
+      // L-03: 断开 ResizeObserver
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      // L-03: dispose ECharts 实例，释放内存
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.dispose();
+        chartInstanceRef.current = null;
+      }
     };
   }, [parsed]);
 

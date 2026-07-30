@@ -33,12 +33,14 @@ class CurrentUser:
         email: 用户邮箱。
         roles: 用户角色列表。
         department_id: 所属实验室 ID（NULL 表示未分配实验室）。
+        organization_id: 所属组织 ID（M-01: 审计事件应使用此字段而非 user_id）。
     """
 
     user_id: UUID
     email: str
     roles: list[str]
     department_id: UUID | None = None
+    organization_id: UUID | None = None
 
 
 def get_token_secret() -> str:
@@ -115,6 +117,7 @@ async def get_current_user(
 
     # H-06: 每次认证复核 is_active 和 token_version
     department_id: UUID | None = None
+    organization_id: UUID | None = None
     if session_factory is not None:
         async with session_factory() as session:
             user: AppUser | None = await session.scalar(
@@ -122,6 +125,7 @@ async def get_current_user(
             )
             if user is not None:
                 department_id = user.department_id
+                organization_id = user.organization_id
                 # H-06: 复核账户状态（disabled 用户拒绝）
                 if user.status == "disabled":
                     raise AppError(
@@ -152,4 +156,5 @@ async def get_current_user(
         email=str(payload.get("email", "")),
         roles=roles,
         department_id=department_id,
+        organization_id=organization_id,
     )

@@ -48,6 +48,10 @@ const QUALITY_COLOR: Record<string, string> = {
  * - 显示「查看完整来源」链接，跳转到溯源图谱
  * - 提交者不能审批自己提交的候选（self_approval_forbidden）
  *   当 currentUser.id === candidate.submitted_by 时，隐藏「批准发布」和「驳回」按钮
+ *
+ * M-03 整改：
+ * - 前端同时检查 reviewer 权限（parameter:approve）、非提交者、状态为待审批（in_review）
+ * - 无权限不显示审批按钮，直接调用 API 仍由后端返回 403
  */
 export function ApprovalPanel({
   candidate,
@@ -62,6 +66,21 @@ export function ApprovalPanel({
 
   /** 当前用户是否为提交者 */
   const isSubmitter = currentUser.id === candidate.submitted_by;
+
+  /** 当前用户是否拥有参数审批权限 */
+  const hasApprovePermission: boolean =
+    currentUser.permissions?.includes('parameter:approve') ?? false;
+
+  /** 候选是否处于待审批状态 */
+  const isPending: boolean = candidate.status === 'in_review';
+
+  /**
+   * 是否可以审批：同时满足三个条件
+   * 1. 拥有 parameter:approve 权限
+   * 2. 不是提交者（职责分离）
+   * 3. 候选状态为待审批（in_review）
+   */
+  const canApprove: boolean = hasApprovePermission && !isSubmitter && isPending;
 
   // ---- 批准 Mutation ----
   const approveMutation = useMutation({
@@ -141,7 +160,7 @@ export function ApprovalPanel({
           查看完整来源
         </Button>
 
-        {!isSubmitter && (
+        {canApprove && (
           <Space>
             <Button
               type="primary"
@@ -160,9 +179,15 @@ export function ApprovalPanel({
           </Space>
         )}
 
-        {isSubmitter && (
+        {!canApprove && (
           <Text type="secondary" style={{ fontSize: 12 }}>
-            提交者不可审批自己提交的候选参数
+            {isSubmitter
+              ? '提交者不可审批自己提交的候选参数'
+              : !hasApprovePermission
+                ? '当前账号无参数审批权限（parameter:approve）'
+                : !isPending
+                  ? '该候选不在待审批状态'
+                  : '暂不可审批'}
           </Text>
         )}
       </Space>

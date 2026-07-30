@@ -17,6 +17,7 @@ import { apiCancelJob, type JobStatus } from '@/api/client';
 import { apiListJobs, apiRetryJob, type JobListItem } from '@/api/governance';
 import { extractApiError } from '@/api/types';
 import { DataTableShell, StatusMark } from '@/components/ui';
+import { QueryStateDisplay } from '@/components/StateDisplay';
 import type { StatusSemantic } from '@/theme/tokens';
 
 const { Text } = Typography;
@@ -72,7 +73,7 @@ export function JobsPage(): JSX.Element {
   const [kindFilter, setKindFilter] = useState<string | undefined>(undefined);
 
   // ---- 数据查询：作业列表 ----
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['jobs', 'list', statusFilter, kindFilter],
     queryFn: () =>
       apiListJobs({ status: statusFilter, kind: kindFilter, limit: 100 }),
@@ -114,12 +115,15 @@ export function JobsPage(): JSX.Element {
       ellipsis: true,
       render: (val: string) => (
         <Tooltip title={val}>
-          <Text
-            style={{ fontSize: 12, cursor: 'pointer', color: 'var(--ocean-action-primary)' }}
+          <Button
+            type="link"
+            size="small"
+            style={{ fontSize: 12, padding: 0, height: 'auto' }}
+            aria-label={`查看作业 ${val} 详情`}
             onClick={() => void navigate({ to: '/jobs/$jobId', params: { jobId: val } })}
           >
-            {val.slice(0, 16)}…
-          </Text>
+            {val.slice(0, 16)}...
+          </Button>
         </Tooltip>
       ),
     },
@@ -245,14 +249,23 @@ export function JobsPage(): JSX.Element {
       </Space>
 
       <DataTableShell bodyPadding={0}>
-        <Table<JobListItem>
-          columns={columns}
-          dataSource={items}
-          rowKey="id"
-          loading={isLoading}
-          pagination={{ pageSize: 20, showSizeChanger: true }}
-          size="middle"
-        />
+        <QueryStateDisplay
+          isLoading={isLoading}
+          isError={isError}
+          error={error}
+          isEmpty={!isLoading && !isError && items.length === 0}
+          emptyText="暂无作业记录"
+          onRetry={() => void refetch()}
+          loadingTitle="加载作业列表…"
+        >
+          <Table<JobListItem>
+            columns={columns}
+            dataSource={items}
+            rowKey="id"
+            pagination={{ pageSize: 20, showSizeChanger: true }}
+            size="middle"
+          />
+        </QueryStateDisplay>
       </DataTableShell>
     </div>
   );

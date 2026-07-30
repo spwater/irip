@@ -1,23 +1,24 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Row, Col } from 'antd';
 import { UsersPage } from '@/governance/UsersPage';
 import { AuditPage } from '@/governance/AuditPage';
 import { SystemHealthPage } from '@/governance/SystemHealthPage';
 import { AIConfigPage } from '@/governance/AIConfigPage';
 import { JobsPage } from '@/jobs/JobsPage';
-import { usePageHeader } from '@/app/PageHeaderContext';
+import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
 /**
  * 平台治理页面
  *
  * Tab 切换和页面标题注册到 AppShell Header。
+ *
+ * M-09 整改：使用 usePageHeaderRegistration，unmount 时清空 header。
  */
 export function GovernanceConsole(): JSX.Element {
   const [activeTab, setActiveTab] = useState<string>('system-config');
-  const { setHeader } = usePageHeader();
 
-  useEffect(() => {
-    setHeader({
+  usePageHeaderRegistration(
+    {
       index: 'MODULE 05 / PLATFORM GOVERNANCE',
       title: '平台治理',
       tabs: [
@@ -28,8 +29,9 @@ export function GovernanceConsole(): JSX.Element {
       ],
       activeTab,
       onTabChange: (key) => setActiveTab(key),
-    });
-  }, [activeTab, setHeader]);
+    },
+    [activeTab],
+  );
 
   return (
     <div className="ocean-page-enter" key={activeTab}>

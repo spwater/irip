@@ -146,7 +146,7 @@ bash scripts/release-gate.sh
 
 - **版本号**：0.1.0
 - **阶段**：Phase V0–V3 全栈交付
-- **数据库迁移版本**：0021_ai_conversations
+- **数据库迁移版本**：0050_component_active_version
 - **发布门脚本**：`scripts/release-gate.sh`
 
 ---

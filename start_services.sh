@@ -8,7 +8,8 @@
 # 需要部署或测试 Docker 时用 docker 模式（全量服务 + --build + bootstrap）。
 
 set -e
-PROJECT_DIR="/Users/shuipei/Desktop/snowSP/irip"
+# M-12: 基于脚本自身目录定位项目根目录，不硬编码个人路径
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR"
 
 MODE="${1:-local}"

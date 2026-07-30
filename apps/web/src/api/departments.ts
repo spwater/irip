@@ -148,3 +148,35 @@ export async function apiSetUserDepartments(
   const res = await http.put<{ ok: boolean }>(`/users/${userId}/departments`, body);
   return res.data;
 }
+
+/**
+ * 原子添加用户到实验室（M-05）。
+ *
+ * 优先调用服务端原子 add API；若后端尚未提供该端点（404/405），
+ * 调用方应回退到 apiSetUserDepartments 并配合并发冲突检测。
+ */
+export async function apiAddUserDepartment(
+  userId: string,
+  departmentId: string,
+): Promise<{ ok: boolean }> {
+  const res = await http.post<{ ok: boolean }>(
+    `/users/${userId}/departments/${encodeURIComponent(departmentId)}`,
+  );
+  return res.data;
+}
+
+/**
+ * 原子移除用户从实验室（M-05）。
+ *
+ * 优先调用服务端原子 remove API；若后端尚未提供该端点（404/405），
+ * 调用方应回退到 apiSetUserDepartments 并配合并发冲突检测。
+ */
+export async function apiRemoveUserDepartment(
+  userId: string,
+  departmentId: string,
+): Promise<{ ok: boolean }> {
+  const res = await http.delete<{ ok: boolean }>(
+    `/users/${userId}/departments/${encodeURIComponent(departmentId)}`,
+  );
+  return res.data;
+}

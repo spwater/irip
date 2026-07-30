@@ -71,7 +71,7 @@ docker compose run --rm bootstrap
 ```bash
 # 后端
 python3 -m venv .venv
-.venv/bin/pip install -i https://pypi.tunainghua.edu.cn/simple -e ".[dev]"
+.venv/bin/pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -e ".[dev]"
 
 # 前端
 cd apps/web && corepack enable pnpm && pnpm install && cd ..

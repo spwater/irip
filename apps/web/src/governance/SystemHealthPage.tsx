@@ -14,7 +14,8 @@ import {
   type SystemHealth,
 } from '@/api/governance';
 import { useAuthStore } from '@/auth/AuthProvider';
-import { OceanPanel, StatusMark, FeedbackState } from '@/components/ui';
+import { OceanPanel, StatusMark } from '@/components/ui';
+import { QueryStateDisplay } from '@/components/StateDisplay';
 import type { StatusSemantic } from '@/theme/tokens';
 
 const { Title, Text } = Typography;
@@ -68,7 +69,7 @@ export function SystemHealthPage(): JSX.Element {
   const canView: boolean = user?.permissions?.includes('system:health') ?? true;
 
   // ---- 数据查询：系统健康 ----
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['system-health'],
     queryFn: apiGetSystemHealth,
     refetchInterval: 30000, // 每 30 秒自动刷新
@@ -85,8 +86,46 @@ export function SystemHealthPage(): JSX.Element {
     );
   }
 
-  if (isLoading) {
-    return <FeedbackState state="loading" title="加载系统健康状态…" style={{ padding: 48 }} />;
+  // 数据未就绪：优先展示错误，其次 loading
+  if (!data) {
+    if (isError) {
+      return (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Title level={5} style={{ margin: 0, paddingTop: '1em', color: 'var(--ocean-text-primary)' }}>系统健康</Title>
+            <Space>
+              <Button onClick={() => refetch()} loading={isFetching}>
+                刷新
+              </Button>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                每 30 秒自动刷新
+              </Text>
+            </Space>
+          </div>
+          <QueryStateDisplay
+            isLoading={false}
+            isError={isError}
+            error={error}
+            onRetry={() => void refetch()}
+            loadingTitle="加载系统健康状态…"
+            style={{ padding: 48 }}
+          >
+            <span />
+          </QueryStateDisplay>
+        </div>
+      );
+    }
+    return (
+      <QueryStateDisplay
+        isLoading={true}
+        isError={false}
+        error={null}
+        loadingTitle="加载系统健康状态…"
+        style={{ padding: 48 }}
+      >
+        <span />
+      </QueryStateDisplay>
+    );
   }
 
   const health: SystemHealth | undefined = data;

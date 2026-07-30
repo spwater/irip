@@ -414,7 +414,17 @@ export function AssistantPage(): JSX.Element {
                 background: selectedConvId === conv.id ? 'rgba(22, 134, 174, 0.12)' : 'transparent',
                 transition: 'background 0.2s',
               }}
+              role="button"
+              tabIndex={0}
+              aria-label={`选择对话：${conv.title || '新对话'}`}
+              aria-pressed={selectedConvId === conv.id}
               onClick={() => setSelectedConvId(conv.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setSelectedConvId(conv.id);
+                }
+              }}
             >
               <List.Item.Meta
                 title={
