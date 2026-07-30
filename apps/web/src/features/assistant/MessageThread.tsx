@@ -326,11 +326,12 @@ function BlockifiedMarkdown({
   const tableCounterRef = useRef(0);
   tableCounterRef.current = 0;
 
-  // 预提取标题 sections 和表格原文
+  // 预提取标题 sections 和表格原文（在 preprocessMath 之前，用 normalizeLatexMath 的输出）
+  const normalizedContent = useMemo(() => normalizeLatexMath(content), [content]);
   const { headingSections, tableSnapshots } = useMemo(() => {
     const sections: Record<string, string> = {};
     const tables: string[] = [];
-    const lines = preprocessed.split('\n');
+    const lines = normalizedContent.split('\n');
     let i = 0;
     // 标题 sections
     i = 0;
@@ -362,10 +363,10 @@ function BlockifiedMarkdown({
     i = 0;
     while (i < lines.length) {
       const line = lines[i];
-      if (line.includes('|') && !line.match(/^#{1,3}\s/) && !line.includes('MATH')) {
+      if (line.includes('|') && !line.match(/^#{1,3}\s/)) {
         const tableLines: string[] = [];
         let j = i;
-        while (j < lines.length && lines[j].includes('|') && !lines[j].match(/^#{1,3}\s/) && !lines[j].includes('MATH')) {
+        while (j < lines.length && lines[j].includes('|') && !lines[j].match(/^#{1,3}\s/)) {
           tableLines.push(lines[j]);
           j++;
         }
