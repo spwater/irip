@@ -27,29 +27,35 @@ class TestPolicyRegistry:
     def test_general_submit_kinds(self) -> None:
         """6 个 kind 允许通用提交。"""
         general_kinds = [
-            k for k in JobKindPolicy.registered_kinds()
+            k
+            for k in JobKindPolicy.registered_kinds()
             if JobKindPolicy.is_general_submit_allowed(k)
         ]
-        assert sorted(general_kinds) == sorted([
-            "flow_execute",
-            "flow_resume",
-            "ingestion",
-            "model_train",
-            "model_predict",
-            "model_publish",
-        ])
+        assert sorted(general_kinds) == sorted(
+            [
+                "flow_execute",
+                "flow_resume",
+                "ingestion",
+                "model_train",
+                "model_predict",
+                "model_publish",
+            ]
+        )
 
     def test_privileged_kinds(self) -> None:
         """3 个 kind 不允许通用提交（特权 kind）。"""
         privileged_kinds = [
-            k for k in JobKindPolicy.registered_kinds()
+            k
+            for k in JobKindPolicy.registered_kinds()
             if not JobKindPolicy.is_general_submit_allowed(k)
         ]
-        assert sorted(privileged_kinds) == sorted([
-            "backup",
-            "restore",
-            "audit_export",
-        ])
+        assert sorted(privileged_kinds) == sorted(
+            [
+                "backup",
+                "restore",
+                "audit_export",
+            ]
+        )
 
     def test_privileged_kinds_require_system_manage(self) -> None:
         """特权 kind 的 required_permission 为 system:manage。"""
@@ -61,8 +67,12 @@ class TestPolicyRegistry:
     def test_general_kinds_require_job_submit(self) -> None:
         """通用 kind 的 required_permission 为 job:submit。"""
         for kind in (
-            "flow_execute", "flow_resume", "ingestion",
-            "model_train", "model_predict", "model_publish",
+            "flow_execute",
+            "flow_resume",
+            "ingestion",
+            "model_train",
+            "model_predict",
+            "model_publish",
         ):
             policy = JobKindPolicy.get_policy(kind)
             assert policy is not None
@@ -80,37 +90,54 @@ class TestPolicyRegistry:
 class TestValidateGeneralKinds:
     """通用 kind 的 validate() 行为。"""
 
-    @pytest.mark.parametrize("kind", [
-        "flow_execute", "flow_resume", "ingestion",
-        "model_train", "model_predict", "model_publish",
-    ])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flow_execute",
+            "flow_resume",
+            "ingestion",
+            "model_train",
+            "model_predict",
+            "model_publish",
+        ],
+    )
     def test_general_kind_with_job_submit_permission(self, kind: str) -> None:
         """拥有 job:submit 权限的用户可提交通用 kind。"""
-        policy = JobKindPolicy.validate(
-            kind, {"job:submit"}, via_general=True
-        )
+        policy = JobKindPolicy.validate(kind, {"job:submit"}, via_general=True)
         assert isinstance(policy, KindPolicy)
         assert policy.required_permission == "job:submit"
         assert policy.allow_general_submit is True
 
-    @pytest.mark.parametrize("kind", [
-        "flow_execute", "flow_resume", "ingestion",
-        "model_train", "model_predict", "model_publish",
-    ])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flow_execute",
+            "flow_resume",
+            "ingestion",
+            "model_train",
+            "model_predict",
+            "model_publish",
+        ],
+    )
     def test_general_kind_without_permission(self, kind: str) -> None:
         """缺少 job:submit 权限时抛出 PermissionError。"""
         with pytest.raises(PermissionError, match="Permission denied"):
             JobKindPolicy.validate(kind, set(), via_general=True)
 
-    @pytest.mark.parametrize("kind", [
-        "flow_execute", "flow_resume", "ingestion",
-        "model_train", "model_predict", "model_publish",
-    ])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flow_execute",
+            "flow_resume",
+            "ingestion",
+            "model_train",
+            "model_predict",
+            "model_publish",
+        ],
+    )
     def test_general_kind_via_dedicated_api(self, kind: str) -> None:
         """通用 kind 通过专用 API（via_general=False）也需权限校验。"""
-        policy = JobKindPolicy.validate(
-            kind, {"job:submit"}, via_general=False
-        )
+        policy = JobKindPolicy.validate(kind, {"job:submit"}, via_general=False)
         assert policy.required_permission == "job:submit"
 
     def test_general_kind_with_extra_permissions(self) -> None:
@@ -130,16 +157,12 @@ class TestValidatePrivilegedKinds:
     def test_privileged_kind_via_general_rejected(self, kind: str) -> None:
         """特权 kind 通过通用接口提交被拒绝（即使有 system:manage 权限）。"""
         with pytest.raises(PermissionError, match="must be submitted via dedicated API"):
-            JobKindPolicy.validate(
-                kind, {"system:manage"}, via_general=True
-            )
+            JobKindPolicy.validate(kind, {"system:manage"}, via_general=True)
 
     @pytest.mark.parametrize("kind", ["backup", "restore", "audit_export"])
     def test_privileged_kind_via_dedicated_with_permission(self, kind: str) -> None:
         """特权 kind 通过专用 API（via_general=False）且拥有 system:manage 时成功。"""
-        policy = JobKindPolicy.validate(
-            kind, {"system:manage"}, via_general=False
-        )
+        policy = JobKindPolicy.validate(kind, {"system:manage"}, via_general=False)
         assert policy.required_permission == "system:manage"
         assert policy.allow_general_submit is False
 
@@ -147,9 +170,7 @@ class TestValidatePrivilegedKinds:
     def test_privileged_kind_via_dedicated_without_permission(self, kind: str) -> None:
         """特权 kind 通过专用 API 但缺少 system:manage 时被拒绝。"""
         with pytest.raises(PermissionError, match="Permission denied"):
-            JobKindPolicy.validate(
-                kind, {"job:submit"}, via_general=False
-            )
+            JobKindPolicy.validate(kind, {"job:submit"}, via_general=False)
 
     @pytest.mark.parametrize("kind", ["backup", "restore", "audit_export"])
     def test_privileged_kind_via_general_no_permission(self, kind: str) -> None:
@@ -179,7 +200,10 @@ class TestValidateUnknownKind:
     def test_unknown_kind_with_all_permissions(self) -> None:
         """未知 kind 即使拥有所有权限也抛出 ValueError。"""
         all_perms = {
-            "job:submit", "system:manage", "fact:read", "fact:write",
+            "job:submit",
+            "system:manage",
+            "fact:read",
+            "fact:write",
         }
         with pytest.raises(ValueError, match="Unknown job kind"):
             JobKindPolicy.validate("malicious_kind", all_perms)

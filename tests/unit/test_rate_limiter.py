@@ -14,8 +14,6 @@
 
 from unittest.mock import patch
 
-import pytest
-
 from packages.common.rate_limiter import RateLimiter, get_rate_limiter
 
 

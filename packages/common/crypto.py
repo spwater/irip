@@ -99,7 +99,7 @@ class EnvelopeCrypto:
     """
 
     #: 单例实例（H-06: 单例模式）。
-    _instance: "EnvelopeCrypto | None" = None
+    _instance: EnvelopeCrypto | None = None
 
     def __init__(
         self,
@@ -124,7 +124,7 @@ class EnvelopeCrypto:
         self._old_keys: dict[int, bytes] = old_keys or {}
 
     @classmethod
-    def from_env(cls) -> "EnvelopeCrypto":
+    def from_env(cls) -> EnvelopeCrypto:
         """从环境变量构建 EnvelopeCrypto（H-06: 单例 + fail-closed）。
 
         读取 ``IRIP_MASTER_KEY``（base64 编码的 32 字节密钥）。
@@ -158,9 +158,7 @@ class EnvelopeCrypto:
                     "Set IRIP_ENV=test for test environments or provide IRIP_MASTER_KEY."
                 )
             # H-06: 测试环境使用固定测试密钥（不随机生成）
-            logger.warning(
-                "IRIP_MASTER_KEY not set in test environment; using fixed test key."
-            )
+            logger.warning("IRIP_MASTER_KEY not set in test environment; using fixed test key.")
             current_key = _decode_key(_TEST_MASTER_KEY_B64)
             current_version = 0
         else:

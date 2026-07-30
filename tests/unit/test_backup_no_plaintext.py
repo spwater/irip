@@ -109,9 +109,7 @@ class TestNoPlaintextInFinalDir:
         await service.backup()
 
         files = _list_files(output_dir)
-        assert OBJECTS_DIRNAME not in files, (
-            f"objects/ should not be in final dir, found: {files}"
-        )
+        assert OBJECTS_DIRNAME not in files, f"objects/ should not be in final dir, found: {files}"
 
     async def test_no_objects_json_in_final_dir(self, tmp_path: Path) -> None:
         """最终目录不含 objects.json。"""
@@ -126,9 +124,7 @@ class TestNoPlaintextInFinalDir:
             f"objects.json should not be in final dir, found: {files}"
         )
 
-    async def test_final_dir_contains_tar_and_manifest(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_final_dir_contains_tar_and_manifest(self, tmp_path: Path) -> None:
         """最终目录包含 backup.tar 和 manifest.json。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=False)
@@ -140,17 +136,13 @@ class TestNoPlaintextInFinalDir:
         assert BACKUP_TAR_FILENAME in files
         assert MANIFEST_FILENAME in files
 
-    async def test_no_plaintext_with_encryption(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_no_plaintext_with_encryption(self, tmp_path: Path) -> None:
         """加密场景下最终目录不含明文（只有 backup.tar.age + manifest.json）。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=True)
         service = MockBackupService(config)
 
         # Mock age 加密：将 tar 复制为 .age 文件
-        original_encrypt = BackupService._encrypt_tar
-
         def mock_encrypt_tar(
             self_: BackupService,
             tar_path: Path,
@@ -193,13 +185,9 @@ class TestTempDirCleanup:
             await service.backup()
 
         for temp_dir in created_temp_dirs:
-            assert not temp_dir.exists(), (
-                f"Temp dir should be cleaned up: {temp_dir}"
-            )
+            assert not temp_dir.exists(), f"Temp dir should be cleaned up: {temp_dir}"
 
-    async def test_temp_dir_cleaned_on_encryption_failure(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_temp_dir_cleaned_on_encryption_failure(self, tmp_path: Path) -> None:
         """加密失败时临时目录被清理。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=True)
@@ -233,9 +221,7 @@ class TestTempDirCleanup:
                 f"Temp dir should be cleaned up after encryption failure: {temp_dir}"
             )
 
-    async def test_no_plaintext_on_encryption_failure(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_no_plaintext_on_encryption_failure(self, tmp_path: Path) -> None:
         """加密失败后最终目录不含明文。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=True)
@@ -264,9 +250,7 @@ class TestTempDirCleanup:
             f"backup.tar should not leak on encryption failure, found: {files}"
         )
 
-    async def test_temp_dir_cleaned_on_dump_failure(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_temp_dir_cleaned_on_dump_failure(self, tmp_path: Path) -> None:
         """dump 失败时临时目录被清理。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=False)
@@ -300,12 +284,9 @@ class TestTempDirCleanup:
 class TestTempDirPermissions:
     """临时目录权限验证。"""
 
-    async def test_temp_dir_created_with_0700_permissions(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_temp_dir_created_with_0700_permissions(self, tmp_path: Path) -> None:
         """临时目录以 0700 权限创建（仅所有者可访问）。"""
         import os
-        import stat
 
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=False)
@@ -344,9 +325,7 @@ class TestTempDirPermissions:
 class TestBackupContentIntegrity:
     """备份内容完整性验证。"""
 
-    async def test_tar_contains_manifest_and_dump(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_tar_contains_manifest_and_dump(self, tmp_path: Path) -> None:
         """tar 归档包含 manifest.json 和 database.dump（但不泄露到最终目录）。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=False)
@@ -363,9 +342,7 @@ class TestBackupContentIntegrity:
             assert OBJECTS_DIRNAME in names
             assert MANIFEST_FILENAME in names
 
-    async def test_manifest_in_final_dir_is_valid(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_manifest_in_final_dir_is_valid(self, tmp_path: Path) -> None:
         """最终目录中的 manifest.json 是有效的 JSON。"""
         output_dir = tmp_path / "backup_output"
         config = _make_config(output_dir, encrypt=False)

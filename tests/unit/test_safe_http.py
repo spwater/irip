@@ -16,7 +16,6 @@ HTTP 响应通过 mock httpx.AsyncClient 实现。
 import ipaddress
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from packages.common.safe_http import (
@@ -52,7 +51,9 @@ class TestIsPrivateIp:
         """私网/保留 IPv4 地址被识别为私网。"""
         assert _is_private_ip(ipaddress.ip_address(ip_str)) is True
 
-    @pytest.mark.parametrize("ip_str", ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.15.0.1", "172.32.0.1"])
+    @pytest.mark.parametrize(
+        "ip_str", ["8.8.8.8", "1.1.1.1", "93.184.216.34", "172.15.0.1", "172.32.0.1"]
+    )
     def test_public_ipv4_allowed(self, ip_str: str) -> None:
         """公网 IPv4 地址不被识别为私网。"""
         assert _is_private_ip(ipaddress.ip_address(ip_str)) is False

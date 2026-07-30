@@ -49,51 +49,35 @@ def principal(org_id: UUID) -> Principal:
 class TestSessionScopeWithPrincipal:
     """提供 principal 时设置 GUC。"""
 
-    async def test_guc_set_when_principal_provided(
-        self, principal: Principal
-    ) -> None:
+    async def test_guc_set_when_principal_provided(self, principal: Principal) -> None:
         """提供 principal 时执行 SET LOCAL app.current_org_id。"""
         db_url = _get_test_db_url()
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
 
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         if not async_url.startswith("postgresql+psycopg_async://"):
-            async_url = async_url.replace(
-                "postgresql://", "postgresql+psycopg_async://", 1
-            )
+            async_url = async_url.replace("postgresql://", "postgresql+psycopg_async://", 1)
 
         factory = build_session_factory(async_url)
         async with session_scope(factory, principal=principal) as session:
-            result = await session.execute(
-                sa.text("SHOW app.current_org_id")
-            )
+            result = await session.execute(sa.text("SHOW app.current_org_id"))
             current_guc = result.scalar()
             assert current_guc == str(principal.organization_id)
 
-    async def test_guc_matches_principal_org_id(
-        self, principal: Principal
-    ) -> None:
+    async def test_guc_matches_principal_org_id(self, principal: Principal) -> None:
         """GUC 值与 principal.organization_id 一致。"""
         db_url = _get_test_db_url()
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
 
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         if not async_url.startswith("postgresql+psycopg_async://"):
-            async_url = async_url.replace(
-                "postgresql://", "postgresql+psycopg_async://", 1
-            )
+            async_url = async_url.replace("postgresql://", "postgresql+psycopg_async://", 1)
 
         factory = build_session_factory(async_url)
         async with session_scope(factory, principal=principal) as session:
-            result = await session.execute(
-                sa.text("SHOW app.current_org_id")
-            )
+            result = await session.execute(sa.text("SHOW app.current_org_id"))
             assert result.scalar() == str(principal.organization_id)
 
 
@@ -106,19 +90,13 @@ class TestSessionScopeWithoutPrincipal:
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
 
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         if not async_url.startswith("postgresql+psycopg_async://"):
-            async_url = async_url.replace(
-                "postgresql://", "postgresql+psycopg_async://", 1
-            )
+            async_url = async_url.replace("postgresql://", "postgresql+psycopg_async://", 1)
 
         factory = build_session_factory(async_url)
         async with session_scope(factory) as session:
-            result = await session.execute(
-                sa.text("SHOW app.current_org_id")
-            )
+            result = await session.execute(sa.text("SHOW app.current_org_id"))
             current_guc = result.scalar()
             # 连接级默认值为空字符串（build_session_factory 中设置）
             assert current_guc == ""
@@ -127,9 +105,7 @@ class TestSessionScopeWithoutPrincipal:
 class TestSessionScopePrincipalParameter:
     """session_scope 的 principal 参数行为。"""
 
-    def test_principal_parameter_is_keyword_only(
-        self, principal: Principal
-    ) -> None:
+    def test_principal_parameter_is_keyword_only(self, principal: Principal) -> None:
         """principal 参数是 keyword-only（不能位置传参）。"""
         import inspect
 
@@ -150,9 +126,7 @@ class TestSessionScopePrincipalParameter:
 class TestBuildSessionFactoryGucDefault:
     """build_session_factory 连接级 GUC 默认值。"""
 
-    def test_build_session_factory_returns_session_maker(
-        self, principal: Principal
-    ) -> None:
+    def test_build_session_factory_returns_session_maker(self, principal: Principal) -> None:
         """build_session_factory 返回 async_sessionmaker 实例。"""
         from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -160,13 +134,9 @@ class TestBuildSessionFactoryGucDefault:
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
 
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         if not async_url.startswith("postgresql+psycopg_async://"):
-            async_url = async_url.replace(
-                "postgresql://", "postgresql+psycopg_async://", 1
-            )
+            async_url = async_url.replace("postgresql://", "postgresql+psycopg_async://", 1)
 
         factory = build_session_factory(async_url)
         assert isinstance(factory, async_sessionmaker)

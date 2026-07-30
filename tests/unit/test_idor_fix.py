@@ -15,18 +15,15 @@
 
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 import sqlalchemy as sa
 
 from packages.common.errors import AppError
 from packages.components.registry import ComponentRegistryService
-from packages.departments.entities import Department
 from packages.departments.repository import DepartmentRepository
-from packages.equipment.entities import Equipment
 from packages.equipment.repository import EquipmentRepository
-
 
 # ---------------------------------------------------------------------------
 # 辅助：编译语句并检查 WHERE 子句中是否包含 organization_id
@@ -61,9 +58,7 @@ class TestDepartmentRepositoryIdorFix:
         dept_id = uuid4()
         org_id = uuid4()
 
-        result = await DepartmentRepository.select_by_id(
-            session, dept_id, org_id
-        )
+        result = await DepartmentRepository.select_by_id(session, dept_id, org_id)
 
         # 模拟跨租户查询返回 None
         assert result is None
@@ -83,9 +78,7 @@ class TestDepartmentRepositoryIdorFix:
         dept_id = uuid4()
         wrong_org = uuid4()
 
-        result = await DepartmentRepository.select_by_id(
-            session, dept_id, wrong_org
-        )
+        result = await DepartmentRepository.select_by_id(session, dept_id, wrong_org)
 
         assert result is None
 
@@ -161,9 +154,7 @@ class TestDepartmentRepositoryIdorFix:
         mock_result.rowcount = 0
         session.execute.return_value = mock_result
 
-        result = await DepartmentRepository.delete_by_id(
-            session, uuid4(), uuid4()
-        )
+        result = await DepartmentRepository.delete_by_id(session, uuid4(), uuid4())
 
         # 模拟跨租户删除不命中
         assert result is False
@@ -200,9 +191,7 @@ class TestEquipmentRepositoryIdorFix:
         mock_result.scalar_one_or_none.return_value = None
         session.execute.return_value = mock_result
 
-        result = await EquipmentRepository.select_by_id(
-            session, uuid4(), uuid4()
-        )
+        result = await EquipmentRepository.select_by_id(session, uuid4(), uuid4())
 
         assert result is None
         session.execute.assert_called_once()
@@ -216,9 +205,7 @@ class TestEquipmentRepositoryIdorFix:
         mock_result.scalar_one_or_none.return_value = None
         session.execute.return_value = mock_result
 
-        result = await EquipmentRepository.select_by_id(
-            session, uuid4(), uuid4()
-        )
+        result = await EquipmentRepository.select_by_id(session, uuid4(), uuid4())
         assert result is None
 
     async def test_update_includes_org_filter(self) -> None:

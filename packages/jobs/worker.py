@@ -238,7 +238,9 @@ class JobExecutor:
             if not renewed:
                 logger.warning(
                     "Heartbeat lost for job %s (owner=%s, fencing=%d)",
-                    job_id, owner, fencing_token,
+                    job_id,
+                    owner,
+                    fencing_token,
                 )
                 break
 
@@ -265,9 +267,7 @@ class JobExecutor:
             JobResult | None: 执行结果（None 表示未获取租约或已终态）。
         """
         # Step 1: 获取租约 + fencing token（H-03）
-        acquired, fencing_token = await self._lease_manager.acquire_with_fencing(
-            job_id, owner
-        )
+        acquired, fencing_token = await self._lease_manager.acquire_with_fencing(job_id, owner)
         if not acquired:
             return None
 

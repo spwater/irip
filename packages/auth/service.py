@@ -221,9 +221,7 @@ class AuthService:
                 # H-06: refresh 拒绝 disabled 用户
                 if user.status == "disabled":
                     # 撤销该会话家族
-                    await self._repository.revoke_family(
-                        session, old_session.family_id, now
-                    )
+                    await self._repository.revoke_family(session, old_session.family_id, now)
                     raise AppError(
                         code="forbidden",
                         message="用户已被禁用",

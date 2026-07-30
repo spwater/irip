@@ -3,7 +3,7 @@ import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
 import 'katex/dist/katex.min.css';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -77,13 +77,34 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   // L-03: 保存 ECharts 实例到 ref，cleanup 时 dispose
   const chartInstanceRef = useRef<{ dispose: () => void; resize: () => void } | null>(null);
 
+  // 防抖：流式传输中不立即渲染，等内容稳定（300ms 无变化）后再渲染
+  const [debouncedStr, setDebouncedStr] = useState(optionStr);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedStr(optionStr), 300);
+    return () => clearTimeout(timer);
+  }, [optionStr]);
+
   const parsed = useMemo(() => {
+    // 1. 先尝试标准 JSON.parse
     try {
-      return JSON.parse(optionStr);
+      return JSON.parse(debouncedStr);
+    } catch {
+      // fall through to lenient parser
+    }
+    // 2. 宽松解析：将 JS 对象语法转为合法 JSON
+    //    - 无引号的 key: title: → "title":
+    //    - 单引号字符串: 'xxx' → "xxx"
+    //    - 尾逗号: ,} → }, ,,] → ]
+    try {
+      const lenient = debouncedStr
+        .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3')
+        .replace(/'/g, '"')
+        .replace(/,(\s*[}\]])/g, '$1');
+      return JSON.parse(lenient);
     } catch {
       return null;
     }
-  }, [optionStr]);
+  }, [debouncedStr]);
 
   useEffect(() => {
     if (!parsed || !chartRef.current) return;
@@ -187,6 +208,11 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   }, [parsed]);
 
   if (!parsed) {
+    // 流式传输中：JSON 可能还没传完，不显示 error 也不占高度
+    const looksIncomplete = debouncedStr.trim().length > 0 && !debouncedStr.trim().endsWith('}');
+    if (looksIncomplete) {
+      return <div style={{ width: '100%', minHeight: 40, margin: '8px 0' }} />;
+    }
     return <Text type="danger">Chart config parse error</Text>;
   }
 

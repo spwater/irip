@@ -109,6 +109,7 @@ export function FlowDetail(): JSX.Element {
   const [runSelectedComp, setRunSelectedComp] = useState<string | undefined>(undefined);
   const [batchSelectedComp, setBatchSelectedComp] = useState<string | undefined>(undefined);
   const [batchOperator, setBatchOperator] = useState<string>('');
+  const [batchPrompt, setBatchPrompt] = useState<string>('');
   const [runParams, setRunParams] = useState<[string, unknown][]>([]);
 
   /** 比较版本号 */
@@ -267,7 +268,10 @@ export function FlowDetail(): JSX.Element {
   const runParamEntries = (() => {
     if (!runNode) return [];
     const params = (runNode.params as Record<string, unknown>) ?? {};
-    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type');
+    const runCompName = runNode?.component_name;
+    const runCompObj = runCompName ? compMap.get(runCompName) : undefined;
+    const isRunXrd = runCompObj?.tool_type === 'xrd_converter';
+    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type' && !(key === 'prompt' && isRunXrd));
     const orderedKeys = ['path', 'file_engine', 'prompt'];
     return entries.sort((a, b) => {
       const ai = orderedKeys.indexOf(a[0]);
@@ -577,7 +581,7 @@ export function FlowDetail(): JSX.Element {
             } else if (key === 'experimental_object_code') {
               inputs[key] = (node.params as Record<string, unknown>)?.experimental_object_code ?? '';
             } else if (key === 'prompt' && comp?.prompt) {
-              inputs[key] = comp.prompt;
+              inputs[key] = batchPrompt || comp.prompt;
             } else {
               const defaultVal = (node.params as Record<string, unknown>)?.[key];
               inputs[key] = defaultVal ?? '';
@@ -919,6 +923,7 @@ export function FlowDetail(): JSX.Element {
                   setBatchProgress(null);
                   setBatchSelectedComp(runNode?.component_name ?? undefined);
                   setBatchOperator('');
+                  setBatchPrompt('');
                   setBatchResults(null);
                   setBatchModalOpen(true);
                 }}
@@ -1290,8 +1295,10 @@ export function FlowDetail(): JSX.Element {
                     const parsed = parseManifest(detail.manifest_yaml);
                     const initialValues: Record<string, unknown> = {};
                     const paramEntries: [string, unknown][] = [];
+                    const isXrdConverter = comp.summary.tool_type === 'xrd_converter';
                     for (const p of parsed.params) {
                       if (p.name === 'experimental_object_code' || p.name === 'tool_type') continue;
+                      if (p.name === 'prompt' && isXrdConverter) continue;
                       const formKey = `n1__${p.name}`;
                       if (p.name === 'prompt' && comp.summary.prompt) {
                         initialValues[formKey] = comp.summary.prompt;
@@ -1573,6 +1580,21 @@ export function FlowDetail(): JSX.Element {
                 </div>
               )}
             </div>
+            {batchSelectedComp && (() => {
+              const batchComp = batchSelectedComp ? compMap.get(batchSelectedComp) : undefined;
+              const isBatchXrd = batchComp?.tool_type === 'xrd_converter';
+              if (isBatchXrd || !batchComp?.prompt) return null;
+              return (
+                <Form.Item label="大模型提示词">
+                  <Input.TextArea
+                    value={batchPrompt || batchComp.prompt || ''}
+                    onChange={(e) => setBatchPrompt(e.target.value)}
+                    rows={6}
+                    placeholder="大模型提示词"
+                  />
+                </Form.Item>
+              );
+            })()}
             <Text type="secondary" style={{ fontSize: 12 }}>
               将使用当前任务的数据接口，逐个上传文件并执行。文件合规性由用户自行负责。
             </Text>

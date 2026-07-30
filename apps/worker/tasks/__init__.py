@@ -21,6 +21,7 @@ H-09 改动：
 
 import asyncio
 import os
+from pathlib import Path
 from uuid import UUID
 
 from packages.common.database import build_session_factory
@@ -279,9 +280,7 @@ def _resolve_backup_dir_by_id(backup_id: str) -> "Path":
     manifest_filename: str = "manifest.json"
     for candidate in search_dir.rglob(manifest_filename):
         try:
-            manifest_data: dict = json.loads(
-                candidate.read_text(encoding="utf-8")
-            )
+            manifest_data: dict = json.loads(candidate.read_text(encoding="utf-8"))
             if manifest_data.get("backup_id") == backup_id:
                 return candidate.parent
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):

@@ -459,7 +459,7 @@ async def list_facts(
                                 + ("..." if total > 3 else "")
                             )  # noqa: E501
                         elif srs:
-                            names = [s.get("name", f"序列{i+1}") for i, s in enumerate(srs[:3])]
+                            names = [s.get("name", f"序列{i + 1}") for i, s in enumerate(srs[:3])]
                             total = len(srs)
                             item.data_summary = (
                                 f"共{total}组序列："
@@ -729,7 +729,7 @@ async def search_facts_by_data(
                             f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
                         )  # noqa: E501
                     elif srs:
-                        names = [s.get("name", f"序列{i+1}") for i, s in enumerate(srs[:3])]
+                        names = [s.get("name", f"序列{i + 1}") for i, s in enumerate(srs[:3])]
                         total = len(srs)
                         item.data_summary = (
                             f"共{total}组序列：" + "，".join(names) + ("..." if total > 3 else "")
@@ -1051,7 +1051,11 @@ async def get_fact_data(
                                     "task_name": fd.display_name,
                                     "task_source": dept_name,
                                     "operator": fd.operator,
-                                    "run_operator": (run_record.input_snapshot or {}).get("_operator") if run_record else None,
+                                    "run_operator": (run_record.input_snapshot or {}).get(
+                                        "_operator"
+                                    )
+                                    if run_record
+                                    else None,
                                     "project_name": fd.project_name,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
@@ -1064,7 +1068,9 @@ async def get_fact_data(
 
                 logging.getLogger(__name__).warning(
                     "Failed to query task info for fact %s: %s",
-                    fact_id, e, exc_info=True,
+                    fact_id,
+                    e,
+                    exc_info=True,
                 )
 
         # 把任务信息附加到返回结果

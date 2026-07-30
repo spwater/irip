@@ -723,9 +723,7 @@ class ComponentRegistryService:
                 )
             # 删除所有版本
             await session.execute(
-                sa.delete(ComponentVersion).where(
-                    ComponentVersion.component_id == component_id
-                )
+                sa.delete(ComponentVersion).where(ComponentVersion.component_id == component_id)
             )
             # 删除主记录
             await session.execute(

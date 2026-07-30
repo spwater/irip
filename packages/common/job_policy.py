@@ -139,8 +139,7 @@ class JobKindPolicy:
             )
         if policy.required_permission not in user_permissions:
             raise PermissionError(
-                f"Permission denied for kind '{kind}': "
-                f"requires '{policy.required_permission}'"
+                f"Permission denied for kind '{kind}': requires '{policy.required_permission}'"
             )
         return policy
 

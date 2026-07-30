@@ -92,14 +92,12 @@ def _resolve_and_validate(host: str, port: int | None = None) -> str:
     try:
         ip = ipaddress.ip_address(host)
         if _is_private_ip(ip):
-            raise SSRFBlockedError(
-                f"SSRF blocked: {ip} is in a private/reserved network range"
-            )
+            raise SSRFBlockedError(f"SSRF blocked: {ip} is in a private/reserved network range")
         return str(ip)
-    except ValueError:
+    except ValueError as exc:
         # host 不是合法 IP 字符串，继续做 DNS 解析
         if isinstance(host, str) and not host:
-            raise ValueError("Empty hostname")
+            raise ValueError("Empty hostname") from exc
 
     # DNS 解析
     try:
@@ -279,9 +277,7 @@ class SafeHTTPClient:
             if response.is_redirect:
                 redirect_count += 1
                 if redirect_count > _MAX_REDIRECTS:
-                    raise ValueError(
-                        f"Too many redirects (max {_MAX_REDIRECTS})"
-                    )
+                    raise ValueError(f"Too many redirects (max {_MAX_REDIRECTS})")
                 location = response.headers.get("location", "")
                 if not location:
                     raise ValueError("Redirect response missing location header")
@@ -305,8 +301,7 @@ class SafeHTTPClient:
                 else:
                     if size > self._max_size:
                         raise ResponseTooLargeError(
-                            f"Response too large: {size} bytes exceeds "
-                            f"max {self._max_size} bytes"
+                            f"Response too large: {size} bytes exceeds max {self._max_size} bytes"
                         )
 
             # 流式读取响应体，累计检查大小

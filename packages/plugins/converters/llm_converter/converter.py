@@ -148,7 +148,9 @@ async def _call_llm(
         if "disconnected" in err_msg.lower() or "remote" in err_msg.lower():
             await asyncio.sleep(2)
             try:
-                async with SafeHTTPClient(timeout=float(timeout + 120), max_size=10 * 1024 * 1024) as client2:
+                async with SafeHTTPClient(
+                    timeout=float(timeout + 120), max_size=10 * 1024 * 1024
+                ) as client2:
                     resp = await client2.post(url, headers=headers, json=body)
             except httpx.HTTPError as exc2:
                 raise AppError(

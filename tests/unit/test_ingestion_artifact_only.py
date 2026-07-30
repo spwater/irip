@@ -99,10 +99,12 @@ class TestSourceFileConfigNoPathField:
 
     def test_path_field_rejected_by_extra_ignore(self) -> None:
         """传入 path 字段时，因 Pydantic 默认忽略额外字段而不报错，
-       但 path 不会出现在 model_dump 中。"""
+        但 path 不会出现在 model_dump 中。"""
         artifact_id = uuid4()
         config = SourceFileConfig(
-            artifact_id=artifact_id, format="csv", path="/etc/passwd"  # type: ignore[call-arg]
+            artifact_id=artifact_id,
+            format="csv",
+            path="/etc/passwd",  # type: ignore[call-arg]
         )
         dumped = config.model_dump()
         assert "path" not in dumped

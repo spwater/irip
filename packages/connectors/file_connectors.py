@@ -102,9 +102,7 @@ class FileConnector:
         effective_limit: int = min(limit, MAX_PREVIEW_ROWS)
         stream = await self._open_artifact_stream(artifact_id_raw)
         try:
-            columns, rows = await self._read_rows_from_stream(
-                stream, fmt, effective_limit
-            )
+            columns, rows = await self._read_rows_from_stream(stream, fmt, effective_limit)
         finally:
             close_stream(stream)
 
@@ -206,17 +204,11 @@ class FileConnector:
         start_time: float = time.monotonic()
 
         if fmt == "csv":
-            return await asyncio.to_thread(
-                self._read_csv_stream, stream, limit, start_time
-            )
+            return await asyncio.to_thread(self._read_csv_stream, stream, limit, start_time)
         if fmt == "xlsx":
-            return await asyncio.to_thread(
-                self._read_xlsx_stream, stream, limit, start_time
-            )
+            return await asyncio.to_thread(self._read_xlsx_stream, stream, limit, start_time)
         if fmt == "json":
-            return await asyncio.to_thread(
-                self._read_json_stream, stream, limit, start_time
-            )
+            return await asyncio.to_thread(self._read_json_stream, stream, limit, start_time)
         raise AppError(
             code="unsupported_media_type",
             message=f"不支持的文件格式：{fmt}",
@@ -224,13 +216,9 @@ class FileConnector:
             fields={"format": fmt},
         )
 
-    async def _read_records_from_stream(
-        self, stream: IO[bytes], fmt: str
-    ) -> list[SourceRecord]:
+    async def _read_records_from_stream(self, stream: IO[bytes], fmt: str) -> list[SourceRecord]:
         """从流读取全部记录为 SourceRecord 列表。"""
-        columns, rows = await self._read_rows_from_stream(
-            stream, fmt, limit=MAX_PREVIEW_ROWS
-        )
+        columns, rows = await self._read_rows_from_stream(stream, fmt, limit=MAX_PREVIEW_ROWS)
         records: list[SourceRecord] = []
         for row in rows:
             fields: dict[str, str | None] = {}

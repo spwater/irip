@@ -167,7 +167,9 @@ async def _record_audit(
     """
     redacted = redact(payload) if payload is not None else None
     event = AuditEventData(
-        organization_id=actor.organization_id if actor.organization_id is not None else actor.user_id,
+        organization_id=actor.organization_id
+        if actor.organization_id is not None
+        else actor.user_id,
         action=action,
         actor_user_id=actor.user_id,
         resource_type=resource_type,

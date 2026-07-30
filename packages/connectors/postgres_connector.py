@@ -12,11 +12,11 @@
 - read(source): 流式 yield SourceRecord。
 """
 
-import sqlparse
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+import sqlparse
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from packages.common.errors import AppError

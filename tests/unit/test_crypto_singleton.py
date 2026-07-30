@@ -12,12 +12,10 @@
 """
 
 import base64
-import os
-from unittest.mock import patch
 
 import pytest
 
-from packages.common.crypto import EnvelopeCrypto, _TEST_MASTER_KEY_B64
+from packages.common.crypto import _TEST_MASTER_KEY_B64, EnvelopeCrypto
 
 
 @pytest.fixture(autouse=True)
@@ -56,9 +54,7 @@ class TestFailClosed:
         with pytest.raises(RuntimeError, match="IRIP_MASTER_KEY is required"):
             EnvelopeCrypto.from_env()
 
-    def test_non_test_env_with_key_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_non_test_env_with_key_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """非 test 环境提供了合法 key 时正常初始化。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "production")
@@ -72,9 +68,7 @@ class TestFailClosed:
 class TestTestEnvFixedKey:
     """test 环境使用固定密钥。"""
 
-    def test_test_env_missing_key_uses_fixed_key(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_test_env_missing_key_uses_fixed_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """test 环境缺 key 时使用固定测试密钥。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -103,9 +97,7 @@ class TestTestEnvFixedKey:
 class TestSingleton:
     """单例模式。"""
 
-    def test_from_env_returns_same_instance(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_from_env_returns_same_instance(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """多次 from_env 返回同一实例。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -113,9 +105,7 @@ class TestSingleton:
         b = EnvelopeCrypto.from_env()
         assert a is b
 
-    def test_reset_singleton_allows_rebuild(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reset_singleton_allows_rebuild(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """reset_singleton 后可重新构建。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -128,9 +118,7 @@ class TestSingleton:
 class TestEncryptDecrypt:
     """加解密往返。"""
 
-    def test_encrypt_decrypt_roundtrip(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_encrypt_decrypt_roundtrip(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """加密后解密还原明文。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -139,9 +127,7 @@ class TestEncryptDecrypt:
             encrypted = crypto.encrypt(plaintext)
             assert crypto.decrypt(encrypted) == plaintext
 
-    def test_encrypt_output_format(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_encrypt_output_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """加密输出格式为 v{version}:{nonce}:{ciphertext}。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -151,9 +137,7 @@ class TestEncryptDecrypt:
         assert len(parts) == 3
         assert parts[0] == "v0"
 
-    def test_encrypt_empty_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_encrypt_empty_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """加密空字符串抛 ValueError。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -161,9 +145,7 @@ class TestEncryptDecrypt:
         with pytest.raises(ValueError, match="Cannot encrypt empty"):
             crypto.encrypt("")
 
-    def test_encrypt_different_nonces(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_encrypt_different_nonces(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """同一明文两次加密产生不同密文（随机 nonce）。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -179,9 +161,7 @@ class TestEncryptDecrypt:
 class TestDecryptFailureNoFallback:
     """解密失败抛异常不回退明文。"""
 
-    def test_decrypt_tampered_ciphertext_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_decrypt_tampered_ciphertext_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """篡改密文后解密抛 ValueError，不回退明文。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -194,9 +174,7 @@ class TestDecryptFailureNoFallback:
         with pytest.raises(ValueError, match="Decryption failed"):
             crypto.decrypt(tampered)
 
-    def test_decrypt_invalid_format_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_decrypt_invalid_format_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """格式无效的输入抛 ValueError。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -204,9 +182,7 @@ class TestDecryptFailureNoFallback:
         with pytest.raises(ValueError, match="Invalid encrypted format"):
             crypto.decrypt("not-a-valid-format")
 
-    def test_decrypt_wrong_version_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_decrypt_wrong_version_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """未知 key version 抛 ValueError。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -216,9 +192,7 @@ class TestDecryptFailureNoFallback:
         with pytest.raises(ValueError, match="Unknown key version"):
             crypto.decrypt(fake)
 
-    def test_decrypt_wrong_key_raises(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_decrypt_wrong_key_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """用不同 key 加密的密文无法用当前 key 解密。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "test")
@@ -235,9 +209,7 @@ class TestDecryptFailureNoFallback:
 class TestKeyRotation:
     """旧版本 key 轮换解密。"""
 
-    def test_old_key_decrypt(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_old_key_decrypt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """旧版本 key 加密的密文可用当前实例解密。"""
         _clear_env(monkeypatch)
         # 设置当前 key 和旧 key（旧 key 必须 32 字节）
@@ -256,9 +228,7 @@ class TestKeyRotation:
         # 当前实例用旧 key 解密
         assert crypto.decrypt(encrypted) == "legacy-secret"
 
-    def test_current_key_encrypt_old_key_decrypt(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_current_key_encrypt_old_key_decrypt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """新 key 加密的密文无法用旧 key 解密。"""
         _clear_env(monkeypatch)
         old_key_bytes = b"a" * 32
@@ -297,6 +267,8 @@ class TestKeyValidation:
         """base64 解码后长度不对抛 ValueError。"""
         _clear_env(monkeypatch)
         monkeypatch.setenv("IRIP_ENV", "production")
-        monkeypatch.setenv("IRIP_MASTER_KEY", base64.b64encode(b"only-16-bytes!!!!").decode("ascii"))
+        monkeypatch.setenv(
+            "IRIP_MASTER_KEY", base64.b64encode(b"only-16-bytes!!!!").decode("ascii")
+        )
         with pytest.raises(ValueError, match="32 bytes"):
             EnvelopeCrypto.from_env()

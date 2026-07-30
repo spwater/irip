@@ -102,11 +102,8 @@ export function AppShell(): JSX.Element | null {
                 justifyContent: 'center',
                 padding: '12px 20px',
                 gap: 4,
-                borderBottom: '1px solid transparent',
-                backgroundImage: 'linear-gradient(to right, transparent 0%, var(--ocean-border-subtle) 100%)',
-                backgroundRepeat: 'no-repeat',
-                backgroundSize: '100% 1px',
-                backgroundPosition: 'bottom',
+                borderBottom: 'none',
+                backgroundImage: 'none',
               }}
             >
               {/* 英文行：IRIP (左) + Data Ocean (右)，底部对齐 */}
@@ -199,13 +196,8 @@ function DynamicHeader({
         background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)',
         backdropFilter: 'blur(6px)',
         padding: isHero ? '16px 24px' : '12px 24px',
-        borderBottom: '1px solid transparent',
-        backgroundImage: isHero
-          ? 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)'
-          : 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%), linear-gradient(to right, var(--ocean-border-subtle) 0%, transparent 100%)',
-        backgroundRepeat: isHero ? 'no-repeat' : 'no-repeat, no-repeat',
-        backgroundSize: isHero ? '100% 100%' : '100% 100%, 100% 1px',
-        backgroundPosition: isHero ? '0 0' : '0 0, bottom',
+        borderBottom: 'none',
+        backgroundImage: 'none',
         position: 'sticky',
         top: 0,
         zIndex: 100,

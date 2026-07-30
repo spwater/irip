@@ -154,7 +154,11 @@ def _parse_tool_type(manifest_yaml: str) -> str | None:
     """从 manifest YAML 提取 tool_type 参数的默认值。"""
     import re
 
-    match = re.search(r'tool_type:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["\']?(.*?)["\']?\s*$', manifest_yaml, re.MULTILINE)
+    match = re.search(
+        r'tool_type:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["\']?(.*?)["\']?\s*$',
+        manifest_yaml,
+        re.MULTILINE,
+    )
     return match.group(1) if match else None
 
 

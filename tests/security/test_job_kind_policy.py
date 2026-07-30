@@ -10,7 +10,7 @@
 使用 FastAPI TestClient + 依赖覆盖，不依赖真实数据库。
 """
 
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI, Request
@@ -18,11 +18,10 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
-from apps.api.routers.jobs import CreateJobRequest, JobResponse, jobs_router, get_job_service
+from apps.api.routers.jobs import get_job_service, jobs_router
 from packages.common.errors import AppError
 from packages.common.job_policy import JobKindPolicy
 from packages.jobs.entities import JobRef, JobStatus
-
 
 # ============================================================
 # 辅助：Mock JobService
@@ -35,9 +34,7 @@ class MockJobService:
     def __init__(self) -> None:
         self.accepted: list[tuple[str, dict, str]] = []
 
-    async def accept(
-        self, kind: str, payload: dict, idempotency_key: str
-    ) -> JobRef:
+    async def accept(self, kind: str, payload: dict, idempotency_key: str) -> JobRef:
         """记录调用并返回虚拟 JobRef。"""
         self.accepted.append((kind, payload, idempotency_key))
         return JobRef(
@@ -129,9 +126,7 @@ class TestNormalUserPrivilegedKindRejected:
         assert "must be submitted via dedicated API" in body["error"]["message"]
 
     @pytest.mark.parametrize("kind", ["backup", "restore", "audit_export"])
-    def test_normal_user_privileged_kind_not_accepted(
-        self, kind: str
-    ) -> None:
+    def test_normal_user_privileged_kind_not_accepted(self, kind: str) -> None:
         """特权 kind 被拒绝后，JobService.accept 不应被调用。"""
         user = _make_user(["lab_member"])
         service = MockJobService()
@@ -189,10 +184,17 @@ class TestUnknownKindRejected:
 class TestNormalUserGeneralKindAccepted:
     """普通用户提交通用 kind → 202 Accepted。"""
 
-    @pytest.mark.parametrize("kind", [
-        "flow_execute", "flow_resume", "ingestion",
-        "model_train", "model_predict", "model_publish",
-    ])
+    @pytest.mark.parametrize(
+        "kind",
+        [
+            "flow_execute",
+            "flow_resume",
+            "ingestion",
+            "model_train",
+            "model_predict",
+            "model_publish",
+        ],
+    )
     def test_normal_user_general_kind_202(self, kind: str) -> None:
         """普通用户（lab_member）提交通用 kind → 202 Accepted。"""
         user = _make_user(["lab_member"])
@@ -272,9 +274,7 @@ class TestAdminBackupViaDedicatedApi:
         for perm in get_role_permissions("platform_administrator"):
             admin_perms.add(perm)
 
-        policy = JobKindPolicy.validate(
-            "backup", admin_perms, via_general=False
-        )
+        policy = JobKindPolicy.validate("backup", admin_perms, via_general=False)
         assert policy.required_permission == "system:manage"
         assert policy.allow_general_submit is False
         assert policy.queue == "irip-ops"
@@ -283,37 +283,25 @@ class TestAdminBackupViaDedicatedApi:
         """admin 通过专用 API 提交 restore 策略校验通过。"""
         from packages.auth.permissions import get_role_permissions
 
-        admin_perms: set[str] = set(
-            get_role_permissions("platform_administrator")
-        )
-        policy = JobKindPolicy.validate(
-            "restore", admin_perms, via_general=False
-        )
+        admin_perms: set[str] = set(get_role_permissions("platform_administrator"))
+        policy = JobKindPolicy.validate("restore", admin_perms, via_general=False)
         assert policy.required_permission == "system:manage"
 
     def test_admin_audit_export_via_dedicated_succeeds(self) -> None:
         """admin 通过专用 API 提交 audit_export 策略校验通过。"""
         from packages.auth.permissions import get_role_permissions
 
-        admin_perms: set[str] = set(
-            get_role_permissions("platform_administrator")
-        )
-        policy = JobKindPolicy.validate(
-            "audit_export", admin_perms, via_general=False
-        )
+        admin_perms: set[str] = set(get_role_permissions("platform_administrator"))
+        policy = JobKindPolicy.validate("audit_export", admin_perms, via_general=False)
         assert policy.required_permission == "system:manage"
 
     def test_normal_user_backup_via_dedicated_rejected(self) -> None:
         """普通用户即使通过专用 API 也缺少 system:manage 权限。"""
         from packages.auth.permissions import get_role_permissions
 
-        member_perms: set[str] = set(
-            get_role_permissions("lab_member")
-        )
+        member_perms: set[str] = set(get_role_permissions("lab_member"))
         with pytest.raises(PermissionError, match="Permission denied"):
-            JobKindPolicy.validate(
-                "backup", member_perms, via_general=False
-            )
+            JobKindPolicy.validate("backup", member_perms, via_general=False)
 
 
 # ============================================================

@@ -227,9 +227,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
         """
         async with self._factory() as session:
-            equipment = await EquipmentRepository.select_by_id(
-                session, equipment_id, self._org_id
-            )
+            equipment = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
             if equipment is None:
                 raise AppError(
                     code="not_found",
@@ -286,9 +284,7 @@ class EquipmentService:
                 return updated
 
             # 影响 0 行：判断是不存在还是 lock_version 不匹配
-            existing = await EquipmentRepository.select_by_id(
-                session, equipment_id, self._org_id
-            )
+            existing = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
             if existing is None or existing.organization_id != self._org_id:
                 raise AppError(
                     code="not_found",
@@ -334,9 +330,7 @@ class EquipmentService:
             if updated is not None:
                 return updated
 
-            existing = await EquipmentRepository.select_by_id(
-                session, equipment_id, self._org_id
-            )
+            existing = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
             if existing is None or existing.organization_id != self._org_id:
                 raise AppError(
                     code="not_found",
@@ -361,9 +355,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
         """
         async with session_scope(self._factory) as session:
-            equipment = await EquipmentRepository.select_by_id(
-                session, equipment_id, self._org_id
-            )
+            equipment = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
             if equipment is None:
                 raise AppError(
                     code="not_found",

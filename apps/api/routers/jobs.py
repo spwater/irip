@@ -160,9 +160,7 @@ async def create_job(
     for role in current_user.roles:
         user_permissions.update(get_role_permissions(role))
     try:
-        JobKindPolicy.validate(
-            body.kind, user_permissions, via_general=True
-        )
+        JobKindPolicy.validate(body.kind, user_permissions, via_general=True)
     except ValueError as exc:
         raise AppError(
             code="unknown_job_kind",
@@ -381,9 +379,7 @@ async def retry_job(
     for role in current_user.roles:
         user_permissions.update(get_role_permissions(role))
     try:
-        JobKindPolicy.validate(
-            original.kind, user_permissions, via_general=True
-        )
+        JobKindPolicy.validate(original.kind, user_permissions, via_general=True)
     except ValueError as exc:
         raise AppError(
             code="unknown_job_kind",

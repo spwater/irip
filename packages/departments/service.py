@@ -221,9 +221,7 @@ class DepartmentService:
             AppError: code="not_found"，当实验室不存在时。
         """
         async with self._factory() as session:
-            dept = await DepartmentRepository.select_by_id(
-                session, department_id, self._org_id
-            )
+            dept = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
         if dept is None:
             raise AppError(
                 code="not_found",
@@ -277,9 +275,7 @@ class DepartmentService:
                 return updated
 
             # 影响 0 行：判断是不存在还是 lock_version 不匹配
-            existing = await DepartmentRepository.select_by_id(
-                session, department_id, self._org_id
-            )
+            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
@@ -325,9 +321,7 @@ class DepartmentService:
             if updated is not None:
                 return updated
 
-            existing = await DepartmentRepository.select_by_id(
-                session, department_id, self._org_id
-            )
+            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
@@ -357,9 +351,7 @@ class DepartmentService:
 
         async with session_scope(self._factory) as session:
             # 检查是否存在
-            existing = await DepartmentRepository.select_by_id(
-                session, department_id, self._org_id
-            )
+            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
@@ -396,9 +388,7 @@ class DepartmentService:
                 )
 
             # 执行删除
-            deleted = await DepartmentRepository.delete_by_id(
-                session, department_id, self._org_id
-            )
+            deleted = await DepartmentRepository.delete_by_id(session, department_id, self._org_id)
             if not deleted:
                 raise AppError(
                     code="not_found",

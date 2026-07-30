@@ -50,9 +50,7 @@ class MockArtifactService:
     def add_file(self, artifact_id: UUID, filename: str, data: bytes) -> None:
         self._store[artifact_id] = (filename, data)
 
-    async def open_stream(
-        self, artifact_id: UUID
-    ) -> tuple[str, int, "io.BytesIO"]:
+    async def open_stream(self, artifact_id: UUID) -> tuple[str, int, "io.BytesIO"]:
         if artifact_id not in self._store:
             raise AppError(
                 code="not_found",
@@ -116,7 +114,7 @@ class TestFileConnectorCSVPreview:
         """limit 参数截断预览行数。"""
         lines = [b"name,value\n"]
         for i in range(50):
-            lines.append(f"item{i},{i}\n".encode("utf-8"))
+            lines.append(f"item{i},{i}\n".encode())
         data = b"".join(lines)
         mock, source = _make_mock_with_file("csv", data)
 
@@ -195,9 +193,7 @@ class TestFileConnectorJSON:
 
     async def test_preview_json(self):
         """预览 JSON 对象数组。"""
-        data = json.dumps([{"x": 1, "y": "a"}, {"x": 2, "y": "b"}]).encode(
-            "utf-8"
-        )
+        data = json.dumps([{"x": 1, "y": "a"}, {"x": 2, "y": "b"}]).encode("utf-8")
         mock, source = _make_mock_with_file("json", data)
 
         connector = FileConnector(artifact_service=mock)
@@ -325,9 +321,7 @@ class TestFileConnectorErrors:
         """缺少 format 抛 validation_failed。"""
         mock = MockArtifactService()
         connector = FileConnector(artifact_service=mock)
-        source = ConnectorSource(
-            kind="file", config={"artifact_id": str(_FAKE_ARTIFACT_ID)}
-        )
+        source = ConnectorSource(kind="file", config={"artifact_id": str(_FAKE_ARTIFACT_ID)})
         with pytest.raises(AppError, match="缺少 format"):
             await connector.preview(source, limit=10)
 
@@ -418,7 +412,7 @@ class TestFileConnectorAsyncBehavior:
         """read 执行期间事件循环不被阻塞。"""
         lines = [b"a,b\n"]
         for i in range(100):
-            lines.append(f"{i},{i * 2}\n".encode("utf-8"))
+            lines.append(f"{i},{i * 2}\n".encode())
         data = b"".join(lines)
         mock, source = _make_mock_with_file("csv", data)
 

@@ -1036,10 +1036,16 @@ async def persist_run_as_fact(
                     # 从 nodes_json 获取 component_name，查 equipment_name
                     nodes = fv.nodes_json or []
                     if isinstance(nodes, list) and len(nodes) > 0:
-                        comp_name = (nodes[0] or {}).get("component_name") if isinstance(nodes[0], dict) else None
+                        comp_name = (
+                            (nodes[0] or {}).get("component_name")
+                            if isinstance(nodes[0], dict)
+                            else None
+                        )
                         if comp_name:
-                            from packages.components.registry import Component as _C, ComponentVersion as _CV
+                            from packages.components.registry import Component as _C
+                            from packages.components.registry import ComponentVersion as _CV
                             from packages.equipment.entities import Equipment as _EQ
+
                             eq_stmt = (
                                 sa.select(_EQ.display_name)
                                 .select_from(_C)
@@ -1060,6 +1066,7 @@ async def persist_run_as_fact(
                             department_name = dept_record.display_name
     except Exception as _e:
         import logging
+
         logging.getLogger(__name__).warning("fact ingest snapshot failed: %s", _e)
 
     # 7. 创建事实

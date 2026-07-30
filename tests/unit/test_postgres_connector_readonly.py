@@ -17,7 +17,6 @@ import pytest
 from packages.common.errors import AppError
 from packages.connectors.postgres_connector import PostgresConnector
 
-
 # ---------------------------------------------------------------------------
 # _validate_sql：拒绝非 SELECT 语句
 # ---------------------------------------------------------------------------
@@ -94,9 +93,7 @@ class TestValidateSqlRejectsMultipleStatements:
     def test_rejects_three_statements(self) -> None:
         """三条语句拼接被拒绝。"""
         with pytest.raises(AppError):
-            PostgresConnector._validate_sql(
-                "SELECT 1; SELECT 2; DROP TABLE users"
-            )
+            PostgresConnector._validate_sql("SELECT 1; SELECT 2; DROP TABLE users")
 
 
 # ---------------------------------------------------------------------------
@@ -118,9 +115,7 @@ class TestValidateSqlAcceptsSelect:
 
     def test_accepts_select_with_where(self) -> None:
         """带 WHERE 的 SELECT 通过校验。"""
-        PostgresConnector._validate_sql(
-            "SELECT id, name FROM users WHERE active = true"
-        )
+        PostgresConnector._validate_sql("SELECT id, name FROM users WHERE active = true")
 
     def test_accepts_select_with_join(self) -> None:
         """带 JOIN 的 SELECT 通过校验。"""
@@ -162,9 +157,7 @@ class TestValidateSqlPgSleep:
     def test_pg_sleep_with_extra_drop_rejected(self) -> None:
         """``SELECT pg_sleep(10); DROP TABLE x`` 因多语句被拒绝。"""
         with pytest.raises(AppError):
-            PostgresConnector._validate_sql(
-                "SELECT pg_sleep(10); DROP TABLE users"
-            )
+            PostgresConnector._validate_sql("SELECT pg_sleep(10); DROP TABLE users")
 
 
 # ---------------------------------------------------------------------------

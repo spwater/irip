@@ -23,9 +23,7 @@ def _load_migration_module(revision: str):
     files = list(MIGRATIONS_DIR.glob(f"{revision}_*.py"))
     assert files, f"找不到 revision={revision} 的迁移文件"
     assert len(files) == 1, f"revision={revision} 匹配到多个文件: {files}"
-    spec = importlib.util.spec_from_file_location(
-        f"migration_{revision}", files[0]
-    )
+    spec = importlib.util.spec_from_file_location(f"migration_{revision}", files[0])
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -216,7 +214,10 @@ class TestMigration0049Triggers:
     def test_drops_use_if_exists(self) -> None:
         """0049 的 DROP TRIGGER 使用 IF EXISTS（幂等）。"""
         content = self._read_file_text()
-        assert "DROP TRIGGER IF EXISTS" in content.upper() or "drop trigger if exists" in content.lower()
+        assert (
+            "DROP TRIGGER IF EXISTS" in content.upper()
+            or "drop trigger if exists" in content.lower()
+        )
 
     def test_0049_module_loads(self) -> None:
         """0049 迁移模块可正常加载。"""

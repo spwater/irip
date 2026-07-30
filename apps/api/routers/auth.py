@@ -59,7 +59,9 @@ class LoginRequest(BaseModel):
     """登录请求体（H-07: 密码/邮箱长度上限）。"""
 
     email: str = Field(..., max_length=254, description="用户邮箱（RFC 5321 上限 254）")
-    password: str = Field(..., min_length=1, max_length=128, description="用户密码（上限 128 防 DoS）")
+    password: str = Field(
+        ..., min_length=1, max_length=128, description="用户密码（上限 128 防 DoS）"
+    )
 
 
 class TokenResponse(BaseModel):

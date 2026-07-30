@@ -13,20 +13,18 @@ get_current_user 中的 session_factory 通过 AsyncMock 替身。
 
 from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
-import jwt
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
+from apps.api.dependencies.auth import CurrentUser, get_current_user
 from packages.auth.tokens import (
     create_access_token,
     decode_access_token,
 )
 from packages.common.clock import FixedClock
 from packages.common.errors import AppError
-from apps.api.dependencies.auth import CurrentUser, get_current_user
-
 
 # ---- 测试常量 ----
 
@@ -284,8 +282,6 @@ class TestEdgeCases:
 
     async def test_expired_token_rejected(self) -> None:
         """过期 token 抛 token_expired。"""
-        from datetime import timedelta
-        from packages.auth.tokens import ACCESS_TOKEN_TTL_SECONDS
 
         past = datetime(2020, 1, 1, tzinfo=UTC)
         past_clock = FixedClock(past)

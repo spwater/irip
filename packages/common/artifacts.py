@@ -524,22 +524,20 @@ class ArtifactService:
         # H-04: complete 前 HEAD 验证实际大小（超限直接删除并拒绝）
         try:
             obj_info = await asyncio.to_thread(self._s3.head_object_info, temp_key)
-        except Exception:
+        except Exception as exc:
             raise AppError(
                 code="not_found",
                 message=f"上传对象不存在: {temp_key}",
                 retryable=False,
                 fields={"temp_key": temp_key},
-            )
+            ) from exc
 
         if obj_info.size > MAX_UPLOAD_SIZE_BYTES:
             # 超限对象清理后拒绝
             await asyncio.to_thread(self._s3.delete_object, temp_key)
             raise AppError(
                 code="file_too_large",
-                message=(
-                    f"文件大小 {obj_info.size} 超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节"
-                ),
+                message=(f"文件大小 {obj_info.size} 超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节"),
                 retryable=False,
                 fields={
                     "actual_size": obj_info.size,

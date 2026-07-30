@@ -24,9 +24,7 @@ from packages.common.errors import AppError
 #: 这是一个合法的 Argon2id 哈希字符串，verify_password 对其校验总是失败，
 #: 但消耗的时间与真实用户校验相同。
 _DUMMY_HASH: str = (
-    "$argon2id$v=19$m=19456,t=2,p=1$"
-    "c2FsdHZlcmlmaWVkYWNjb3VudA$"
-    "rW8xK5nLnF0Y3J5cHRvaW5mbw"
+    "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHZlcmlmaWVkYWNjb3VudA$rW8xK5nLnF0Y3J5cHRvaW5mbw"
 )
 
 
