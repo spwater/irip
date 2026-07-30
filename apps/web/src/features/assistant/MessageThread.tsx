@@ -662,7 +662,7 @@ export function MessageThread({
             </Avatar>
             <div
               style={{
-                maxWidth: 'calc(100% - 48px)',
+                width: 'calc(100% - 48px)',
                 padding: '12px 16px',
                 borderRadius: 12,
                 background: isUser ? 'rgba(22, 134, 174, 0.10)' : 'rgba(20, 118, 94, 0.06)',
