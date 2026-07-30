@@ -15,14 +15,21 @@ import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 const { Text, Paragraph } = Typography;
 
 // KaTeX style for proper rendering within react-markdown
-// 关键：overflow 不能放在 .katex-display 上，否则 BFC 破坏 strut 垂直定位
-// 横向滚动放在内层 .katex-html，外层保持 overflow: visible
+// 关键修复：
+// 1. overflow 不能放在 .katex-display 上（BFC 破坏 strut 垂直定位）
+// 2. 全局 body line-height: 1.7 会继承到 KaTeX 内部 .vlist，导致分式结构塌陷
+//    → 必须在 .katex 及其子元素上强制 line-height: normal
+// 3. 全局 box-sizing: border-box 影响 KaTeX 尺寸计算
+//    → 强制 .katex * box-sizing: content-box
 const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; }
-.ai-markdown-body .katex-display { margin: 8px 0; padding: 4px 0; overflow: visible !important; }
-.ai-markdown-body .katex-display > .katex { overflow-x: auto; overflow-y: hidden; }
+.ai-markdown-body .katex { font-size: 1.05em; line-height: normal; }
+.ai-markdown-body .katex-display { margin: 0.6em 0; padding: 4px 0; overflow: visible !important; line-height: normal; }
+.ai-markdown-body .katex-display > .katex { overflow-x: auto; overflow-y: hidden; line-height: normal; }
 .ai-markdown-body .katex-display > .katex::-webkit-scrollbar { height: 4px; }
-.ai-markdown-body .katex * { box-sizing: content-box !important; }
+.ai-markdown-body .katex * { box-sizing: content-box !important; line-height: normal; }
+.ai-markdown-body .katex .vlist { line-height: normal; }
+.ai-markdown-body .katex .vlist > span { line-height: normal; }
+.ai-markdown-body .katex .frac-line { line-height: normal; }
 `;
 
 /**
