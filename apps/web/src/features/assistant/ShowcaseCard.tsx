@@ -38,16 +38,9 @@ import 'katex/dist/katex.min.css';
 
 const { Text } = Typography;
 
-// KaTeX 隔离样式：防止全局 line-height:1.7 和 box-sizing:border-box 污染 KaTeX 内部排版
+// KaTeX 样式：line-height/box-sizing 隔离已移至 global.css 全局层面
 const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; line-height: 1 !important; }
-.ai-markdown-body .katex-display { margin: 0.6em 0; padding: 4px 0; overflow: visible !important; line-height: 1 !important; }
-.ai-markdown-body .katex-display > .katex { display: block; line-height: 1 !important; }
-.ai-markdown-body .katex * { box-sizing: content-box !important; line-height: 1 !important; }
-.ai-markdown-body .katex .vlist { line-height: 1 !important; }
-.ai-markdown-body .katex .vlist > span { line-height: 1 !important; }
-.ai-markdown-body .katex .frac-line { line-height: 1 !important; }
-.ai-markdown-body .katex .strut { line-height: 1 !important; }
+.ai-markdown-body .katex { font-size: 1.05em; }
 `;
 
 /** 块类型 → 图标映射 */

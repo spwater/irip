@@ -239,3 +239,31 @@ canvas {
 button {
   font-family: inherit;
 }
+
+/* ============================================================
+ * KaTeX 公式渲染隔离
+ *
+ * 全局 body { line-height: 1.7 } 会被所有子元素继承，
+ * 而 KaTeX 的 .vlist 依赖精确的行高来定位分子/分母/分数线，
+ * line-height: 1.7 导致分式结构塌陷。
+ *
+ * 同样，全局 * { box-sizing: border-box } 影响 KaTeX 尺寸计算。
+ *
+ * 这里在全局层面做隔离，比组件内 <style> 更可靠（无优先级竞争）。
+ * ========================================================== */
+.katex,
+.katex * {
+  line-height: 1 !important;
+  box-sizing: content-box !important;
+}
+
+.katex-display {
+  margin: 0.6em 0;
+  overflow: visible !important;
+  line-height: 1 !important;
+}
+
+.katex-display > .katex {
+  display: block;
+  line-height: 1 !important;
+}

@@ -14,21 +14,10 @@ import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 
 const { Text, Paragraph } = Typography;
 
-// KaTeX style for proper rendering within react-markdown
-// 关键修复：
-// 1. 全局 body line-height: 1.7 继承到 KaTeX .vlist 导致分式塌陷 → 强制 line-height: 1
-// 2. CSS 规范：overflow-x:auto 时 overflow-y:visible 会被强制变 auto → 不能在 KaTeX 元素上设 overflow
-// 3. 全局 box-sizing: border-box 影响 KaTeX 尺寸 → 强制 content-box
-// 4. 横向滚动不放在 KaTeX 元素上，放在外层 wrapper 上
+// KaTeX 样式：line-height/box-sizing 隔离已移至 global.css 全局层面
+// 这里只保留 font-size 覆盖
 const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; line-height: 1 !important; }
-.ai-markdown-body .katex-display { margin: 0.6em 0; padding: 4px 0; overflow: visible !important; line-height: 1 !important; }
-.ai-markdown-body .katex-display > .katex { display: block; line-height: 1 !important; }
-.ai-markdown-body .katex * { box-sizing: content-box !important; line-height: 1 !important; }
-.ai-markdown-body .katex .vlist { line-height: 1 !important; }
-.ai-markdown-body .katex .vlist > span { line-height: 1 !important; }
-.ai-markdown-body .katex .frac-line { line-height: 1 !important; }
-.ai-markdown-body .katex .strut { line-height: 1 !important; }
+.ai-markdown-body .katex { font-size: 1.05em; }
 `;
 
 /**
