@@ -300,6 +300,9 @@ class TestNamespaceConfinement:
         assert key.startswith("uploads/")
         assert ".." not in key
         assert "\\" not in key
-        # UUID 部分是合法 UUID 格式
-        uuid_part = key[len("uploads/") :]
-        assert len(uuid_part) == 36  # UUID 字符串长度
+        # H-04: object_key 格式为 uploads/{user_prefix}/{artifact_id}
+        # user_prefix 是 user_id 前 8 字符，artifact_id 是 UUID
+        parts = key[len("uploads/"):].split("/")
+        assert len(parts) == 2  # user_prefix + artifact_id
+        assert len(parts[0]) == 8  # user_prefix 前 8 字符
+        assert len(parts[1]) == 36  # UUID 字符串长度
