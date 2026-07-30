@@ -7,7 +7,7 @@ import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
 import { dataOceanTheme } from '@/theme/themeConfig';
 import { registerQueryClient } from '@/features/auth/sessionState';
-// KaTeX CSS 通过 index.html <link> 引入，不再在此 import（避免 Vite CSS 模块处理中 url() 字体路径问题）
+import 'katex/dist/katex.min.css';
 // Data Ocean 全局样式：基础 / 极地雾蓝空间 / 动效降级
 import '@/styles/global.css';
 import '@/styles/ocean.css';
