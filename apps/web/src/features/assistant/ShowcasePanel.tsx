@@ -323,6 +323,7 @@ export function ShowcasePanel({
         ) : (
           <ShowcaseSortableList
             items={filteredItems}
+            allItems={allItems}
             conversationId={conversationId}
             onLocate={onLocateMessage}
             onDelete={(itemId) => deleteMutation.mutate(itemId)}

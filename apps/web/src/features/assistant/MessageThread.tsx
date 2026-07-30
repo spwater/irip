@@ -268,12 +268,18 @@ function BlockifiedMarkdown({
   blockCounterRef.current = 0;
   const getNextIndex = (): number => blockCounterRef.current++;
 
-  // 预处理：从原始 Markdown 提取每个标题对应的完整 section（标题 + 正文直到下一个同级或更高级标题）
-  // 用于 contentSnapshot，使橱窗卡片展开时能看到完整内容而非仅标题
-  const headingSections = useMemo(() => {
+  // 预处理：从原始 Markdown 提取每个标题对应的完整 section + 表格 Markdown 原文
+  // headingSections: 标题+正文 section（用于 conclusion 块 contentSnapshot）
+  // tableSnapshots: Markdown 表格原文（用于 table 块 contentSnapshot，替代 extractTextFromNode）
+  const { headingSections, tableSnapshots } = useMemo(() => {
     const sections: Record<string, string> = {};
+    const tables: string[] = [];
     const lines = content.split('\n');
     let i = 0;
+    let tableIdx = 0;
+
+    // 先提取标题 sections
+    i = 0;
     while (i < lines.length) {
       const line = lines[i];
       const h2Match = line.match(/^##\s+(.+)/);
@@ -283,20 +289,16 @@ function BlockifiedMarkdown({
         const level = h2Match ? 2 : 3;
         const sectionLines: string[] = [line];
         i++;
-        // 收集直到下一个同级或更高级标题的正文
         while (i < lines.length) {
           const nextLine = lines[i];
           const nextH2 = nextLine.match(/^##\s+/);
           const nextH3 = nextLine.match(/^###\s+/);
-          // h2 结束条件：遇到下一个 ## 或 ###
-          // h3 结束条件：遇到下一个 ###（## 也终止，因为 ## 是更高级别）
           if ((level === 2 && (nextH2 || nextH3)) || (level === 3 && nextH3)) {
             break;
           }
           sectionLines.push(nextLine);
           i++;
         }
-        // 用 headingText 做 key（去重：取第一个匹配的）
         if (!(headingText in sections)) {
           sections[headingText] = sectionLines.join('\n').trim();
         }
@@ -304,8 +306,50 @@ function BlockifiedMarkdown({
         i++;
       }
     }
-    return sections;
+
+    // 提取表格 Markdown 原文：GFM 表格是连续的含 | 行，前面可能有空行
+    i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // 表格行特征：包含 | 且不是标题行（排除 ### 样品: 模式）
+      if (line.includes('|') && !line.match(/^#{1,3}\s/)) {
+        // 向前检查是否是分隔行（---|---）
+        const tableLines: string[] = [];
+        // 从当前行向上找表格起始（含 | 的连续行）
+        let j = i;
+        while (j < lines.length && lines[j].includes('|') && !lines[j].match(/^#{1,3}\s/)) {
+          tableLines.push(lines[j]);
+          j++;
+        }
+        // 验证是否是真正的表格（至少 2 行且第二行含 ---）
+        if (tableLines.length >= 2 && tableLines[1].includes('---')) {
+          tables.push(tableLines.join('\n'));
+          tableIdx++;
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+
+    return { headingSections: sections, tableSnapshots: tables };
   }, [content]);
+
+  // 预处理：提取 $$...$$ display 公式的 LaTeX 原文（用于 formula 块 contentSnapshot）
+  const formulaSnapshots = useMemo(() => {
+    const formulas: string[] = [];
+    // 匹配 $$...$$ 块（非贪婪，跨行允许）
+    const regex = /\$\$([\s\S]*?)\$\$/g;
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(content)) !== null) {
+      formulas.push(`$$${m[1].trim()}$$`);
+    }
+    return formulas;
+  }, [content]);
+
+  // 公式块计数器（独立于 blockCounter，因为 div 无法用 getNextIndex 按序号对应）
+  const formulaCounterRef = useRef(0);
+  formulaCounterRef.current = 0;
 
   return (
     <ReactMarkdown
@@ -375,7 +419,8 @@ function BlockifiedMarkdown({
         },
         table: ({ children }: { children?: ReactNode }) => {
           const idx = getNextIndex();
-          const textSnapshot = extractTextFromNode(children);
+          // 使用预提取的 Markdown 表格原文作为 contentSnapshot（而非纯文本）
+          const tableSnapshot = tableSnapshots[idx] ?? extractTextFromNode(children);
           return (
             <BlockWrapper
               messageId={messageId}
@@ -383,7 +428,7 @@ function BlockifiedMarkdown({
               blockType="table"
               conversationId={conversationId}
               systemContext={systemContext}
-              contentSnapshot={textSnapshot}
+              contentSnapshot={tableSnapshot}
             >
               <div style={{ overflowX: 'auto', margin: '8px 0' }}>
                 <table>{children}</table>
@@ -424,6 +469,34 @@ function BlockifiedMarkdown({
               <h3>{children}</h3>
             </BlockWrapper>
           );
+        },
+        div: ({
+          className,
+          children,
+        }: {
+          className?: string;
+          children?: ReactNode;
+        }) => {
+          // KaTeX display 公式：rehype-katex 渲染为 div.katex-display
+          if (className && className.includes('katex-display')) {
+            const idx = getNextIndex();
+            const formulaIdx = formulaCounterRef.current++;
+            const formulaSnapshot = formulaSnapshots[formulaIdx] ?? extractTextFromNode(children);
+            return (
+              <BlockWrapper
+                messageId={messageId}
+                blockIndex={idx}
+                blockType="formula"
+                conversationId={conversationId}
+                systemContext={systemContext}
+                contentSnapshot={formulaSnapshot}
+              >
+                <div className={className}>{children}</div>
+              </BlockWrapper>
+            );
+          }
+          // 其他 div 原样渲染
+          return <div className={className}>{children}</div>;
         },
       }}
     >

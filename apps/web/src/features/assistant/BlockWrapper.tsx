@@ -30,7 +30,7 @@ export const BLOCK_TYPE_LABELS: Record<ShowcaseBlockType, string> = {
 
 /**
  * 从 system_context 解析数据来源信息。
- * 提取 `### 样品: XXX` 模式的样品标签，以及任务分组信息。
+ * 提取样品标签（### 样品: XXX）、任务名称、检测字段等。
  */
 export function parseDataSource(
   systemContext: string | null | undefined,
@@ -56,6 +56,24 @@ export function parseDataSource(
       ds.sample_labels.length === 1
         ? ds.sample_labels[0]
         : `${ds.sample_labels[0]}-${ds.sample_labels[ds.sample_labels.length - 1]}`;
+  }
+
+  // 提取任务名称：system_context 中 JSON 块的 metadata.task_name 或顶层提示
+  // 格式示例: "以下是实验数据，请基于此数据回答用户的问题："
+  // JSON 内可能有 metadata.task_name 字段
+  const taskNameMatch = systemContext.match(/"task_name"\s*:\s*"([^"]+)"/);
+  if (taskNameMatch) {
+    ds.task_name = taskNameMatch[1].trim();
+  }
+
+  // 提取检测字段/指标：从 JSON metadata 中查找 fields / properties / column_names
+  const fieldsMatch = systemContext.match(/"(?:fields|properties|column_names|indicators)"\s*:\s*\[([^\]]*)\]/);
+  if (fieldsMatch) {
+    const inner = fieldsMatch[1];
+    const fieldStrings = inner.match(/"([^"]+)"/g) || [];
+    ds.fields = fieldStrings
+      .map((s) => s.replace(/"/g, '').trim())
+      .filter(Boolean);
   }
 
   return ds;

@@ -95,13 +95,16 @@ function SortableShowcaseCard({
 
 export function ShowcaseSortableList({
   items,
+  allItems,
   conversationId,
   onLocate,
   onDelete,
   onRename,
 }: {
-  /** 橱窗卡片列表（已按 sort_order 排序） */
+  /** 橱窗卡片列表（已筛选、已按 sort_order 排序） */
   items: ShowcaseItem[];
+  /** 全量卡片列表（未筛选，用于排序持久化时包含未筛选项） */
+  allItems: ShowcaseItem[];
   /** 当前对话 ID */
   conversationId: string;
   /** 定位原文回调 */
@@ -126,27 +129,34 @@ export function ShowcaseSortableList({
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    // 计算新顺序
+    // 在筛选后的列表中找到拖拽位置
     const oldIndex = items.findIndex((i) => i.id === active.id);
     const newIndex = items.findIndex((i) => i.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    // 构建新顺序的 ID 列表
-    const newItems = [...items];
-    const [moved] = newItems.splice(oldIndex, 1);
-    newItems.splice(newIndex, 0, moved);
-    const newOrderIds = newItems.map((i) => i.id);
+    // 在全量列表中计算最终顺序：将 active 移动到 over 的位置
+    // 策略：以 allItems 为基准，把 active 移到 over 之前/之后的位置
+    const fullList = [...allItems];
+    const activeIdx = fullList.findIndex((i) => i.id === active.id);
+    const overIdx = fullList.findIndex((i) => i.id === over.id);
+    if (activeIdx === -1 || overIdx === -1) return;
 
-    // 乐观更新：先更新缓存
+    const [moved] = fullList.splice(activeIdx, 1);
+    // 找到 over 在移除后的新位置
+    const overIdxAfterRemove = fullList.findIndex((i) => i.id === over.id);
+    fullList.splice(overIdxAfterRemove, 0, moved);
+    const newOrderIds = fullList.map((i) => i.id);
+
+    // 乐观更新：更新全量缓存中的 sort_order
     const queryKey = ['showcase-items', conversationId];
     const previousData = queryClient.getQueryData<ShowcaseItem[]>(queryKey);
     queryClient.setQueryData<ShowcaseItem[]>(queryKey, (old) => {
       if (!old) return old;
-      const updated = [...old];
-      const [m] = updated.splice(oldIndex, 1);
-      updated.splice(newIndex, 0, m);
-      // 重新分配 sort_order
-      return updated.map((item, idx) => ({ ...item, sort_order: idx }));
+      // 用 fullList 的新顺序重新分配 sort_order
+      return fullList.map((item, idx) => ({
+        ...item,
+        sort_order: idx,
+      }));
     });
 
     try {
