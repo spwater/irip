@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import text as sa_text
 
 from packages.ai.tool_repository import AIToolRow, ToolRepository
 from packages.ai.tools import ALL_TOOLS, ToolRegistry
@@ -386,37 +387,260 @@ class TestOptimisticLock:
     """
 
     @pytest.mark.integration
-    async def test_update_with_correct_lock_version_succeeds(self) -> None:
+    async def test_update_with_correct_lock_version_succeeds(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """update 传入正确的 lock_version 时成功，lock_version 自增。"""
-        # 需 DB 环境：创建工具 → update(lock_version=0) → 验证 lock_version=1
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            row = await ToolRepository.create(
+                session,
+                {
+                    "name": f"test-olv-{uuid4().hex[:8]}",
+                    "display_name": "Test",
+                    "description": "test tool",
+                    "required_permission": "standard:read",
+                    "parameters_schema": {},
+                },
+                updated_by=uuid4(),
+            )
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                updated = await ToolRepository.update(
+                    session,
+                    row.name,
+                    {
+                        "display_name": "Updated",
+                        "description": "updated desc",
+                        "required_permission": "standard:read",
+                        "parameters_schema": {},
+                    },
+                    lock_version=row.lock_version,
+                    updated_by=uuid4(),
+                )
+                assert updated.lock_version == row.lock_version + 1
+                assert updated.display_name == "Updated"
+                await session.commit()
+        finally:
+            async with session_scope(async_session_factory) as session:
+                existing = await ToolRepository.get_by_name(session, row.name)
+                if existing:
+                    await session.execute(
+                        sa_text("DELETE FROM ai_tool WHERE name = :n"),
+                        {"n": row.name},
+                    )
+                    await session.commit()
 
     @pytest.mark.integration
-    async def test_update_with_stale_lock_version_raises_conflict(self) -> None:
+    async def test_update_with_stale_lock_version_raises_conflict(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """update 传入过期的 lock_version 时抛 conflict（409）。"""
-        # 需 DB 环境：创建工具 → update(lock_version=0) → update(lock_version=0)
-        # 第二次应抛 AppError(code="conflict")
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            row = await ToolRepository.create(
+                session,
+                {
+                    "name": f"test-olv-stale-{uuid4().hex[:8]}",
+                    "display_name": "Test",
+                    "description": "test tool",
+                    "required_permission": "standard:read",
+                    "parameters_schema": {},
+                },
+                updated_by=uuid4(),
+            )
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                await ToolRepository.update(
+                    session,
+                    row.name,
+                    {
+                        "display_name": "V1",
+                        "description": "v1",
+                        "required_permission": "standard:read",
+                        "parameters_schema": {},
+                    },
+                    lock_version=row.lock_version,
+                    updated_by=uuid4(),
+                )
+                await session.commit()
+            async with session_scope(async_session_factory) as session:
+                with pytest.raises(AppError) as exc_info:
+                    await ToolRepository.update(
+                        session,
+                        row.name,
+                        {
+                            "display_name": "V2",
+                            "description": "v2",
+                            "required_permission": "standard:read",
+                            "parameters_schema": {},
+                        },
+                        lock_version=row.lock_version,
+                        updated_by=uuid4(),
+                    )
+                assert exc_info.value.code == "conflict"
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(
+                    sa_text("DELETE FROM ai_tool WHERE name = :n"),
+                    {"n": row.name},
+                )
+                await session.commit()
 
     @pytest.mark.integration
-    async def test_set_enabled_with_stale_lock_version_raises_conflict(self) -> None:
+    async def test_set_enabled_with_stale_lock_version_raises_conflict(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """set_enabled 传入过期的 lock_version 时抛 conflict（409）。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            row = await ToolRepository.create(
+                session,
+                {
+                    "name": f"test-olv-set-{uuid4().hex[:8]}",
+                    "display_name": "Test",
+                    "description": "test tool",
+                    "required_permission": "standard:read",
+                    "parameters_schema": {},
+                },
+                updated_by=uuid4(),
+            )
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                await ToolRepository.set_enabled(
+                    session,
+                    row.name,
+                    enabled=False,
+                    lock_version=row.lock_version,
+                    updated_by=uuid4(),
+                )
+                await session.commit()
+            async with session_scope(async_session_factory) as session:
+                with pytest.raises(AppError) as exc_info:
+                    await ToolRepository.set_enabled(
+                        session,
+                        row.name,
+                        enabled=True,
+                        lock_version=row.lock_version,
+                        updated_by=uuid4(),
+                    )
+                assert exc_info.value.code == "conflict"
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(
+                    sa_text("DELETE FROM ai_tool WHERE name = :n"),
+                    {"n": row.name},
+                )
+                await session.commit()
 
     @pytest.mark.integration
-    async def test_update_nonexistent_tool_raises_not_found(self) -> None:
+    async def test_update_nonexistent_tool_raises_not_found(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """update 不存在的工具抛 not_found（404）。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            with pytest.raises(AppError) as exc_info:
+                await ToolRepository.update(
+                    session,
+                    f"nonexistent-{uuid4().hex[:8]}",
+                    {
+                        "display_name": "X",
+                        "description": "x",
+                        "required_permission": "standard:read",
+                        "parameters_schema": {},
+                    },
+                    lock_version=0,
+                    updated_by=uuid4(),
+                )
+            assert exc_info.value.code == "not_found"
 
     @pytest.mark.integration
-    async def test_set_enabled_nonexistent_tool_raises_not_found(self) -> None:
+    async def test_set_enabled_nonexistent_tool_raises_not_found(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """set_enabled 不存在的工具抛 not_found（404）。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            with pytest.raises(AppError) as exc_info:
+                await ToolRepository.set_enabled(
+                    session,
+                    f"nonexistent-{uuid4().hex[:8]}",
+                    enabled=False,
+                    lock_version=0,
+                    updated_by=uuid4(),
+                )
+            assert exc_info.value.code == "not_found"
 
     @pytest.mark.integration
-    async def test_create_duplicate_name_raises_conflict(self) -> None:
+    async def test_create_duplicate_name_raises_conflict(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """create 重复 name 抛 conflict（409）。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.common.database import session_scope
+
+        name = f"test-dup-{uuid4().hex[:8]}"
+        async with session_scope(async_session_factory) as session:
+            await ToolRepository.create(
+                session,
+                {
+                    "name": name,
+                    "display_name": "First",
+                    "description": "first",
+                    "required_permission": "standard:read",
+                    "parameters_schema": {},
+                },
+                updated_by=uuid4(),
+            )
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                with pytest.raises(AppError) as exc_info:
+                    await ToolRepository.create(
+                        session,
+                        {
+                            "name": name,
+                            "display_name": "Second",
+                            "description": "second",
+                            "required_permission": "standard:read",
+                            "parameters_schema": {},
+                        },
+                        updated_by=uuid4(),
+                    )
+                assert exc_info.value.code == "conflict"
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(
+                    sa_text("DELETE FROM ai_tool WHERE name = :n"),
+                    {"n": name},
+                )
+                await session.commit()
 
 
 # ============================================================
@@ -431,16 +655,90 @@ class TestSeedToolsIfEmpty:
     """
 
     @pytest.mark.integration
-    async def test_seed_writes_14_tools_on_empty_table(self) -> None:
+    async def test_seed_writes_14_tools_on_empty_table(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """表空时写入 14 条种子数据（12 AI + 2 插件）。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            await session.execute(sa_text("DELETE FROM ai_tool"))
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                count = await seed_tools_if_empty(session)
+                assert count == len(ALL_TOOLS)
+                all_rows = await ToolRepository.list_all(session)
+                assert len(all_rows) == len(ALL_TOOLS)
+                for row in all_rows:
+                    assert row.enabled is True
+                    assert row.lock_version == 0
+                await session.commit()
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(sa_text("DELETE FROM ai_tool"))
+                await session.commit()
 
     @pytest.mark.integration
-    async def test_seed_skips_when_table_not_empty(self) -> None:
+    async def test_seed_skips_when_table_not_empty(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """表非空时不写入，返回 0。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from uuid import uuid4
+
+        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            await session.execute(sa_text("DELETE FROM ai_tool"))
+            await session.commit()
+        async with session_scope(async_session_factory) as session:
+            await ToolRepository.create(
+                session,
+                {
+                    "name": f"pre-existing-{uuid4().hex[:8]}",
+                    "display_name": "Pre",
+                    "description": "pre-existing",
+                    "required_permission": "standard:read",
+                    "parameters_schema": {},
+                },
+                updated_by=uuid4(),
+            )
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                count = await seed_tools_if_empty(session)
+                assert count == 0
+                await session.commit()
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(sa_text("DELETE FROM ai_tool"))
+                await session.commit()
 
     @pytest.mark.integration
-    async def test_seed_tools_enabled_and_lock_version_zero(self) -> None:
+    async def test_seed_tools_enabled_and_lock_version_zero(
+        self,
+        async_session_factory: Any,
+    ) -> None:
         """种子数据 enabled=True, lock_version=0。"""
-        pytest.skip("需要 PostgreSQL 数据库环境")
+        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.common.database import session_scope
+
+        async with session_scope(async_session_factory) as session:
+            await session.execute(sa_text("DELETE FROM ai_tool"))
+            await session.commit()
+        try:
+            async with session_scope(async_session_factory) as session:
+                await seed_tools_if_empty(session)
+                all_rows = await ToolRepository.list_all(session)
+                for row in all_rows:
+                    assert row.enabled is True
+                    assert row.lock_version == 0
+                await session.commit()
+        finally:
+            async with session_scope(async_session_factory) as session:
+                await session.execute(sa_text("DELETE FROM ai_tool"))
+                await session.commit()
