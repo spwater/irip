@@ -3,9 +3,9 @@ import { render } from '@testing-library/react';
 import { RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAppRouter } from '@/app/router';
-import { useAuthStore } from '@/auth/AuthProvider';
-import { useJobStore, setJobStoreScope } from '@/jobs/useJobStore';
-import { registerQueryClient } from '@/auth/sessionState';
+import { useAuthStore } from '@/features/auth/AuthProvider';
+import { useJobStore, setJobStoreScope } from '@/features/jobs/useJobStore';
+import { registerQueryClient } from '@/features/auth/sessionState';
 import { setMockApi, type MockApiHandlers } from '@/test/mockApi';
 import type { JobSummary } from '@/api/client';
 

@@ -5,18 +5,18 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router';
-import { AuthProvider } from '@/auth/AuthProvider';
-import { LoginPage } from '@/auth/LoginPage';
+import { AuthProvider } from '@/features/auth/AuthProvider';
+import { LoginPage } from '@/features/auth/LoginPage';
 import { AppShell } from '@/app/AppShell';
-import { WorkbenchPage } from '@/pages/WorkbenchPage';
-import { StandardsPage as StandardsPageV1 } from '@/standards/StandardsPage';
-import { LabOpsPage } from '@/pages/LabOpsPage';
-import { PlatformPage } from '@/pages/PlatformPage';
-import { FactDetail } from '@/facts/FactDetail';
-import { ComponentsPage } from '@/components/ComponentsPage';
-import { GovernanceConsole } from '@/governance/GovernanceConsole';
-import { JobsPage } from '@/jobs/JobsPage';
-import { JobDetail } from '@/jobs/JobDetail';
+import { WorkbenchPage } from '@/features/dashboard/WorkbenchPage';
+import { StandardsPage as StandardsPageV1 } from '@/features/standards/StandardsPage';
+import { LabOpsPage } from '@/features/dashboard/LabOpsPage';
+import { PlatformPage } from '@/features/dashboard/PlatformPage';
+import { FactDetail } from '@/features/facts/FactDetail';
+import { ComponentsPage } from '@/features/components/ComponentsPage';
+import { GovernanceConsole } from '@/features/governance/GovernanceConsole';
+import { JobsPage } from '@/features/jobs/JobsPage';
+import { JobDetail } from '@/features/jobs/JobDetail';
 
 /**
  * 根路由布局 — 包裹 AuthProvider

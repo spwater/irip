@@ -1,5 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
-import { clearSessionState } from '@/auth/sessionState';
+import { clearSessionState } from '@/features/auth/sessionState';
 
 /**
  * IRIP API 客户端类型定义

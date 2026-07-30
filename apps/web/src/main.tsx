@@ -6,7 +6,7 @@ import { ConfigProvider, App as AntApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
 import { dataOceanTheme } from '@/theme/themeConfig';
-import { registerQueryClient } from '@/auth/sessionState';
+import { registerQueryClient } from '@/features/auth/sessionState';
 import 'katex/dist/katex.min.css';
 // Data Ocean 全局样式：基础 / 极地雾蓝空间 / 动效降级
 import '@/styles/global.css';

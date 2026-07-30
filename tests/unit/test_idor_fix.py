@@ -313,7 +313,7 @@ class TestComponentRegistryIdorFix:
         )
 
         with patch(
-            "packages.components.registry.session_scope",
+            "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
         ):
             with pytest.raises(AppError) as exc_info:
@@ -343,7 +343,7 @@ class TestComponentRegistryIdorFix:
         )
 
         with patch(
-            "packages.components.registry.session_scope",
+            "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
         ):
             # 不抛异常即通过
@@ -361,7 +361,7 @@ class TestComponentRegistryIdorFix:
         )
 
         with patch(
-            "packages.components.registry.session_scope",
+            "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
         ):
             with pytest.raises(AppError) as exc_info:
@@ -380,7 +380,7 @@ class TestComponentRegistryIdorFix:
         )
 
         with patch(
-            "packages.components.registry.session_scope",
+            "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
         ):
             with pytest.raises(AppError):
@@ -403,7 +403,7 @@ class TestComponentRegistryIdorFix:
         )
 
         with patch(
-            "packages.components.registry.session_scope",
+            "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
         ):
             with pytest.raises(AppError):

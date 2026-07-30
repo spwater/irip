@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { Avatar, Button, Grid, Layout, Menu, Space, Typography } from 'antd';
 import { Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import type { MenuProps } from 'antd';
-import { useAuthStore } from '@/auth/AuthProvider';
-import { JobDrawer, JobDrawerButton } from '@/jobs/JobDrawer';
-import { OceanBackdrop } from '@/components/layout/OceanBackdrop';
-import { ContentFrame } from '@/components/layout/ContentFrame';
+import { useAuthStore } from '@/features/auth/AuthProvider';
+import { JobDrawer, JobDrawerButton } from '@/features/jobs/JobDrawer';
+import { OceanBackdrop } from '@/shared/layout/OceanBackdrop';
+import { ContentFrame } from '@/shared/layout/ContentFrame';
 import { PageHeaderProvider, usePageHeader } from './PageHeaderContext';
 
 const { Sider, Header, Content } = Layout;
