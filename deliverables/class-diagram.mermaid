@@ -1,17 +1,19 @@
+%% IRIP 整改类图（阶段 0-2 新增和修改的数据结构）
+%% 2026-07-30 增量设计
+
 classDiagram
+    %% ---- 核心值对象 ----
+
     class Principal {
         +UUID user_id
         +UUID organization_id
         +str email
         +list~str~ roles
         +QueryScope scope
+        +int token_version
         +bool is_active
-        +from_current_user(user, org_id) Principal
-    }
-
-    class TenantId {
-        +UUID value
-        +from_principal(principal) TenantId
+        +has_permission(perm: str) bool
+        +from_current_user(user, org_id, scope) Principal
     }
 
     class QueryScope {
@@ -19,110 +21,135 @@ classDiagram
         +UUID department_id
         +UUID object_root_id
         +str resource_type
-        +apply~T~(query) Query
+        +apply(query: Select) Select
     }
 
-    class ErrorCode {
-        <<enum>>
-        +INVALID_CREDENTIALS
-        +TOKEN_EXPIRED
-        +FORBIDDEN
-        +NOT_FOUND
-        +CONFLICT
-        +FILE_TOO_LARGE
-        +SSRF_BLOCKED
-        +COMPONENT_TIMEOUT
-        +AI_PROVIDER_ERROR
-        +UNKNOWN_JOB_KIND
-        +str code
-        +int http_status
+    class TenantId {
+        +UUID value
+        +from_principal(principal: Principal) TenantId
     }
 
-    class AppError {
-        +ErrorCode code_enum
-        +str message
-        +bool retryable
-        +dict fields
-        +to_dict() dict
+    %% ---- Job 策略 ----
+
+    class KindPolicy {
+        +str required_permission
+        +str queue
+        +int timeout_seconds
+        +int max_retries
+        +bool allow_general_submit
+        +dict payload_schema
+        +dict resource_budget
     }
+
+    class JobKindPolicy {
+        +dict POLICIES
+        +validate(kind: str, principal: Principal, via_general: bool) KindPolicy
+    }
+
+    %% ---- 安全 ----
 
     class SafeHttpClient {
-        +set~str~ allowlist
+        +set allowlist
         +int max_response_size
         +int timeout_seconds
-        +get(url) Response
-        +_validate_ip(ip) void
-        +_is_private(ip) bool
+        +safe_get(url: str) SafeResponse
+        +_validate_ip(ip: str) void
+        +_is_private(ip: str) bool
+        +_stream_accumulate(response) bytes
     }
 
     class EnvelopeCrypto {
-        +bytes master_key
-        +encrypt(plaintext) tuple~str, str~
-        +decrypt(ciphertext, key_version) str
+        -EnvelopeCrypto _instance
+        -bytes master_key
+        -dict key_versions
+        +from_env() EnvelopeCrypto
+        +encrypt(plaintext: str) str
+        +decrypt(ciphertext: str) str
+        -_decrypt_internal(ciphertext: str) str
     }
 
-    class AuditMiddleware {
-        +record(actor, org, action, resource, result) void
-        +get_coverage() list~str~
+    class RateLimiter {
+        +allow(key: str, limit: int, window: int) bool
+        +reset(key: str) void
     }
 
-    class OutboxDispatcherService {
-        +async_sessionmaker factory
-        +Celery celery_app
-        +dispatch(batch_size) int
-        +_send_to_celery(event) bool
-    }
-
-    class JobHandlerRegistry {
-        +dict~str, JobHandler~ handlers
-        +register(kind, handler) void
-        +get(kind) JobHandler
-    }
-
-    class JobService {
-        +async_sessionmaker factory
-        +UUID organization_id
-        +UUID created_by
-        +accept(kind, payload, idempotency_key) JobRef
-        +request_cancel(job_id, principal) JobRef
-        +get(job_id, org_id) JobRef
-        +get_raw(job_id, org_id) Job
-        +list(scope, status, kind, cursor, limit) tuple
-    }
+    %% ---- 作业执行 ----
 
     class JobExecutor {
-        +WorkerLeaseManager lease_manager
-        +async_sessionmaker factory
-        +dict handlers
-        +execute(job_id, owner) JobResult
-        +register_handler(kind, handler) void
+        -WorkerLeaseManager _lease_manager
+        -async_sessionmaker _factory
+        -dict _handlers
+        +execute(job_id: UUID, principal: Principal) JobResult
+        -_heartbeat_loop(job_id, owner, fencing_token) void
+        -_commit_result(job_id, fencing_token, status, result) void
+        -_enqueue_retry(job_id, fencing_token) void
     }
 
-    class JobRepository {
-        +insert(session, job) Job
-        +get(session, org_id, job_id) Job
-        +get_by_idempotency(session, org_id, key) Job
-        +update_status(session, job_id, status, result, lock_version) bool
-        +acquire_lease(session, job_id, owner, expires_at) bool
-        +reap_expired_leases(session, now) list
+    class WorkerLeaseManager {
+        -async_sessionmaker _factory
+        -Clock _clock
+        +acquire(job_id: UUID, owner: str, ttl: int) bool
+        +acquire_with_fencing(job_id: UUID, owner: str) int
+        +heartbeat(job_id: UUID, owner: str, ttl: int) bool
+        +release(job_id: UUID, owner: str) void
+        +reap_expired() list
     }
 
-    class FactService {
-        +async_sessionmaker factory
-        +UUID organization_id
-        +UUID actor_id
-        +create_fact(principal, template, observations) Fact
-        +add_revision(principal, fact_id, observations) FactRevision
-        +archive(principal, fact_id) None
-        +search(scope, conditions) FactListResponse
+    class JobHandler {
+        <<protocol>>
+        +execute(job: Job) dict
     }
 
-    Principal --> QueryScope
-    Principal --> TenantId
-    AppError --> ErrorCode
-    AuditMiddleware --> Principal
-    OutboxDispatcherService --> JobHandlerRegistry
-    JobService --> JobRepository
-    JobExecutor --> JobHandlerRegistry
-    JobExecutor --> JobRepository
-    FactService --> Principal
+    %% ---- 数据库会话 ----
+
+    class DatabaseSession {
+        +session_scope(factory, principal) AsyncSession
+        +build_session_factory(url: str) async_sessionmaker
+        +_set_tenant_guc(session, org_id) void
+    }
+
+    %% ---- 前端会话管理 ----
+
+    class AuthProvider {
+        +clearSessionState() void
+        +logout() void
+        +refreshAccessToken(refreshToken: str) AccessToken
+    }
+
+    class RefreshCoordinator {
+        -Promise refreshPromise
+        +refreshToken(refreshToken: str) AccessToken
+        -doRefresh(refreshToken: str) AccessToken
+    }
+
+    class JobStore {
+        +dict jobs
+        +reset() void
+        +clear() void
+        +loadJobs(query: QueryScope) void
+    }
+
+    class BatchResultTracker {
+        +int succeeded
+        +int failed
+        +int cancelled
+        +int timed_out
+        +update(item: BatchItem) void
+        +getSummary() BatchResult
+    }
+
+    %% ---- 关系 ----
+
+    Principal --> QueryScope : scope
+    Principal --> TenantId : organization_id
+    JobKindPolicy --> KindPolicy : POLICIES
+    JobKindPolicy --> Principal : validate
+    JobExecutor --> WorkerLeaseManager : lease
+    JobExecutor --> JobHandler : execute
+    JobExecutor --> JobKindPolicy : 二次校验
+    DatabaseSession --> Principal : session_scope
+    DatabaseSession --> QueryScope : GUC
+    AuthProvider --> RefreshCoordinator : refresh
+    AuthProvider --> JobStore : clearSessionState
+    RefreshCoordinator --> AuthProvider : clearSessionState on failure
+    EnvelopeCrypto --> Principal : token_version verification

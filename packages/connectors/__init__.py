@@ -40,12 +40,14 @@ from packages.connectors.rest_connector import RestConnector
 def build_connector(
     source: ConnectorSource,
     secret_store: SecretStore | None = None,
+    artifact_service: object | None = None,
 ) -> Connector:
     """按数据源类型构造连接器实例。
 
     Args:
         source: 数据源描述（kind + config）。
         secret_store: 密钥存储（postgres/rest 连接器需要，file 连接器忽略）。
+        artifact_service: 工件服务（file 连接器需要，C-01: 从 artifact 流读取）。
 
     Returns:
         Connector: 对应类型的连接器实例。
@@ -56,7 +58,7 @@ def build_connector(
     from packages.common.errors import AppError
 
     if source.kind == "file":
-        return FileConnector()
+        return FileConnector(artifact_service=artifact_service)
     if source.kind == "postgres":
         if secret_store is None:
             raise AppError(

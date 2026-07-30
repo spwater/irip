@@ -54,6 +54,8 @@ class Principal:
         email: 用户邮箱。
         roles: 用户角色列表（如 ``["admin"]``、``["analyst"]``）。
         scope: 查询范围（组织/部门/对象根过滤）。
+        token_version: JWT 令牌版本号，用于撤销检测。
+            每次认证必须复核，不匹配时拒绝（token 已被撤销）。
         is_active: 用户是否活跃（默认 True）。
     """
 
@@ -62,7 +64,23 @@ class Principal:
     email: str
     roles: list[str]
     scope: QueryScope
+    token_version: int = 0
     is_active: bool = True
+
+    def has_permission(self, perm: str) -> bool:
+        """检查当前用户是否拥有指定权限。
+
+        通过角色列表解析权限（延迟导入避免循环依赖）。
+
+        Args:
+            perm: 权限字符串（如 ``"job:submit"``）。
+
+        Returns:
+            bool: 拥有该权限返回 True。
+        """
+        from packages.auth.permissions import has_role_permission
+
+        return any(has_role_permission(role, perm) for role in self.roles)
 
     @staticmethod
     def from_current_user(
@@ -84,12 +102,14 @@ class Principal:
         Returns:
             Principal: 可信身份上下文。
         """
+        token_version: int = getattr(user, "token_version", 0)
         return Principal(
             user_id=user.user_id,
             organization_id=org_id,
             email=user.email,
             roles=user.roles,
             scope=scope,
+            token_version=token_version,
         )
 
     def tenant_id(self) -> "TenantId":

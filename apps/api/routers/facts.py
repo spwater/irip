@@ -1051,7 +1051,7 @@ async def get_fact_data(
                                     "task_name": fd.display_name,
                                     "task_source": dept_name,
                                     "operator": fd.operator,
-                                    "run_operator": (run.input_snapshot or {}).get("_operator") if run else None,
+                                    "run_operator": (run_record.input_snapshot or {}).get("_operator") if run_record else None,
                                     "project_name": fd.project_name,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
@@ -1059,12 +1059,13 @@ async def get_fact_data(
                                     if fd.created_at
                                     else None,  # noqa: E501
                                 }
-            except Exception as e:
+            except (sa.exc.SQLAlchemyError, KeyError, ValueError) as e:
                 import logging
 
                 logging.getLogger(__name__).warning(
-                    f"Failed to query task info for fact {fact_id}: {e}"
-                )  # noqa: E501
+                    "Failed to query task info for fact %s: %s",
+                    fact_id, e, exc_info=True,
+                )
 
         # 把任务信息附加到返回结果
         if task_info:

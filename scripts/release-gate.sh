@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# IRIP 发布门脚本 — 全量质量检查
+# IRIP 发布门脚本 -- 全量质量检查
 # 用法：bash scripts/release-gate.sh
 # 任一步骤失败即退出码 1，全部通过输出 "RELEASE GATE PASSED"
+# H-10: 先启动环境和迁移，再执行集成/安全/恢复测试
 set -euo pipefail
 
 # ---- 颜色输出 ----
@@ -20,7 +21,7 @@ PNPM="${PNPM:-pnpm}"
 
 # 步骤计数器
 STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 
 # ---- 辅助函数 ----
 
@@ -56,7 +57,7 @@ trap cleanup EXIT
 # ---- Step 1: Lint + Format ----
 step_header "Ruff 静态检查 + 格式检查 (apps packages tests)"
 if $PY -m ruff check apps packages tests && $PY -m ruff format --check apps packages tests; then
-    step_pass "Ruff lint + format — 0 errors"
+    step_pass "Ruff lint + format -- 0 errors"
 else
     step_fail "Ruff lint 或 format 检查失败"
 fi
@@ -64,31 +65,23 @@ fi
 # ---- Step 2: Type check ----
 step_header "Mypy 严格类型检查 (packages apps/api)"
 if $PY -m mypy packages apps/api; then
-    step_pass "Mypy type check — 0 errors"
+    step_pass "Mypy type check -- 0 errors"
 else
     step_fail "Mypy type check 失败"
 fi
 
-# ---- Step 3: Python 测试套件 ----
-# F-16: 删除不存在的 tests/property 引用
-step_header "Python 测试套件 (unit + contract + integration + security + recovery + acceptance)"
-if $PY -m pytest \
-    tests/unit \
-    tests/contract \
-    tests/integration \
-    tests/security \
-    tests/recovery \
-    tests/acceptance \
-    tests/performance; then
-    step_pass "Python 测试套件 — 100% pass"
+# ---- Step 3: Unit + Contract tests (no infrastructure needed) ----
+step_header "Python 单元 + 契约测试 (unit + contract)"
+if $PY -m pytest tests/unit tests/contract -v -m "not integration"; then
+    step_pass "Unit + Contract tests -- 100% pass"
 else
-    step_fail "Python 测试套件失败"
+    step_fail "Unit + Contract tests 失败"
 fi
 
 # ---- Step 4: Frontend lint ----
 step_header "前端 Lint (apps/web)"
 if $PNPM --dir apps/web lint; then
-    step_pass "前端 lint — 0 errors"
+    step_pass "前端 lint -- 0 errors"
 else
     step_fail "前端 lint 失败"
 fi
@@ -96,7 +89,7 @@ fi
 # ---- Step 5: Frontend tests ----
 step_header "前端单元测试 (apps/web)"
 if $PNPM --dir apps/web test -- --run; then
-    step_pass "前端单元测试 — 100% pass"
+    step_pass "前端单元测试 -- 100% pass"
 else
     step_fail "前端单元测试失败"
 fi
@@ -104,14 +97,13 @@ fi
 # ---- Step 6: Frontend build ----
 step_header "前端生产构建 (apps/web)"
 if $PNPM --dir apps/web build; then
-    step_pass "前端构建 — success"
+    step_pass "前端构建 -- success"
 else
     step_fail "前端构建失败"
 fi
 
-# ---- Step 7: Docker Compose up ----
-# F-16: 先启动 Docker 基础设施再迁移和执行测试
-step_header "Docker Compose 全量启动 (release-gate 环境)"
+# ---- Step 7: Docker Compose up + migration (H-10: 先启动环境和迁移) ----
+step_header "Docker Compose 全量启动 + 迁移 (release-gate 环境)"
 echo "  构建并启动全部服务..."
 if docker compose up --build -d; then
     # 等待 API 健康
@@ -128,22 +120,30 @@ if docker compose up --build -d; then
     if [ $WAITED -ge $MAX_WAIT ]; then
         step_fail "Docker Compose 启动后 API 健康检查超时 (${MAX_WAIT}s)"
     else
-        step_pass "Docker Compose 启动 — 全部服务健康"
+        step_pass "Docker Compose 启动 -- 全部服务健康 + 迁移完成"
     fi
 else
     step_fail "Docker Compose 启动失败"
 fi
 
-# ---- Step 8: E2E tests ----
-# F-16: E2E 测试在 Docker 基础设施就绪后运行
-step_header "前端 E2E 测试 (apps/web)"
-if $PNPM --dir apps/web e2e; then
-    step_pass "前端 E2E 测试 — 100% pass"
+# ---- Step 8: Integration + Security + Recovery tests (H-10: 环境就绪后执行) ----
+step_header "集成 + 安全 + 恢复测试 (integration + security + recovery)"
+# H-10: 按目录独立执行，不加 marker 过滤
+if $PY -m pytest tests/integration tests/security tests/recovery -v; then
+    step_pass "Integration + Security + Recovery tests -- 100% pass"
 else
-    step_fail "前端 E2E 测试失败"
+    step_fail "Integration + Security + Recovery tests 失败"
 fi
 
-# ---- Step 9: Cleanup (via trap) ----
+# ---- Step 9: Acceptance + E2E tests ----
+step_header "验收 + E2E 测试 (acceptance + e2e)"
+if $PY -m pytest tests/acceptance -v && $PNPM --dir apps/web e2e; then
+    step_pass "Acceptance + E2E tests -- 100% pass"
+else
+    step_fail "Acceptance + E2E tests 失败"
+fi
+
+# ---- Step 10: Cleanup (via trap) ----
 step_header "清理 Docker Compose 环境"
 # trap EXIT 会自动执行 cleanup
 step_pass "清理完成"

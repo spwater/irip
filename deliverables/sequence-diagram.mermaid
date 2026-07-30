@@ -1,48 +1,206 @@
+%% IRIP 整改时序图（阶段 0-2 关键流程）
+%% 2026-07-30 增量设计
+
+%% 1. 摄入预览改为 artifact-only 流程
 sequenceDiagram
+    participant U as 用户
     participant API as API Router
+    participant AS as ArtifactService
+    participant DB as PostgreSQL
+    participant S3 as MinIO/S3
+    participant FC as FileConnector
+
+    U->>API: POST /ingestions/preview { artifact_id, format }
+    API->>API: 构造 Principal (含 org_id)
+    API->>AS: open_stream(principal, artifact_id)
+    AS->>DB: SELECT artifact WHERE org_id=? AND id=?
+    DB-->>AS: artifact record (校验 org/scope/status/media_type)
+    alt artifact 不属于本租户
+        AS-->>API: 404/403 not_found/forbidden
+        API-->>U: 404/403
+    end
+    AS->>S3: get_object_stream(bucket, key)
+    S3-->>AS: 流式 reader (有界)
+    AS->>FC: preview(stream, format, limit, budget)
+    FC->>FC: 逐行读取 (行数/字节/CPU/时间预算)
+    FC-->>AS: PreviewTable (有界)
+    AS-->>API: PreviewTable
+    API-->>U: 200 PreviewTable
+
+%% 2. Job 提交增加 allowlist 校验流程
+sequenceDiagram
+    participant U as 用户
+    participant API as API Router
+    participant JKP as JobKindPolicy
     participant JS as JobService
     participant DB as PostgreSQL
-    participant OB as OutboxDispatcher
-    participant Beat as Celery Beat
     participant Cel as Celery Broker
-    participant W as Celery Worker
     participant JE as JobExecutor
     participant H as JobHandler
-    participant Reg as HandlerRegistry
 
-    Note over API,Reg: 作业提交与执行闭环
+    U->>API: POST /jobs { kind, payload, idempotency_key }
+    API->>API: 构造 Principal (含 roles, org_id)
 
-    API->>JS: POST /jobs (kind, payload)
+    Note over API,JKP: API 侧一次校验
+    API->>JKP: validate(kind, principal, via_general=True)
+    alt kind 不在 allowlist
+        JKP-->>API: 422 unknown_job_kind
+        API-->>U: 422
+    end
+    alt 特权 kind 通过通用接口提交
+        JKP-->>API: 403 forbidden
+        API-->>U: 403
+    end
+    alt 缺少 required_permission
+        JKP-->>API: 403 forbidden
+        API-->>U: 403
+    end
+    JKP-->>API: KindPolicy (queue, timeout, retries)
+
+    API->>JS: accept(kind, payload, idempotency_key, principal=principal)
+    Note over JS: 服务端生成 org_id, actor<br/>不从 payload 取
     JS->>DB: BEGIN TX
+    JS->>DB: SET LOCAL app.current_org_id
     JS->>DB: INSERT job (status=accepted)
     JS->>DB: INSERT outbox_event (job.accepted)
     JS->>DB: COMMIT TX
     JS-->>API: 202 JobRef
+    API-->>U: 202 JobRef
 
-    Note over Beat,OB: Beat 定时触发 Dispatcher
+    Note over Cel,JE: Worker 侧二次校验
+    Cel->>JE: deliver task (job_id)
+    JE->>JKP: validate(job.kind, principal_snapshot, via_general=False)
+    JE->>DB: acquire_lease(job_id, owner, fencing_token)
+    JE->>DB: SELECT job WHERE org_id=? AND id=?
 
-    Beat->>OB: dispatch(batch_size=100)
-    OB->>DB: SELECT ... FOR UPDATE SKIP LOCKED WHERE delivered_at IS NULL
-    DB-->>OB: events[]
-    loop 每个事件
-        OB->>Cel: send_task("jobs.execute", args=[job_id])
-        OB->>DB: UPDATE outbox_event SET delivered_at=now()
-    end
-
-    Cel->>W: deliver task (job_id)
-    W->>JE: execute(job_id, owner)
-    JE->>DB: acquire_lease (条件 UPDATE)
-    JE->>DB: SELECT job by (org_id, job_id)
-    JE->>Reg: get_handler(job.kind)
-
-    alt handler 存在
-        JE->>H: execute(job)
-        H-->>JE: result_data
-        JE->>DB: UPDATE job SET status=succeeded (乐观锁)
+    alt handler 存在且校验通过
+        JE->>H: execute(job) [原生 async]
+        alt 成功
+            H-->>JE: result_data
+            JE->>DB: commit_result(job_id, fencing_token, status=succeeded)
+        else 失败 (raise AppError)
+            H-->>JE: raise AppError
+            JE->>JE: 判断是否可重试
+            alt 可重试且 attempt < max
+                JE->>DB: enqueue_retry(job_id, fencing_token)
+            else 不可重试
+                JE->>DB: commit_result(job_id, fencing_token, status=failed)
+            end
+        end
     else handler 不存在
-        JE->>DB: UPDATE job SET status=failed
-        JE-->>W: JobResult(failed)
+        JE->>DB: commit_result(job_id, fencing_token, status=failed)
     end
 
-    JE->>DB: release_lease
-    W-->>Cel: ACK
+    JE->>DB: release_lease(job_id, owner)
+
+%% 3. 租户隔离 GUC 设置流程
+sequenceDiagram
+    participant U as 用户
+    participant API as API Router
+    participant Auth as Auth Dependency
+    participant DB as PostgreSQL
+    participant Svc as Domain Service
+    participant Repo as Repository
+    participant RLS as RLS Policy
+
+    U->>API: Request + Bearer JWT
+    API->>Auth: get_current_user(token)
+    Auth->>Auth: decode JWT (无静态 fallback)
+    Auth->>DB: SELECT user WHERE id = sub
+    DB-->>Auth: user record
+
+    alt 用户不存在或已禁用
+        Auth-->>API: 401 invalid_credentials
+    end
+    Auth->>Auth: 复核 active + token_version
+    alt token_version 不匹配
+        Auth-->>API: 401 token_expired (已被撤销)
+    end
+    Auth-->>API: Principal(org_id, user_id, roles, token_version)
+
+    API->>Svc: method(principal, ...)
+    Svc->>DB: session_scope(factory, principal=principal)
+    Svc->>DB: SET LOCAL app.current_org_id = principal.organization_id
+    Svc->>Repo: get(org_id, resource_id)
+    Repo->>DB: SELECT ... WHERE organization_id=? AND id=?
+    DB->>RLS: RLS policy 检查
+    RLS->>RLS: organization_id = current_setting('app.current_org_id')
+
+    alt organization_id 匹配
+        RLS-->>DB: 放行
+        DB-->>Repo: entity
+    else organization_id 不匹配
+        RLS-->>DB: 阻止
+        DB-->>Repo: 空
+    end
+
+    Repo-->>Svc: entity (或 None)
+    Svc-->>API: result
+    API-->>U: 200 JSON
+
+%% 4. 备份明文清理流程
+sequenceDiagram
+    participant BP as backup.py
+    participant FS as FileSystem
+    participant PG as PostgreSQL
+    participant MN as MinIO
+    participant AGE as age 加密
+
+    BP->>FS: mkdtemp(prefix="irip-backup-") [0700]
+    FS-->>BP: temp_dir
+
+    Note over BP,MN: 在临时目录中生成明文
+    BP->>PG: pg_dump --format=custom
+    PG-->>BP: temp_dir/database.dump
+    BP->>MN: 导出对象列表
+    MN-->>BP: temp_dir/objects/
+
+    BP->>BP: compute_manifest(temp_dir)
+    BP->>FS: save_manifest(temp_dir/manifest.json)
+
+    BP->>FS: tar temp_dir → temp_dir/backup.tar
+    BP->>AGE: encrypt(temp_dir/backup.tar → temp_dir/backup.tar.age)
+    AGE-->>BP: temp_dir/backup.tar.age (加密制品)
+
+    Note over BP,FS: 原子移动唯一加密制品到最终目录
+    BP->>FS: shutil.move(temp_dir/backup.tar.age → target_dir/)
+    BP->>FS: write public manifest (HMAC 签名, 不敏感字段)
+
+    Note over BP,FS: finally: 无论成功失败都清理
+    BP->>FS: shutil.rmtree(temp_dir, ignore_errors=True)
+
+    Note over FS: 最终目录只包含:<br/>- backup.tar.age (加密制品)<br/>- public_manifest.json (HMAC 签名)
+
+%% 5. Token refresh single-flight 流程
+sequenceDiagram
+    participant R1 as 请求1 (401)
+    participant R2 as 请求2 (401)
+    participant R3 as 请求3 (401)
+    participant RC as Refresh Coordinator
+    participant API as Auth API
+    participant AS as AuthProvider
+
+    par 并发 401
+        R1->>RC: refresh(refreshToken)
+        R2->>RC: refresh(refreshToken)
+        R3->>RC: refresh(refreshToken)
+    end
+
+    Note over RC: single-flight: 只发一个 refresh 请求
+    RC->>API: POST /auth/refresh { refreshToken }
+    API-->>RC: { access, refresh }
+
+    par 共享结果
+        RC-->>R1: new AccessToken
+        RC-->>R2: new AccessToken
+        RC-->>R3: new AccessToken
+    end
+
+    Note over RC: 如果 refresh 失败
+    alt refresh 失败
+        RC->>AS: clearSessionState()
+        AS->>AS: queryClient.clear()
+        AS->>AS: useJobStore.reset()
+        AS->>AS: localStorage 清除 (tenant+user prefix)
+        AS->>AS: navigate('/login')
+    end

@@ -81,9 +81,13 @@ IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)
 
 
 class SourceFileConfig(BaseModel):
-    """文件数据源配置。"""
+    """文件数据源配置。
 
-    path: str = Field(..., min_length=1)
+    C-01: 只接受 artifact_id（本租户已上传的 artifact ID），
+    不再接受任意服务器路径 path。
+    """
+
+    artifact_id: UUID = Field(..., description="本租户已上传的 artifact ID")
     format: Literal["csv", "xlsx", "json"]
 
 

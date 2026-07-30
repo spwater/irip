@@ -796,24 +796,30 @@ class MappingProfileService:
 class IngestionService:
     """数据源预览服务：按 kind 构造连接器并预览。
 
+    C-01: 文件预览改为从 artifact stream 读取，需要 artifact_service。
+
     Attributes:
         _factory: 异步会话工厂。
         _org_id: 当前组织 ID。
+        _artifact_service: 可选的工件服务，用于 file kind 的 artifact 流读取。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         organization_id: UUID,
+        artifact_service: object | None = None,
     ) -> None:
         """初始化预览服务。
 
         Args:
             session_factory: 异步会话工厂。
             organization_id: 当前组织 ID。
+            artifact_service: 工件服务实例（C-01: file kind 需要）。
         """
         self._factory = session_factory
         self._org_id = organization_id
+        self._artifact_service = artifact_service
 
     async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览数据源。
@@ -829,7 +835,11 @@ class IngestionService:
         from packages.connectors import build_connector
 
         secret_store = SecretStore(self._factory, self._org_id)
-        connector = build_connector(source, secret_store=secret_store)
+        connector = build_connector(
+            source,
+            secret_store=secret_store,
+            artifact_service=self._artifact_service,
+        )
         return await connector.preview(source, limit=limit)
 
 

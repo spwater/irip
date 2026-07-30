@@ -12,6 +12,7 @@
 """
 
 import asyncio
+import io
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -550,10 +551,49 @@ class ArtifactService:
                     fields={"artifact_id": str(artifact_id)},
                 )
             object_key: str = row[0]
-            url: str = await asyncio.to_thread(
-                self._s3.presigned_get,
-                object_key,
-                expires,
-                endpoint_override,
-            )
-            return url
+        return self._s3.presigned_get(object_key, expires, endpoint_override)
+
+    async def open_stream(self, artifact_id: UUID) -> tuple[str, int, "io.BytesIO"]:
+        """打开 artifact 内容流（C-01: 用于文件连接器安全预览）。
+
+        校验 artifact 归属当前组织后，返回二进制流。
+        跨租户 artifact 返回 not_found（不泄露存在性）。
+
+        Args:
+            artifact_id: 工件 UUID。
+
+        Returns:
+            tuple[str, int, io.BytesIO]: (filename, size_bytes, binary_stream)。
+
+        Raises:
+            AppError: code="not_found"，当工件不存在或无权访问时。
+        """
+        async with session_scope(self._factory) as session:
+            row = (
+                await session.execute(
+                    sa.select(Artifact, ArtifactBlob)
+                    .join(
+                        ArtifactBlob,
+                        ArtifactBlob.sha256 == Artifact.sha256,
+                    )
+                    .where(
+                        Artifact.id == artifact_id,
+                        Artifact.organization_id == self._org_id,
+                    )
+                )
+            ).first()
+            if row is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"工件不存在: {artifact_id}",
+                    retryable=False,
+                    fields={"artifact_id": str(artifact_id)},
+                )
+            artifact: Artifact = row[0]
+            blob: ArtifactBlob = row[1]
+            filename: str = artifact.filename
+            size_bytes: int = artifact.size_bytes
+            object_key: str = blob.object_key
+
+        data: bytes = await asyncio.to_thread(self._s3.get_object, object_key)
+        return filename, size_bytes, io.BytesIO(data)

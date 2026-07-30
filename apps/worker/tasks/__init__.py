@@ -3,9 +3,13 @@
 在 worker 进程中通过 DI 组装 JobExecutor 并执行作业。
 此模块在 celery_app.py 的 execute_job 任务中被调用。
 
-技术设计文档 F-04 §8.5：所有异步任务只通过 Outbox→Dispatcher→Celery 一条通道。
+技术设计文档 F-04 S8.5：所有异步任务只通过 Outbox->Dispatcher->Celery 一条通道。
 此处注册全部 handler（flow, ingestion, model, backup, restore, audit_export），
 确保 JobExecutor 能处理所有已注册的作业类型。
+
+C-02 改动：
+- Worker 侧二次校验 kind 和权限；
+- _restore_handler 使用签名 backup_id 而非 backup_dir 路径。
 """
 
 import asyncio
@@ -13,6 +17,8 @@ import os
 from uuid import UUID
 
 from packages.common.database import build_session_factory
+from packages.common.errors import AppError
+from packages.common.job_policy import JobKindPolicy
 from packages.jobs.worker import JobExecutor, WorkerLeaseManager
 
 
@@ -55,6 +61,8 @@ def _register_handlers(executor: JobExecutor) -> None:
     audit_export 全部 handler，确保 JobExecutor 能处理所有已注册的作业类型。
     未知 kind 直接失败（禁止 echo fallback）。
 
+    C-02: Worker 侧二次校验 -- 在 handler 执行前验证 kind 合法性。
+
     注意：JobExecutor 调用 handler(job) 传单个 Job ORM 对象，
     但各业务 handler 签名是 (job_id: str, payload: dict)，
     因此用适配器拆包 job.id 和 job.payload。
@@ -63,11 +71,17 @@ def _register_handlers(executor: JobExecutor) -> None:
 
     async def _flow_execute_adapter(job):
         """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。"""
+        _validate_job_kind(job)
         job_id = str(job.id)
         payload = job.payload or {}
         run_id = str(payload.get("run_id", ""))
         if not run_id:
-            return {"error": "payload missing run_id", "job_id": job_id}
+            raise AppError(
+                code="validation_failed",
+                message="payload missing run_id",
+                retryable=False,
+                fields={"job_id": job_id},
+            )
         try:
             return await _execute_flow_async(run_id, payload)
         except Exception as exc:
@@ -79,6 +93,7 @@ def _register_handlers(executor: JobExecutor) -> None:
 
     async def _flow_resume_adapter(job):
         """适配 flow_resume。"""
+        _validate_job_kind(job)
         job_id = str(job.id)
         payload = job.payload or {}
         try:
@@ -96,6 +111,7 @@ def _register_handlers(executor: JobExecutor) -> None:
         """
 
         async def _wrapper(job):
+            _validate_job_kind(job)
             return handler(str(job.id), job.payload or {})
 
         return _wrapper
@@ -112,10 +128,31 @@ def _register_handlers(executor: JobExecutor) -> None:
     executor.register_handler("model_predict", _adapt(predict_model_job))
     executor.register_handler("model_publish", _adapt(publish_model_job))
 
-    # Backup / Restore / Audit Export handler（F-04 §8.5）
+    # Backup / Restore / Audit Export handler（F-04 S8.5）
     executor.register_handler("backup", _backup_handler)
     executor.register_handler("restore", _restore_handler)
     executor.register_handler("audit_export", _audit_export_handler)
+
+
+def _validate_job_kind(job: object) -> None:
+    """C-02: Worker 侧二次校验 job kind 合法性。
+
+    确保即使绕过 API 层，Worker 也不会执行未注册的 kind。
+
+    Args:
+        job: 作业 ORM 实例。
+
+    Raises:
+        AppError: code="unknown_job_kind"，当 kind 未注册时。
+    """
+    kind: str = getattr(job, "kind", "")
+    if kind not in JobKindPolicy.POLICIES:
+        raise AppError(
+            code="unknown_job_kind",
+            message=f"未注册的作业类型: {kind}",
+            retryable=False,
+            fields={"kind": kind},
+        )
 
 
 async def _backup_handler(job: object) -> dict:
@@ -123,12 +160,15 @@ async def _backup_handler(job: object) -> dict:
 
     执行 PostgreSQL + MinIO 全量备份，生成完整性 manifest。
 
+    C-02: org_id 从服务端 job 属性获取，不从 payload 取。
+
     Args:
         job: 作业 ORM 实例。
 
     Returns:
         dict: 备份结果（含 backup_id、manifest 路径）。
     """
+    _validate_job_kind(job)
     from deployments.compose.backup import run_backup
 
     manifest = await run_backup()
@@ -142,34 +182,94 @@ async def _backup_handler(job: object) -> dict:
 async def _restore_handler(job: object) -> dict:
     """恢复作业 handler。
 
-    从备份目录恢复 PostgreSQL + MinIO 数据。
+    C-02: 使用签名 backup_id 而非 backup_dir 路径。
+    通过 backup_id 在备份输出目录中查找对应的 manifest，
+    不信任客户端提供的任意路径。
 
     Args:
         job: 作业 ORM 实例。
 
     Returns:
         dict: 恢复结果。
+
+    Raises:
+        AppError: code="validation_failed"，当缺少 backup_id 时。
+        AppError: code="not_found"，当 backup_id 对应的备份不存在时。
     """
-    from pathlib import Path
-
+    _validate_job_kind(job)
     payload: dict = getattr(job, "payload", None) or {}
-    backup_dir_str: str = payload.get("backup_dir", "")
-    if not backup_dir_str:
-        from packages.common.errors import AppError
-
+    backup_id: str = payload.get("backup_id", "")
+    if not backup_id:
         raise AppError(
             code="validation_failed",
-            message="恢复作业缺少 backup_dir 参数",
+            message="恢复作业缺少 backup_id 参数",
             retryable=False,
+            fields={"field": "backup_id"},
         )
+
+    # C-02: 通过 backup_id 解析备份目录，不信任客户端路径
+    backup_dir = _resolve_backup_dir_by_id(backup_id)
 
     from deployments.compose.restore import run_restore
 
-    manifest = await run_restore(Path(backup_dir_str))
+    manifest = await run_restore(backup_dir)
     return {
         "backup_id": manifest.backup_id,
         "restored": True,
     }
+
+
+def _resolve_backup_dir_by_id(backup_id: str) -> "Path":
+    """通过 backup_id 在备份输出目录中查找对应的备份目录。
+
+    C-02: 不信任客户端提供的路径，只接受已签名的 backup_id。
+
+    Args:
+        backup_id: 备份唯一标识（UUID 字符串）。
+
+    Returns:
+        Path: 备份目录路径。
+
+    Raises:
+        AppError: code="not_found"，当 backup_id 对应的备份不存在时。
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+
+    # 备份输出目录（与 backup.py 一致）
+    output_dir_str: str = os.getenv("IRIP_BACKUP_OUTPUT_DIR", "")
+    if output_dir_str:
+        search_dir: Path = Path(output_dir_str)
+    else:
+        search_dir = Path(tempfile.gettempdir()) / "irip-backup"
+
+    if not search_dir.exists():
+        raise AppError(
+            code="not_found",
+            message=f"备份目录不存在: {search_dir}",
+            retryable=False,
+            fields={"backup_id": backup_id},
+        )
+
+    # 搜索 manifest.json 文件，匹配 backup_id
+    manifest_filename: str = "manifest.json"
+    for candidate in search_dir.rglob(manifest_filename):
+        try:
+            manifest_data: dict = json.loads(
+                candidate.read_text(encoding="utf-8")
+            )
+            if manifest_data.get("backup_id") == backup_id:
+                return candidate.parent
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+            continue
+
+    raise AppError(
+        code="not_found",
+        message=f"未找到 backup_id={backup_id} 对应的备份",
+        retryable=False,
+        fields={"backup_id": backup_id},
+    )
 
 
 async def _audit_export_handler(job: object) -> dict:
@@ -183,6 +283,7 @@ async def _audit_export_handler(job: object) -> dict:
     Returns:
         dict: 导出结果（含记录数、导出路径）。
     """
+    _validate_job_kind(job)
     import os
     from uuid import UUID
 

@@ -2,13 +2,17 @@ import { Avatar, Typography } from 'antd';
 import CitationList from '@/assistant/CitationList';
 import ToolTrace from '@/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
-import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 
 const { Text, Paragraph } = Typography;
 
-// KaTeX 公式样式
+// KaTeX style for proper rendering within react-markdown
 const katexStyle = `
 .ai-markdown-body .katex { font-size: 1.05em; }
 .ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
@@ -17,194 +21,201 @@ const katexStyle = `
 `;
 
 /**
- * 渲染包含 LaTeX 公式的 Markdown
+ * Custom sanitize schema for rehype-sanitize.
  *
- * 方案：
- * 1. 用正则把 $$...$$ 和 $...$ 替换为 <span class="katex-math" data-latex="..." data-display="..."></span>
- * 2. 用简易 Markdown → HTML 转换处理其余语法
- * 3. useEffect 里找到所有 .katex-math span，用 katex.render 渲染公式
- *
- * 这样 KaTeX HTML 完全由 katex.render 生成，不经过 react-markdown 处理。
+ * Extends the default schema to:
+ * - Allow katex-related class names (added by rehype-katex)
+ * - Allow data-* attributes used by katex
+ * - Restrict protocols to http/https/data only (no javascript:)
  */
-function MarkdownWithMath({ content }: { content: string }): JSX.Element {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartOptions = useRef<string[]>([]);
+const sanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    div: [
+      ...(defaultSchema.attributes?.div || []),
+      'className',
+      'dataLatex',
+      'dataDisplay',
+    ],
+    span: [
+      ...(defaultSchema.attributes?.span || []),
+      'className',
+    ],
+    code: [
+      ...(defaultSchema.attributes?.code || []),
+      'className',
+    ],
+    pre: [
+      ...(defaultSchema.attributes?.pre || []),
+      'className',
+    ],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: ['http', 'https', 'data'],
+    href: ['http', 'https'],
+  },
+};
 
-  // 提取公式，替换为占位符
-  let processed = content
-    // 块级公式 $$...$$ → 用 div 占位（display 模式需要块级元素）
-    .replace(/\$\$([\s\S]+?)\$\$/g, (_, latex: string) => {
-      const escaped = latex.trim().replace(/"/g, '&quot;');
-      return `<div class="katex-math" data-latex="${escaped}" data-display="true"></div>`;
-    })
-    // 行内公式 $...$ → 用 span 占位
-    .replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$/g, (_, latex: string) => {
-      const escaped = latex.trim().replace(/"/g, '&quot;');
-      return `<span class="katex-math" data-latex="${escaped}" data-display="false"></span>`;
-    });
+/**
+ * ECharts chart block component.
+ *
+ * H-14: ECharts data is parsed independently, not through Markdown rendering.
+ * The option JSON is parsed safely with JSON.parse and rendered via echarts.
+ */
+function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
+  const chartRef = useRef<HTMLDivElement>(null);
 
-  // 提取 echarts 代码块，存到 ref 数组，div 只存索引
-  chartOptions.current = [];
-  processed = processed.replace(/```echarts\n([\s\S]*?)```/g, (_, code) => {
-    const idx = chartOptions.current.length;
-    chartOptions.current.push(code.trim());
-    return `<div class="echarts-chart" data-idx="${idx}" style="width:100%;height:400px;margin:8px 0"></div>`;
-  });
+  const parsed = useMemo(() => {
+    try {
+      return JSON.parse(optionStr);
+    } catch {
+      return null;
+    }
+  }, [optionStr]);
 
-  // 渲染完后，用 katex.render 替换占位符
   useEffect(() => {
-    if (!containerRef.current) return;
-    // 渲染 KaTeX 公式
-    const spans = containerRef.current.querySelectorAll('.katex-math');
-    spans.forEach((span) => {
-      const latex = span.getAttribute('data-latex') || '';
-      const display = span.getAttribute('data-display') === 'true';
-      try {
-        katex.render(latex, span as HTMLElement, {
-          displayMode: display,
-          throwOnError: false,
-          strict: false,
-        });
-      } catch {
-        span.textContent = latex;
-      }
-    });
-    // 渲染 ECharts 图表
-    const charts = containerRef.current.querySelectorAll('.echarts-chart');
-    charts.forEach((div) => {
-      const idx = parseInt(div.getAttribute('data-idx') || '-1', 10);
-      if (idx < 0 || idx >= chartOptions.current.length) return;
-      const optionStr = chartOptions.current[idx];
-      try {
-        const option = JSON.parse(optionStr);
-        // 只补充 containLabel 防裁切，不覆盖 LLM 的 grid 值
-        if (!option.grid) option.grid = {};
-        option.grid.containLabel = true;
-        // X 轴名称放到正下方
-        if (option.xAxis && !Array.isArray(option.xAxis)) {
-          option.xAxis.nameLocation = 'middle';
-          option.xAxis.nameGap = 25;
-        }
-        // 动态导入 echarts 避免首屏加载慢
-        import('echarts').then((echarts) => {
-          // 找消息气泡容器（向上遍历到有 padding 的 div）
-          let el: HTMLElement = div as HTMLElement;
-          let width = 0;
-          while (el.parentElement) {
-            el = el.parentElement;
-            if (el.clientWidth > 0) {
-              width = el.clientWidth - 32; // 减去 padding (12px*2 + 一点余量)
-              break;
-            }
-          }
-          if (width < 200) width = 500; // 兜底
-          (div as HTMLElement).style.width = '100%';
-          (div as HTMLElement).style.position = 'relative';
-          const chart = echarts.init(div as HTMLElement, undefined, { width, height: 400 });
-          chart.setOption(option);
+    if (!parsed || !chartRef.current) return;
 
-          // 在图表右上角添加复制按钮（hover 时显示）
-          if (!div.querySelector('.echarts-copy-btn')) {
-            const btn = document.createElement('div');
-            btn.className = 'echarts-copy-btn';
-            btn.innerHTML = '📋';
-            btn.title = '复制 ECharts 配置';
-            btn.style.cssText = 'position:absolute;top:8px;right:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(232,246,249,0.9);border:1px solid rgba(24,102,133,0.20);border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
-            (div as HTMLElement).onmouseenter = () => { btn.style.opacity = '1'; };
-            (div as HTMLElement).onmouseleave = () => { btn.style.opacity = '0'; };
-            btn.onclick = (e) => {
-              e.stopPropagation();
-              navigator.clipboard.writeText(JSON.stringify(option, null, 2)).then(() => {
-                btn.innerHTML = '✓';
-                btn.title = '已复制';
-                setTimeout(() => { btn.innerHTML = '📋'; btn.title = '复制 ECharts 配置'; }, 1500);
-              });
-            };
-            (div as HTMLElement).appendChild(btn);
-          }
-        });
-      } catch (e) {
-        div.textContent = '图表配置解析失败: ' + (e as Error).message;
+    let chart: { setOption: (opt: Record<string, unknown>) => void; dispose: () => void } | null = null;
+    let width = 500;
+
+    // Find parent container width
+    let el: HTMLElement | null = chartRef.current.parentElement;
+    while (el) {
+      if (el.clientWidth > 0) {
+        width = el.clientWidth - 32;
+        break;
+      }
+      el = el.parentElement;
+    }
+    if (width < 200) width = 500;
+
+    // Enhance option with safe defaults
+    const safeOption = { ...parsed };
+    if (!safeOption.grid) safeOption.grid = {};
+    safeOption.grid.containLabel = true;
+    if (safeOption.xAxis && !Array.isArray(safeOption.xAxis)) {
+      safeOption.xAxis.nameLocation = 'middle';
+      safeOption.xAxis.nameGap = 25;
+    }
+
+    import('echarts').then((echarts) => {
+      if (!chartRef.current) return;
+      chart = echarts.init(chartRef.current, undefined, { width, height: 400 });
+      chart.setOption(safeOption);
+
+      // Add copy button
+      if (!chartRef.current.querySelector('.echarts-copy-btn')) {
+        const btn = document.createElement('div');
+        btn.className = 'echarts-copy-btn';
+        btn.textContent = '\u{1F4CB}';
+        btn.title = 'Copy ECharts config';
+        btn.style.cssText =
+          'position:absolute;top:8px;right:8px;width:28px;height:28px;' +
+          'display:flex;align-items:center;justify-content:center;cursor:pointer;' +
+          'background:rgba(232,246,249,0.9);border:1px solid rgba(24,102,133,0.20);' +
+          'border-radius:4px;font-size:14px;z-index:100;opacity:0;transition:opacity 0.2s';
+        chartRef.current.onmouseenter = () => { btn.style.opacity = '1'; };
+        chartRef.current.onmouseleave = () => { btn.style.opacity = '0'; };
+        btn.onclick = (e: MouseEvent) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(JSON.stringify(safeOption, null, 2)).then(() => {
+            btn.textContent = '\u2713';
+            btn.title = 'Copied';
+            setTimeout(() => {
+              btn.textContent = '\u{1F4CB}';
+              btn.title = 'Copy ECharts config';
+            }, 1500);
+          });
+        };
+        chartRef.current.appendChild(btn);
       }
     });
-  });
+
+    return () => {
+      if (chart) chart.dispose();
+    };
+  }, [parsed]);
+
+  if (!parsed) {
+    return <Text type="danger">Chart config parse error</Text>;
+  }
 
   return (
-    <div ref={containerRef} dangerouslySetInnerHTML={{ __html: renderMarkdownToHtml(processed) }} />
+    <div
+      ref={chartRef}
+      style={{ width: '100%', height: 400, margin: '8px 0', position: 'relative' }}
+    />
   );
 }
 
 /**
- * 简易 Markdown → HTML 转换
+ * Code block renderer for react-markdown.
  *
- * 不用 react-markdown，直接用正则处理常见的 Markdown 语法。
- * 避免 react-markdown 对 HTML 标签的转义和重新处理。
+ * H-14: Intercepts `echarts` code blocks and renders them as ChartBlock.
+ * All other code blocks are rendered normally by react-markdown.
  */
-function renderMarkdownToHtml(md: string): string {
-  let html = md;
+function CodeBlockRenderer({
+  className,
+  children,
+}: {
+  className?: string;
+  children?: React.ReactNode;
+}): JSX.Element {
+  const lang = className?.replace('language-', '') || '';
+  const codeStr = String(children || '').replace(/\n$/, '');
 
-  // 代码块 ```（echarts 已在前面提取，这里只处理普通代码块）
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => {
-    return `<pre style="background:rgba(142,191,208,0.16);padding:8px 12px;border-radius:6px;overflow:auto;margin:6px 0;font-size:13px;font-family:var(--ocean-font-mono,monospace)"><code>${escapeHtml(code.trim())}</code></pre>`;
-  });
+  if (lang === 'echarts') {
+    return <ChartBlock optionStr={codeStr} />;
+  }
 
-  // 行内代码 `...`
-  html = html.replace(/`([^`]+)`/g, (_, code) => {
-    return `<code style="background:rgba(142,191,208,0.18);padding:1px 4px;border-radius:3px;font-size:13px;font-family:var(--ocean-font-mono,monospace)">${escapeHtml(code)}</code>`;
-  });
-
-  // 标题
-  html = html.replace(/^### (.+)$/gm, '<h3 style="font-size:15px;font-weight:600;margin:8px 0 4px">$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2 style="font-size:16px;font-weight:700;margin:10px 0 6px">$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1 style="font-size:18px;font-weight:700;margin:12px 0 8px">$1</h1>');
-
-  // 粗体 **...**
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-  // 斜体 *...*
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-
-  // 表格
-  html = html.replace(/^\|(.+)\|\n\|([-| :]+)\|\n((?:\|.*\|\n?)*)/gm, (_, header, _sep, body) => {
-    const headers = header.split('|').map((h: string) => h.trim()).filter(Boolean);
-    const rows = body.trim().split('\n').map((r: string) => r.split('|').map((c: string) => c.trim()).filter(Boolean));
-    let table = '<table style="border-collapse:collapse;width:100%;margin:8px 0;font-size:13px">';
-    table += '<tr>' + headers.map((h: string) => `<th style="border:1px solid rgba(24,102,133,0.20);padding:6px 10px;background:rgba(142,191,208,0.16);font-weight:600;text-align:left">${h}</th>`).join('') + '</tr>';
-    rows.forEach((row: string[]) => {
-      table += '<tr>' + row.map((c: string) => `<td style="border:1px solid rgba(24,102,133,0.14);padding:6px 10px">${c}</td>`).join('') + '</tr>';
-    });
-    table += '</table>';
-    return table;
-  });
-
-  // 引用块 >
-  html = html.replace(/^> (.+)$/gm, '<blockquote style="border-left:3px solid #91caff;margin:6px 0;padding:4px 12px;color:#666;background:#f6f8fa">$1</blockquote>');
-
-  // 无序列表 - 或 *
-  html = html.replace(/^[-*] (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
-  html = html.replace(/(<li[^<]*<\/li>\n?)+/g, (m) => `<ul style="margin:4px 0;padding-left:20px">${m}</ul>`);
-
-  // 有序列表 1.
-  html = html.replace(/^\d+\. (.+)$/gm, '<li style="margin:2px 0;line-height:1.7;padding-left:4px">$1</li>');
-
-  // 分隔线 ---
-  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid #e8e8e8;margin:12px 0" />');
-
-  // 段落（把连续的非标签行用 p 包裹，排除 katex-math div 和其他块级元素）
-  html = html.replace(/^(?!<[a-z/])(?<!<div class="katex-math")((?!<[a-z])(?!<div class="katex-math").+)$/gm, '<p style="margin:4px 0;line-height:1.7">$1</p>');
-
-  // 清理多余空行
-  html = html.replace(/\n{3,}/g, '\n\n');
-
-  return html;
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return (
+    <pre
+      style={{
+        background: 'rgba(142,191,208,0.16)',
+        padding: '8px 12px',
+        borderRadius: 6,
+        overflow: 'auto',
+        margin: '6px 0',
+        fontSize: 13,
+        fontFamily: 'var(--ocean-font-mono, monospace)',
+      }}
+    >
+      <code className={className}>{children}</code>
+    </pre>
+  );
 }
 
 /**
- * 消息角色 → 头像首字母
+ * Render Markdown content safely using react-markdown + rehype-sanitize.
+ *
+ * H-14: Replaces the previous regex-based HTML rendering with:
+ * - react-markdown: safe Markdown parsing (no raw HTML by default)
+ * - rehype-sanitize: strict allowlist, no event attributes
+ * - remark-math + rehype-katex: KaTeX math rendering
+ * - remark-gfm: GitHub-flavored Markdown (tables, etc.)
+ * - ECharts data parsed independently, not through Markdown
+ *
+ * No dangerouslySetInnerHTML is used.
+ */
+function MarkdownWithMath({ content }: { content: string }): JSX.Element {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkMath, remarkGfm]}
+      rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeKatex]}
+      components={{
+        code: CodeBlockRenderer as never,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
+
+/**
+ * Message role -> avatar letter
  */
 const ROLE_AVATAR_TEXT: Record<string, string> = {
   user: 'U',
@@ -213,7 +224,7 @@ const ROLE_AVATAR_TEXT: Record<string, string> = {
 };
 
 /**
- * 消息角色 → 头像颜色
+ * Message role -> avatar color
  */
 const ROLE_COLOR: Record<string, string> = {
   user: '#1686AE',
@@ -222,19 +233,22 @@ const ROLE_COLOR: Record<string, string> = {
 };
 
 /**
- * 消息角色 → 中文名
+ * Message role -> Chinese label
  */
 const ROLE_LABEL: Record<string, string> = {
-  user: '我',
-  assistant: '小艾',
-  tool: '工具',
+  user: '\u6211',
+  assistant: '\u5c0f\u827e',
+  tool: '\u5de5\u5177',
 };
 
 /**
- * 消息列表组件
+ * Message thread component.
  *
- * 展示对话历史，区分用户消息、AI 回答与工具消息。
- * AI 回答使用 Markdown 渲染（含表格、公式、代码块等）。
+ * Displays conversation history, distinguishing user messages,
+ * AI responses, and tool messages.
+ * AI responses use safe Markdown rendering (react-markdown + rehype-sanitize).
+ *
+ * H-14: No dangerouslySetInnerHTML, no regex-based HTML construction.
  */
 export function MessageThread({
   messages,
@@ -252,7 +266,7 @@ export function MessageThread({
           color: 'var(--ocean-text-muted)',
         }}
       >
-        <Text type="secondary">开始一段新对话吧 ✨</Text>
+        <Text type="secondary">{'\u5f00\u59cb\u4e00\u6bb5\u65b0\u5bf9\u8bdd\u5427'}</Text>
       </div>
     );
   }
@@ -313,22 +327,22 @@ export function MessageThread({
                 </div>
               )}
 
-              {/* 工具调用轨迹（仅 AI 消息） */}
+              {/* Tool call traces (AI messages only) */}
               {!isUser && toolCalls.length > 0 && <ToolTrace toolCalls={toolCalls} />}
 
-              {/* 引用列表（仅 AI 消息） */}
+              {/* Citation list (AI messages only) */}
               {!isUser && citations.length > 0 && (
                 <CitationList citations={citations} />
               )}
 
-              {/* 不确定性说明 */}
+              {/* Uncertainty note */}
               {!isUser && msg.uncertainty && (
                 <div style={{ marginTop: 8 }}>
                   <Text
                     type="warning"
                     style={{ fontSize: 12 }}
                   >
-                    ⚠ {msg.uncertainty}
+                    {'\u26a0'} {msg.uncertainty}
                   </Text>
                 </div>
               )}

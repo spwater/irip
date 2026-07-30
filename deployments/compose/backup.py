@@ -181,6 +181,10 @@ class BackupService:
     async def backup(self, output_dir: Path | None = None) -> BackupManifest:
         """执行完整备份流程。
 
+        C-04: 在 0700 临时目录中生成 dump、objects 和 manifest，
+        加密后原子移动唯一加密制品到最终目录，
+        try/finally 确保清理临时明文（成功和失败路径）。
+
         Args:
             output_dir: 输出目录（默认使用配置中的 output_dir）。
 
@@ -193,56 +197,73 @@ class BackupService:
         backup_id: str = str(new_id())
         logger.info("Backup %s: starting (output=%s)", backup_id, target_dir)
 
-        # 1. pg_dump → database.dump（custom 格式）
-        database_path: Path = target_dir / DATABASE_DUMP_FILENAME
-        logger.info("Backup %s: dumping PostgreSQL database ...", backup_id)
-        self._dump_database(database_path)
+        # C-04: 1. 创建 0700 临时目录
+        temp_dir: Path = Path(tempfile.mkdtemp(prefix="irip-backup-"))
+        try:
+            os.chmod(temp_dir, 0o700)
 
-        # 2. 导出 MinIO 对象 → objects/
-        objects_dir: Path = target_dir / OBJECTS_DIRNAME
-        objects_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Backup %s: exporting MinIO objects ...", backup_id)
-        object_count: int = self._export_minio_objects(objects_dir)
+            # C-04: 2. 在临时目录中生成 dump 和 objects
+            database_path: Path = temp_dir / DATABASE_DUMP_FILENAME
+            logger.info("Backup %s: dumping PostgreSQL database ...", backup_id)
+            self._dump_database(database_path)
 
-        # 3. 查询 alembic_version
-        migration_version: str = await self._query_migration_version()
-        logger.info(
-            "Backup %s: migration_version=%s, object_count=%d",
-            backup_id, migration_version, object_count,
-        )
+            objects_dir: Path = temp_dir / OBJECTS_DIRNAME
+            objects_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Backup %s: exporting MinIO objects ...", backup_id)
+            object_count: int = self._export_minio_objects(objects_dir)
 
-        # 4. 计算 manifest
-        manifest: BackupManifest = compute_manifest(
-            database_dump_path=database_path,
-            objects_dir=objects_dir,
-            application_version=self._config.application_version,
-            migration_version=migration_version,
-            backup_id=backup_id,
-            encrypted=self._config.age_recipient is not None,
-        )
+            # C-04: 3. 查询 alembic_version
+            migration_version: str = await self._query_migration_version()
+            logger.info(
+                "Backup %s: migration_version=%s, object_count=%d",
+                backup_id, migration_version, object_count,
+            )
 
-        # 5. 写入 manifest.json
-        save_manifest(manifest, target_dir)
-        logger.info("Backup %s: manifest written", backup_id)
+            # C-04: 4. 计算 manifest
+            manifest: BackupManifest = compute_manifest(
+                database_dump_path=database_path,
+                objects_dir=objects_dir,
+                application_version=self._config.application_version,
+                migration_version=migration_version,
+                backup_id=backup_id,
+                encrypted=self._config.age_recipient is not None,
+            )
 
-        # 6. 打包 tar
-        tar_path: Path = target_dir / BACKUP_TAR_FILENAME
-        self._create_tar(target_dir, tar_path)
+            # C-04: 5. 写入 manifest（临时目录）
+            save_manifest(manifest, temp_dir)
+            logger.info("Backup %s: manifest written", backup_id)
 
-        # 7. 可选 age 加密
-        final_path: Path = tar_path
-        if self._config.age_recipient is not None:
-            encrypted_path: Path = target_dir / BACKUP_TAR_AGE_FILENAME
-            self._encrypt_tar(tar_path, encrypted_path, self._config.age_recipient)
-            tar_path.unlink(missing_ok=True)
-            final_path = encrypted_path
-            logger.info("Backup %s: encrypted with age → %s", backup_id, final_path)
+            # C-04: 6. 打包 tar（临时目录）
+            tar_path: Path = temp_dir / BACKUP_TAR_FILENAME
+            self._create_tar(temp_dir, tar_path)
 
-        logger.info(
-            "Backup %s: complete (db_sha256=%s..., objects=%d)",
-            backup_id, manifest.database_sha256[:12], manifest.object_count,
-        )
-        return manifest
+            # C-04: 7. 加密（临时目录）
+            final_path: Path = tar_path
+            if self._config.age_recipient is not None:
+                encrypted_path: Path = temp_dir / BACKUP_TAR_AGE_FILENAME
+                self._encrypt_tar(tar_path, encrypted_path, self._config.age_recipient)
+                tar_path.unlink(missing_ok=True)
+                final_path = encrypted_path
+                logger.info("Backup %s: encrypted with age -> %s", backup_id, final_path)
+
+            # C-04: 8. 原子移动唯一加密制品到最终目录
+            final_dest: Path = target_dir / final_path.name
+            shutil.move(str(final_path), str(final_dest))
+            logger.info("Backup %s: moved encrypted artifact to %s", backup_id, final_dest)
+
+            # C-04: 9. 写入最小公开元数据到最终目录
+            save_manifest(manifest, target_dir)
+
+            logger.info(
+                "Backup %s: complete (db_sha256=%s..., objects=%d)",
+                backup_id, manifest.database_sha256[:12], manifest.object_count,
+            )
+            return manifest
+
+        finally:
+            # C-04: 10. 成功和失败路径都可靠清理临时明文
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            logger.info("Backup %s: cleaned up temp dir %s", backup_id, temp_dir)
 
     def _dump_database(self, output_path: Path) -> None:
         """使用 pg_dump 以 custom 格式导出 PostgreSQL 数据库。

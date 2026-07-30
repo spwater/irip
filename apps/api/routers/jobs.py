@@ -26,6 +26,7 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.common.ids import new_id
+from packages.common.job_policy import JobKindPolicy
 from packages.jobs.entities import TERMINAL_STATUSES, JobRef, JobStatus
 from packages.jobs.service import JobService
 
@@ -137,6 +138,9 @@ async def create_job(
     同事务 INSERT job(accepted) + outbox_event(job.accepted)。
     幂等键保证重复提交返回同一作业。
 
+    C-02: 通用接口只允许 allow_general_submit=True 的 kind。
+    特权 kind（backup/restore/audit_export）必须通过专用 API 提交。
+
     Args:
         body: 作业请求体。
         current_user: 当前认证用户。
@@ -146,8 +150,34 @@ async def create_job(
         JobResponse: 作业 ID + 状态（202 Accepted）。
 
     Raises:
-        AppError: code="validation_failed"，当 kind 为空时。
+        AppError: code="unknown_job_kind"，当 kind 未知时。
+        AppError: code="forbidden"，当 kind 不允许通用提交或缺少权限时。
     """
+    # C-02: JobKindPolicy 校验
+    from packages.auth.permissions import get_role_permissions
+
+    user_permissions: set[str] = set()
+    for role in current_user.roles:
+        user_permissions.update(get_role_permissions(role))
+    try:
+        JobKindPolicy.validate(
+            body.kind, user_permissions, via_general=True
+        )
+    except ValueError as exc:
+        raise AppError(
+            code="unknown_job_kind",
+            message=str(exc),
+            retryable=False,
+            fields={"kind": body.kind},
+        ) from exc
+    except PermissionError as exc:
+        raise AppError(
+            code="forbidden",
+            message=str(exc),
+            retryable=False,
+            fields={"kind": body.kind},
+        ) from exc
+
     ref: JobRef = await service.accept(
         kind=body.kind,
         payload=body.payload,
@@ -343,6 +373,31 @@ async def retry_job(
             retryable=False,
             fields={"status": original_status.value},
         )
+
+    # C-02: JobKindPolicy 校验（重试也必须经过策略校验）
+    from packages.auth.permissions import get_role_permissions
+
+    user_permissions: set[str] = set()
+    for role in current_user.roles:
+        user_permissions.update(get_role_permissions(role))
+    try:
+        JobKindPolicy.validate(
+            original.kind, user_permissions, via_general=True
+        )
+    except ValueError as exc:
+        raise AppError(
+            code="unknown_job_kind",
+            message=str(exc),
+            retryable=False,
+            fields={"kind": original.kind},
+        ) from exc
+    except PermissionError as exc:
+        raise AppError(
+            code="forbidden",
+            message=str(exc),
+            retryable=False,
+            fields={"kind": original.kind},
+        ) from exc
 
     # 创建新作业（同 kind + payload，新幂等键）
     new_idempotency_key = f"retry:{job_id}:{new_id()}"

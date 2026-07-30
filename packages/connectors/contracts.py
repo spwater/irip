@@ -27,9 +27,9 @@ class ConnectorSource:
     Attributes:
         kind: 数据源类型（file / postgres / rest）。
         config: 类型特定配置字典：
-            - file → ``{"path": str, "format": "csv"|"xlsx"|"json"}``
-            - postgres → ``{"secret_id": str(uuid), "query": str}``
-            - rest → ``{"secret_id": str(uuid), "path": str, "method": "GET"|"POST"}``
+            - file -> ``{"artifact_id": str(uuid), "format": "csv"|"xlsx"|"json"}``
+            - postgres -> ``{"secret_id": str(uuid), "query": str}``
+            - rest -> ``{"secret_id": str(uuid), "path": str, "method": "GET"|"POST"}``
     """
 
     kind: Literal["file", "postgres", "rest"]
