@@ -14,11 +14,9 @@ import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 
 const { Text, Paragraph } = Typography;
 
-// KaTeX 样式：line-height/box-sizing 隔离已移至 global.css 全局层面
-// 这里只保留 font-size 覆盖
-const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; }
-`;
+// KaTeX 样式隔离已在 global.css 中处理（仅 .katex { line-height: 1.2 }）
+// 不在此处添加任何 KaTeX 覆盖样式，避免与 KaTeX 自身 CSS 冲突
+const katexStyle = '';
 
 /**
  * Custom sanitize schema for rehype-sanitize.

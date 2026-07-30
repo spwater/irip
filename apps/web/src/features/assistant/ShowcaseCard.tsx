@@ -38,10 +38,8 @@ import rehypeKatex from 'rehype-katex';
 
 const { Text } = Typography;
 
-// KaTeX 样式：line-height/box-sizing 隔离已移至 global.css 全局层面
-const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; }
-`;
+// KaTeX 样式隔离已在 global.css 中处理
+const katexStyle = '';
 
 /** 块类型 → 图标映射 */
 const BLOCK_ICONS: Record<ShowcaseBlockType, JSX.Element> = {
