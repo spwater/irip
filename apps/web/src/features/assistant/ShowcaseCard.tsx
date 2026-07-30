@@ -170,12 +170,19 @@ export function ShowcaseCard({
     const snapshot = item.content_snapshot;
     switch (item.block_type) {
       case 'echarts':
+        // ECharts 缩略图：复用渲染组件，高度 120
+        return <EChartsThumbnail optionStr={snapshot} />;
       case 'plotly':
-        // 图表缩略图：复用渲染组件，高度 120
-        return item.block_type === 'plotly' ? (
-          <PlotlyBlock optionStr={snapshot} height={120} />
-        ) : (
-          <EChartsThumbnail optionStr={snapshot} />
+        // Plotly 缩略图不渲染三维图，只显示类型标签提示（展开后可看完整图）
+        return (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 4 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              Plotly 图表
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ fontSize: 11, opacity: 0.6 }}>
+              点击展开查看
+            </Typography.Text>
+          </div>
         );
       case 'table':
         // 表格前 3 行
