@@ -5,9 +5,10 @@ import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-a
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { BlockWrapper } from '@/features/assistant/BlockWrapper';
+import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 
 const { Text, Paragraph } = Typography;
 
@@ -22,72 +23,7 @@ const katexStyle = '';
  * KaTeX generates deeply nested span/div structures with class names, style attributes,
  * aria-* attributes, and MathML elements (semantics, annotation, math, mrow, mi, mo, etc.)
  */
-/* sanitizeSchema 暂时去掉（rehype-sanitize 未使用）
-const sanitizeSchema = {
-  ...defaultSchema,
-  tagNames: [
-    ...(defaultSchema.tagNames || []),
-    'math', 'semantics', 'annotation', 'mrow', 'mi', 'mo', 'mn', 'msupsub',
-    'mfrac', 'mtext', 'mspace', 'mtable', 'mtr', 'mtd', 'mstyle',
-  ],
-  attributes: {
-    ...defaultSchema.attributes,
-    '*': [
-      ...(defaultSchema.attributes?.['*'] || []),
-      'className',
-      'style',
-      'aria*',
-    ],
-    div: [
-      ...(defaultSchema.attributes?.div || []),
-      'className',
-      'dataLatex',
-      'dataDisplay',
-    ],
-    span: [
-      ...(defaultSchema.attributes?.span || []),
-      'className',
-      'style',
-    ],
-    code: [
-      ...(defaultSchema.attributes?.code || []),
-      'className',
-    ],
-    pre: [
-      ...(defaultSchema.attributes?.pre || []),
-      'className',
-    ],
-    annotation: [
-      'encoding',
-    ],
-    math: [
-      'xmlns',
-    ],
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    src: ['http', 'https', 'data'],
-    href: ['http', 'https'],
-  },
-};
-*/
-
-/**
- * 从 React 节点中提取纯文本内容（用于 content_snapshot）。
- */
-function extractTextFromNode(node: ReactNode): string {
-  if (node === null || node === undefined || typeof node === 'boolean') return '';
-  if (typeof node === 'string') return node;
-  if (typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(extractTextFromNode).join('');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if (typeof node === 'object' && node !== null && 'props' in (node as any)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const props = (node as any).props as { children?: ReactNode };
-    return extractTextFromNode(props.children);
-  }
-  return '';
-}
+/* sanitizeSchema 已移除（不再使用 rehype-sanitize） */
 
 /**
  * ECharts chart block component.
@@ -267,13 +203,15 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
  * 注意：纯方括号 [ ... ] 仅在包含 LaTeX 命令（\frac, \sum, \bar, \hat, \sqrt 等）时才转换，
  * 避免误匹配引用标注 [1] 或普通文本。
  */
-/* normalizeLatexMath 暂时未使用
+/**
+ * 将 LaTeX 原始语法 \[...\] 和 [...] 转换为 $$...$$ 语法。
+ */
 function normalizeLatexMath(md: string): string {
-  // LaTeX 命令检测：包含反斜杠开头的 LaTeX 命令才算公式
   const hasLatexCmd = (s: string): boolean => /\\(frac|sum|bar|hat|sqrt|int|oint|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|sigma|omega|pi|infty|cdot|times|div|pm|mp|le|ge|ne|approx|equiv|propto|leq|geq|subset|supset|in|notin|cup|cap|forall|exists|mathbb|mathcal|mathbf|text|mathrm|left|right|begin|end|operatorname)/.test(s);
 
+  let result = md;
   // \[...\] 跨行 → $$...$$
-  let result = md.replace(/(^|\n)\s*\\\[\s*\n([\s\S]*?)\n\s*\\\]\s*(?=\n|$)/g, '$1\n$$ $2 $$\n');
+  result = result.replace(/(^|\n)\s*\\\[\s*\n([\s\S]*?)\n\s*\\\]\s*(?=\n|$)/g, '$1\n$$ $2 $$\n');
   // \[...\] 单行 → $$...$$
   result = result.replace(/(^|\n)\s*\\\[([\s\S]*?)\\\]\s*(?=\n|$)/g, '$1$$ $2 $$');
   // \(...\) → $...$
@@ -281,26 +219,34 @@ function normalizeLatexMath(md: string): string {
     if (hasLatexCmd(inner)) return `$${inner}$`;
     return match;
   });
-
-  // 纯方括号 [ ... ] 独占行 → $$...$$（仅当包含 LaTeX 命令时）
-  // 匹配：行首可选空格 + [ + 内容(不含换行或含换行) + ] + 行尾
-  // 跨行版本
+  // 纯方括号 [ ... ] 独占行 → $$...$$（仅含 LaTeX 命令时）
   result = result.replace(/(^|\n)\s*\[\s*\n([\s\S]*?)\n\s*\]\s*(?=\n|$)/g, (match, prefix, inner) => {
     if (hasLatexCmd(inner)) return `${prefix}\n$$ ${inner.trim()} $$\n`;
     return match;
   });
-  // 单行版本
   result = result.replace(/(^|\n)\s*\[([\s\S]*?)\]\s*(?=\n|$)/g, (match, prefix, inner) => {
     if (hasLatexCmd(inner)) return `${prefix}$$ ${inner.trim()} $$`;
     return match;
   });
-
-  // 纯括号 ( ... ) 行内含 LaTeX → $...$（仅在紧跟 LaTeX 命令时）
-  // 不做 — 风险太高，行内括号太常见
-
   return result;
 }
-*/
+
+/**
+ * 从 React 节点中提取纯文本内容（用于 content_snapshot）。
+ */
+function extractTextFromNode(node: ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractTextFromNode).join('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (typeof node === 'object' && node !== null && 'props' in (node as any)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const props = (node as any).props as { children?: ReactNode };
+    return extractTextFromNode(props.children);
+  }
+  return '';
+}
 
 /**
  * 用 KaTeX JS API 直接渲染公式为 HTML 字符串。
@@ -353,67 +299,111 @@ function preprocessMath(md: string): { html: string; mathMap: Map<string, string
 /**
  * 内容块化 Markdown 渲染器。
  * 不使用 rehype-katex，自己用 KaTeX JS API 渲染公式。
+ * 支持代码块（echarts/plotly）拦截 + 表格/标题加入橱窗。
  */
 function BlockifiedMarkdown({
   content,
+  messageId,
+  conversationId,
+  systemContext,
 }: {
   content: string;
   messageId: string;
   conversationId: string | null;
   systemContext: string | null | undefined;
 }): JSX.Element {
-  // 预处理：把公式替换成占位符，KaTeX HTML 存到 mathMap
-  const { html: preprocessed, mathMap } = useMemo(() => preprocessMath(content), [content]);
+  // 预处理：先转换 \[...\] → $$...$$，再把公式替换成占位符
+  const { html: preprocessed, mathMap } = useMemo(() => {
+    const normalized = normalizeLatexMath(content);
+    return preprocessMath(normalized);
+  }, [content]);
 
-  // 用 ReactMarkdown 渲染（不带 remarkMath，因为公式已经被预处理了）
-  // 渲染后把占位符替换回 KaTeX HTML
-  const rendered = useMemo(() => {
-    // 用 remarkGfm 渲染 Markdown（表格、列表等），不渲染公式
-    // 占位符是纯文本，会原样出现在 HTML 中
-    return preprocessed;
+  // 块计数器
+  const blockCounterRef = useRef(0);
+  blockCounterRef.current = 0;
+  const getNextIndex = (): number => blockCounterRef.current++;
+
+  // 预提取标题 sections 和表格原文
+  const { headingSections, tableSnapshots } = useMemo(() => {
+    const sections: Record<string, string> = {};
+    const tables: string[] = [];
+    const lines = preprocessed.split('\n');
+    let i = 0;
+    // 标题 sections
+    i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const h2Match = line.match(/^##\s+(.+)/);
+      const h3Match = line.match(/^###\s+(.+)/);
+      if (h2Match || h3Match) {
+        const headingText = (h2Match || h3Match)![1].trim();
+        const level = h2Match ? 2 : 3;
+        const sectionLines: string[] = [line];
+        i++;
+        while (i < lines.length) {
+          const nextLine = lines[i];
+          const nextH2 = nextLine.match(/^##\s+/);
+          const nextH3 = nextLine.match(/^###\s+/);
+          if ((level === 2 && (nextH2 || nextH3)) || (level === 3 && nextH3)) break;
+          sectionLines.push(nextLine);
+          i++;
+        }
+        if (!(headingText in sections)) {
+          sections[headingText] = sectionLines.join('\n').trim();
+        }
+      } else {
+        i++;
+      }
+    }
+    // 表格原文
+    i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (line.includes('|') && !line.match(/^#{1,3}\s/) && !line.includes('MATH')) {
+        const tableLines: string[] = [];
+        let j = i;
+        while (j < lines.length && lines[j].includes('|') && !lines[j].match(/^#{1,3}\s/) && !lines[j].includes('MATH')) {
+          tableLines.push(lines[j]);
+          j++;
+        }
+        if (tableLines.length >= 2 && tableLines[1].includes('---')) {
+          tables.push(tableLines.join('\n'));
+        }
+        i = j;
+      } else {
+        i++;
+      }
+    }
+    return { headingSections: sections, tableSnapshots: tables };
   }, [preprocessed]);
 
-  // 自定义组件：拦截包含占位符的文本节点，替换为 KaTeX HTML
+  // 自定义组件
   const components = useMemo(() => {
     const replacePlaceholders = (text: string): ReactNode => {
-      // 检查是否包含占位符
       if (!text.includes('MATH')) return text;
-
-      // 按占位符分割文本
       const parts: ReactNode[] = [];
       const regex = /(MATH(?:DISPLAY|INLINE)\d+MATHEND)/g;
       let lastIndex = 0;
       let match: RegExpExecArray | null;
       let key = 0;
-
       while ((match = regex.exec(text)) !== null) {
-        // 占位符前的普通文本
-        if (match.index > lastIndex) {
-          parts.push(text.slice(lastIndex, match.index));
-        }
-        // 占位符对应的 KaTeX HTML
+        if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
         const placeholder = match[1];
         const mathHtml = mathMap.get(placeholder);
         if (mathHtml) {
-          parts.push(
-            <span key={`math-${key}`} dangerouslySetInnerHTML={{ __html: mathHtml }} />
-          );
+          parts.push(<span key={`math-${key}`} dangerouslySetInnerHTML={{ __html: mathHtml }} />);
         } else {
           parts.push(placeholder);
         }
         lastIndex = match.index + placeholder.length;
         key++;
       }
-      // 末尾普通文本
-      if (lastIndex < text.length) {
-        parts.push(text.slice(lastIndex));
-      }
+      if (lastIndex < text.length) parts.push(text.slice(lastIndex));
       return parts.length === 1 ? parts[0] : <>{parts}</>;
     };
 
     return {
       p: ({ children }: { children?: ReactNode }) => {
-        // 检查 children 是否包含占位符字符串
         if (typeof children === 'string' && children.includes('MATH')) {
           return <p>{replacePlaceholders(children)}</p>;
         }
@@ -425,23 +415,90 @@ function BlockifiedMarkdown({
         }
         return <p>{children}</p>;
       },
-      // 代码块也检查占位符（display math 可能被当成代码块）
-      code: ({ children }: { children?: ReactNode }) => {
+      code: ({
+        className,
+        children,
+      }: {
+        className?: string;
+        children?: ReactNode;
+      }) => {
         const text = String(children || '');
+        // 公式占位符优先处理
         if (text.includes('MATH')) {
           return <>{replacePlaceholders(text)}</>;
         }
-        return <code>{children}</code>;
+        const lang = className?.replace('language-', '') || '';
+        const codeStr = text.replace(/\n$/, '');
+
+        // ECharts 代码块
+        if (lang === 'echarts') {
+          const idx = getNextIndex();
+          return (
+            <BlockWrapper messageId={messageId} blockIndex={idx} blockType="echarts"
+              conversationId={conversationId} systemContext={systemContext} contentSnapshot={codeStr}>
+              <ChartBlock optionStr={codeStr} />
+            </BlockWrapper>
+          );
+        }
+        // Plotly 代码块
+        if (lang === 'plotly') {
+          const idx = getNextIndex();
+          return (
+            <BlockWrapper messageId={messageId} blockIndex={idx} blockType="plotly"
+              conversationId={conversationId} systemContext={systemContext} contentSnapshot={codeStr}>
+              <PlotlyBlock optionStr={codeStr} />
+            </BlockWrapper>
+          );
+        }
+        // 普通代码块
+        return <code className={className} style={{
+          background: 'rgba(142,191,208,0.16)', padding: '2px 4px', borderRadius: 4,
+          fontSize: 13, fontFamily: 'var(--ocean-font-mono, monospace)',
+        }}>{children}</code>;
+      },
+      table: ({ children }: { children?: ReactNode }) => {
+        const idx = getNextIndex();
+        const tableSnapshot = tableSnapshots[idx] ?? extractTextFromNode(children);
+        return (
+          <BlockWrapper messageId={messageId} blockIndex={idx} blockType="table"
+            conversationId={conversationId} systemContext={systemContext} contentSnapshot={tableSnapshot}>
+            <div style={{ overflowX: 'auto', margin: '8px 0' }}>
+              <table>{children}</table>
+            </div>
+          </BlockWrapper>
+        );
+      },
+      h2: ({ children }: { children?: ReactNode }) => {
+        const idx = getNextIndex();
+        const headingText = extractTextFromNode(children).trim();
+        const sectionSnapshot = headingSections[headingText] ?? headingText;
+        return (
+          <BlockWrapper messageId={messageId} blockIndex={idx} blockType="conclusion"
+            conversationId={conversationId} systemContext={systemContext} contentSnapshot={sectionSnapshot}>
+            <h2>{children}</h2>
+          </BlockWrapper>
+        );
+      },
+      h3: ({ children }: { children?: ReactNode }) => {
+        const idx = getNextIndex();
+        const headingText = extractTextFromNode(children).trim();
+        const sectionSnapshot = headingSections[headingText] ?? headingText;
+        return (
+          <BlockWrapper messageId={messageId} blockIndex={idx} blockType="conclusion"
+            conversationId={conversationId} systemContext={systemContext} contentSnapshot={sectionSnapshot}>
+            <h3>{children}</h3>
+          </BlockWrapper>
+        );
       },
     };
-  }, [mathMap]);
+  }, [mathMap, messageId, conversationId, systemContext, headingSections, tableSnapshots]);
 
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={components}
     >
-      {rendered}
+      {preprocessed}
     </ReactMarkdown>
   );
 }
