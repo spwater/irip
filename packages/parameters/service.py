@@ -570,8 +570,14 @@ class ParameterService:
             AppError: code="self_approval_forbidden"，当审核人==提交人。
         """
         async with session_scope(self._factory) as session:
+            # C-03 IDOR 修复：通过 JOIN Parameter 确保候选属于当前组织
             candidate = await session.scalar(
-                sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
+                sa.select(ParameterCandidate)
+                .join(Parameter, ParameterCandidate.parameter_id == Parameter.id)
+                .where(
+                    ParameterCandidate.id == candidate_id,
+                    Parameter.organization_id == self._org_id,
+                )
             )
             if candidate is None:
                 raise AppError(

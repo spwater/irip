@@ -664,9 +664,13 @@ class ComponentRegistryService:
         """
         now: datetime = self._clock.now()
         async with session_scope(self._factory) as session:
+            # C-03 IDOR 修复：通过 JOIN Component 确保版本属于当前组织
             version: ComponentVersion | None = await session.scalar(
-                sa.select(ComponentVersion).where(
+                sa.select(ComponentVersion)
+                .join(Component, ComponentVersion.component_id == Component.id)
+                .where(
                     ComponentVersion.id == version_id,
+                    Component.organization_id == self._org_id,
                 )
             )
             if version is None:
@@ -676,11 +680,13 @@ class ComponentRegistryService:
                     retryable=False,
                 )
 
-            # 查询组件主记录，修改 current_version_id 指针
+            # 查询组件主记录，修改 active_version_id 指针
             # 不修改 version 的 created_at（不可变表，不允许 UPDATE）
+            # C-03 IDOR 修复：加 organization_id 条件
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == version.component_id,
+                    Component.organization_id == self._org_id,
                 )
             )
             if component is not None:
@@ -696,12 +702,36 @@ class ComponentRegistryService:
 
         Args:
             component_id: 组件主记录 UUID。
+
+        Raises:
+            AppError: code="not_found"，当组件不存在或不属于当前组织时。
         """
         async with session_scope(self._factory) as session:
+            # C-03 IDOR 修复：先校验组件属于当前组织
+            component: Component | None = await session.scalar(
+                sa.select(Component).where(
+                    Component.id == component_id,
+                    Component.organization_id == self._org_id,
+                )
+            )
+            if component is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"组件不存在: {component_id}",
+                    retryable=False,
+                    fields={"component_id": str(component_id)},
+                )
             # 删除所有版本
             await session.execute(
-                sa.delete(ComponentVersion).where(ComponentVersion.component_id == component_id)
+                sa.delete(ComponentVersion).where(
+                    ComponentVersion.component_id == component_id
+                )
             )
             # 删除主记录
-            await session.execute(sa.delete(Component).where(Component.id == component_id))
+            await session.execute(
+                sa.delete(Component).where(
+                    Component.id == component_id,
+                    Component.organization_id == self._org_id,
+                )
+            )
             await session.flush()

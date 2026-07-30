@@ -37,6 +37,33 @@ if _db_url is not None:
 
 target_metadata = Base.metadata
 
+# ---- 导入所有 ORM 模型模块，确保 autogenerate 能发现所有表 ----
+# H-02 修复：完整导入所有 packages 下的 entities / ORM 模块，
+# 确保 Base.metadata 包含所有表定义，避免 autogenerate 遗漏。
+import packages.auth.entities  # noqa: F401, E402
+import packages.auth.scope_grants  # noqa: F401, E402
+import packages.common.artifacts  # noqa: F401, E402
+import packages.components.registry  # noqa: F401, E402
+import packages.components.flow_runtime  # noqa: F401, E402
+import packages.connectors.entities  # noqa: F401, E402
+import packages.departments.entities  # noqa: F401, E402
+import packages.equipment.entities  # noqa: F401, E402
+import packages.facts.entities  # noqa: F401, E402
+import packages.jobs.entities  # noqa: F401, E402
+import packages.jobs.outbox  # noqa: F401, E402
+import packages.models.entities  # noqa: F401, E402
+import packages.parameters.entities  # noqa: F401, E402
+import packages.provenance.entities  # noqa: F401, E402
+import packages.standards.methods  # noqa: F401, E402
+import packages.standards.object_type_dict  # noqa: F401, E402
+import packages.standards.objects  # noqa: F401, E402
+import packages.standards.packages  # noqa: F401, E402
+import packages.standards.templates  # noqa: F401, E402
+import packages.standards.variables  # noqa: F401, E402
+import packages.audit.events  # noqa: F401, E402
+import packages.ai.service  # noqa: F401, E402
+import packages.ai.tool_repository  # noqa: F401, E402
+
 
 def run_migrations_offline() -> None:
     """离线模式：生成 SQL 脚本而不连接数据库。"""

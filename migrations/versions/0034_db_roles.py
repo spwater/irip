@@ -91,13 +91,14 @@ _BUSINESS_TABLES = [
 ]
 
 #: 不可变表列表（运行时账号仅 SELECT/INSERT，不可 UPDATE/DELETE）。
+#: H-01 修复：flow_node_execution 和 evidence_set 不再是不可变的，
+#: 真正不可变的是 evidence_set_version。
 _IMMUTABLE_TABLES = [
     "fact_revision",
     "component_version",
     "flow_definition_version",
-    "flow_node_execution",
     "audit_event",
-    "evidence_set",
+    "evidence_set_version",
 ]
 
 #: 审计事件表名。
@@ -147,26 +148,78 @@ def upgrade() -> None:
     op.execute("GRANT USAGE ON SCHEMA public TO irip_runtime;")
 
     # 对所有业务表授予 SELECT/INSERT/UPDATE/DELETE
+    # H-02/C-03 修复：用 DO 块包裹 GRANT，检查表是否存在后再授权，
+    # 避免 fresh DB 上表尚未创建时 GRANT 报错
     for table in _BUSINESS_TABLES:
         op.execute(
-            f'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "{table}" TO irip_runtime;'
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '{table}'
+                ) THEN
+                    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "{table}" TO irip_runtime;
+                END IF;
+            END
+            $$;
+            """
         )
 
     # 对不可变表 REVOKE UPDATE/DELETE（仅保留 SELECT/INSERT）
     # 注意：不可变表的触发器在 0033 迁移中创建，此处仅做权限层面的限制
     for table in _IMMUTABLE_TABLES:
-        op.execute(f'REVOKE UPDATE, DELETE ON TABLE "{table}" FROM irip_runtime;')
-        op.execute(f'GRANT SELECT, INSERT ON TABLE "{table}" TO irip_runtime;')
+        op.execute(
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '{table}'
+                ) THEN
+                    REVOKE UPDATE, DELETE ON TABLE "{table}" FROM irip_runtime;
+                    GRANT SELECT, INSERT ON TABLE "{table}" TO irip_runtime;
+                END IF;
+            END
+            $$;
+            """
+        )
 
     # 运行时账号不授予 audit_event 的 UPDATE/DELETE
-    op.execute(f'REVOKE UPDATE, DELETE ON TABLE "{_AUDIT_TABLE}" FROM irip_runtime;')
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = '{_AUDIT_TABLE}'
+            ) THEN
+                REVOKE UPDATE, DELETE ON TABLE "{_AUDIT_TABLE}" FROM irip_runtime;
+            END IF;
+        END
+        $$;
+        """
+    )
 
     # 授予序列使用权限（INSERT 需要序列值）
     op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO irip_runtime;")
 
     # ---- 4. irip_audit_writer: 审计写入账号，仅审计表 INSERT ----
     op.execute("GRANT USAGE ON SCHEMA public TO irip_audit_writer;")
-    op.execute(f'GRANT INSERT ON TABLE "{_AUDIT_TABLE}" TO irip_audit_writer;')
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = '{_AUDIT_TABLE}'
+            ) THEN
+                GRANT INSERT ON TABLE "{_AUDIT_TABLE}" TO irip_audit_writer;
+            END IF;
+        END
+        $$;
+        """
+    )
 
     # ---- 5. 默认权限（未来新建表自动授权给 irip_runtime） ----
     # 由数据库 owner 创建的新表自动授权给 irip_runtime
@@ -193,14 +246,38 @@ def downgrade() -> None:
     )
 
     # 收回 irip_audit_writer 权限
-    op.execute(f'REVOKE INSERT ON TABLE "{_AUDIT_TABLE}" FROM irip_audit_writer;')
+    op.execute(
+        f"""
+        DO $$
+        BEGIN
+            IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = '{_AUDIT_TABLE}'
+            ) THEN
+                REVOKE INSERT ON TABLE "{_AUDIT_TABLE}" FROM irip_audit_writer;
+            END IF;
+        END
+        $$;
+        """
+    )
     op.execute("REVOKE USAGE ON SCHEMA public FROM irip_audit_writer;")
 
     # 收回 irip_runtime 权限
     for table in _BUSINESS_TABLES:
         op.execute(
-            f'REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLE "{table}" '
-            f"FROM irip_runtime;"
+            f"""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public' AND table_name = '{table}'
+                ) THEN
+                    REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLE "{table}"
+                    FROM irip_runtime;
+                END IF;
+            END
+            $$;
+            """
         )
     op.execute("REVOKE USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public FROM irip_runtime;")
     op.execute("REVOKE USAGE ON SCHEMA public FROM irip_runtime;")

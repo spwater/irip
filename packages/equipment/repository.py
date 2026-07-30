@@ -57,9 +57,18 @@ class EquipmentRepository:
         return equipment
 
     @staticmethod
-    async def select_by_id(session: AsyncSession, equipment_id: UUID) -> Equipment | None:
-        """按 ID 查询设备。"""
-        result = await session.execute(sa.select(Equipment).where(Equipment.id == equipment_id))
+    async def select_by_id(
+        session: AsyncSession,
+        equipment_id: UUID,
+        organization_id: UUID,
+    ) -> Equipment | None:
+        """按 ID 查询设备（含租户隔离条件）。"""
+        result = await session.execute(
+            sa.select(Equipment).where(
+                Equipment.id == equipment_id,
+                Equipment.organization_id == organization_id,
+            )
+        )
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -181,9 +190,10 @@ class EquipmentRepository:
         department_id: UUID,
         sort_order: int,
         lock_version: int,
+        organization_id: UUID,
         visible_departments: list[str] | None = None,
     ) -> Equipment | None:
-        """UPDATE 设备（乐观锁，不含 code 列）。"""
+        """UPDATE 设备（乐观锁，不含 code 列，含租户隔离）。"""
         values: dict[str, object] = {
             "display_name": display_name,
             "description": description,
@@ -199,6 +209,7 @@ class EquipmentRepository:
             .values(**values)
             .where(
                 Equipment.id == equipment_id,
+                Equipment.organization_id == organization_id,
                 Equipment.lock_version == lock_version,
             )
             .returning(Equipment)
@@ -211,8 +222,9 @@ class EquipmentRepository:
         equipment_id: UUID,
         status: str,
         lock_version: int,
+        organization_id: UUID,
     ) -> Equipment | None:
-        """UPDATE 设备状态（乐观锁，软禁用/启用）。"""
+        """UPDATE 设备状态（乐观锁，软禁用/启用，含租户隔离）。"""
         result = await session.execute(
             sa.update(Equipment)
             .values(
@@ -222,6 +234,7 @@ class EquipmentRepository:
             )
             .where(
                 Equipment.id == equipment_id,
+                Equipment.organization_id == organization_id,
                 Equipment.lock_version == lock_version,
             )
             .returning(Equipment)

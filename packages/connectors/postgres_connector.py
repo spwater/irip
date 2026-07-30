@@ -3,13 +3,16 @@
 安全约定：
 - DSN 通过 SecretStore 按 secret_id 解析，绝不返回、绝不记录日志；
 - 连接器仅接收 DSN 内部使用，API 响应不携带 DSN 明文；
-- 查询强制包一层 LIMIT，防止全表扫描。
+- 查询强制包一层 LIMIT，防止全表扫描；
+- H-08 安全修复：查询在 READ ONLY 事务中执行，设置 statement_timeout；
+- H-08 安全修复：用 sqlparse 校验 SQL 为单条 SELECT 语句。
 
 实现 Connector 协议：
 - preview(source, limit): 执行 ``SELECT * FROM (<query>) sub LIMIT n``；
 - read(source): 流式 yield SourceRecord。
 """
 
+import sqlparse
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -64,11 +67,12 @@ class PostgresConnector:
             PreviewTable: 列名 + 行 + 总行数。
 
         Raises:
-            AppError: code="validation_failed"，当缺少 secret_id/query 时。
+            AppError: code="validation_failed"，当缺少 secret_id/query 或 SQL 校验失败时。
             AppError: code="secret_not_found"，当 secret 不存在时。
             AppError: code="connector_error"，当查询执行失败时。
         """
         secret_id, query = self._extract(source)
+        self._validate_sql(query)
         dsn = await self._secret_store.get(secret_id)
         engine = create_async_engine(_to_async_url(dsn))
         try:
@@ -92,6 +96,7 @@ class PostgresConnector:
             SourceRecord: 每行一条记录。
         """
         secret_id, query = self._extract(source)
+        self._validate_sql(query)
         dsn = await self._secret_store.get(secret_id)
         engine = create_async_engine(_to_async_url(dsn))
         try:
@@ -144,16 +149,58 @@ class PostgresConnector:
         return f"SELECT * FROM ({query.rstrip(';')}) AS _irip_sub LIMIT {safe_limit}"
 
     @staticmethod
+    def _validate_sql(query: str) -> None:
+        """校验 SQL 为单条 SELECT 语句（H-08 安全修复）。
+
+        用 sqlparse 解析 SQL，确保：
+        1. 只有一条语句（防止 SQL 注入拼接多条语句）；
+        2. 语句类型为 SELECT（防止 DML/DDL 操作）。
+
+        Args:
+            query: 待校验的 SQL 字符串。
+
+        Raises:
+            AppError: code="validation_failed"，当 SQL 不是单条 SELECT 语句时。
+        """
+        statements = sqlparse.parse(query)
+        non_empty = [s for s in statements if s.token_first(skip_ws=True, skip_cm=True) is not None]
+        if len(non_empty) != 1:
+            raise AppError(
+                code="validation_failed",
+                message="只允许单条 SQL 语句",
+                retryable=False,
+                fields={},
+            )
+        stmt_type = non_empty[0].get_type()
+        if stmt_type != "SELECT":
+            raise AppError(
+                code="validation_failed",
+                message=f"只允许 SELECT 查询，当前语句类型: {stmt_type}",
+                retryable=False,
+                fields={"statement_type": str(stmt_type)},
+            )
+
+    @staticmethod
     async def _execute(engine: AsyncEngine, sql: str) -> tuple[tuple[str, ...], list[list]]:
-        """执行 SQL，返回 (列名元组, 行列表)。"""
+        """执行 SQL，返回 (列名元组, 行列表)。
+
+        H-08 安全修复：在 READ ONLY 事务中执行，设置 statement_timeout，
+        防止数据修改和长时间运行的查询。
+        """
         from sqlalchemy import text
 
         try:
             async with engine.connect() as conn:
+                # 设置 READ ONLY 事务，防止任何写操作
+                await conn.execute(text("SET LOCAL transaction_read_only = true"))
+                # 设置语句超时，防止长时间运行的查询
+                await conn.execute(text("SET LOCAL statement_timeout = '30s'"))
                 result = await conn.execute(text(sql))
                 columns = tuple(str(c) for c in result.keys())
                 rows = [list(row) for row in result.fetchall()]
                 return columns, rows
+        except AppError:
+            raise
         except Exception as exc:
             raise AppError(
                 code="connector_error",

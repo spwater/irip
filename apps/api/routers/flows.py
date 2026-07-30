@@ -556,7 +556,10 @@ async def update_flow(
     from packages.components.flow_runtime import FlowDefinition
 
     async with session_scope(service.session_factory) as session:
-        stmt = sa.select(FlowDefinition).where(FlowDefinition.id == flow_id)
+        stmt = sa.select(FlowDefinition).where(
+            FlowDefinition.id == flow_id,
+            FlowDefinition.organization_id == service.organization_id,
+        )
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()
         if definition is None:

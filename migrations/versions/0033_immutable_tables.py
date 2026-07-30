@@ -35,13 +35,15 @@ depends_on = None
 
 #: 不可变表列表（数据库实际表名）。
 #: 注意 flow_version 的实际表名为 flow_definition_version。
+#: H-01 修复：flow_node_execution 和 evidence_set 不再是不可变的
+#: （flow_runtime 需要更新节点状态，evidence.py 需要更新证据集状态），
+#: 真正不可变的是 evidence_set_version（冻结快照）。
 _IMMUTABLE_TABLES: list[str] = [
     "fact_revision",
     "component_version",
     "flow_definition_version",
-    "flow_node_execution",
     "audit_event",
-    "evidence_set",
+    "evidence_set_version",
 ]
 
 #: 触发器名称映射（表名 → 触发器名）。
@@ -49,9 +51,8 @@ _TRIGGER_NAMES: dict[str, str] = {
     "fact_revision": "prevent_modify_fact_revision",
     "component_version": "prevent_modify_component_version",
     "flow_definition_version": "prevent_modify_flow_version",
-    "flow_node_execution": "prevent_modify_flow_node_execution",
     "audit_event": "prevent_modify_audit_event",
-    "evidence_set": "prevent_modify_evidence_set",
+    "evidence_set_version": "prevent_modify_evidence_set_version",
 }
 
 
