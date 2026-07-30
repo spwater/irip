@@ -17,7 +17,7 @@ const { Text, Paragraph } = Typography;
 // KaTeX style for proper rendering within react-markdown
 const katexStyle = `
 .ai-markdown-body .katex { font-size: 1.05em; }
-.ai-markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; margin: 8px 0; }
+.ai-markdown-body .katex-display { overflow-x: auto; overflow-y: visible; margin: 8px 0; padding: 4px 0; }
 .ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
 .ai-markdown-body .katex * { box-sizing: content-box !important; }
 `;
