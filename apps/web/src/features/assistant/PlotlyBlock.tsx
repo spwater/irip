@@ -1,60 +1,47 @@
 /**
  * Plotly 图表渲染组件。
  *
- * 使用 react-plotly.js + plotly.js-dist-min 渲染 ```plotly 代码块中的 JSON 配置。
- * 动态 import 按需加载，避免影响初始包体积。
+ * 直接使用 plotly.js-dist-min 的 Plotly.newPlot() API 渲染，
+ * 不用 react-plotly.js（其 Babel CommonJS 包装与 Vite ESM React 冲突，
+ * 导致 "Cannot call a class as a function"）。
  *
- * 复用于：
- * - 消息区全尺寸图表（height 默认 400）
- * - 橱窗卡片缩略图（height 120）
+ * 动态 import 按需加载，避免影响初始包体积。
+ * 复用于：消息区全尺寸图表（height 400）+ 橱窗缩略图（height 120）。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Typography } from 'antd';
 
 const { Text } = Typography;
 
-/** Plotly 组件类型（动态加载后赋值） */
-type PlotlyComponentType = React.ComponentType<Record<string, unknown>>;
+/** Plotly 模块类型（动态加载后使用） */
+type PlotlyModule = {
+  newPlot: (el: HTMLElement, data: unknown[], layout: Record<string, unknown>, config: Record<string, unknown>) => Promise<unknown>;
+  react: (el: HTMLElement, data: unknown[], layout: Record<string, unknown>, config: Record<string, unknown>) => Promise<unknown>;
+  purge: (el: HTMLElement) => void;
+};
 
-/** 模块级缓存：动态加载的 Plotly React 组件（仅加载一次） */
-let plotlyComponentPromise: Promise<PlotlyComponentType> | null = null;
+/** 模块级缓存：动态加载的 Plotly 模块（仅加载一次） */
+let plotlyPromise: Promise<PlotlyModule> | null = null;
 
 /**
- * 动态加载 react-plotly.js factory + plotly.js-dist-min。
+ * 动态加载 plotly.js-dist-min。
  * 使用模块级缓存确保只加载一次。
- *
- * 关键：不能用 react-plotly.js 的默认导出（index.js），
- * 因为它内部 require('plotly.js/dist/plotly') 会加载完整 plotly.js（~3MB），
- * 与我们已加载的 plotly.js-dist-min 冲突，导致 "Cannot call a class as a function"。
- * 正确做法：用 factory 模式，传入我们自己加载的 plotly.js-dist-min 实例。
  */
-async function loadPlotlyComponent(): Promise<PlotlyComponentType> {
-  if (plotlyComponentPromise) {
-    return plotlyComponentPromise;
-  }
-  plotlyComponentPromise = (async () => {
-    // 先加载 plotly.js-dist-min
-    const Plotly = await import('plotly.js-dist-min');
-    // 用 factory 模式创建组件，传入我们的 Plotly 实例
-    const factoryMod = await import('react-plotly.js/factory');
-    const factory = (factoryMod as unknown as { default: (p: unknown) => PlotlyComponentType }).default;
-    return factory(Plotly);
-  })();
-  return plotlyComponentPromise;
+async function loadPlotly(): Promise<PlotlyModule> {
+  if (plotlyPromise) return plotlyPromise;
+  plotlyPromise = import('plotly.js-dist-min').then((m) => m as unknown as PlotlyModule);
+  return plotlyPromise;
 }
 
 /**
  * 宽松 JSON 解析（复用 ChartBlock 的逻辑）。
- * 将 JS 对象语法转为合法 JSON：无引号 key、单引号、尾逗号。
  */
 function lenientParse(str: string): Record<string, unknown> | null {
-  // 1. 标准 JSON.parse
   try {
     return JSON.parse(str) as Record<string, unknown>;
   } catch {
     // fall through
   }
-  // 2. 宽松解析
   try {
     const lenient = str
       .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)/g, '$1"$2"$3')
@@ -76,7 +63,8 @@ export function PlotlyBlock({
   height?: number;
 }): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [PlotlyComp, setPlotlyComp] = useState<PlotlyComponentType | null>(null);
+  const plotlyRef = useRef<PlotlyModule | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
   // 防抖：流式传输中等内容稳定后再渲染
@@ -89,24 +77,65 @@ export function PlotlyBlock({
   // 解析 JSON 配置
   const parsed = useMemo(() => lenientParse(debouncedStr), [debouncedStr]);
 
-  // 动态加载 Plotly 组件
+  // 动态加载 Plotly 模块
   useEffect(() => {
     let cancelled = false;
-    loadPlotlyComponent()
-      .then((comp) => {
+    loadPlotly()
+      .then((mod) => {
         if (!cancelled) {
-          setPlotlyComp(comp);
+          plotlyRef.current = mod;
+          setLoaded(true);
         }
       })
       .catch(() => {
-        if (!cancelled) {
-          setLoadError(true);
-        }
+        if (!cancelled) setLoadError(true);
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // 渲染 / 更新图表
+  useEffect(() => {
+    if (!parsed || !loaded || !plotlyRef.current || !containerRef.current) return;
+
+    const Plotly = plotlyRef.current;
+    const el = containerRef.current;
+    let cancelled = false;
+
+    const data = (parsed.data ?? []) as unknown[];
+    const rawLayout = (parsed.layout ?? {}) as Record<string, unknown>;
+    const config = {
+      responsive: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+    };
+
+    // 缩略图模式（height <= 120）：注入小字体 + 紧凑 margin + 隐藏 legend
+    const isThumbnail = height <= 120;
+    const layout = isThumbnail
+      ? {
+          ...rawLayout,
+          font: { ...(rawLayout.font as Record<string, unknown> | undefined), size: 8 },
+          margin: { l: 28, r: 8, t: 15, b: 20 },
+          showlegend: false,
+        }
+      : rawLayout;
+
+    // 首次用 newPlot，后续用 react 更新
+    const hasExisting = el.querySelector('.plotly') !== null;
+    if (hasExisting) {
+      Plotly.react(el, data, layout, config).catch(() => {});
+    } else {
+      Plotly.newPlot(el, data, layout, config).catch(() => {});
+    }
+
+    return () => {
+      if (!cancelled && el.querySelector('.plotly')) {
+        Plotly.purge(el);
+      }
+    };
+  }, [parsed, loaded]);
 
   // 复制配置按钮
   useEffect(() => {
@@ -142,7 +171,6 @@ export function PlotlyBlock({
   }, [parsed]);
 
   if (!parsed) {
-    // 流式传输中：JSON 可能还没传完
     const looksIncomplete = debouncedStr.trim().length > 0 && !debouncedStr.trim().endsWith('}');
     if (looksIncomplete) {
       return <div style={{ width: '100%', minHeight: 40, margin: '8px 0' }} />;
@@ -151,10 +179,10 @@ export function PlotlyBlock({
   }
 
   if (loadError) {
-    return <Text type="danger">Plotly 组件加载失败</Text>;
+    return <Text type="danger">Plotly 加载失败</Text>;
   }
 
-  if (!PlotlyComp) {
+  if (!loaded) {
     return (
       <div
         style={{
@@ -170,39 +198,11 @@ export function PlotlyBlock({
     );
   }
 
-  // react-plotly.js 的 Plot 组件接受 data、layout、config 等 props
-  const data = (parsed.data ?? []) as unknown[];
-  const rawLayout = (parsed.layout ?? {}) as Record<string, unknown>;
-  const config = {
-    responsive: true,
-    displaylogo: false,
-    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-  };
-
-  // 缩略图模式（height <= 120）：注入小字体 + 紧凑 margin + 隐藏 legend
-  const isThumbnail = height <= 120;
-  const layout = isThumbnail
-    ? {
-        ...rawLayout,
-        font: { ...(rawLayout.font as Record<string, unknown> | undefined), size: 8 },
-        margin: { l: 28, r: 8, t: 15, b: 20 },
-        showlegend: false,
-      }
-    : rawLayout;
-
   return (
     <div
       ref={containerRef}
       style={{ width: '100%', height, margin: '8px 0', position: 'relative' }}
-    >
-      <PlotlyComp
-        data={data}
-        layout={layout}
-        config={config}
-        style={{ width: '100%', height: '100%' }}
-        useResizeHandler
-      />
-    </div>
+    />
   );
 }
 
