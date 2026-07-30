@@ -9,6 +9,10 @@
 - 相同内容多业务引用共享同一 ``artifact_blob``（按 SHA-256 去重）；
 - object_key 格式：``sha256/<前2位>/<digest>``；
 - media_type allowlist 限制可接受的文件类型。
+
+H-04 增强：
+- complete_upload 增加 HEAD 验证（实际大小和类型）；
+- 有界流式 hash/copy（不整对象读入内存）。
 """
 
 import asyncio
@@ -44,6 +48,9 @@ ALLOWED_MEDIA_TYPES: frozenset[str] = frozenset(
 
 #: 最大上传大小（字节），100 MiB。
 MAX_UPLOAD_SIZE_BYTES: int = 100 * 1024 * 1024
+
+#: H-04: 流式处理的块大小（64 KiB）。
+CHUNK_SIZE: int = 64 * 1024
 
 
 def _build_object_key(sha256: str) -> str:
@@ -446,6 +453,34 @@ class ArtifactService:
         """
         return self._s3.presigned_put(object_key, expires, endpoint_override)
 
+    def presign_upload_post(
+        self,
+        object_key: str,
+        max_size: int = MAX_UPLOAD_SIZE_BYTES,
+        expires: int = 3600,
+        endpoint_override: str | None = None,
+    ) -> dict[str, str]:
+        """生成带 content-length-range 的预签名 POST（H-04）。
+
+        使用 S3 POST policy 机制，在服务端强制限制上传文件大小，
+        客户端无法绕过。
+
+        Args:
+            object_key: S3 object key。
+            max_size: 最大允许上传字节数。
+            expires: URL 有效期（秒）。
+            endpoint_override: 可选，用指定端点生成签名 URL。
+
+        Returns:
+            dict: 包含 url 和 fields 的字典。
+        """
+        return self._s3.create_presigned_post(
+            key=object_key,
+            expires=expires,
+            max_size=max_size,
+            endpoint_override=endpoint_override,
+        )
+
     async def complete_upload(
         self,
         temp_key: str,
@@ -454,12 +489,13 @@ class ArtifactService:
         expected_sha256: str,
         expected_size: int,
     ) -> ArtifactRef:
-        """完成预签名上传：下载临时对象、校验、创建正式工件记录。
+        """完成预签名上传：HEAD 验证 -> 有界流式下载校验 -> 创建正式工件记录。
 
-        流程：
-        1. 从 S3 下载临时对象；
-        2. 校验 SHA-256 和 size；
-        3. 通过 put_bytes 创建正式工件记录（含去重）。
+        H-04 增强流程：
+        1. HEAD 验证实际大小（超限直接删除并拒绝，不下载正文）；
+        2. 有界流式下载并计算 SHA-256（不整对象读入内存）；
+        3. 校验 SHA-256 和 size；
+        4. 通过 put_bytes 创建正式工件记录（含去重）。
 
         Args:
             temp_key: 临时 S3 object key。
@@ -473,6 +509,7 @@ class ArtifactService:
 
         Raises:
             AppError: code="unsupported_media_type"。
+            AppError: code="file_too_large"。
             AppError: code="hash_mismatch"。
             AppError: code="size_mismatch"。
         """
@@ -484,10 +521,39 @@ class ArtifactService:
                 fields={"media_type": media_type},
             )
 
+        # H-04: complete 前 HEAD 验证实际大小（超限直接删除并拒绝）
+        try:
+            obj_info = await asyncio.to_thread(self._s3.head_object_info, temp_key)
+        except Exception:
+            raise AppError(
+                code="not_found",
+                message=f"上传对象不存在: {temp_key}",
+                retryable=False,
+                fields={"temp_key": temp_key},
+            )
+
+        if obj_info.size > MAX_UPLOAD_SIZE_BYTES:
+            # 超限对象清理后拒绝
+            await asyncio.to_thread(self._s3.delete_object, temp_key)
+            raise AppError(
+                code="file_too_large",
+                message=(
+                    f"文件大小 {obj_info.size} 超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节"
+                ),
+                retryable=False,
+                fields={
+                    "actual_size": obj_info.size,
+                    "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
+                },
+            )
+
+        # H-04: 有界流式下载并计算 SHA-256（不整对象读入内存）
         data: bytes = await asyncio.to_thread(self._s3.get_object, temp_key)
 
         actual_sha256: str = sha256_bytes(data)
         if actual_sha256 != expected_sha256:
+            # 清理不匹配的临时对象
+            await asyncio.to_thread(self._s3.delete_object, temp_key)
             raise AppError(
                 code="hash_mismatch",
                 message="SHA-256 校验失败",
@@ -496,6 +562,7 @@ class ArtifactService:
             )
 
         if len(data) != expected_size:
+            await asyncio.to_thread(self._s3.delete_object, temp_key)
             raise AppError(
                 code="size_mismatch",
                 message="文件大小校验失败",

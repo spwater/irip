@@ -3,17 +3,20 @@
 核心设计（docs/arch-v0.md §4.2 时序图 + §7.6 异步与事务约定）：
 - 租约 TTL 30s，心跳间隔 10s；
 - acquire: 条件 UPDATE 获取租约（失败则丢弃任务，Redis 重投）；
+- acquire_with_fencing: 条件 UPDATE + RETURNING lock_version（H-03 fencing token）；
 - heartbeat: 延长租约过期时间；
 - release: 清除租约；
 - reap_expired: 回收过期租约，重新入队。
 
-作业执行入口 execute_job:
-  1. acquire 租约；
-  2. 执行作业处理器（kind → handler 映射）；
-  3. 乐观锁提交结果（lock_version 匹配才更新）；
-  4. release 租约。
+作业执行入口 execute_job（H-03 增强）:
+  1. acquire_with_fencing 获取租约 + fencing token；
+  2. 启动独立心跳任务（asyncio.create_task）；
+  3. 执行作业处理器（kind -> handler 映射）；
+  4. 乐观锁提交结果（fencing token 匹配才更新）；
+  5. 取消心跳任务 + release 租约。
 """
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
@@ -95,6 +98,33 @@ class WorkerLeaseManager:
             acquired = await JobRepository.acquire_lease(session, job_id, owner, expires_at)
             return acquired
 
+    async def acquire_with_fencing(
+        self,
+        job_id: UUID,
+        owner: str,
+        ttl_seconds: int = LEASE_TTL_SECONDS,
+    ) -> tuple[bool, int]:
+        """获取作业租约并返回 fencing token（H-03）。
+
+        与 acquire 相同，但通过 RETURNING 子句返回获取后的 lock_version
+        作为 fencing token。fencing token 用于提交结果时的乐观锁校验。
+
+        Args:
+            job_id: 作业 UUID。
+            owner: worker ID。
+            ttl_seconds: 租约 TTL（秒），默认 30。
+
+        Returns:
+            tuple[bool, int]: (是否获取成功, fencing token)。
+        """
+        expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
+
+        async with session_scope(self._factory) as session:
+            acquired, fencing_token = await JobRepository.acquire_lease_with_fencing(
+                session, job_id, owner, expires_at
+            )
+            return acquired, fencing_token
+
     async def heartbeat(
         self,
         job_id: UUID,
@@ -132,9 +162,10 @@ class WorkerLeaseManager:
             await JobRepository.release_lease(session, job_id, owner)
 
     async def reap_expired(self) -> list[UUID]:
-        """回收过期租约。
+        """回收过期租约并重新投递（H-03）。
 
-        将 running 状态且租约过期的作业重新入队（status→queued）。
+        将 running 状态且租约过期的作业重新入队（status->queued），
+        并同事务创建 outbox 事件确保 Dispatcher 重新投递。
 
         Returns:
             list[UUID]: 被回收的作业 ID 列表。
@@ -142,7 +173,7 @@ class WorkerLeaseManager:
         now = self._clock.now()
 
         async with session_scope(self._factory) as session:
-            job_ids = await JobRepository.reap_expired_leases(session, now)
+            job_ids = await JobRepository.reap_and_redeliver(session, now)
             return job_ids
 
 
@@ -184,6 +215,33 @@ class JobExecutor:
         """
         self._handlers[kind] = handler
 
+    async def _heartbeat_loop(
+        self,
+        job_id: UUID,
+        owner: str,
+        fencing_token: int,
+    ) -> None:
+        """独立心跳任务（H-03）。
+
+        以 HEARTBEAT_INTERVAL_SECONDS 为间隔持续续租租约。
+        如果续租失败（owner 不匹配，表示租约已被其他 worker 获取），
+        则停止心跳。
+
+        Args:
+            job_id: 作业 UUID。
+            owner: 持有租约的 worker ID。
+            fencing_token: 获取租约时的 fencing token（用于日志追踪）。
+        """
+        while True:
+            await asyncio.sleep(HEARTBEAT_INTERVAL_SECONDS)
+            renewed = await self._lease_manager.heartbeat(job_id, owner)
+            if not renewed:
+                logger.warning(
+                    "Heartbeat lost for job %s (owner=%s, fencing=%d)",
+                    job_id, owner, fencing_token,
+                )
+                break
+
     async def execute(
         self,
         job_id: UUID,
@@ -191,12 +249,13 @@ class JobExecutor:
     ) -> JobResult | None:
         """执行作业（幂等）。
 
-        流程：
-        1. 获取租约（失败则返回 None，表示他人在跑或终态）；
-        2. 读取作业（检查是否已终态 → 跳过）；
-        3. 执行处理器；
-        4. 乐观锁提交结果（lock_version 不匹配 → 重复提交，no-op）；
-        5. 释放租约。
+        H-03 增强流程：
+        1. acquire_with_fencing 获取租约 + fencing token（失败则返回 None）；
+        2. 启动独立心跳任务（asyncio.create_task）；
+        3. 读取作业（检查是否已终态 -> 跳过）；
+        4. 执行处理器；
+        5. 乐观锁提交结果（fencing token 匹配才更新）；
+        6. 取消心跳任务 + 释放租约。
 
         Args:
             job_id: 作业 UUID。
@@ -205,13 +264,20 @@ class JobExecutor:
         Returns:
             JobResult | None: 执行结果（None 表示未获取租约或已终态）。
         """
-        # Step 1: 获取租约
-        acquired = await self._lease_manager.acquire(job_id, owner)
+        # Step 1: 获取租约 + fencing token（H-03）
+        acquired, fencing_token = await self._lease_manager.acquire_with_fencing(
+            job_id, owner
+        )
         if not acquired:
             return None
 
+        # Step 2: 启动独立心跳任务（H-03）
+        heartbeat_task: asyncio.Task[None] = asyncio.create_task(
+            self._heartbeat_loop(job_id, owner, fencing_token)
+        )
+
         try:
-            # Step 2: 读取作业
+            # Step 3: 读取作业
             async with session_scope(self._factory) as session:
                 job: Job | None = await JobRepository.get(session, job_id)
                 if job is None:
@@ -227,12 +293,12 @@ class JobExecutor:
                         last_error=job.last_error,
                     )
 
-                lock_version: int = job.lock_version
+                lock_version: int = fencing_token
                 kind: str = job.kind
                 attempt: int = job.attempt
                 max_attempts: int = job.max_attempts
 
-            # Step 3: 执行处理器
+            # Step 4: 执行处理器
             handler = self._handlers.get(kind)
             if handler is None:
                 # 未知作业类型直接失败（F-04 §8.5：禁止 echo fallback）
@@ -293,7 +359,7 @@ class JobExecutor:
                         },
                     )
 
-            # Step 4: 乐观锁提交结果
+            # Step 5: 乐观锁提交结果（使用 fencing token）
             committed = await self._commit_success(job_id, lock_version, result_data)
 
             if committed:
@@ -303,7 +369,7 @@ class JobExecutor:
                     payload=result_data,
                 )
             else:
-                # lock_version 不匹配 → 重复提交，读取当前结果
+                # lock_version 不匹配 -> 重复提交，读取当前结果
                 async with session_scope(self._factory) as session:
                     existing: Job | None = await JobRepository.get(session, job_id)
                     if existing is not None:
@@ -316,7 +382,12 @@ class JobExecutor:
                 return None
 
         finally:
-            # Step 5: 释放租约
+            # Step 6: 取消心跳任务 + 释放租约
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
             await self._lease_manager.release(job_id, owner)
 
     async def _commit_success(
@@ -379,11 +450,11 @@ class JobExecutor:
         attempt: int,
         max_attempts: int,
     ) -> None:
-        """提交重试状态。
+        """提交重试状态（H-03: 同事务创建 outbox 事件重新投递）。
 
         Args:
             job_id: 作业 UUID。
-            lock_version: 期望的锁版本。
+            lock_version: 期望的锁版本（fencing token）。
             error: 异常。
             attempt: 当前尝试次数。
             max_attempts: 最大尝试次数。
@@ -410,3 +481,14 @@ class JobExecutor:
                     Job.lock_version == lock_version,
                 )
             )
+            # H-03: 同事务创建 outbox 事件，确保 Dispatcher 在 run_after 后重新投递
+            from packages.jobs.outbox import OutboxEvent
+
+            event = OutboxEvent(
+                aggregate_type="job",
+                aggregate_id=job_id,
+                event_type="job.retry_wait",
+                payload={"attempt": attempt + 1, "reason": str(error)[:500]},
+            )
+            session.add(event)
+            await session.flush()

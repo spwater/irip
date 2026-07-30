@@ -2,13 +2,19 @@
 
 封装 MinIO / S3 的常用操作，屏蔽 boto3 细节，供 ArtifactService 使用：
 - ensure_bucket: 幂等创建 bucket；
-- put_object / get_object / head_object: 基本对象操作；
-- presigned_put / presigned_get: 预签名 URL 生成。
+- put_object / put_object_stream / get_object / head_object: 基本对象操作；
+- presigned_put / presigned_get / create_presigned_post: 预签名 URL 生成。
+
+H-04 增强：
+- create_presigned_post: 生成带 content-length-range 的 POST policy；
+- put_object_stream: 流式上传大对象（不整对象读入内存）。
 
 所有方法为同步（boto3 限制），调用方在异步上下文中应使用 asyncio.to_thread() 包装。
 """
 
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import boto3
@@ -17,6 +23,23 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ObjectInfo:
+    """S3 对象元数据（H-04: HEAD 验证用）。
+
+    Attributes:
+        key: 对象 key。
+        size: 对象大小（字节）。
+        content_type: MIME 类型。
+        etag: 对象 ETag。
+    """
+
+    key: str
+    size: int
+    content_type: str
+    etag: str
 
 
 class S3Repository:
@@ -158,6 +181,43 @@ class S3Repository:
         result: dict[str, Any] = self._client.head_object(Bucket=self._bucket, Key=key)
         return result
 
+    def head_object_info(self, key: str) -> ObjectInfo:
+        """获取对象元数据并返回类型化结果（H-04: HEAD 验证用）。
+
+        Args:
+            key: 对象 key。
+
+        Returns:
+            ObjectInfo: 包含 size、content_type、etag 的类型化元数据。
+
+        Raises:
+            ClientError: 对象不存在时抛出 404。
+        """
+        result: dict[str, Any] = self._client.head_object(Bucket=self._bucket, Key=key)
+        return ObjectInfo(
+            key=key,
+            size=int(result.get("ContentLength", 0)),
+            content_type=str(result.get("ContentType", "application/octet-stream")),
+            etag=str(result.get("ETag", "")),
+        )
+
+    def put_object_stream(self, key: str, file_obj: Any, content_type: str) -> None:
+        """流式上传大对象（H-04/H-09: 不整对象读入内存）。
+
+        使用 boto3 upload_fileobj 进行分片上传，适用于大文件。
+
+        Args:
+            key: 对象 key。
+            file_obj: 可读的文件类对象（有 read 方法）。
+            content_type: MIME 类型。
+        """
+        self._client.upload_fileobj(
+            Fileobj=file_obj,
+            Bucket=self._bucket,
+            Key=key,
+            ExtraArgs={"ContentType": content_type},
+        )
+
     def object_exists(self, key: str) -> bool:
         """检查对象是否存在。
 
@@ -231,3 +291,48 @@ class S3Repository:
             ExpiresIn=expires,
         )
         return url
+
+    def create_presigned_post(
+        self,
+        key: str,
+        expires: int = 3600,
+        max_size: int = 100 * 1024 * 1024,
+        content_type: str | None = None,
+        endpoint_override: str | None = None,
+    ) -> dict[str, str]:
+        """生成带 content-length-range 的预签名 POST（H-04: 上传大小限制）。
+
+        使用 S3 POST policy 机制，在服务端强制限制上传文件大小，
+        客户端无法绕过。POST policy 中的 content-length-range 条件
+        确保超限对象在接收正文前即被 S3/MinIO 拒绝。
+
+        Args:
+            key: 对象 key。
+            expires: URL 有效期（秒），默认 3600。
+            max_size: 最大允许上传字节数（默认 100 MiB）。
+            content_type: 可选，限制 MIME 类型。
+            endpoint_override: 可选，用指定端点生成签名 URL。
+
+        Returns:
+            dict: 包含 url 和 fields 的字典，客户端用于构造 multipart POST。
+        """
+        client = self._make_presign_client(endpoint_override)
+        conditions: list[Any] = [
+            ["content-length-range", 0, max_size],
+        ]
+        fields: dict[str, str] = {"key": key}
+        if content_type is not None:
+            conditions.append({"Content-Type": content_type})
+            fields["Content-Type"] = content_type
+
+        response: dict[str, Any] = client.generate_presigned_post(
+            Bucket=self._bucket,
+            Key=key,
+            Fields=fields,
+            Conditions=conditions,
+            ExpiresIn=expires,
+        )
+        return {
+            "url": str(response["url"]),
+            **{k: str(v) for k, v in response.get("fields", {}).items()},
+        }

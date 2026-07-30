@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
-import httpx
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
@@ -27,6 +26,7 @@ from apps.api.routers.ai_config import get_active_ai_config
 from apps.api.routers.uploads import get_artifact_service
 from packages.common.artifacts import ArtifactService
 from packages.common.errors import AppError
+from packages.common.safe_http import SafeHTTPClient
 
 #: 路由实例。
 component_preview_router = APIRouter(prefix="/api/v1/component-preview", tags=["component-preview"])
@@ -146,7 +146,8 @@ async def _call_llm(
         "temperature": 0.0,
         "seed": 42,
     }
-    async with httpx.AsyncClient(timeout=float(timeout), proxy=None) as client:
+    # H-05: 使用 SafeHTTPClient（SSRF 防护 + 流式大小限制）
+    async with SafeHTTPClient(timeout=float(timeout), max_size=10 * 1024 * 1024) as client:
         resp = await client.post(url, headers=headers, json=body)
     if resp.status_code != 200:
         raise AppError(

@@ -261,7 +261,7 @@ async def update_ai_config(
     clock = SystemClock()
     now = clock.now()
 
-    # F-12: API key 加密存储（envelope encryption）
+    # H-06: 使用单例 crypto（from_env 返回单例实例）
     crypto = EnvelopeCrypto.from_env()
     encrypted_api_key = crypto.encrypt(body.api_key)
 
@@ -406,11 +406,12 @@ async def test_ai_connection(
                 row = await _get_config_row(session)
                 if row is None:
                     return AITestResponse(success=False, message="未找到已保存的配置")
+                # H-06: 使用单例 crypto，解密失败直接 raise
                 crypto = EnvelopeCrypto.from_env()
                 try:
                     api_key = crypto.decrypt(row["api_key"])
                 except ValueError:
-                    api_key = row["api_key"]
+                    return AITestResponse(success=False, message="API key 解密失败，请重新配置")
         else:
             api_key = saved["api_key"]
 
@@ -467,13 +468,9 @@ async def get_active_ai_config() -> dict[str, str] | None:
         row = await _get_config_row(session)
         if row is None or not row["enabled"]:
             return None
-        # F-12: 解密 API key
+        # H-06: 使用单例 crypto，解密失败直接 raise（不回退明文）
         crypto = EnvelopeCrypto.from_env()
-        try:
-            decrypted_key = crypto.decrypt(row["api_key"])
-        except ValueError:
-            # 兼容旧版明文存储（迁移期间）
-            decrypted_key = row["api_key"]
+        decrypted_key = crypto.decrypt(row["api_key"])
         return {
             "base_url": row["base_url"],
             "api_key": decrypted_key,

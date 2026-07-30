@@ -4,8 +4,12 @@
 （API key、连接器密钥等）。支持 master key 多版本轮换，解密时按
 key_version 选择对应的 master key。
 
-安全约定：
+安全约定（H-06 增强）：
 - Master key 从环境变量 ``IRIP_MASTER_KEY`` 读取（base64 编码的 32 字节密钥）；
+- 非测试环境（IRIP_ENV != "test"）缺少 key 时拒绝启动（fail-closed）；
+- 测试环境使用固定测试密钥（不随机生成，确保重启可解密）；
+- 单例模式：``from_env()`` 返回同一实例，避免重复初始化；
+- 解密失败直接 raise（不回退到明文）；
 - 支持旧版本 key 轮换：``IRIP_MASTER_KEY_OLD_v1``、``IRIP_MASTER_KEY_OLD_v2`` 等；
 - 加密输出包含 key_version、nonce、ciphertext、tag，序列化为 base64 字符串；
 - 使用 ``cryptography`` 库的 AESGCM 实现（FIPS 兼容）。
@@ -15,7 +19,7 @@ key_version 选择对应的 master key。
     crypto = EnvelopeCrypto.from_env()
     encrypted = crypto.encrypt("my-secret-api-key")
     # encrypted = "v1:base64nonce:base64ciphertext:base64tag"
-    plaintext = crypto.decrypt(encrypted)  # → "my-secret-api-key"
+    plaintext = crypto.decrypt(encrypted)  # -> "my-secret-api-key"
 
 密钥轮换::
 
@@ -76,14 +80,26 @@ def _decode_key(encoded: str) -> bytes:
     return key
 
 
+#: 测试环境固定主密钥（H-06: 不随机生成，确保重启可解密）。
+_TEST_MASTER_KEY: str = "test-master-key-do-not-use-in-production"
+
+#: 测试环境固定主密钥的 base64 编码（32 字节）。
+_TEST_MASTER_KEY_B64: str = base64.b64encode(b"0" * 32).decode("ascii")
+
+
 class EnvelopeCrypto:
     """AES-GCM 信封加密，支持 master key 轮换。
+
+    H-06 增强：单例模式 + fail-closed。
 
     Attributes:
         _current_key: 当前加密使用的 master key（version 0）。
         _current_version: 当前 key 版本号。
         _old_keys: 旧版本 key 字典 {version: key_bytes}，用于解密。
     """
+
+    #: 单例实例（H-06: 单例模式）。
+    _instance: "EnvelopeCrypto | None" = None
 
     def __init__(
         self,
@@ -97,6 +113,9 @@ class EnvelopeCrypto:
             current_key: 当前 master key（32 字节）。
             current_version: 当前 key 版本号（默认 0）。
             old_keys: 旧版本 key 字典 {version: key_bytes}。
+
+        Raises:
+            ValueError: 当 master key 长度不是 32 字节时。
         """
         if len(current_key) != 32:
             raise ValueError(f"Master key must be 32 bytes, got {len(current_key)} bytes")
@@ -105,32 +124,44 @@ class EnvelopeCrypto:
         self._old_keys: dict[int, bytes] = old_keys or {}
 
     @classmethod
-    def from_env(cls) -> EnvelopeCrypto:
-        """从环境变量构建 EnvelopeCrypto。
+    def from_env(cls) -> "EnvelopeCrypto":
+        """从环境变量构建 EnvelopeCrypto（H-06: 单例 + fail-closed）。
 
         读取 ``IRIP_MASTER_KEY``（base64 编码的 32 字节密钥）。
-        如果未设置，生成随机密钥并记录警告（仅用于开发环境）。
-        旧版本 key 从 ``IRIP_MASTER_KEY_OLD_v1``、``IRIP_MASTER_KEY_OLD_v2``
-        等环境变量读取，用于解密旧数据。
+        - 非测试环境（IRIP_ENV != "test"）缺少 key 时拒绝启动；
+        - 测试环境使用固定测试密钥（不随机生成，确保重启可解密）；
+        - 单例模式：多次调用返回同一实例。
 
         Returns:
-            EnvelopeCrypto: 加密实例。
+            EnvelopeCrypto: 加密实例（单例）。
 
         Raises:
+            RuntimeError: 非测试环境缺少 IRIP_MASTER_KEY 时。
             ValueError: 当 master key 格式无效时。
         """
+        # H-06: 单例模式
+        if cls._instance is not None:
+            return cls._instance
+
         import logging
 
         logger = logging.getLogger(__name__)
 
         raw_key = os.getenv("IRIP_MASTER_KEY", "")
+        is_test_env = os.getenv("IRIP_ENV") == "test"
+
         if not raw_key:
-            # 开发环境：生成随机密钥
+            if not is_test_env:
+                # H-06: 非测试环境缺 key 拒绝启动（fail-closed）
+                raise RuntimeError(
+                    "IRIP_MASTER_KEY is required in non-test environment. "
+                    "Set IRIP_ENV=test for test environments or provide IRIP_MASTER_KEY."
+                )
+            # H-06: 测试环境使用固定测试密钥（不随机生成）
             logger.warning(
-                "IRIP_MASTER_KEY not set; generating random key. "
-                "Encrypted data will not survive restart."
+                "IRIP_MASTER_KEY not set in test environment; using fixed test key."
             )
-            current_key = _generate_master_key()
+            current_key = _decode_key(_TEST_MASTER_KEY_B64)
             current_version = 0
         else:
             current_key = _decode_key(raw_key)
@@ -148,11 +179,20 @@ class EnvelopeCrypto:
             except ValueError as exc:
                 logger.warning("Failed to load %s: %s", env_name, exc)
 
-        return cls(
+        cls._instance = cls(
             current_key=current_key,
             current_version=current_version,
             old_keys=old_keys,
         )
+        return cls._instance
+
+    @classmethod
+    def reset_singleton(cls) -> None:
+        """重置单例实例（仅用于测试）。
+
+        测试中修改环境变量后需要重新构建实例时调用。
+        """
+        cls._instance = None
 
     def encrypt(self, plaintext: str) -> str:
         """加密明文字符串。

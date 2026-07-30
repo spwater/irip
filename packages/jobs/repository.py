@@ -8,9 +8,11 @@
 - get: SELECT job by id；
 - update_status: UPDATE with lock_version（乐观锁，幂等提交）；
 - acquire_lease: 条件 UPDATE（仅当租约可用时获取）；
+- acquire_lease_with_fencing: 条件 UPDATE + RETURNING lock_version（fencing token）；
 - renew_lease: 延长租约过期时间；
 - release_lease: 清除租约；
-- reap_expired_leases: 回收过期租约，重新入队。
+- reap_expired_leases: 回收过期租约，重新入队；
+- reap_and_redeliver: 回收过期租约 + 同事务创建 outbox 事件重新投递（H-03）。
 """
 
 from datetime import datetime
@@ -27,6 +29,7 @@ from packages.jobs.entities import (
     Job,
     JobStatus,
 )
+from packages.jobs.outbox import OutboxEvent
 
 
 class JobRepository:
@@ -181,11 +184,70 @@ class JobRepository:
         )
 
     @staticmethod
-    async def reap_expired_leases(
+    async def acquire_lease_with_fencing(
+        session: AsyncSession,
+        job_id: UUID,
+        owner: str,
+        expires_at: datetime,
+    ) -> tuple[bool, int]:
+        """获取作业租约并返回 fencing token（H-03）。
+
+        与 acquire_lease 相同的条件 UPDATE，但通过 RETURNING 子句返回
+        获取后的 lock_version 作为 fencing token。fencing token 用于
+        提交结果时的乐观锁校验，防止过期 worker 覆盖新 worker 的结果。
+
+        Args:
+            session: 数据库异步会话。
+            job_id: 作业 UUID。
+            owner: worker ID。
+            expires_at: 租约过期时间。
+
+        Returns:
+            tuple[bool, int]: (是否获取成功, fencing token)。
+              获取失败时 fencing token 为 0。
+        """
+        now = sa.func.now()
+        leaseable_values = [s.value for s in LEASEABLE_STATUSES]
+
+        stmt = (
+            sa.update(Job)
+            .values(
+                lease_owner=owner,
+                lease_expires_at=expires_at,
+                status=JobStatus.RUNNING.value,
+                updated_at=now,
+                lock_version=Job.lock_version + 1,
+            )
+            .where(
+                Job.id == job_id,
+                Job.status.in_(leaseable_values),
+                sa.or_(
+                    Job.lease_owner.is_(None),
+                    Job.lease_expires_at < now,
+                ),
+            )
+            .returning(Job.lock_version)
+        )
+        result = await session.execute(stmt)
+        row = result.fetchone()
+        if row is None:
+            return False, 0
+        return True, int(row[0])
+
+    @staticmethod
+    async def reap_and_redeliver(
         session: AsyncSession,
         now: datetime,
     ) -> list[UUID]:
-        """回收过期租约，将 running 状态的过期作业重新入队。"""
+        """回收过期租约并同事务创建 outbox 事件重新投递（H-03）。
+
+        与 reap_expired_leases 相比，此方法在同一个事务中：
+        1. 将过期 running 作业重新入队（status -> queued）；
+        2. 为每个被回收的作业创建 outbox_event，确保 Dispatcher 能重新投递。
+
+        Returns:
+            list[UUID]: 被回收的作业 ID 列表。
+        """
         result = await session.execute(
             sa.select(Job.id).where(
                 Job.status == JobStatus.RUNNING.value,
@@ -209,6 +271,15 @@ class JobRepository:
                     Job.status == JobStatus.RUNNING.value,
                 )
             )
+            # 同事务创建 outbox 事件，确保 Dispatcher 重新投递
+            for job_id in job_ids:
+                event = OutboxEvent(
+                    aggregate_type="job",
+                    aggregate_id=job_id,
+                    event_type="job.requeued",
+                )
+                session.add(event)
+            await session.flush()
 
         return job_ids
 

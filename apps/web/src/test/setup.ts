@@ -4,7 +4,8 @@ import { RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAppRouter } from '@/app/router';
 import { useAuthStore } from '@/auth/AuthProvider';
-import { useJobStore } from '@/jobs/useJobStore';
+import { useJobStore, setJobStoreScope } from '@/jobs/useJobStore';
+import { registerQueryClient } from '@/auth/sessionState';
 import { setMockApi, type MockApiHandlers } from '@/test/mockApi';
 import type { JobSummary } from '@/api/client';
 
@@ -29,10 +30,13 @@ export function renderApp(options: {
   // 重置 job store
   useJobStore.getState().reset();
 
-  // 预置 localStorage 中的 job ID 列表
+  // H-15: 设置测试用 job store scope（tenant+user）
+  setJobStoreScope('test-org', 'test-user');
+
+  // 预置 localStorage 中的 job ID 列表（使用 H-15 的 scoped key）
   if (options.storedJobs && options.storedJobs.length > 0) {
     const jobIds = options.storedJobs.map((j) => j.id);
-    localStorage.setItem('irip.job_ids', JSON.stringify(jobIds));
+    localStorage.setItem('irip:test-org:test-user:jobs', JSON.stringify(jobIds));
   }
 
   // 设置初始 URL
@@ -44,6 +48,8 @@ export function renderApp(options: {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
+  // H-15: 注册 QueryClient 供 clearSessionState 使用
+  registerQueryClient(queryClient);
   render(
     React.createElement(
       QueryClientProvider,

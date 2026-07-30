@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import {
   Button,
   Card,
@@ -19,11 +20,25 @@ import {
   apiCreateJob,
   apiGetJob,
   type JobSummary,
+  type JobStatus,
 } from '@/api/client';
 import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
 import { extractApiError, type MappingCandidate, type SourcePreview } from '@/api/types';
 
 const { Text } = Typography;
+
+/**
+ * M-08: 摄入轮询参数
+ * - 指数退避：2s → 30s（每次失败翻倍，上限 30s）
+ * - 连续失败阈值：5 次（达到后停止轮询并提示）
+ * - 总超时：5 分钟（达到后停止并显示超时状态）
+ * - 401：停止轮询并跳转登录页
+ */
+const MAX_POLLING_DURATION = 5 * 60 * 1000;
+const MAX_CONSECUTIVE_FAILURES = 5;
+const INITIAL_POLL_INTERVAL = 2000;
+const MAX_POLL_INTERVAL = 30000;
+const TERMINAL_JOB_STATUSES: JobStatus[] = ['succeeded', 'failed', 'cancelled'];
 
 /** 质量等级 → 颜色 */
 const QUALITY_COLOR: Record<string, string> = {
@@ -126,31 +141,107 @@ export function IngestionWizard(): JSX.Element {
     },
   });
 
-  // ---- 轮询作业状态 ----
+  // ---- M-08: 轮询作业状态（指数退避 + 连续失败阈值 + 总超时）----
+  const navigate = useNavigate();
+  const startTimeRef = useRef<number>(0);
+  const consecutiveFailuresRef = useRef<number>(0);
+  const currentIntervalRef = useRef<number>(INITIAL_POLL_INTERVAL);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef<boolean>(true);
+
+  const poll = useCallback(async (): Promise<void> => {
+    if (!activeRef.current || !jobId) return;
+
+    // 总超时检查
+    if (Date.now() - startTimeRef.current > MAX_POLLING_DURATION) {
+      if (activeRef.current) {
+        setJobStatus({
+          id: jobId,
+          kind: 'ingestions.import',
+          status: 'failed',
+          stage: '摄入状态轮询超时，请稍后查看结果',
+          progress: 0,
+          retryable: true,
+        });
+        setCurrentStep(6);
+        message.warning('摄入状态轮询超时，请稍后查看结果');
+      }
+      return;
+    }
+
+    try {
+      const status = await apiGetJob(jobId);
+      if (!activeRef.current) return;
+
+      // 成功：重置失败计数和轮询间隔
+      consecutiveFailuresRef.current = 0;
+      currentIntervalRef.current = INITIAL_POLL_INTERVAL;
+      setJobStatus(status);
+
+      // 终态：停止轮询
+      if (TERMINAL_JOB_STATUSES.includes(status.status)) {
+        setCurrentStep(6);
+        return;
+      }
+    } catch (error) {
+      if (!activeRef.current) return;
+
+      consecutiveFailuresRef.current++;
+      // 指数退避：每次失败翻倍，上限 30s
+      currentIntervalRef.current = Math.min(
+        currentIntervalRef.current * 2,
+        MAX_POLL_INTERVAL,
+      );
+
+      // 401：停止轮询并跳转登录（clearSessionState 已由拦截器处理）
+      const errStatus = (error as { response?: { status?: number } }).response?.status;
+      if (errStatus === 401) {
+        message.warning('登录已过期，请重新登录');
+        void navigate({ to: '/login' });
+        return;
+      }
+
+      // 连续失败达到阈值：停止轮询并提示
+      if (consecutiveFailuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
+        setJobStatus({
+          id: jobId,
+          kind: 'ingestions.import',
+          status: 'failed',
+          stage: '连续多次获取状态失败，请检查网络后重试',
+          progress: 0,
+          retryable: true,
+        });
+        setCurrentStep(6);
+        message.error('连续多次获取状态失败，请检查网络后重试');
+        return;
+      }
+    }
+
+    // 安排下一轮轮询（使用当前退避间隔）
+    if (activeRef.current) {
+      timeoutRef.current = setTimeout(() => void poll(), currentIntervalRef.current);
+    }
+  }, [jobId, navigate]);
+
   useEffect(() => {
     if (currentStep !== 5 || !jobId) return;
-    let active = true;
-    const poll = async (): Promise<void> => {
-      if (!active) return;
-      try {
-        const status = await apiGetJob(jobId);
-        if (!active) return;
-        setJobStatus(status);
-        if (['succeeded', 'failed', 'cancelled'].includes(status.status)) {
-          active = false;
-          setCurrentStep(6);
-        }
-      } catch {
-        // 忽略轮询错误
+
+    // 初始化轮询状态
+    activeRef.current = true;
+    startTimeRef.current = Date.now();
+    consecutiveFailuresRef.current = 0;
+    currentIntervalRef.current = INITIAL_POLL_INTERVAL;
+
+    void poll();
+
+    return () => {
+      activeRef.current = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
     };
-    void poll();
-    const interval = setInterval(() => void poll(), 2000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [currentStep, jobId]);
+  }, [currentStep, jobId, poll]);
 
   // ---- 事件处理 ----
   const handleNextToMapping = (): void => {
@@ -169,6 +260,15 @@ export function IngestionWizard(): JSX.Element {
   };
 
   const handleReset = (): void => {
+    // M-08: 清理轮询状态
+    activeRef.current = false;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    consecutiveFailuresRef.current = 0;
+    currentIntervalRef.current = INITIAL_POLL_INTERVAL;
+
     setCurrentStep(0);
     setFile(null);
     setPreviewData(null);

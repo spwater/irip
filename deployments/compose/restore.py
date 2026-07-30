@@ -255,7 +255,24 @@ class RestoreService:
         for table_name, row_count in smoke_results.items():
             logger.info("  %s: %d rows", table_name, row_count)
 
-        logger.info("Restore %s: complete ✓", manifest.backup_id)
+        # H-09: 冒烟失败非零退出
+        smoke_failures: list[str] = []
+        for table_name, row_count in smoke_results.items():
+            if row_count < 0:
+                smoke_failures.append(f"{table_name}: query failed")
+        if smoke_results.get("app_user", 0) <= 0:
+            smoke_failures.append("app_user table is empty after restore")
+        if smoke_results.get("alembic_version", 0) != 1:
+            smoke_failures.append(
+                f"alembic_version should have exactly 1 row, got {smoke_results.get('alembic_version')}"
+            )
+        if smoke_failures:
+            logger.error("Restore %s: smoke test failures: %s", manifest.backup_id, smoke_failures)
+            raise RuntimeError(
+                f"Smoke test failures: {'; '.join(smoke_failures)}"
+            )
+
+        logger.info("Restore %s: complete", manifest.backup_id)
         return manifest
 
     def _extract_archive(self, backup_dir: Path) -> None:
@@ -485,10 +502,10 @@ class RestoreService:
             logger.warning("Could not ensure database exists: %s", exc)
 
     def _restore_minio_objects(self, objects_dir: Path) -> None:
-        """恢复 MinIO 对象到目标 bucket。
+        """恢复 MinIO 对象到目标 bucket（H-09: 流式传输大对象）。
 
         读取 ``objects.json`` 元数据，逐对象上传到 S3。
-        上传后重算 SHA-256 与元数据记录值比对，确保传输完整。
+        H-09: 使用流式上传（put_object_stream），不整对象读入内存。
 
         Args:
             objects_dir: 对象目录路径。
@@ -504,9 +521,10 @@ class RestoreService:
             for path in objects_dir.rglob("*"):
                 if path.is_file() and path.name != OBJECTS_METADATA_FILENAME:
                     key: str = str(path.relative_to(objects_dir))
-                    data: bytes = path.read_bytes()
                     content_type: str = "application/octet-stream"
-                    self._s3.put_object(key, data, content_type)
+                    # H-09: 流式上传
+                    with open(path, "rb") as f:
+                        self._s3.put_object_stream(key, f, content_type)
             return
 
         restored: int = 0
@@ -516,23 +534,48 @@ class RestoreService:
             expected_sha: str = obj_meta["sha256"]
             obj_path: Path = objects_dir / key
             if not obj_path.exists():
-                # F-06: fail-closed — 对象缺失直接记录失败
+                # F-06: fail-closed -- 对象缺失直接记录失败
                 failed.append(f"missing: {key}")
                 continue
-            data: bytes = obj_path.read_bytes()
-            # 上传前校验本地文件完整性
+            # H-09: 流式校验 SHA-256（不整对象读入内存）
             from packages.common.hashing import sha256_bytes
 
-            actual_sha: str = sha256_bytes(data)
-            if actual_sha != expected_sha:
-                # F-06: fail-closed — SHA 不匹配直接记录失败
-                failed.append(
-                    f"sha256 mismatch: {key} "
-                    f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
-                )
-                continue
-            content_type: str = "application/octet-stream"
-            self._s3.put_object(key, data, content_type)
+            # 对于小文件直接读取校验，大文件流式校验
+            file_size: int = obj_path.stat().st_size
+            if file_size <= 10 * 1024 * 1024:
+                # 小文件（<= 10 MiB）：直接读取校验
+                data: bytes = obj_path.read_bytes()
+                actual_sha: str = sha256_bytes(data)
+                if actual_sha != expected_sha:
+                    failed.append(
+                        f"sha256 mismatch: {key} "
+                        f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
+                    )
+                    continue
+                content_type: str = "application/octet-stream"
+                self._s3.put_object(key, data, content_type)
+            else:
+                # H-09: 大文件（> 10 MiB）：流式校验 + 流式上传
+                import hashlib
+
+                hasher = hashlib.sha256()
+                with open(obj_path, "rb") as f:
+                    while True:
+                        chunk: bytes = f.read(64 * 1024)
+                        if not chunk:
+                            break
+                        hasher.update(chunk)
+                actual_sha: str = hasher.hexdigest()
+                if actual_sha != expected_sha:
+                    failed.append(
+                        f"sha256 mismatch: {key} "
+                        f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
+                    )
+                    continue
+                content_type: str = "application/octet-stream"
+                # H-09: 流式上传大对象
+                with open(obj_path, "rb") as f:
+                    self._s3.put_object_stream(key, f, content_type)
             restored += 1
 
         # F-06: 失败清单非空时 raise
@@ -744,6 +787,11 @@ def main() -> None:
     except FileNotFoundError as exc:
         logger.info("无备份文件，恢复中止: %s", exc)
         print(f"\n无备份文件，恢复中止（退出码 1）: {exc}")
+        sys.exit(1)
+    except RuntimeError as exc:
+        # H-09: 冒烟失败或恢复步骤失败，非零退出
+        logger.error("恢复失败: %s", exc)
+        print(f"\n恢复失败（退出码 1）: {exc}")
         sys.exit(1)
 
 

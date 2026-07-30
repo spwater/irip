@@ -13,10 +13,10 @@
 - CLI Runner 创建临时工作目录，隔离执行环境；
 - CLI Runner 过滤环境变量，仅传递安全变量（不含 secrets 明文）。
 
-安全增强（技术设计文档 F-13，T1-9）：
-- SAFE_CLI_MODE 环境变量开关（默认 false），开启后 CLI 组件在
+安全增强（技术设计文档 F-13，T1-9 + H-12）：
+- SAFE_CLI_MODE 环境变量开关（默认 true），开启后 CLI 组件在
   沙箱容器中执行（无网络、只读 FS、非 root、资源限制）；
-- 生产环境开启 SAFE_CLI_MODE=true，开发/测试环境保持 false（现有行为）。
+- 生产环境强制 fail-closed：非沙箱模式时拒绝执行（H-12）。
 """
 
 import asyncio
@@ -38,13 +38,17 @@ from packages.components.sdk import (
 _DEFAULT_PYTHON_TIMEOUT: float = 300.0
 
 #: CLI 组件沙箱模式开关（环境变量 IRIP_SAFE_CLI_MODE）。
-#: - false（默认）：CLI 组件直接在当前进程中执行（开发/测试环境）；
-#: - true：CLI 组件在独立沙箱容器中执行（生产环境，F-13 安全增强）。
-_SAFE_CLI_MODE: bool = os.getenv("IRIP_SAFE_CLI_MODE", "false").lower() in (
+#: H-12: 默认 true（安全优先），生产环境强制 fail-closed。
+#: - true（默认）：CLI 组件在独立沙箱容器中执行；
+#: - false：CLI 组件直接在当前进程中执行（仅开发/测试环境）。
+_SAFE_CLI_MODE: bool = os.getenv("IRIP_SAFE_CLI_MODE", "true").lower() in (
     "true",
     "1",
     "yes",
 )
+
+#: H-12: 是否为生产环境（用于强制 fail-closed）。
+_IS_PRODUCTION: bool = os.getenv("IRIP_ENV") == "production"
 
 #: 沙箱容器镜像名称。
 _SANDBOX_IMAGE: str = os.getenv("IRIP_CLI_SANDBOX_IMAGE", "irip-cli-sandbox:latest")
@@ -339,6 +343,18 @@ class CLIComponentRunner:
 
             # 4. 执行子进程
             output_path = workdir / "output.json"
+
+            # H-12: 生产环境强制 fail-closed（非沙箱时拒绝执行）
+            if not _SAFE_CLI_MODE and _IS_PRODUCTION:
+                raise AppError(
+                    code="forbidden",
+                    message="生产环境必须启用 CLI 沙箱（IRIP_SAFE_CLI_MODE=true）",
+                    retryable=False,
+                    fields={
+                        "name": manifest.name,
+                        "version": manifest.version,
+                    },
+                )
 
             if _SAFE_CLI_MODE:
                 # 沙箱模式：在隔离容器中执行（F-13 安全增强）

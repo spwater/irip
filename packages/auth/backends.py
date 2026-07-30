@@ -5,6 +5,9 @@ LocalAuthBackend 使用数据库 + Argon2id 密码验证实现该协议。
 
 设计意图（docs/arch-v0.md §3.2 类图）：
   API 依赖层只依赖 AuthBackend 协议，未来接入 OIDC 后端时不需修改领域服务。
+
+H-07 增强：
+- 不存在用户执行 dummy Argon2（恒定时间），防止时延侧用户枚举攻击。
 """
 
 from dataclasses import dataclass
@@ -17,6 +20,15 @@ from packages.auth.passwords import verify_password
 from packages.auth.repository import AuthRepository
 from packages.common.errors import AppError
 
+#: H-07: dummy Argon2 哈希值（用于不存在用户时保持恒定时间校验）。
+#: 这是一个合法的 Argon2id 哈希字符串，verify_password 对其校验总是失败，
+#: 但消耗的时间与真实用户校验相同。
+_DUMMY_HASH: str = (
+    "$argon2id$v=19$m=19456,t=2,p=1$"
+    "c2FsdHZlcmlmaWVkYWNjb3VudA$"
+    "rW8xK5nLnF0Y3J5cHRvaW5mbw"
+)
+
 
 @dataclass(frozen=True)
 class AuthenticatedIdentity:
@@ -28,6 +40,7 @@ class AuthenticatedIdentity:
         display_name: 用户显示名。
         status: 账户状态（active / disabled）。
         roles: 用户角色列表（从 app_user.roles 读取）。
+        token_version: JWT 撤销版本号（H-06，用于签发含 token_version 的 JWT）。
     """
 
     user_id: UUID
@@ -35,6 +48,7 @@ class AuthenticatedIdentity:
     display_name: str
     status: str
     roles: list[str]
+    token_version: int = 0
 
 
 class AuthBackend(Protocol):
@@ -84,15 +98,27 @@ class LocalAuthBackend:
     ) -> AuthenticatedIdentity:
         """验证凭据并返回身份。
 
-        查找用户 → Argon2id 验证密码 → 检查账户状态 → 返回身份。
+        查找用户 -> Argon2id 验证密码 -> 检查账户状态 -> 返回身份。
         任何一步失败均抛出 AppError(invalid_credentials)，
         不区分"用户不存在"与"密码错误"，防止枚举攻击。
+
+        H-07: 不存在用户时执行 dummy Argon2 校验，保持恒定时间，
+        防止时延侧用户枚举攻击。
 
         Raises:
             AppError: code="invalid_credentials"，当认证失败时。
         """
         user = await self._repository.find_user_by_email(session, email)
-        if user is None or not verify_password(user.password_hash, password):
+        if user is None:
+            # H-07: 不存在用户执行 dummy Argon2（恒定时间）
+            verify_password(_DUMMY_HASH, password)
+            raise AppError(
+                code="invalid_credentials",
+                message="邮箱或密码错误",
+                retryable=False,
+                fields={},
+            )
+        if not verify_password(user.password_hash, password):
             raise AppError(
                 code="invalid_credentials",
                 message="邮箱或密码错误",
@@ -112,4 +138,5 @@ class LocalAuthBackend:
             display_name=user.display_name,
             status=user.status,
             roles=list(user.roles),
+            token_version=user.token_version,
         )

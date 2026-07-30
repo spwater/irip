@@ -10,6 +10,13 @@
 C-02 改动：
 - Worker 侧二次校验 kind 和权限；
 - _restore_handler 使用签名 backup_id 而非 backup_dir 路径。
+
+H-03 改动：
+- 全部 handler 原生 async，失败必须 raise（不返回 error dict）；
+- owner 从环境变量获取而非硬编码。
+
+H-09 改动：
+- backup handler 使用 job.organization_id（服务端生成，不从 payload 取）。
 """
 
 import asyncio
@@ -50,7 +57,9 @@ async def _execute_job_async(job_id: str) -> str:
     # 注册全部 handler（F-04：显式注册表）
     _register_handlers(executor)
 
-    result = await executor.execute(UUID(job_id), owner="celery-worker")
+    # H-03: owner 从环境变量获取而非硬编码
+    owner = os.getenv("IRIP_WORKER_ID", f"celery-worker-{os.getpid()}")
+    result = await executor.execute(UUID(job_id), owner=owner)
     return str(result.job_id) if result else job_id
 
 
@@ -70,7 +79,10 @@ def _register_handlers(executor: JobExecutor) -> None:
     from apps.worker.tasks.flows import _execute_flow_async, _mark_job_failed, _resume_flow_async
 
     async def _flow_execute_adapter(job):
-        """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。"""
+        """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。
+
+        H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。
+        """
         _validate_job_kind(job)
         job_id = str(job.id)
         payload = job.payload or {}
@@ -85,28 +97,35 @@ def _register_handlers(executor: JobExecutor) -> None:
         try:
             return await _execute_flow_async(run_id, payload)
         except Exception as exc:
+            # H-03: 失败必须 raise，不返回 error dict
             try:
                 await _mark_job_failed(job_id, str(exc))
             except Exception:
                 pass
-            return {"error": str(exc), "job_id": job_id, "run_id": run_id}
+            raise
 
     async def _flow_resume_adapter(job):
-        """适配 flow_resume。"""
+        """适配 flow_resume。
+
+        H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。
+        """
         _validate_job_kind(job)
         job_id = str(job.id)
         payload = job.payload or {}
         try:
             return await _resume_flow_async(payload)
         except Exception as exc:
+            # H-03: 失败必须 raise，不返回 error dict
             try:
                 await _mark_job_failed(job_id, str(exc))
             except Exception:
                 pass
-            return {"error": str(exc), "job_id": job_id}
+            raise
 
     def _adapt(handler):
         """适配 (job_id, payload) 签名的同步 handler 为 async (job) 签名。
+
+        H-03: handler 原生 async，失败必须 raise（不返回 error dict）。
         用于非 flow handler（它们内部用 asyncio.run，不在嵌套 async 上下文中）。
         """
 
@@ -160,7 +179,7 @@ async def _backup_handler(job: object) -> dict:
 
     执行 PostgreSQL + MinIO 全量备份，生成完整性 manifest。
 
-    C-02: org_id 从服务端 job 属性获取，不从 payload 取。
+    C-02/H-09: org_id 从服务端 job 属性获取，不从 payload 取。
 
     Args:
         job: 作业 ORM 实例。
@@ -171,11 +190,15 @@ async def _backup_handler(job: object) -> dict:
     _validate_job_kind(job)
     from deployments.compose.backup import run_backup
 
+    # H-09: org_id 从 job 取，不从 payload 取（服务端生成，不可被客户端覆盖）
+    org_id = getattr(job, "organization_id", None)
+
     manifest = await run_backup()
     return {
         "backup_id": manifest.backup_id,
         "database_sha256": manifest.database_sha256,
         "object_count": manifest.object_count,
+        "organization_id": str(org_id) if org_id else None,
     }
 
 

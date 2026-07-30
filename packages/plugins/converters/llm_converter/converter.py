@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from packages.common.errors import AppError
+from packages.common.safe_http import SafeHTTPClient
 from packages.plugins.protocol import ConverterResult
 
 
@@ -131,9 +132,10 @@ async def _call_llm(
     body: dict[str, Any],
     timeout: int,  # noqa: ASYNC109
 ) -> httpx.Response:
-    """调用 LLM API，含断线重试。"""
+    """调用 LLM API，含断线重试（H-05: 使用 SafeHTTPClient）。"""
     try:
-        async with httpx.AsyncClient(timeout=float(timeout), proxy=None) as client:
+        # H-05: 使用 SafeHTTPClient（SSRF 防护 + 流式大小限制）
+        async with SafeHTTPClient(timeout=float(timeout), max_size=10 * 1024 * 1024) as client:
             resp = await client.post(url, headers=headers, json=body)
     except httpx.TimeoutException:
         raise AppError(
@@ -146,7 +148,7 @@ async def _call_llm(
         if "disconnected" in err_msg.lower() or "remote" in err_msg.lower():
             await asyncio.sleep(2)
             try:
-                async with httpx.AsyncClient(timeout=float(timeout + 120), proxy=None) as client2:
+                async with SafeHTTPClient(timeout=float(timeout + 120), max_size=10 * 1024 * 1024) as client2:
                     resp = await client2.post(url, headers=headers, json=body)
             except httpx.HTTPError as exc2:
                 raise AppError(

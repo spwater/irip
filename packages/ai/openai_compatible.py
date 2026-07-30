@@ -27,6 +27,7 @@ import httpx
 
 from packages.ai.providers import AIRequest, AIResponse
 from packages.common.errors import AppError
+from packages.common.safe_http import SafeHTTPClient
 
 
 class OpenAICompatibleProvider:
@@ -88,7 +89,8 @@ class OpenAICompatibleProvider:
         headers = self._build_headers()
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout, proxy=None) as client:
+            # H-05: 使用 SafeHTTPClient（SSRF 防护 + 流式大小限制）
+            async with SafeHTTPClient(timeout=self._timeout, max_size=10 * 1024 * 1024) as client:
                 if cancel_event is not None:
                     # 竞速：请求 vs 取消信号
                     request_task = asyncio.create_task(

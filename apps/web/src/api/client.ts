@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import { clearSessionState } from '@/auth/sessionState';
 
 /**
  * IRIP API 客户端类型定义
@@ -9,6 +10,8 @@ export type CurrentUser = {
   displayName: string;
   roles: string[];
   permissions: string[];
+  /** 组织/租户 ID，由后端 /me 返回；可能为空（后端未返回时） */
+  organizationId?: string;
 };
 
 export type JobStatus =
@@ -52,6 +55,7 @@ type MeApiResponse = {
   display_name: string;
   roles: string[];
   permissions: string[];
+  organization_id?: string;
 };
 
 /**
@@ -88,37 +92,63 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 /**
- * 响应拦截器：401 时自动尝试 refresh 并重试一次
- * 重试仍 401 → 跳转登录页
+ * M-04: 统一 refresh coordinator（single-flight）
+ *
+ * N 个并行 401 只刷新一次：所有并发请求共享同一个 refresh Promise。
+ * refresh 成功后所有等待请求自动重试；refresh 失败时原子清会话。
  */
-let isRefreshing = false;
+let refreshPromise: Promise<string> | null = null;
 
+/**
+ * 执行 single-flight token refresh。
+ * - 首次调用发起实际的 /auth/refresh 请求
+ * - 并发调用复用同一个 Promise
+ * - 成功返回新 access token，失败时原子清会话并抛出
+ */
+function refreshAccessToken(): Promise<string> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+  refreshPromise = axios
+    .post<LoginResponse>(
+      `${baseURL}/auth/refresh`,
+      {},
+      { withCredentials: true },
+    )
+    .then((res) => {
+      accessToken = res.data.access_token;
+      return res.data.access_token;
+    })
+    .catch((err) => {
+      // refresh 失败：原子清会话（清 Query/Zustand/localStorage）
+      clearSessionState();
+      accessToken = null;
+      throw err;
+    })
+    .finally(() => {
+      refreshPromise = null;
+    });
+  return refreshPromise;
+}
+
+/**
+ * 响应拦截器：401 时通过 single-flight coordinator 刷新并重试一次
+ * refresh 失败 → clearSessionState 原子清会话，由 AuthProvider/AppShell 跳登录
+ */
 http.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retried?: boolean } | undefined;
+    const originalRequest = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
     if (error.response?.status === 401 && originalRequest && !originalRequest._retried) {
-      if (isRefreshing) {
-        return Promise.reject(error);
-      }
-      isRefreshing = true;
       try {
-        const res = await axios.post<LoginResponse>(
-          `${baseURL}/auth/refresh`,
-          {},
-          { withCredentials: true },
-        );
-        accessToken = res.data.access_token;
+        // single-flight：N 个并行 401 只刷新一次
+        const newToken = await refreshAccessToken();
         originalRequest._retried = true;
-        originalRequest.headers.set('Authorization', `Bearer ${accessToken}`);
+        originalRequest.headers.set('Authorization', `Bearer ${newToken}`);
         return http.request(originalRequest);
       } catch {
-        // 不用 window.location.href 硬跳转，否则会触发整页刷新→init()→401→刷新 死循环
-        // 只清除 token，让 AuthProvider/AppShell 通过 router navigate 处理跳转
-        accessToken = null;
+        // refresh 失败已在 refreshAccessToken 中处理（clearSessionState）
         return Promise.reject(error);
-      } finally {
-        isRefreshing = false;
       }
     }
     return Promise.reject(error);
@@ -155,6 +185,7 @@ export async function apiGetMe(): Promise<CurrentUser> {
     displayName: res.data.display_name,
     roles: res.data.roles ?? [],
     permissions: res.data.permissions ?? [],
+    organizationId: res.data.organization_id,
   };
 }
 

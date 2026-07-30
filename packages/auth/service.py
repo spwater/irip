@@ -120,6 +120,7 @@ class AuthService:
                 roles=identity.roles,
                 secret=self._token_secret,
                 clock=self._clock,
+                token_version=getattr(identity, "token_version", 0),
             )
             return TokenPair(
                 access_token=access_token,
@@ -216,12 +217,25 @@ class AuthService:
                         retryable=False,
                         fields={},
                     )
+                # H-06: refresh 拒绝 disabled 用户
+                if user.status == "disabled":
+                    # 撤销该会话家族
+                    await self._repository.revoke_family(
+                        session, old_session.family_id, now
+                    )
+                    raise AppError(
+                        code="forbidden",
+                        message="用户已被禁用",
+                        retryable=False,
+                        fields={},
+                    )
                 access_token = create_access_token(
                     user_id=user.id,
                     email=user.email,
                     roles=list(user.roles),
                     secret=self._token_secret,
                     clock=self._clock,
+                    token_version=user.token_version,
                 )
                 return TokenPair(
                     access_token=access_token,
@@ -254,3 +268,35 @@ class AuthService:
             old_session = await self._repository.find_session_by_digest(session, digest)
             if old_session is not None and old_session.revoked_at is None:
                 await self._repository.revoke_session(session, old_session.id, self._clock.now())
+
+    async def disable_user(self, user_id: UUID) -> None:
+        """禁用用户：撤销全部会话 + token_version+1（H-06）。
+
+        禁用后：
+        1. 用户 status 设为 disabled；
+        2. token_version + 1，使所有已签发的 access token 立即失效；
+        3. 撤销该用户的所有 refresh session（整族撤销）。
+
+        Args:
+            user_id: 待禁用的用户 UUID。
+
+        Raises:
+            AppError: code="not_found"，当用户不存在时。
+        """
+        now = self._clock.now()
+        async with session_scope(self._session_factory) as session:
+            user = await self._repository.find_user_by_id(session, user_id)
+            if user is None:
+                raise AppError(
+                    code="not_found",
+                    message="用户不存在",
+                    retryable=False,
+                    fields={},
+                )
+            # H-06: 禁用用户 + token_version + 1
+            user.status = "disabled"
+            user.token_version = user.token_version + 1
+            user.updated_at = now
+            await session.flush()
+            # H-06: 撤销该用户的所有 refresh session
+            await self._repository.revoke_family_by_user(session, user_id, now)

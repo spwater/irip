@@ -143,9 +143,18 @@ async def presign_upload(
     minio_endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
     minio_external = minio_endpoint
 
+    # H-04: 上传会话绑定 tenant/user（object_key 含 user_id 前缀）
+    user_prefix = str(current_user.user_id)[:8]
     artifact_id = new_id()
-    object_key = f"uploads/{artifact_id}"
-    upload_url = service.presign_upload_for_key(object_key, endpoint_override=minio_external)
+    object_key = f"uploads/{user_prefix}/{artifact_id}"
+
+    # H-04: 使用 presigned POST（带 content-length-range）替代 presigned PUT
+    presigned = service.presign_upload_post(
+        object_key=object_key,
+        max_size=MAX_UPLOAD_SIZE_BYTES,
+        endpoint_override=minio_external,
+    )
+    upload_url = presigned["url"]
 
     return PresignUploadResponse(
         artifact_id=str(artifact_id),

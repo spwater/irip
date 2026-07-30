@@ -51,8 +51,13 @@ def create_access_token(
     roles: list[str],
     secret: str,
     clock: Clock,
+    token_version: int = 0,
 ) -> str:
     """签发 JWT access token。
+
+    H-06: payload 中增加 token_version claim，用于 JWT 撤销。
+    每次认证时复核 token_version 与数据库中的值是否匹配，
+    不匹配则拒绝（token 已被撤销）。
 
     Args:
         user_id: 用户 UUID。
@@ -60,6 +65,7 @@ def create_access_token(
         roles: 用户角色列表（T04 为空，T05 RBAC 后填充）。
         secret: JWT 签名密钥。
         clock: 时钟依赖（用于 iat/exp 时间戳）。
+        token_version: JWT 撤销版本号（H-06，默认 0）。
 
     Returns:
         str: 编码后的 JWT 字符串。
@@ -69,6 +75,7 @@ def create_access_token(
         "sub": str(user_id),
         "email": email,
         "roles": roles,
+        "token_version": token_version,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS)).timestamp()),
     }

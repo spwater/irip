@@ -66,6 +66,13 @@ class AppUser(Base):
     department_id: Mapped[UUID | None] = mapped_column(
         GUID, nullable=True, comment="所属实验室 ID（FK→department.id）"
     )
+    token_version: Mapped[int] = mapped_column(
+        sa.Integer,
+        nullable=False,
+        server_default=sa.text("0"),
+        default=0,
+        comment="JWT 撤销版本号（H-06: 禁用/改密/改角色时 +1 使旧 token 失效）",
+    )
 
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
         "RefreshSession",

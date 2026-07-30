@@ -2,16 +2,30 @@
 # 用法：docker compose up --build -d
 # 镜像固定 tag（架构文档 §6.3），Docker registry mirror 走 daocloud。
 # 环境变量从 .env 读取。
+#
+# H-12/H-13 安全增强：
+# - IRIP_SAFE_CLI_MODE=true（CLI 组件沙箱）
+# - Redis 加密码
+# - 内部服务不暴露宿主端口（postgres/redis/minio 仅 internal）
+# - 统一 cap_drop/no-new-privileges/只读 FS 安全基线
+
+# H-13: 统一容器安全基线
+x-security-base: &security-base
+  cap_drop: ["ALL"]
+  security_opt: ["no-new-privileges"]
+  read_only: true
+  tmpfs:
+    - /tmp
 
 services:
   postgres:
     image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    <<: *security-base
     environment:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
       POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
       POSTGRES_DB: ${IRIP_DATABASE_NAME:-irip}
-    ports:
-      - "5432:5432"
+    # H-13: 不暴露宿主端口（仅内部网络可访问）
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,10 +37,12 @@ services:
 
   redis:
     image: docker.m.daocloud.io/redis:7-alpine
-    ports:
-      - "6379:6379"
+    <<: *security-base
+    # H-13: Redis 加密码
+    command: ["redis-server", "--requirepass", "${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}"]
+    # H-13: 不暴露宿主端口
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${IRIP_REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -34,9 +50,9 @@ services:
 
   minio:
     image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
+    <<: *security-base
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
+    # H-13: 不暴露宿主端口（仅内部网络可访问）
     environment:
       MINIO_ROOT_USER: ${IRIP_MINIO_ACCESS_KEY:-irip}
       MINIO_ROOT_PASSWORD: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -53,11 +69,12 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -67,7 +84,9 @@ services:
       IRIP_API_CORS_ORIGINS: ${IRIP_API_CORS_ORIGINS:-http://localhost:8080}
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_SAFE_CLI_MODE: "true"
+      IRIP_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,12 +107,13 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -101,7 +121,9 @@ services:
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_SAFE_CLI_MODE: "true"
+      IRIP_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -113,12 +135,13 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://redis:6379/1
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
+      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -126,7 +149,9 @@ services:
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_SAFE_CLI_MODE: "true"
+      IRIP_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,6 +163,7 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/web.Dockerfile
+    <<: *security-base
     depends_on:
       api:
         condition: service_healthy
@@ -149,11 +175,12 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     # 先跑 alembic 迁移建表，再跑 bootstrap 创建组织+角色+管理员+bucket
     command: ["sh", "-c", "alembic upgrade head && python -m deployments.compose.bootstrap"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -161,7 +188,7 @@ services:
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:-}
+      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
     depends_on:
       postgres:
         condition: service_healthy
@@ -174,10 +201,11 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     command: ["python", "-m", "deployments.compose.backup"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
@@ -200,10 +228,11 @@ services:
     build:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
+    <<: *security-base
     command: ["python", "-m", "deployments.compose.restore", "--backup-dir", "${IRIP_RESTORE_BACKUP_DIR:-/backups}"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      IRIP_REDIS_URL: redis://redis:6379/0
+      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}

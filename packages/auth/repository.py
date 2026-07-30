@@ -206,6 +206,33 @@ class AuthRepository:
         )
 
     @staticmethod
+    async def revoke_family_by_user(
+        session: AsyncSession,
+        user_id: UUID,
+        now: datetime,
+    ) -> int:
+        """撤销指定用户的所有未撤销会话（H-06: 禁用用户时调用）。
+
+        Args:
+            session: 数据库异步会话。
+            user_id: 用户 UUID。
+            now: 当前时刻（撤销时间）。
+
+        Returns:
+            int: 被撤销的会话数。
+        """
+        from sqlalchemy.engine import CursorResult
+
+        result = await session.execute(
+            sa.update(RefreshSession)
+            .where(RefreshSession.user_id == user_id)
+            .where(RefreshSession.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        typed_result: CursorResult[int] = result  # type: ignore[assignment]
+        return typed_result.rowcount
+
+    @staticmethod
     async def count_by_email(
         session: AsyncSession,
         email: str,

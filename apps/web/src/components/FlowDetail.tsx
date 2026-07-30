@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Col,
@@ -59,6 +60,27 @@ import {
 
 const { Text } = Typography;
 
+/**
+ * H-16: 批量执行单项结果
+ * - succeeded: 执行成功（唯一计为成功的状态）
+ * - failed: 执行失败
+ * - cancelled: 被取消
+ * - timed_out: 轮询耗尽，未在超时内到达终态
+ */
+interface BatchItemResult {
+  fileName: string;
+  status: 'succeeded' | 'failed' | 'cancelled' | 'timed_out';
+  error?: string;
+  runId?: string;
+}
+
+/** H-16: 批量轮询单项的最大尝试次数（120 * 2s = 240s = 4min） */
+const BATCH_POLL_MAX_ATTEMPTS = 120;
+/** H-16: 批量轮询间隔（毫秒） */
+const BATCH_POLL_INTERVAL = 2000;
+/** H-16: 流程运行终态 */
+const FLOW_RUN_TERMINAL_STATUSES = ['succeeded', 'failed', 'cancelled'];
+
 export function FlowDetail(): JSX.Element {
   const queryClient = useQueryClient();
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
@@ -81,6 +103,8 @@ export function FlowDetail(): JSX.Element {
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; status: string } | null>(null);
+  /** H-16: 批量执行逐项结果，仅 succeeded 计成功 */
+  const [batchResults, setBatchResults] = useState<BatchItemResult[] | null>(null);
   const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const [runSelectedComp, setRunSelectedComp] = useState<string | undefined>(undefined);
   const [batchSelectedComp, setBatchSelectedComp] = useState<string | undefined>(undefined);
@@ -535,6 +559,9 @@ export function FlowDetail(): JSX.Element {
     const node = (updatedFlow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
     const comp = node?.component_name ? compMap.get(node.component_name) : undefined;
 
+    // H-16: 逐项维护 succeeded/failed/cancelled/timed_out
+    const results: BatchItemResult[] = [];
+
     for (let i = 0; i < batchFiles.length; i++) {
       const file = batchFiles[i];
       setBatchProgress({ current: i, total: batchFiles.length, status: `正在上传: ${file.name}` });
@@ -562,27 +589,66 @@ export function FlowDetail(): JSX.Element {
         // 3. 创建运行
         setBatchProgress({ current: i, total: batchFiles.length, status: `正在执行: ${file.name}` });
         const run = await apiCreateFlowRun(selectedFlowId, { inputs });
-        // 4. 等待执行完成（轮询）
-        let done = false;
-        let attempts = 0;
-        while (!done && attempts < 120) {
-          await new Promise((r) => setTimeout(r, 2000));
-          attempts++;
+        // 4. 等待执行完成（轮询）— H-16: 轮询耗尽记超时
+        let runStatus: string | null = null;
+        for (let attempts = 0; attempts < BATCH_POLL_MAX_ATTEMPTS; attempts++) {
+          await new Promise((r) => setTimeout(r, BATCH_POLL_INTERVAL));
           const updated = await apiGetFlowRun(run.id);
-          if (['succeeded', 'failed', 'cancelled'].includes(updated.status)) {
-            done = true;
+          runStatus = updated.status;
+          if (FLOW_RUN_TERMINAL_STATUSES.includes(updated.status)) {
+            break;
           }
         }
+        // H-16: 仅 succeeded/failed/cancelled 为终态；轮询耗尽记 timed_out
+        if (runStatus && FLOW_RUN_TERMINAL_STATUSES.includes(runStatus)) {
+          results.push({
+            fileName: file.name,
+            status: runStatus as BatchItemResult['status'],
+            runId: run.id,
+          });
+        } else {
+          // 轮询耗尽，未到达终态
+          results.push({
+            fileName: file.name,
+            status: 'timed_out',
+            runId: run.id,
+          });
+        }
       } catch (err) {
-        message.error(`文件 ${file.name} 执行失败: ${err instanceof Error ? err.message : String(err)}`);
+        // H-16: 记录失败原因
+        const errMsg = err instanceof Error ? err.message : String(err);
+        results.push({ fileName: file.name, status: 'failed', error: errMsg });
+        message.error(`文件 ${file.name} 执行失败: ${errMsg}`);
       }
     }
-    setBatchProgress({ current: batchFiles.length, total: batchFiles.length, status: '全部完成' });
+
+    // H-16: 准确汇总 — 仅 succeeded 计成功，混合结果用 warning 而非 success
+    const summary = results.reduce(
+      (acc, r) => {
+        acc[r.status]++;
+        return acc;
+      },
+      { succeeded: 0, failed: 0, cancelled: 0, timed_out: 0 } as Record<BatchItemResult['status'], number>,
+    );
+
+    setBatchResults(results);
+    setBatchProgress({ current: batchFiles.length, total: batchFiles.length, status: '批量执行完成' });
     void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
     setBatchRunning(false);
     setBatchFiles([]);
-    setBatchModalOpen(false);
-    message.success(`批量执行完成: ${batchFiles.length} 个文件`);
+
+    // H-16: 展示准确汇总 — 有失败/取消/超时时用 warning 而非 success
+    const hasIssues = summary.failed > 0 || summary.cancelled > 0 || summary.timed_out > 0;
+    if (hasIssues) {
+      const parts: string[] = [];
+      if (summary.succeeded > 0) parts.push(`${summary.succeeded} 成功`);
+      if (summary.failed > 0) parts.push(`${summary.failed} 失败`);
+      if (summary.cancelled > 0) parts.push(`${summary.cancelled} 取消`);
+      if (summary.timed_out > 0) parts.push(`${summary.timed_out} 超时`);
+      message.warning(`批量执行完成: ${parts.join(', ')}`);
+    } else {
+      message.success(`批量执行完成: ${summary.succeeded} 个文件`);
+    }
   };
 
   // ---- 表格列定义 ----
@@ -853,6 +919,7 @@ export function FlowDetail(): JSX.Element {
                   setBatchProgress(null);
                   setBatchSelectedComp(runNode?.component_name ?? undefined);
                   setBatchOperator('');
+                  setBatchResults(null);
                   setBatchModalOpen(true);
                 }}
               >
@@ -1341,10 +1408,22 @@ export function FlowDetail(): JSX.Element {
             setBatchProgress(null);
             setBatchSelectedComp(undefined);
             setBatchOperator('');
+            setBatchResults(null);
           }
         }}
         footer={
-          batchRunning ? null : (
+          batchRunning ? null : batchResults ? (
+            <Button type="primary" onClick={() => {
+              setBatchModalOpen(false);
+              setBatchFiles([]);
+              setBatchProgress(null);
+              setBatchResults(null);
+              setBatchSelectedComp(undefined);
+              setBatchOperator('');
+            }}>
+              关闭
+            </Button>
+          ) : (
             <Space>
               <Button onClick={() => setBatchModalOpen(false)}>取消</Button>
               <Button
@@ -1370,6 +1449,40 @@ export function FlowDetail(): JSX.Element {
             <div style={{ marginTop: 8 }}>
               <Text type="secondary">{batchProgress.status}</Text>
             </div>
+          </div>
+        ) : batchResults ? (
+          /* H-16: 展示批量执行结果，含失败原因与状态汇总 */
+          <div>
+            {(() => {
+              const summary = batchResults.reduce(
+                (acc, r) => { acc[r.status]++; return acc; },
+                { succeeded: 0, failed: 0, cancelled: 0, timed_out: 0 } as Record<BatchItemResult['status'], number>,
+              );
+              const hasIssues = summary.failed > 0 || summary.cancelled > 0 || summary.timed_out > 0;
+              return (
+                <Alert
+                  type={hasIssues ? 'warning' : 'success'}
+                  message={
+                    hasIssues
+                      ? `批量执行完成: ${summary.succeeded} 成功, ${summary.failed} 失败, ${summary.cancelled} 取消, ${summary.timed_out} 超时`
+                      : `批量执行完成: ${summary.succeeded} 个文件全部成功`
+                  }
+                  style={{ marginBottom: 16 }}
+                />
+              );
+            })()}
+            {/* H-16: 展示失败原因与可重试状态 */}
+            {batchResults
+              .filter((r) => r.status === 'failed' || r.status === 'timed_out')
+              .map((r, idx) => (
+                <Alert
+                  key={idx}
+                  type="error"
+                  message={`${r.fileName}: ${r.status === 'timed_out' ? '执行超时' : '执行失败'}`}
+                  description={r.error || (r.status === 'timed_out' ? '轮询超时，未在规定时间内到达终态' : '未知原因')}
+                  style={{ marginBottom: 8 }}
+                />
+              ))}
           </div>
         ) : (
           <>

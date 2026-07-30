@@ -6,14 +6,32 @@ import { ConfigProvider, App as AntApp } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
 import { dataOceanTheme } from '@/theme/themeConfig';
+import { registerQueryClient } from '@/auth/sessionState';
 import 'katex/dist/katex.min.css';
 // Data Ocean 全局样式：基础 / 极地雾蓝空间 / 动效降级
 import '@/styles/global.css';
 import '@/styles/ocean.css';
 import '@/styles/motion.css';
 
-/** TanStack Query 客户端实例 */
-const queryClient = new QueryClient();
+/**
+ * H-15: QueryClient 配置
+ * - staleTime: 30s，避免频繁重复请求
+ * - refetchOnWindowFocus: false，减少不必要的刷新
+ * - 实际的跨账号隔离由 clearSessionState() 在登出/refresh 失败时
+ *   调用 queryClient.clear() 保证，而非依赖 queryKey 前缀
+ */
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+// H-15: 注册 QueryClient 到 sessionState，供 clearSessionState 使用
+registerQueryClient(queryClient);
 
 /**
  * IRIP Web 控制台入口

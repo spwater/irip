@@ -179,6 +179,8 @@ def reap_expired_leases() -> int:
 def retry_wait_jobs() -> int:
     """Celery Beat 调度任务：重新入队 retry_wait 状态且已到 run_after 的作业。
 
+    H-03: 重新投递而非只改状态。同事务创建 outbox 事件，确保 Dispatcher 重新投递。
+
     Returns:
         int: 重新入队的作业数。
     """
@@ -189,6 +191,7 @@ def retry_wait_jobs() -> int:
 
     from packages.common.database import build_session_factory, session_scope
     from packages.jobs.entities import Job, JobStatus
+    from packages.jobs.outbox import OutboxEvent
 
     db_url = os.getenv(
         "IRIP_DATABASE_URL",
@@ -224,7 +227,15 @@ def retry_wait_jobs() -> int:
                     )
                     .where(Job.id == job.id)
                 )
+                # H-03: 同事务创建 outbox 事件，确保 Dispatcher 重新投递
+                event = OutboxEvent(
+                    aggregate_type="job",
+                    aggregate_id=job.id,
+                    event_type="job.requeued",
+                )
+                session.add(event)
                 count += 1
+            await session.flush()
         return count
 
     return asyncio.run(_retry())

@@ -109,10 +109,11 @@ async def get_current_user(
     sub: object = payload.get("sub", "")
     roles_raw: object = payload.get("roles", [])
     roles: list[str] = roles_raw if isinstance(roles_raw, list) else []
+    token_version_jwt: int = int(payload.get("token_version", 0))
 
     user_id = UUID(str(sub))
 
-    # 从数据库查询用户的 department_id（用于实验室级数据隔离）
+    # H-06: 每次认证复核 is_active 和 token_version
     department_id: UUID | None = None
     if session_factory is not None:
         async with session_factory() as session:
@@ -121,6 +122,30 @@ async def get_current_user(
             )
             if user is not None:
                 department_id = user.department_id
+                # H-06: 复核账户状态（disabled 用户拒绝）
+                if user.status == "disabled":
+                    raise AppError(
+                        code="forbidden",
+                        message="用户已被禁用",
+                        retryable=False,
+                        fields={},
+                    )
+                # H-06: 复核 token_version（不匹配则 token 已被撤销）
+                if user.token_version != token_version_jwt:
+                    raise AppError(
+                        code="token_expired",
+                        message="访问令牌已被撤销，请重新登录",
+                        retryable=False,
+                        fields={},
+                    )
+            else:
+                # 用户不存在，拒绝
+                raise AppError(
+                    code="invalid_credentials",
+                    message="用户不存在",
+                    retryable=False,
+                    fields={},
+                )
 
     return CurrentUser(
         user_id=user_id,

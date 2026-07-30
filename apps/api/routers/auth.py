@@ -10,13 +10,23 @@
 - access_token 放 JSON body 返回（不设 cookie）；
 - refresh_token 放 HttpOnly SameSite=Strict cookie（irip_refresh），绝不放 JSON body；
 - 错误响应统一格式：{"error": {"code", "message", "retryable", "fields"}}。
+
+H-07 增强：
+- 密码 max_length=128（防止 DoS）；
+- 邮箱 max_length=254（RFC 5321 上限）；
+- IP+账号双维限流（IP 20 次/分钟，账号 5 次/分钟）。
+
+H-13 增强：
+- refresh cookie secure=True（生产环境）；
+- refresh cookie path 改为 /api/v1/auth（最小 path）。
 """
 
+import os
 from typing import Annotated
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
@@ -25,6 +35,7 @@ from packages.auth.permissions import BUILTIN_ROLES
 from packages.auth.service import AuthService
 from packages.auth.tokens import TokenPair
 from packages.common.errors import AppError
+from packages.common.rate_limiter import get_rate_limiter
 
 #: Refresh cookie 名称。
 REFRESH_COOKIE_NAME: str = "irip_refresh"
@@ -32,15 +43,23 @@ REFRESH_COOKIE_NAME: str = "irip_refresh"
 #: Refresh cookie 有效期（秒），7 天。
 REFRESH_COOKIE_MAX_AGE: int = 7 * 24 * 3600
 
+#: H-07: IP 维限流（每分钟 20 次）。
+LOGIN_IP_LIMIT: int = 20
+LOGIN_IP_WINDOW: int = 60
+
+#: H-07: 账号维限流（每分钟 5 次）。
+LOGIN_ACCOUNT_LIMIT: int = 5
+LOGIN_ACCOUNT_WINDOW: int = 60
+
 
 # ---- 请求/响应模型 ----
 
 
 class LoginRequest(BaseModel):
-    """登录请求体。"""
+    """登录请求体（H-07: 密码/邮箱长度上限）。"""
 
-    email: str
-    password: str
+    email: str = Field(..., max_length=254, description="用户邮箱（RFC 5321 上限 254）")
+    password: str = Field(..., min_length=1, max_length=128, description="用户密码（上限 128 防 DoS）")
 
 
 class TokenResponse(BaseModel):
@@ -92,21 +111,24 @@ me_router = APIRouter(tags=["user"])
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
-    """设置 HttpOnly SameSite refresh cookie。"""
+    """设置 HttpOnly SameSite refresh cookie（H-13: secure + 最小 path）。"""
+    # H-13: 生产环境 secure=True，开发环境可通过 IRIP_ENV 控制
+    is_production: bool = os.getenv("IRIP_ENV") == "production"
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=refresh_token,
         httponly=True,
         samesite="strict",
-        secure=False,
+        secure=is_production,
         max_age=REFRESH_COOKIE_MAX_AGE,
-        path="/",
+        # H-13: 最小 path，缩小 cookie 发送范围
+        path="/api/v1/auth",
     )
 
 
 def _clear_refresh_cookie(response: Response) -> None:
-    """清除 refresh cookie。"""
-    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/")
+    """清除 refresh cookie（H-13: path 与 set 时一致）。"""
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/api/v1/auth")
 
 
 @auth_router.post("/login", response_model=TokenResponse)
@@ -119,12 +141,38 @@ async def login(
     """用户登录。
 
     成功返回 access_token（JSON body）+ 设置 irip_refresh HttpOnly cookie。
-    失败抛出 AppError(invalid_credentials) → 401。
+    失败抛出 AppError(invalid_credentials) -> 401。
+
+    H-07: IP+账号双维限流。
     """
+    # H-07: IP+账号双维限流
     client_ip: str | None = None
     if request.client is not None:
         client_ip = request.client.host
     user_agent: str | None = request.headers.get("user-agent")
+
+    rate_limiter = get_rate_limiter()
+    if client_ip is not None:
+        if not rate_limiter.allow(
+            f"login:ip:{client_ip}", limit=LOGIN_IP_LIMIT, window=LOGIN_IP_WINDOW
+        ):
+            raise AppError(
+                code="rate_limited",
+                message="请求过于频繁，请稍后再试",
+                retryable=False,
+                fields={},
+            )
+    if not rate_limiter.allow(
+        f"login:email:{body.email}",
+        limit=LOGIN_ACCOUNT_LIMIT,
+        window=LOGIN_ACCOUNT_WINDOW,
+    ):
+        raise AppError(
+            code="rate_limited",
+            message="账号登录尝试过多，请稍后再试",
+            retryable=False,
+            fields={},
+        )
 
     pair: TokenPair = await service.login(
         email=body.email,

@@ -7,6 +7,11 @@ import type { SourcePreview, MappingRankResponse } from '@/api/types';
 import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
 import { IngestionWizard } from '@/ingestions/IngestionWizard';
 
+// M-08: mock useNavigate（IngestionWizard 在 401 时跳转登录页）
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 // vi.mock 必须在 import 之前（vitest 会自动提升）
 vi.mock('@/api/client', () => ({
   apiCreateJob: vi.fn().mockResolvedValue({ job_id: 'job-001' }),

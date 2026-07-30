@@ -1334,11 +1334,11 @@ class AIService:
             if not title:
                 return
         else:
-            # 直接 httpx 调用，不走 thinking 模式
-            import httpx
+            # H-05: 使用 SafeHTTPClient（SSRF 防护）
+            from packages.common.safe_http import SafeHTTPClient
 
             try:
-                async with httpx.AsyncClient(timeout=15.0) as client:
+                async with SafeHTTPClient(timeout=15.0, max_size=1024 * 1024) as client:
                     resp = await client.post(
                         f"{base_url}/chat/completions",
                         headers={
