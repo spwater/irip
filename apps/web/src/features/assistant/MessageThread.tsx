@@ -15,10 +15,13 @@ import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 const { Text, Paragraph } = Typography;
 
 // KaTeX style for proper rendering within react-markdown
+// 关键：overflow 不能放在 .katex-display 上，否则 BFC 破坏 strut 垂直定位
+// 横向滚动放在内层 .katex-html，外层保持 overflow: visible
 const katexStyle = `
 .ai-markdown-body .katex { font-size: 1.05em; }
-.ai-markdown-body .katex-display { overflow-x: auto; overflow-y: visible; margin: 8px 0; padding: 4px 0; }
-.ai-markdown-body .katex-display::-webkit-scrollbar { height: 4px; }
+.ai-markdown-body .katex-display { margin: 8px 0; padding: 4px 0; overflow: visible !important; }
+.ai-markdown-body .katex-display > .katex { overflow-x: auto; overflow-y: hidden; }
+.ai-markdown-body .katex-display > .katex::-webkit-scrollbar { height: 4px; }
 .ai-markdown-body .katex * { box-sizing: content-box !important; }
 `;
 
@@ -244,20 +247,48 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
 }
 
 /**
- * 将 LaTeX 原始 display math 语法 \[...\] 转换为 Markdown 的 $$...$$ 语法。
- * remark-math 只识别 $ 和 $$ 语法，不识别 \[...\] 和 \(...\)。
- * 仅转换独占行的 \[...\]（行首可选空格，行尾可选空格），避免误转行内引用 [1]。
+ * 将各种数学公式语法统一转换为 remark-math 能识别的 $$...$$ 和 $...$ 语法。
+ *
+ * 支持的输入格式：
+ * - \[...\]  LaTeX display math（跨行或单行）
+ * - [...]     纯方括号 display math（AI 常见输出，行首行尾独占）
+ * - \(...\)   LaTeX inline math
+ * - (...)     纯括号 inline math（需包含 LaTeX 命令才转换，避免误匹配普通括号）
+ *
+ * 注意：纯方括号 [ ... ] 仅在包含 LaTeX 命令（\frac, \sum, \bar, \hat, \sqrt 等）时才转换，
+ * 避免误匹配引用标注 [1] 或普通文本。
  */
 function normalizeLatexMath(md: string): string {
-  // \[...\] 独占行 → $$...$$
-  // 匹配：行首可选空格 + \[ + 内容 + \] + 行尾
-  // 多行公式：\[ 开头到 \] 结尾，中间可能跨行
-  return md
-    .replace(/(^|\n)\s*\\\[\s*\n([\s\S]*?)\n\s*\\\]\s*(?=\n|$)/g, '$1\n$$ $2 $$\n')
-    // 单行 \[...\] → $$...$$
-    .replace(/(^|\n)\s*\\\[([\s\S]*?)\\\]\s*(?=\n|$)/g, '$1$$ $2 $$')
-    // \(...\) 行内 → $...$
-    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+  // LaTeX 命令检测：包含反斜杠开头的 LaTeX 命令才算公式
+  const hasLatexCmd = (s: string): boolean => /\\(frac|sum|bar|hat|sqrt|int|oint|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|sigma|omega|pi|infty|cdot|times|div|pm|mp|le|ge|ne|approx|equiv|propto|leq|geq|subset|supset|in|notin|cup|cap|forall|exists|mathbb|mathcal|mathbf|text|mathrm|left|right|begin|end|operatorname)/.test(s);
+
+  // \[...\] 跨行 → $$...$$
+  let result = md.replace(/(^|\n)\s*\\\[\s*\n([\s\S]*?)\n\s*\\\]\s*(?=\n|$)/g, '$1\n$$ $2 $$\n');
+  // \[...\] 单行 → $$...$$
+  result = result.replace(/(^|\n)\s*\\\[([\s\S]*?)\\\]\s*(?=\n|$)/g, '$1$$ $2 $$');
+  // \(...\) → $...$
+  result = result.replace(/\\\(([\s\S]*?)\\\)/g, (match, inner) => {
+    if (hasLatexCmd(inner)) return `$${inner}$`;
+    return match;
+  });
+
+  // 纯方括号 [ ... ] 独占行 → $$...$$（仅当包含 LaTeX 命令时）
+  // 匹配：行首可选空格 + [ + 内容(不含换行或含换行) + ] + 行尾
+  // 跨行版本
+  result = result.replace(/(^|\n)\s*\[\s*\n([\s\S]*?)\n\s*\]\s*(?=\n|$)/g, (match, prefix, inner) => {
+    if (hasLatexCmd(inner)) return `${prefix}\n$$ ${inner.trim()} $$\n`;
+    return match;
+  });
+  // 单行版本
+  result = result.replace(/(^|\n)\s*\[([\s\S]*?)\]\s*(?=\n|$)/g, (match, prefix, inner) => {
+    if (hasLatexCmd(inner)) return `${prefix}$$ ${inner.trim()} $$`;
+    return match;
+  });
+
+  // 纯括号 ( ... ) 行内含 LaTeX → $...$（仅在紧跟 LaTeX 命令时）
+  // 不做 — 风险太高，行内括号太常见
+
+  return result;
 }
 
 /**
