@@ -169,7 +169,7 @@ services:
       context: .
       dockerfile: deployments/compose/web.Dockerfile
     <<: *security-base
-    cap_add: ["CHOWN"]
+    cap_add: ["CHOWN", "SETGID", "SETUID"]
     tmpfs:
       - /tmp
       - /var/cache/nginx
