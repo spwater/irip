@@ -5,7 +5,8 @@ import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-a
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+// rehype-sanitize 暂时去掉测试公式渲染
+// import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { BlockWrapper } from '@/features/assistant/BlockWrapper';
@@ -25,6 +26,7 @@ const katexStyle = '';
  * KaTeX generates deeply nested span/div structures with class names, style attributes,
  * aria-* attributes, and MathML elements (semantics, annotation, math, mrow, mi, mo, etc.)
  */
+/* sanitizeSchema 暂时去掉（rehype-sanitize 未使用）
 const sanitizeSchema = {
   ...defaultSchema,
   tagNames: [
@@ -72,6 +74,7 @@ const sanitizeSchema = {
     href: ['http', 'https'],
   },
 };
+*/
 
 /**
  * 从 React 节点中提取纯文本内容（用于 content_snapshot）。
@@ -396,37 +399,40 @@ function BlockifiedMarkdown({
     return { headingSections: sections, tableSnapshots: tables };
   }, [content]);
 
-  // 预处理：提取 $$...$$ display 公式的 LaTeX 原文（用于 formula 块 contentSnapshot）
-  const formulaSnapshots = useMemo(() => {
-    const formulas: string[] = [];
-    // 匹配 $$...$$ 块（非贪婪，跨行允许），基于 normalizedContent（已转换 \[...\] → $$...$$）
-    const regex = /\$\$([\s\S]*?)\$\$/g;
-    let m: RegExpExecArray | null;
-    while ((m = regex.exec(normalizedContent)) !== null) {
-      formulas.push(`$$${m[1].trim()}$$`);
-    }
-    return formulas;
-  }, [normalizedContent]);
+  // formulaSnapshots 暂时注释掉（formula 块加入橱窗功能后续实现）
+  // const _formulaSnapshots = useMemo(() => {
+  //   const formulas: string[] = [];
+  //   const regex = /\$\$([\s\S]*?)\$\$/g;
+  //   let m: RegExpExecArray | null;
+  //   while ((m = regex.exec(normalizedContent)) !== null) {
+  //     formulas.push(`$$${m[1].trim()}$$`);
+  //   }
+  //   return formulas;
+  // }, [normalizedContent]);
 
-  // 公式块计数器（独立于 blockCounter，因为 div 无法用 getNextIndex 按序号对应）
+  // 公式块计数器（暂未使用）
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const formulaCounterRef = useRef(0);
   formulaCounterRef.current = 0;
 
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
-      // rehype-katex 先渲染公式，rehype-sanitize 后清理（但需要保留 KaTeX 的所有属性）
-      // 顺序：katex 先 → sanitize 后（sanitize 需要放行 KaTeX 的 class/style/aria 属性）
-      rehypePlugins={[rehypeKatex, [rehypeSanitize, sanitizeSchema]]}
+      // 临时去掉 rehype-sanitize 测试公式渲染（AI 内容来自后端，安全风险低）
+      rehypePlugins={[rehypeKatex]}
       components={{
         code: ({
           className,
           children,
+          node,
         }: {
           className?: string;
           children?: ReactNode;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          node?: any;
         }) => {
-          const lang = className?.replace('language-', '') || '';
+          // react-markdown v10: className 可能在 node.properties.className 中
+          const lang = (className ?? node?.properties?.className?.[0] ?? '').replace('language-', '') || '';
           const codeStr = String(children || '').replace(/\n$/, '');
 
           // ECharts 代码块 → BlockWrapper + ChartBlock
@@ -532,34 +538,9 @@ function BlockifiedMarkdown({
             </BlockWrapper>
           );
         },
-        div: ({
-          className,
-          children,
-        }: {
-          className?: string;
-          children?: ReactNode;
-        }) => {
-          // KaTeX display 公式：rehype-katex 渲染为 div.katex-display
-          if (className && className.includes('katex-display')) {
-            const idx = getNextIndex();
-            const formulaIdx = formulaCounterRef.current++;
-            const formulaSnapshot = formulaSnapshots[formulaIdx] ?? extractTextFromNode(children);
-            return (
-              <BlockWrapper
-                messageId={messageId}
-                blockIndex={idx}
-                blockType="formula"
-                conversationId={conversationId}
-                systemContext={systemContext}
-                contentSnapshot={formulaSnapshot}
-              >
-                <div className={className}>{children}</div>
-              </BlockWrapper>
-            );
-          }
-          // 其他 div 原样渲染
-          return <div className={className}>{children}</div>;
-        },
+        // div 组件：不自定义，让 rehype-katex 生成的 KaTeX display 原样渲染
+        // 之前自定义 div 拦截 katex-display 会破坏 KaTeX 内部结构
+        // 公式块的"加入橱窗"功能暂通过其他方式实现（后续用 remark 插件提取）
       }}
     >
       {normalizedContent}
