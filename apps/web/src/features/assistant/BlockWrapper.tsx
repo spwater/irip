@@ -175,7 +175,7 @@ export function BlockWrapper({
       data-block-id={blockId}
       style={{
         position: 'relative',
-        margin: '8px 0',
+        margin: '2px 0',
         borderRadius: 8,
         transition: 'box-shadow 0.3s',
       }}
