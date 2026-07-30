@@ -540,7 +540,7 @@ async def get_provider_status(
                 display_name=str(t["display_name"]),
                 description=str(t["description"]),
                 required_permission=str(t["required_permission"]),
-                candidate=bool(t["candidate"]),
+                candidate=False,
             )
             for t in status.get("whitelist_tools", [])
         ],
@@ -550,7 +550,7 @@ async def get_provider_status(
                 display_name=str(t["display_name"]),
                 description=str(t["description"]),
                 required_permission=str(t["required_permission"]),
-                candidate=bool(t["candidate"]),
+                candidate=True,
             )
             for t in status.get("candidate_tools", [])
         ],
