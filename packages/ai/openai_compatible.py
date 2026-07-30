@@ -197,6 +197,12 @@ class OpenAICompatibleProvider:
             "- heatmap（热力图）: type=\"heatmap\""
             "\n普通二维图表（折线/柱状/饼图/散点图）仍使用 ECharts。"
             "仅当需要 ECharts 不支持的科研图表时才使用 Plotly。"
+            "\n\n数学公式指引："
+            "使用 Markdown 数学公式语法。行内公式用 $...$，"
+            "独立公式块用 $$...$$（独占一行）。"
+            "不要使用 LaTeX 原始的 \\[...\\] 或 \\(...\\) 语法，"
+            "前端只识别 $ 和 $$ 语法。"
+            "示例：$$\\bar{x} = \\frac{\\sum_{i=1}^{n} x_i}{n}$$"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (

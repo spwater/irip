@@ -244,10 +244,28 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
 }
 
 /**
+ * 将 LaTeX 原始 display math 语法 \[...\] 转换为 Markdown 的 $$...$$ 语法。
+ * remark-math 只识别 $ 和 $$ 语法，不识别 \[...\] 和 \(...\)。
+ * 仅转换独占行的 \[...\]（行首可选空格，行尾可选空格），避免误转行内引用 [1]。
+ */
+function normalizeLatexMath(md: string): string {
+  // \[...\] 独占行 → $$...$$
+  // 匹配：行首可选空格 + \[ + 内容 + \] + 行尾
+  // 多行公式：\[ 开头到 \] 结尾，中间可能跨行
+  return md
+    .replace(/(^|\n)\s*\\\[\s*\n([\s\S]*?)\n\s*\\\]\s*(?=\n|$)/g, '$1\n$$ $2 $$\n')
+    // 单行 \[...\] → $$...$$
+    .replace(/(^|\n)\s*\\\[([\s\S]*?)\\\]\s*(?=\n|$)/g, '$1$$ $2 $$')
+    // \(...\) 行内 → $...$
+    .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+}
+
+/**
  * 内容块化 Markdown 渲染器。
  *
  * 在 react-markdown 的 components 回调中，对可操作块（echarts/plotly 代码块、
- * 表格、h2/h3 标题）用 BlockWrapper 包裹，分配 block_index 并设置 data-block-id。
+ * 表格、h2/h3 标题、KaTeX display 公式）用 BlockWrapper 包裹，
+ * 分配 block_index 并设置 data-block-id。
  *
  * block_index 规则：按块出现顺序从 0 开始递增，同一消息内唯一。
  */
@@ -262,6 +280,8 @@ function BlockifiedMarkdown({
   conversationId: string | null;
   systemContext: string | null | undefined;
 }): JSX.Element {
+  // 预处理：转换 \[...\] → $$...$$ 和 \(...\) → $...$
+  const normalizedContent = useMemo(() => normalizeLatexMath(content), [content]);
   // 块计数器：每次渲染重置，按出现顺序递增
   // 使用 ref 避免触发重渲染，react-markdown 同步渲染保证顺序稳定
   const blockCounterRef = useRef(0);
@@ -274,7 +294,7 @@ function BlockifiedMarkdown({
   const { headingSections, tableSnapshots } = useMemo(() => {
     const sections: Record<string, string> = {};
     const tables: string[] = [];
-    const lines = content.split('\n');
+    const lines = normalizedContent.split('\n');
     let i = 0;
     let tableIdx = 0;
 
@@ -338,14 +358,14 @@ function BlockifiedMarkdown({
   // 预处理：提取 $$...$$ display 公式的 LaTeX 原文（用于 formula 块 contentSnapshot）
   const formulaSnapshots = useMemo(() => {
     const formulas: string[] = [];
-    // 匹配 $$...$$ 块（非贪婪，跨行允许）
+    // 匹配 $$...$$ 块（非贪婪，跨行允许），基于 normalizedContent（已转换 \[...\] → $$...$$）
     const regex = /\$\$([\s\S]*?)\$\$/g;
     let m: RegExpExecArray | null;
-    while ((m = regex.exec(content)) !== null) {
+    while ((m = regex.exec(normalizedContent)) !== null) {
       formulas.push(`$$${m[1].trim()}$$`);
     }
     return formulas;
-  }, [content]);
+  }, [normalizedContent]);
 
   // 公式块计数器（独立于 blockCounter，因为 div 无法用 getNextIndex 按序号对应）
   const formulaCounterRef = useRef(0);
@@ -500,7 +520,7 @@ function BlockifiedMarkdown({
         },
       }}
     >
-      {content}
+      {normalizedContent}
     </ReactMarkdown>
   );
 }
