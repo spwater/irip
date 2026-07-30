@@ -39,16 +39,15 @@ import 'katex/dist/katex.min.css';
 const { Text } = Typography;
 
 // KaTeX 隔离样式：防止全局 line-height:1.7 和 box-sizing:border-box 污染 KaTeX 内部排版
-// 与 MessageThread 中的 katexStyle 保持一致
 const katexStyle = `
-.ai-markdown-body .katex { font-size: 1.05em; line-height: normal; }
-.ai-markdown-body .katex-display { margin: 0.6em 0; padding: 4px 0; overflow: visible !important; line-height: normal; }
-.ai-markdown-body .katex-display > .katex { overflow-x: auto; overflow-y: hidden; line-height: normal; }
-.ai-markdown-body .katex-display > .katex::-webkit-scrollbar { height: 4px; }
-.ai-markdown-body .katex * { box-sizing: content-box !important; line-height: normal; }
-.ai-markdown-body .katex .vlist { line-height: normal; }
-.ai-markdown-body .katex .vlist > span { line-height: normal; }
-.ai-markdown-body .katex .frac-line { line-height: normal; }
+.ai-markdown-body .katex { font-size: 1.05em; line-height: 1 !important; }
+.ai-markdown-body .katex-display { margin: 0.6em 0; padding: 4px 0; overflow: visible !important; line-height: 1 !important; }
+.ai-markdown-body .katex-display > .katex { display: block; line-height: 1 !important; }
+.ai-markdown-body .katex * { box-sizing: content-box !important; line-height: 1 !important; }
+.ai-markdown-body .katex .vlist { line-height: 1 !important; }
+.ai-markdown-body .katex .vlist > span { line-height: 1 !important; }
+.ai-markdown-body .katex .frac-line { line-height: 1 !important; }
+.ai-markdown-body .katex .strut { line-height: 1 !important; }
 `;
 
 /** 块类型 → 图标映射 */
