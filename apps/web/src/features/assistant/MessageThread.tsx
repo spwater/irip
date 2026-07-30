@@ -2,7 +2,6 @@ import { Avatar, Typography } from 'antd';
 import CitationList from '@/features/assistant/CitationList';
 import ToolTrace from '@/features/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
-import 'katex/dist/katex.min.css';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
@@ -11,6 +10,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import { BlockWrapper } from '@/features/assistant/BlockWrapper';
 import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
+// KaTeX CSS 通过 index.html <link> 引入
 
 const { Text, Paragraph } = Typography;
 

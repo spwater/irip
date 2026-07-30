@@ -34,7 +34,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+// KaTeX CSS 通过 index.html <link> 引入
 
 const { Text } = Typography;
 

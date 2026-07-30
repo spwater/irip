@@ -243,27 +243,17 @@ button {
 /* ============================================================
  * KaTeX 公式渲染隔离
  *
- * 全局 body { line-height: 1.7 } 会被所有子元素继承，
- * 而 KaTeX 的 .vlist 依赖精确的行高来定位分子/分母/分数线，
- * line-height: 1.7 导致分式结构塌陷。
+ * 不覆盖 KaTeX 自身的 line-height（KaTeX 设 1.2），
+ * 只防止全局 body line-height:1.7 通过继承污染 KaTeX 内部
+ * 未显式设置 line-height 的元素。
  *
- * 同样，全局 * { box-sizing: border-box } 影响 KaTeX 尺寸计算。
- *
- * 这里在全局层面做隔离，比组件内 <style> 更可靠（无优先级竞争）。
+ * 关键：KaTeX .vlist>span 设了 height:0 + position:relative，
+ * 子元素用 top 精确定位。任何额外的 height/line-height 干扰
+ * 都会破坏分式结构。
  * ========================================================== */
-.katex,
-.katex * {
-  line-height: 1 !important;
-  box-sizing: content-box !important;
+.katex {
+  line-height: 1.2;
 }
-
-.katex-display {
-  margin: 0.6em 0;
-  overflow: visible !important;
-  line-height: 1 !important;
-}
-
-.katex-display > .katex {
-  display: block;
-  line-height: 1 !important;
+.katex .vlist > span {
+  height: 0;
 }
