@@ -46,7 +46,9 @@ async def evidence_service(
     yield service
 
     # 清理证据集相关数据
+    # T03/H-01: evidence_set_version 现在是不可变表，需要临时禁用触发器才能清理
     with sync_engine.connect() as conn:
+        conn.execute(sa.text("SET LOCAL session_replication_role = replica"))
         conn.execute(
             sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
             {"oid": org_id},
