@@ -271,6 +271,7 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
  * 注意：纯方括号 [ ... ] 仅在包含 LaTeX 命令（\frac, \sum, \bar, \hat, \sqrt 等）时才转换，
  * 避免误匹配引用标注 [1] 或普通文本。
  */
+/* normalizeLatexMath 暂时未使用
 function normalizeLatexMath(md: string): string {
   // LaTeX 命令检测：包含反斜杠开头的 LaTeX 命令才算公式
   const hasLatexCmd = (s: string): boolean => /\\(frac|sum|bar|hat|sqrt|int|oint|partial|nabla|alpha|beta|gamma|delta|epsilon|theta|lambda|mu|sigma|omega|pi|infty|cdot|times|div|pm|mp|le|ge|ne|approx|equiv|propto|leq|geq|subset|supset|in|notin|cup|cap|forall|exists|mathbb|mathcal|mathbf|text|mathrm|left|right|begin|end|operatorname)/.test(s);
@@ -303,6 +304,7 @@ function normalizeLatexMath(md: string): string {
 
   return result;
 }
+*/
 
 /**
  * 内容块化 Markdown 渲染器。
@@ -324,8 +326,8 @@ function BlockifiedMarkdown({
   conversationId: string | null;
   systemContext: string | null | undefined;
 }): JSX.Element {
-  // 预处理：转换 \[...\] → $$...$$ 和 \(...\) → $...$
-  const normalizedContent = useMemo(() => normalizeLatexMath(content), [content]);
+  // 暂时去掉 normalizeLatexMath 预处理，直接用原始 content 测试公式渲染
+  const normalizedContent = content;
   // 块计数器：每次渲染重置，按出现顺序递增
   // 使用 ref 避免触发重渲染，react-markdown 同步渲染保证顺序稳定
   const blockCounterRef = useRef(0);
@@ -418,7 +420,6 @@ function BlockifiedMarkdown({
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
-      // 临时去掉 rehype-sanitize 测试公式渲染（AI 内容来自后端，安全风险低）
       rehypePlugins={[rehypeKatex]}
       components={{
         code: ({
