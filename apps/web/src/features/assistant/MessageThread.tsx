@@ -4,15 +4,10 @@ import ToolTrace from '@/features/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
-import rehypeKatex from 'rehype-katex';
-// rehype-sanitize 暂时去掉测试公式渲染
-// import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-// BlockifiedMarkdown 暂时简化为纯 ReactMarkdown（测试公式渲染）
-// import { BlockWrapper } from '@/features/assistant/BlockWrapper';
-// import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
-// KaTeX CSS 通过 index.html <link> 引入
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 const { Text, Paragraph } = Typography;
 
@@ -308,13 +303,56 @@ function normalizeLatexMath(md: string): string {
 */
 
 /**
+ * 用 KaTeX JS API 直接渲染公式为 HTML 字符串。
+ * 绕开 rehype-katex 的 hast 节点转换（在 react-markdown v10 中有兼容性问题）。
+ */
+function renderMath(tex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(tex, {
+      displayMode,
+      throwOnError: false,
+      strict: false,
+    });
+  } catch {
+    return `<span style="color:red">${tex}</span>`;
+  }
+}
+
+/**
+ * 预处理：把 $$...$$ 和 $...$ 公式用 KaTeX 渲染成 HTML，
+ * 然后用特殊占位符标记，后续在 ReactMarkdown 渲染后替换。
+ *
+ * 不用 rehype-katex，直接用 KaTeX JS API 生成 HTML 字符串。
+ */
+function preprocessMath(md: string): { html: string; mathMap: Map<string, string> } {
+  const mathMap = new Map<string, string>();
+  let counter = 0;
+  let result = md;
+
+  // 先处理 $$...$$ display math（非贪婪，跨行允许）
+  result = result.replace(/\$\$([\s\S]*?)\$\$/g, (_, tex: string) => {
+    const html = renderMath(tex.trim(), true);
+    const placeholder = `MATHDISPLAY${counter}MATHEND`;
+    mathMap.set(placeholder, html);
+    counter++;
+    return placeholder;
+  });
+
+  // 再处理 $...$ inline math（不跨行，避免误匹配）
+  result = result.replace(/\$([^\n$]+?)\$/g, (_, tex: string) => {
+    const html = renderMath(tex.trim(), false);
+    const placeholder = `MATHINLINE${counter}MATHEND`;
+    mathMap.set(placeholder, html);
+    counter++;
+    return placeholder;
+  });
+
+  return { html: result, mathMap };
+}
+
+/**
  * 内容块化 Markdown 渲染器。
- *
- * 在 react-markdown 的 components 回调中，对可操作块（echarts/plotly 代码块、
- * 表格、h2/h3 标题、KaTeX display 公式）用 BlockWrapper 包裹，
- * 分配 block_index 并设置 data-block-id。
- *
- * block_index 规则：按块出现顺序从 0 开始递增，同一消息内唯一。
+ * 不使用 rehype-katex，自己用 KaTeX JS API 渲染公式。
  */
 function BlockifiedMarkdown({
   content,
@@ -324,13 +362,86 @@ function BlockifiedMarkdown({
   conversationId: string | null;
   systemContext: string | null | undefined;
 }): JSX.Element {
-  // 纯净测试：只用 ReactMarkdown + remarkMath + rehypeKatex，无自定义组件
+  // 预处理：把公式替换成占位符，KaTeX HTML 存到 mathMap
+  const { html: preprocessed, mathMap } = useMemo(() => preprocessMath(content), [content]);
+
+  // 用 ReactMarkdown 渲染（不带 remarkMath，因为公式已经被预处理了）
+  // 渲染后把占位符替换回 KaTeX HTML
+  const rendered = useMemo(() => {
+    // 用 remarkGfm 渲染 Markdown（表格、列表等），不渲染公式
+    // 占位符是纯文本，会原样出现在 HTML 中
+    return preprocessed;
+  }, [preprocessed]);
+
+  // 自定义组件：拦截包含占位符的文本节点，替换为 KaTeX HTML
+  const components = useMemo(() => {
+    const replacePlaceholders = (text: string): ReactNode => {
+      // 检查是否包含占位符
+      if (!text.includes('MATH')) return text;
+
+      // 按占位符分割文本
+      const parts: ReactNode[] = [];
+      const regex = /(MATH(?:DISPLAY|INLINE)\d+MATHEND)/g;
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      let key = 0;
+
+      while ((match = regex.exec(text)) !== null) {
+        // 占位符前的普通文本
+        if (match.index > lastIndex) {
+          parts.push(text.slice(lastIndex, match.index));
+        }
+        // 占位符对应的 KaTeX HTML
+        const placeholder = match[1];
+        const mathHtml = mathMap.get(placeholder);
+        if (mathHtml) {
+          parts.push(
+            <span key={`math-${key}`} dangerouslySetInnerHTML={{ __html: mathHtml }} />
+          );
+        } else {
+          parts.push(placeholder);
+        }
+        lastIndex = match.index + placeholder.length;
+        key++;
+      }
+      // 末尾普通文本
+      if (lastIndex < text.length) {
+        parts.push(text.slice(lastIndex));
+      }
+      return parts.length === 1 ? parts[0] : <>{parts}</>;
+    };
+
+    return {
+      p: ({ children }: { children?: ReactNode }) => {
+        // 检查 children 是否包含占位符字符串
+        if (typeof children === 'string' && children.includes('MATH')) {
+          return <p>{replacePlaceholders(children)}</p>;
+        }
+        if (Array.isArray(children)) {
+          const hasMath = children.some(c => typeof c === 'string' && c.includes('MATH'));
+          if (hasMath) {
+            return <p>{children.map(c => typeof c === 'string' && c.includes('MATH') ? replacePlaceholders(c) : c)}</p>;
+          }
+        }
+        return <p>{children}</p>;
+      },
+      // 代码块也检查占位符（display math 可能被当成代码块）
+      code: ({ children }: { children?: ReactNode }) => {
+        const text = String(children || '');
+        if (text.includes('MATH')) {
+          return <>{replacePlaceholders(text)}</>;
+        }
+        return <code>{children}</code>;
+      },
+    };
+  }, [mathMap]);
+
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkMath, remarkGfm]}
-      rehypePlugins={[rehypeKatex]}
+      remarkPlugins={[remarkGfm]}
+      components={components}
     >
-      {content}
+      {rendered}
     </ReactMarkdown>
   );
 }
