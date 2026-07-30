@@ -96,16 +96,20 @@ http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
  *
  * N 个并行 401 只刷新一次：所有并发请求共享同一个 refresh Promise。
  * refresh 成功后所有等待请求自动重试；refresh 失败时原子清会话。
+ *
+ * 关键修复：apiRefresh() 和 refreshAccessToken() 必须共享同一个 single-flight 锁，
+ * 否则页面刷新时 AuthProvider.init() 和响应拦截器各发一个 refresh 请求，
+ * 第二个请求的 token 已被第一个旋转 → 后端判定重放攻击 → 撤销整个 family → 登出。
  */
-let refreshPromise: Promise<string> | null = null;
+let refreshPromise: Promise<LoginResponse> | null = null;
 
 /**
- * 执行 single-flight token refresh。
+ * 执行 single-flight token refresh（核心函数）。
  * - 首次调用发起实际的 /auth/refresh 请求
- * - 并发调用复用同一个 Promise
- * - 成功返回新 access token，失败时原子清会话并抛出
+ * - 并发调用（apiRefresh / refreshAccessToken）复用同一个 Promise
+ * - 成功返回 LoginResponse，失败时原子清会话并抛出
  */
-function refreshAccessToken(): Promise<string> {
+function doRefresh(): Promise<LoginResponse> {
   if (refreshPromise) {
     return refreshPromise;
   }
@@ -117,7 +121,7 @@ function refreshAccessToken(): Promise<string> {
     )
     .then((res) => {
       accessToken = res.data.access_token;
-      return res.data.access_token;
+      return res.data;
     })
     .catch((err) => {
       // refresh 失败：原子清会话（清 Query/Zustand/localStorage）
@@ -129,6 +133,14 @@ function refreshAccessToken(): Promise<string> {
       refreshPromise = null;
     });
   return refreshPromise;
+}
+
+/**
+ * 执行 single-flight token refresh，返回 access token 字符串。
+ * 供响应拦截器使用。
+ */
+function refreshAccessToken(): Promise<string> {
+  return doRefresh().then((data) => data.access_token);
 }
 
 /**
@@ -166,13 +178,8 @@ export async function apiLogin(email: string, password: string): Promise<LoginRe
 
 export async function apiRefresh(): Promise<LoginResponse | null> {
   try {
-    // 用裸 axios 绕过响应拦截器，避免 refresh 失败时触发 window.location.href 硬跳转导致无限刷新
-    const res = await axios.post<LoginResponse>(
-      `${baseURL}/auth/refresh`,
-      {},
-      { withCredentials: true },
-    );
-    return res.data;
+    // 通过 doRefresh() 共享 single-flight 锁，避免与 refreshAccessToken() 竞态
+    return await doRefresh();
   } catch {
     return null;
   }
