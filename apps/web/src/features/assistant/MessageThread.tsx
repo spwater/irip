@@ -270,8 +270,9 @@ function renderMath(tex: string, displayMode: boolean): string {
  *
  * 不用 rehype-katex，直接用 KaTeX JS API 生成 HTML 字符串。
  */
-function preprocessMath(md: string): { html: string; mathMap: Map<string, string> } {
+function preprocessMath(md: string): { html: string; mathMap: Map<string, string>; formulaMap: Map<string, string> } {
   const mathMap = new Map<string, string>();
+  const formulaMap = new Map<string, string>();
   let counter = 0;
   let result = md;
 
@@ -280,6 +281,7 @@ function preprocessMath(md: string): { html: string; mathMap: Map<string, string
     const html = renderMath(tex.trim(), true);
     const placeholder = `MATHDISPLAY${counter}MATHEND`;
     mathMap.set(placeholder, html);
+    formulaMap.set(placeholder, `$$${tex.trim()}$$`);
     counter++;
     return placeholder;
   });
@@ -293,7 +295,7 @@ function preprocessMath(md: string): { html: string; mathMap: Map<string, string
     return placeholder;
   });
 
-  return { html: result, mathMap };
+  return { html: result, mathMap, formulaMap };
 }
 
 /**
@@ -313,7 +315,7 @@ function BlockifiedMarkdown({
   systemContext: string | null | undefined;
 }): JSX.Element {
   // 预处理：先转换 \[...\] → $$...$$，再把公式替换成占位符
-  const { html: preprocessed, mathMap } = useMemo(() => {
+  const { html: preprocessed, mathMap, formulaMap } = useMemo(() => {
     const normalized = normalizeLatexMath(content);
     return preprocessMath(normalized);
   }, [content]);
@@ -408,8 +410,26 @@ function BlockifiedMarkdown({
 
     return {
       p: ({ children }: { children?: ReactNode }) => {
-        if (typeof children === 'string' && children.includes('MATH')) {
-          return <p>{replacePlaceholders(children)}</p>;
+        if (typeof children === 'string') {
+          // 检测整段是否是单个 display 公式占位符 → 用 BlockWrapper 包裹支持加入橱窗
+          const displayMatch = children.match(/^(MATHDISPLAY\d+MATHEND)$/);
+          if (displayMatch) {
+            const placeholder = displayMatch[1];
+            const mathHtml = mathMap.get(placeholder);
+            const formulaTex = formulaMap.get(placeholder);
+            if (mathHtml && formulaTex) {
+              const idx = getNextIndex();
+              return (
+                <BlockWrapper messageId={messageId} blockIndex={idx} blockType="formula"
+                  conversationId={conversationId} systemContext={systemContext} contentSnapshot={formulaTex}>
+                  <div style={{ margin: '8px 0', overflowX: 'auto' }} dangerouslySetInnerHTML={{ __html: mathHtml }} />
+                </BlockWrapper>
+              );
+            }
+          }
+          if (children.includes('MATH')) {
+            return <p>{replacePlaceholders(children)}</p>;
+          }
         }
         if (Array.isArray(children)) {
           const hasMath = children.some(c => typeof c === 'string' && c.includes('MATH'));
@@ -497,7 +517,7 @@ function BlockifiedMarkdown({
         );
       },
     };
-  }, [mathMap, messageId, conversationId, systemContext, headingSections, tableSnapshots]);
+  }, [mathMap, formulaMap, messageId, conversationId, systemContext, headingSections, tableSnapshots]);
 
   return (
     <ReactMarkdown
