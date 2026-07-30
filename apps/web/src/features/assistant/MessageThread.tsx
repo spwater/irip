@@ -21,15 +21,25 @@ const katexStyle = '';
 /**
  * Custom sanitize schema for rehype-sanitize.
  *
- * Extends the default schema to:
- * - Allow katex-related class names (added by rehype-katex)
- * - Allow data-* attributes used by katex
- * - Restrict protocols to http/https/data only (no javascript:)
+ * Extends the default schema to allow all KaTeX-generated elements and attributes.
+ * KaTeX generates deeply nested span/div structures with class names, style attributes,
+ * aria-* attributes, and MathML elements (semantics, annotation, math, mrow, mi, mo, etc.)
  */
 const sanitizeSchema = {
   ...defaultSchema,
+  tagNames: [
+    ...(defaultSchema.tagNames || []),
+    'math', 'semantics', 'annotation', 'mrow', 'mi', 'mo', 'mn', 'msupsub',
+    'mfrac', 'mtext', 'mspace', 'mtable', 'mtr', 'mtd', 'mstyle',
+  ],
   attributes: {
     ...defaultSchema.attributes,
+    '*': [
+      ...(defaultSchema.attributes?.['*'] || []),
+      'className',
+      'style',
+      'aria*',
+    ],
     div: [
       ...(defaultSchema.attributes?.div || []),
       'className',
@@ -39,6 +49,7 @@ const sanitizeSchema = {
     span: [
       ...(defaultSchema.attributes?.span || []),
       'className',
+      'style',
     ],
     code: [
       ...(defaultSchema.attributes?.code || []),
@@ -47,6 +58,12 @@ const sanitizeSchema = {
     pre: [
       ...(defaultSchema.attributes?.pre || []),
       'className',
+    ],
+    annotation: [
+      'encoding',
+    ],
+    math: [
+      'xmlns',
     ],
   },
   protocols: {
@@ -398,7 +415,9 @@ function BlockifiedMarkdown({
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
-      rehypePlugins={[[rehypeSanitize, sanitizeSchema], rehypeKatex]}
+      // rehype-katex 先渲染公式，rehype-sanitize 后清理（但需要保留 KaTeX 的所有属性）
+      // 顺序：katex 先 → sanitize 后（sanitize 需要放行 KaTeX 的 class/style/aria 属性）
+      rehypePlugins={[rehypeKatex, [rehypeSanitize, sanitizeSchema]]}
       components={{
         code: ({
           className,
@@ -643,7 +662,7 @@ export function MessageThread({
             </Avatar>
             <div
               style={{
-                maxWidth: '75%',
+                maxWidth: 'calc(100% - 48px)',
                 padding: '12px 16px',
                 borderRadius: 12,
                 background: isUser ? 'rgba(22, 134, 174, 0.10)' : 'rgba(20, 118, 94, 0.06)',
