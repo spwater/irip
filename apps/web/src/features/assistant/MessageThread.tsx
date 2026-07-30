@@ -446,21 +446,20 @@ function BlockifiedMarkdown({
             );
           }
 
-          // 普通代码块
+          // 普通代码块：只返回 <code>，react-markdown v9 已用 <pre> 包裹
           return (
-            <pre
+            <code
+              className={className}
               style={{
                 background: 'rgba(142,191,208,0.16)',
-                padding: '8px 12px',
-                borderRadius: 6,
-                overflow: 'auto',
-                margin: '6px 0',
+                padding: '2px 4px',
+                borderRadius: 4,
                 fontSize: 13,
                 fontFamily: 'var(--ocean-font-mono, monospace)',
               }}
             >
-              <code className={className}>{children}</code>
-            </pre>
+              {children}
+            </code>
           );
         },
         table: ({ children }: { children?: ReactNode }) => {
