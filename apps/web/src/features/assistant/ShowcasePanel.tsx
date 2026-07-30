@@ -241,12 +241,14 @@ export function ShowcasePanel({
         display: 'flex',
         flexDirection: 'column',
       }}
-      bodyStyle={{
-        padding: 0,
-        flex: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
+      styles={{
+        body: {
+          padding: 0,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        },
       }}
       title={
         <Space size={8}>

@@ -390,7 +390,7 @@ export function AssistantPage(): JSX.Element {
       <Card
         size="small"
         style={{ width: 260, display: 'flex', flexDirection: 'column', flexShrink: 0 }}
-        bodyStyle={{ padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        styles={{ body: { padding: 0, flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}
         title={
           <Space size={4}>
             <Title level={5} style={{ margin: 0 }}>
@@ -554,12 +554,14 @@ export function AssistantPage(): JSX.Element {
       <Card
         size="small"
         style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{
-          padding: 16,
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
+        styles={{
+          body: {
+            padding: 16,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
         }}
         title={
           <Space>
