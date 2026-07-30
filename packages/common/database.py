@@ -91,8 +91,11 @@ async def session_scope(
     async with factory() as session:
         async with session.begin():
             if principal is not None:
+                # SET LOCAL 不支持参数绑定，用 quote 安全拼接
                 await session.execute(
-                    sa.text("SET LOCAL app.current_org_id = :org_id"),
-                    {"org_id": str(principal.organization_id)},
+                    sa.text(
+                        "SET LOCAL app.current_org_id = "
+                        f"'{str(principal.organization_id)}'"
+                    )
                 )
             yield session
