@@ -9,8 +9,9 @@ import rehypeKatex from 'rehype-katex';
 // import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import { BlockWrapper } from '@/features/assistant/BlockWrapper';
-import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
+// BlockifiedMarkdown 暂时简化为纯 ReactMarkdown（测试公式渲染）
+// import { BlockWrapper } from '@/features/assistant/BlockWrapper';
+// import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
 // KaTeX CSS 通过 index.html <link> 引入
 
 const { Text, Paragraph } = Typography;
@@ -317,234 +318,19 @@ function normalizeLatexMath(md: string): string {
  */
 function BlockifiedMarkdown({
   content,
-  messageId,
-  conversationId,
-  systemContext,
 }: {
   content: string;
   messageId: string;
   conversationId: string | null;
   systemContext: string | null | undefined;
 }): JSX.Element {
-  // 暂时去掉 normalizeLatexMath 预处理，直接用原始 content 测试公式渲染
-  const normalizedContent = content;
-  // 块计数器：每次渲染重置，按出现顺序递增
-  // 使用 ref 避免触发重渲染，react-markdown 同步渲染保证顺序稳定
-  const blockCounterRef = useRef(0);
-  blockCounterRef.current = 0;
-  const getNextIndex = (): number => blockCounterRef.current++;
-
-  // 预处理：从原始 Markdown 提取每个标题对应的完整 section + 表格 Markdown 原文
-  // headingSections: 标题+正文 section（用于 conclusion 块 contentSnapshot）
-  // tableSnapshots: Markdown 表格原文（用于 table 块 contentSnapshot，替代 extractTextFromNode）
-  const { headingSections, tableSnapshots } = useMemo(() => {
-    const sections: Record<string, string> = {};
-    const tables: string[] = [];
-    const lines = normalizedContent.split('\n');
-    let i = 0;
-    let tableIdx = 0;
-
-    // 先提取标题 sections
-    i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const h2Match = line.match(/^##\s+(.+)/);
-      const h3Match = line.match(/^###\s+(.+)/);
-      if (h2Match || h3Match) {
-        const headingText = (h2Match || h3Match)![1].trim();
-        const level = h2Match ? 2 : 3;
-        const sectionLines: string[] = [line];
-        i++;
-        while (i < lines.length) {
-          const nextLine = lines[i];
-          const nextH2 = nextLine.match(/^##\s+/);
-          const nextH3 = nextLine.match(/^###\s+/);
-          if ((level === 2 && (nextH2 || nextH3)) || (level === 3 && nextH3)) {
-            break;
-          }
-          sectionLines.push(nextLine);
-          i++;
-        }
-        if (!(headingText in sections)) {
-          sections[headingText] = sectionLines.join('\n').trim();
-        }
-      } else {
-        i++;
-      }
-    }
-
-    // 提取表格 Markdown 原文：GFM 表格是连续的含 | 行，前面可能有空行
-    i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      // 表格行特征：包含 | 且不是标题行（排除 ### 样品: 模式）
-      if (line.includes('|') && !line.match(/^#{1,3}\s/)) {
-        // 向前检查是否是分隔行（---|---）
-        const tableLines: string[] = [];
-        // 从当前行向上找表格起始（含 | 的连续行）
-        let j = i;
-        while (j < lines.length && lines[j].includes('|') && !lines[j].match(/^#{1,3}\s/)) {
-          tableLines.push(lines[j]);
-          j++;
-        }
-        // 验证是否是真正的表格（至少 2 行且第二行含 ---）
-        if (tableLines.length >= 2 && tableLines[1].includes('---')) {
-          tables.push(tableLines.join('\n'));
-          tableIdx++;
-        }
-        i = j;
-      } else {
-        i++;
-      }
-    }
-
-    return { headingSections: sections, tableSnapshots: tables };
-  }, [content]);
-
-  // formulaSnapshots 暂时注释掉（formula 块加入橱窗功能后续实现）
-  // const _formulaSnapshots = useMemo(() => {
-  //   const formulas: string[] = [];
-  //   const regex = /\$\$([\s\S]*?)\$\$/g;
-  //   let m: RegExpExecArray | null;
-  //   while ((m = regex.exec(normalizedContent)) !== null) {
-  //     formulas.push(`$$${m[1].trim()}$$`);
-  //   }
-  //   return formulas;
-  // }, [normalizedContent]);
-
-  // 公式块计数器（暂未使用）
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const formulaCounterRef = useRef(0);
-  formulaCounterRef.current = 0;
-
+  // 纯净测试：只用 ReactMarkdown + remarkMath + rehypeKatex，无自定义组件
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
       rehypePlugins={[rehypeKatex]}
-      components={{
-        code: ({
-          className,
-          children,
-          node,
-        }: {
-          className?: string;
-          children?: ReactNode;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          node?: any;
-        }) => {
-          // react-markdown v10: className 可能在 node.properties.className 中
-          const lang = (className ?? node?.properties?.className?.[0] ?? '').replace('language-', '') || '';
-          const codeStr = String(children || '').replace(/\n$/, '');
-
-          // ECharts 代码块 → BlockWrapper + ChartBlock
-          if (lang === 'echarts') {
-            const idx = getNextIndex();
-            return (
-              <BlockWrapper
-                messageId={messageId}
-                blockIndex={idx}
-                blockType="echarts"
-                conversationId={conversationId}
-                systemContext={systemContext}
-                contentSnapshot={codeStr}
-              >
-                <ChartBlock optionStr={codeStr} />
-              </BlockWrapper>
-            );
-          }
-
-          // Plotly 代码块 → BlockWrapper + PlotlyBlock
-          if (lang === 'plotly') {
-            const idx = getNextIndex();
-            return (
-              <BlockWrapper
-                messageId={messageId}
-                blockIndex={idx}
-                blockType="plotly"
-                conversationId={conversationId}
-                systemContext={systemContext}
-                contentSnapshot={codeStr}
-              >
-                <PlotlyBlock optionStr={codeStr} />
-              </BlockWrapper>
-            );
-          }
-
-          // 普通代码块：只返回 <code>，react-markdown v9 已用 <pre> 包裹
-          return (
-            <code
-              className={className}
-              style={{
-                background: 'rgba(142,191,208,0.16)',
-                padding: '2px 4px',
-                borderRadius: 4,
-                fontSize: 13,
-                fontFamily: 'var(--ocean-font-mono, monospace)',
-              }}
-            >
-              {children}
-            </code>
-          );
-        },
-        table: ({ children }: { children?: ReactNode }) => {
-          const idx = getNextIndex();
-          // 使用预提取的 Markdown 表格原文作为 contentSnapshot（而非纯文本）
-          const tableSnapshot = tableSnapshots[idx] ?? extractTextFromNode(children);
-          return (
-            <BlockWrapper
-              messageId={messageId}
-              blockIndex={idx}
-              blockType="table"
-              conversationId={conversationId}
-              systemContext={systemContext}
-              contentSnapshot={tableSnapshot}
-            >
-              <div style={{ overflowX: 'auto', margin: '8px 0' }}>
-                <table>{children}</table>
-              </div>
-            </BlockWrapper>
-          );
-        },
-        h2: ({ children }: { children?: ReactNode }) => {
-          const idx = getNextIndex();
-          const headingText = extractTextFromNode(children).trim();
-          const sectionSnapshot = headingSections[headingText] ?? headingText;
-          return (
-            <BlockWrapper
-              messageId={messageId}
-              blockIndex={idx}
-              blockType="conclusion"
-              conversationId={conversationId}
-              systemContext={systemContext}
-              contentSnapshot={sectionSnapshot}
-            >
-              <h2>{children}</h2>
-            </BlockWrapper>
-          );
-        },
-        h3: ({ children }: { children?: ReactNode }) => {
-          const idx = getNextIndex();
-          const headingText = extractTextFromNode(children).trim();
-          const sectionSnapshot = headingSections[headingText] ?? headingText;
-          return (
-            <BlockWrapper
-              messageId={messageId}
-              blockIndex={idx}
-              blockType="conclusion"
-              conversationId={conversationId}
-              systemContext={systemContext}
-              contentSnapshot={sectionSnapshot}
-            >
-              <h3>{children}</h3>
-            </BlockWrapper>
-          );
-        },
-        // div 组件：不自定义，让 rehype-katex 生成的 KaTeX display 原样渲染
-        // 之前自定义 div 拦截 katex-display 会破坏 KaTeX 内部结构
-        // 公式块的"加入橱窗"功能暂通过其他方式实现（后续用 remark 插件提取）
-      }}
     >
-      {normalizedContent}
+      {content}
     </ReactMarkdown>
   );
 }
