@@ -322,6 +322,9 @@ function BlockifiedMarkdown({
   const blockCounterRef = useRef(0);
   blockCounterRef.current = 0;
   const getNextIndex = (): number => blockCounterRef.current++;
+  // 表格独立计数器（blockCounter 对所有块类型统一递增，tableSnapshots 只含表格）
+  const tableCounterRef = useRef(0);
+  tableCounterRef.current = 0;
 
   // 预提取标题 sections 和表格原文
   const { headingSections, tableSnapshots } = useMemo(() => {
@@ -458,7 +461,9 @@ function BlockifiedMarkdown({
       },
       table: ({ children }: { children?: ReactNode }) => {
         const idx = getNextIndex();
-        const tableSnapshot = tableSnapshots[idx] ?? extractTextFromNode(children);
+        // 用独立计数器索引 tableSnapshots（因为 blockCounter 对所有块类型统一递增）
+        const tableIdx = tableCounterRef.current++;
+        const tableSnapshot = tableSnapshots[tableIdx] ?? extractTextFromNode(children);
         return (
           <BlockWrapper messageId={messageId} blockIndex={idx} blockType="table"
             conversationId={conversationId} systemContext={systemContext} contentSnapshot={tableSnapshot}>
