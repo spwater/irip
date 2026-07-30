@@ -637,7 +637,7 @@ export function ExperimentalObjectPage({
         loading={isLoading}
         pagination={false}
         size="middle"
-        expandable={{ defaultExpandAllRows: true }}
+        expandable={{ defaultExpandAllRows: false }}
       />
 
       {/* 创建/编辑 Modal */}
