@@ -282,10 +282,10 @@ class TestMigration0050ActiveVersion:
         return files[0].read_text(encoding="utf-8")
 
     def test_adds_active_version_id_column(self) -> None:
-        """0050 包含 add_column active_version_id 操作。"""
+        """0050 包含添加 active_version_id 列操作。"""
         content = self._read_file_text()
         assert "active_version_id" in content
-        assert "add_column" in content
+        assert "ADD COLUMN" in content.upper()
 
     def test_creates_foreign_key(self) -> None:
         """0050 创建外键约束指向 component_version。"""
