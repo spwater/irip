@@ -111,7 +111,7 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
         chartInstanceRef.current = null;
       }
 
-      const chart = echarts.init(chartRef.current, undefined, { width, height: 400 });
+      const chart = echarts.init(chartRef.current, undefined, { width, height: 320 });
       chart.setOption(safeOption);
       chartInstanceRef.current = chart;
 
@@ -186,7 +186,7 @@ function ChartBlock({ optionStr }: { optionStr: string }): JSX.Element {
   return (
     <div
       ref={chartRef}
-      style={{ width: '100%', height: 400, margin: '2px 0', position: 'relative' }}
+      style={{ width: '100%', height: 320, margin: '2px 0', position: 'relative' }}
     />
   );
 }
