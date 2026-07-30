@@ -9,7 +9,7 @@
 # - 内部服务不暴露宿主端口（postgres/redis/minio 仅 internal）
 # - 统一 cap_drop/no-new-privileges/只读 FS 安全基线
 
-# H-13: 统一容器安全基线
+# H-13: 应用服务安全基线（不适用于基础设施 postgres/redis/minio，它们需要写权限）
 x-security-base: &security-base
   cap_drop: ["ALL"]
   security_opt: ["no-new-privileges"]
@@ -17,10 +17,12 @@ x-security-base: &security-base
   tmpfs:
     - /tmp
 
+# 基础设施不需要应用层安全限制（它们是受信任的内部服务）
+x-infra-security: &infra-security {}
+
 services:
   postgres:
     image: docker.m.daocloud.io/pgvector/pgvector:pg16
-    <<: *security-base
     environment:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
       POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
@@ -28,6 +30,7 @@ services:
     # H-13: 不暴露宿主端口（仅内部网络可访问）
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - pgrun:/var/run/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${IRIP_DATABASE_USER:-irip} -d ${IRIP_DATABASE_NAME:-irip}"]
       interval: 5s
@@ -37,10 +40,12 @@ services:
 
   redis:
     image: docker.m.daocloud.io/redis:7-alpine
-    <<: *security-base
+    <<: *infra-security
     # H-13: Redis 加密码
     command: ["redis-server", "--requirepass", "${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}"]
     # H-13: 不暴露宿主端口
+    volumes:
+      - redisdata:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${IRIP_REDIS_PASSWORD}", "ping"]
       interval: 5s
@@ -50,7 +55,7 @@ services:
 
   minio:
     image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
-    <<: *security-base
+    <<: *infra-security
     command: server /data --console-address ":9001"
     # H-13: 不暴露宿主端口（仅内部网络可访问）
     environment:
@@ -136,7 +141,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
-    command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info"]
+    command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
@@ -164,6 +169,11 @@ services:
       context: .
       dockerfile: deployments/compose/web.Dockerfile
     <<: *security-base
+    cap_add: ["CHOWN"]
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     depends_on:
       api:
         condition: service_healthy
@@ -251,4 +261,6 @@ services:
 
 volumes:
   pgdata:
+  pgrun:
   miniodata:
+  redisdata:
