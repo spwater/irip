@@ -3,15 +3,16 @@ import { FlowDetail } from '@/features/components/FlowDetail';
 import { FactsPage } from '@/features/facts/FactsPage';
 import { ParameterPage } from '@/features/parameters/ParameterPage';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
+import { FeedbackState } from '@/shared/ui';
 
 /** 合法的 Tab key 集合。 */
-const VALID_TABS = ['flows', 'facts', 'parameters'] as const;
+const VALID_TABS = ['flows', 'facts', 'parameters', 'models'] as const;
 type LabOpsTab = (typeof VALID_TABS)[number];
 
 /**
  * 实验室运营页面
  *
- * 三个 Tab：实验任务 / 原始数据 / 衍生数据
+ * 四个 Tab：实验任务 / 原始数据 / 衍生数据 / 模型发布
  * Tab 切换和页面标题注册到 AppShell Header。
  *
  * M-09 整改：使用 usePageHeaderRegistration，unmount 时清空 header。
@@ -38,6 +39,7 @@ export function LabOpsPage(): JSX.Element {
         { key: 'flows', label: '实验任务' },
         { key: 'facts', label: '原始数据' },
         { key: 'parameters', label: '衍生数据' },
+        { key: 'models', label: '模型发布' },
       ],
       activeTab,
       onTabChange: handleTabChange,
@@ -50,6 +52,9 @@ export function LabOpsPage(): JSX.Element {
       {activeTab === 'flows' && <FlowDetail />}
       {activeTab === 'facts' && <FactsPage />}
       {activeTab === 'parameters' && <ParameterPage />}
+      {activeTab === 'models' && (
+        <FeedbackState state="empty" title="模型发布" description="开发中，待发布" style={{ padding: 80 }} />
+      )}
     </div>
   );
 }

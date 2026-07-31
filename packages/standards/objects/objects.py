@@ -83,8 +83,7 @@ class ObjectType(StrEnum):
 class IndustrialObject(Base):
     """工业对象实体（对应 industrial_object 表）。
 
-    code 在组织内 + 类型内唯一。parent_id 为便捷的反规范化字段，
-    表示 contains 关系的父对象（实际关系存储在 object_relation 表）。
+    code 在组织内 + 类型内唯一。
 
     Attributes:
         id: 对象 UUID。
@@ -93,7 +92,6 @@ class IndustrialObject(Base):
         code: 对象编码（组织内 + 类型内唯一）。
         display_name: 中文显示名。
         description: 描述（可选）。
-        parent_id: 父对象 ID（便捷反规范化，对应 contains 关系的源对象）。
         department_id: 所属部门 ID（nullable，跨实验室可见性基准）。
         visible_departments: 可见单位 ID 列表（JSONB 数组，跨实验室可见性）。
         status: 状态（默认 active）。
@@ -110,7 +108,6 @@ class IndustrialObject(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    parent_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     visible_departments: Mapped[list[str]] = mapped_column(
@@ -146,59 +143,3 @@ class IndustrialObject(Base):
         )
 
 
-class ObjectRelation(Base):
-    """对象间关系实体（对应 object_relation 表）。
-
-    (source_id, target_id, relation_type) 在活跃状态下唯一。
-    禁止自关联（source_id != target_id）。
-    is_active=false 表示已移除的关系，可被重新激活。
-
-    Attributes:
-        id: 关系 UUID。
-        organization_id: 所属组织 ID。
-        source_id: 源对象 ID（FK → industrial_object.id）。
-        target_id: 目标对象 ID（FK → industrial_object.id）。
-        relation_type: 关系类型（contains / connected_to / ...）。
-        is_active: 是否活跃（默认 true）。
-        created_at: 创建时间。
-        lock_version: 乐观锁版本号。
-    """
-
-    __tablename__ = "object_relation"
-
-    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
-    source_id: Mapped[UUID] = mapped_column(
-        GUID,
-        sa.ForeignKey("industrial_object.id"),
-        nullable=False,
-    )
-    target_id: Mapped[UUID] = mapped_column(
-        GUID,
-        sa.ForeignKey("industrial_object.id"),
-        nullable=False,
-    )
-    relation_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        sa.Boolean, nullable=False, server_default=sa.text("true")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, server_default=sa.func.now(), nullable=False
-    )
-    lock_version: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False, server_default=sa.text("0")
-    )
-
-    __table_args__ = (
-        sa.CheckConstraint(
-            "source_id != target_id",
-            name="ck_object_relation_no_self",
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"ObjectRelation(id={self.id!r}, source_id={self.source_id!r}, "
-            f"target_id={self.target_id!r}, relation_type={self.relation_type!r}, "
-            f"is_active={self.is_active!r})"
-        )

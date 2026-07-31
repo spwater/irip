@@ -37,8 +37,10 @@ from packages.departments.entities import AppUserDepartment
 #: 路由实例。
 governance_router = APIRouter(prefix="/api/v1/governance", tags=["governance"])
 
-#: 需 user:manage 权限的当前用户依赖。
+#: irip-ai-collab: 允许 platform_administrator 和 lab_director 访问用户管理。
+#: platform_administrator 需 user:manage 权限，lab_director 需 role:assign 权限。
 ManageUserDep = Annotated[CurrentUser, Depends(require_permission("user:manage"))]
+ManageRoleDep = Annotated[CurrentUser, Depends(require_permission("role:assign"))]
 
 
 # ---- 依赖占位（由应用启动或测试覆盖）----
@@ -147,6 +149,81 @@ def _validate_role_codes(roles: list[str]) -> None:
             )
 
 
+def _is_platform_admin(user: CurrentUser) -> bool:
+    """检查用户是否为 platform_administrator。
+
+    Args:
+        user: 当前用户。
+
+    Returns:
+        bool: 是否为平台管理员。
+    """
+    return "platform_administrator" in (user.roles or [])
+
+
+def _is_lab_director(user: CurrentUser) -> bool:
+    """检查用户是否为 lab_director。
+
+    Args:
+        user: 当前用户。
+
+    Returns:
+        bool: 是否为实验室负责人。
+    """
+    return "lab_director" in (user.roles or [])
+
+
+def _can_manage_roles(user: CurrentUser) -> bool:
+    """检查用户是否有权管理用户角色（platform_administrator 或 lab_director）。
+
+    Args:
+        user: 当前用户。
+
+    Returns:
+        bool: 是否有权管理角色。
+    """
+    return _is_platform_admin(user) or _is_lab_director(user)
+
+
+def _get_assignable_roles(user: CurrentUser) -> list[str]:
+    """获取当前用户可分配的角色列表。
+
+    platform_administrator: 全部 5 个角色
+    lab_director: 仅 lab_member / lab_viewer
+
+    Args:
+        user: 当前用户。
+
+    Returns:
+        list[str]: 可分配的角色代码列表。
+    """
+    if _is_platform_admin(user):
+        return list(BUILTIN_ROLES.keys())
+    # lab_director 只能分配 lab_member / lab_viewer
+    return ["lab_member", "lab_viewer"]
+
+
+def _validate_assignable_roles(user: CurrentUser, roles: list[str]) -> None:
+    """验证角色代码在当前用户可分配范围内。
+
+    Args:
+        user: 当前用户。
+        roles: 要分配的角色代码列表。
+
+    Raises:
+        AppError: code="forbidden"，当角色超出可分配范围时。
+    """
+    assignable = _get_assignable_roles(user)
+    for role_code in roles:
+        if role_code not in assignable:
+            raise AppError(
+                code="forbidden",
+                message=f"无权分配角色: {role_code}（仅可分配 {', '.join(assignable)}）",
+                retryable=False,
+                fields={"roles": role_code},
+            )
+
+
 async def _record_audit(
     session: AsyncSession,
     actor: CurrentUser,
@@ -184,7 +261,7 @@ async def _record_audit(
 
 @governance_router.get("/users", response_model=UserListResponse)
 async def list_users(
-    current_user: ManageUserDep,
+    current_user: ManageRoleDep,
     session_factory: GovernanceSessionFactoryDep,
     status: str | None = Query(None, description="状态筛选（active / disabled）"),
     cursor: str | None = Query(None, description="分页游标"),
@@ -192,8 +269,11 @@ async def list_users(
 ) -> UserListResponse:
     """列出用户（分页）。
 
+    irip-ai-collab: 允许 platform_administrator（user:manage）和 lab_director（role:assign）访问。
+    lab_director 只能查看同 organization 的用户。
+
     Args:
-        current_user: 当前认证用户（需 user:manage 权限）。
+        current_user: 当前认证用户（需 role:assign 权限）。
         session_factory: 数据库会话工厂。
         status: 状态筛选。
         cursor: 分页游标（上一页最后一条记录的 created_at ISO 字符串）。
@@ -202,8 +282,17 @@ async def list_users(
     Returns:
         UserListResponse: 分页用户列表。
     """
+    is_lab_director_only: bool = _is_lab_director(current_user) and not _is_platform_admin(current_user)
+
     async with session_factory() as session:
         stmt = sa.select(AppUser).order_by(AppUser.created_at.desc())
+
+        # irip-ai-collab: lab_director 只能查看同 org 用户
+        if is_lab_director_only:
+            if current_user.organization_id is None:
+                # 无 org 的 lab_director 返回空
+                return UserListResponse(items=[], next_cursor=None, has_more=False)
+            stmt = stmt.where(AppUser.organization_id == current_user.organization_id)
 
         if status is not None:
             stmt = stmt.where(AppUser.status == status)
@@ -220,9 +309,21 @@ async def list_users(
                 ) from exc
             stmt = stmt.where(AppUser.created_at < cursor_dt)
 
-        stmt = stmt.limit(limit + 1)
+        # lab_director 需要额外过滤掉平台级角色用户，所以多取一些行再过滤
+        fetch_limit = limit + 1 if not is_lab_director_only else limit * 10 + 1
+        stmt = stmt.limit(fetch_limit)
         result = await session.execute(stmt)
         rows: list[AppUser] = list(result.scalars().all())
+
+    # irip-ai-collab: lab_director 不应看到平台管理员/监督员用户
+    if is_lab_director_only:
+        rows = [
+            u for u in rows
+            if not any(
+                r in ("platform_administrator", "platform_auditor")
+                for r in (u.roles if u.roles else [])
+            )
+        ]
 
     has_more: bool = len(rows) > limit
     page_items: list[AppUser] = rows[:limit]
@@ -243,7 +344,7 @@ async def create_user(
     current_user: ManageUserDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> UserResponse:
-    """新建用户。
+    """新建用户（仅 platform_administrator）。
 
     Args:
         body: 新建用户请求体（邮箱、显示名、密码、角色）。
@@ -338,15 +439,18 @@ async def create_user(
 async def update_user(
     user_id: UUID,
     body: UpdateUserRequest,
-    current_user: ManageUserDep,
+    current_user: ManageRoleDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> UserResponse:
     """编辑用户信息（邮箱不可修改）。
 
+    irip-ai-collab: 允许 platform_administrator 和 lab_director 访问。
+    lab_director 只能编辑同 org 用户，且只能分配 lab_member / lab_viewer 角色。
+
     Args:
         user_id: 目标用户 UUID。
         body: 编辑用户请求体。
-        current_user: 当前认证用户（需 user:manage 权限）。
+        current_user: 当前认证用户（需 role:assign 权限）。
         session_factory: 数据库会话工厂。
 
     Returns:
@@ -355,10 +459,14 @@ async def update_user(
     Raises:
         AppError: code="not_found"，当用户不存在时。
         AppError: code="validation_failed"，当角色代码未知时。
+        AppError: code="forbidden"，当 lab_director 操作非同 org 用户或分配超出范围角色时。
     """
     # 验证角色代码
     if body.roles is not None:
         _validate_role_codes(body.roles)
+        # irip-ai-collab: lab_director 只能分配 lab_member / lab_viewer
+        if not _is_platform_admin(current_user):
+            _validate_assignable_roles(current_user, body.roles)
 
     async with session_scope(session_factory) as session:
         user = await session.get(AppUser, user_id)
@@ -369,6 +477,16 @@ async def update_user(
                 retryable=False,
                 fields={"user_id": str(user_id)},
             )
+
+        # irip-ai-collab: lab_director 只能操作同 org 用户
+        if not _is_platform_admin(current_user):
+            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+                raise AppError(
+                    code="forbidden",
+                    message="只能管理本组织用户",
+                    retryable=False,
+                    fields={},
+                )
 
         if body.display_name is not None:
             user.display_name = body.display_name
@@ -403,15 +521,18 @@ async def update_user(
 async def assign_roles(
     user_id: UUID,
     body: AssignRolesRequest,
-    current_user: ManageUserDep,
+    current_user: ManageRoleDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> UserResponse:
     """分配角色给用户（合并到已有角色列表）。
 
+    irip-ai-collab: 允许 platform_administrator 和 lab_director 访问。
+    lab_director 只能操作同 org 用户，且只能分配 lab_member / lab_viewer 角色。
+
     Args:
         user_id: 目标用户 UUID。
         body: 角色分配请求体。
-        current_user: 当前认证用户（需 user:manage 权限）。
+        current_user: 当前认证用户（需 role:assign 权限）。
         session_factory: 数据库会话工厂。
 
     Returns:
@@ -420,8 +541,12 @@ async def assign_roles(
     Raises:
         AppError: code="not_found"，当用户不存在时。
         AppError: code="validation_failed"，当角色代码未知时。
+        AppError: code="forbidden"，当 lab_director 操作非同 org 用户或分配超出范围角色时。
     """
     _validate_role_codes(body.roles)
+    # irip-ai-collab: lab_director 只能分配 lab_member / lab_viewer
+    if not _is_platform_admin(current_user):
+        _validate_assignable_roles(current_user, body.roles)
 
     async with session_scope(session_factory) as session:
         user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
@@ -432,6 +557,16 @@ async def assign_roles(
                 retryable=False,
                 fields={"user_id": str(user_id)},
             )
+
+        # irip-ai-collab: lab_director 只能操作同 org 用户
+        if not _is_platform_admin(current_user):
+            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+                raise AppError(
+                    code="forbidden",
+                    message="只能管理本组织用户",
+                    retryable=False,
+                    fields={},
+                )
 
         existing_roles: set[str] = set(user.roles) if user.roles else set()
         new_roles_set: set[str] = existing_roles | set(body.roles)
@@ -466,15 +601,18 @@ async def assign_roles(
 async def remove_role(
     user_id: UUID,
     role: str,
-    current_user: ManageUserDep,
+    current_user: ManageRoleDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> UserResponse:
     """移除用户的指定角色。
 
+    irip-ai-collab: 允许 platform_administrator 和 lab_director 访问。
+    lab_director 只能操作同 org 用户，且只能移除 lab_member / lab_viewer 角色。
+
     Args:
         user_id: 目标用户 UUID。
         role: 要移除的角色代码。
-        current_user: 当前认证用户（需 user:manage 权限）。
+        current_user: 当前认证用户（需 role:assign 权限）。
         session_factory: 数据库会话工厂。
 
     Returns:
@@ -482,7 +620,12 @@ async def remove_role(
 
     Raises:
         AppError: code="not_found"，当用户不存在时。
+        AppError: code="forbidden"，当 lab_director 操作非同 org 用户或移除超出范围角色时。
     """
+    # irip-ai-collab: lab_director 只能移除 lab_member / lab_viewer 角色
+    if not _is_platform_admin(current_user):
+        _validate_assignable_roles(current_user, [role])
+
     async with session_scope(session_factory) as session:
         user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
@@ -492,6 +635,16 @@ async def remove_role(
                 retryable=False,
                 fields={"user_id": str(user_id)},
             )
+
+        # irip-ai-collab: lab_director 只能操作同 org 用户
+        if not _is_platform_admin(current_user):
+            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+                raise AppError(
+                    code="forbidden",
+                    message="只能管理本组织用户",
+                    retryable=False,
+                    fields={},
+                )
 
         existing_roles: list[str] = list(user.roles) if user.roles else []
         updated_roles: list[str] = [r for r in existing_roles if r != role]
@@ -527,7 +680,7 @@ async def update_user_status(
     current_user: ManageUserDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> UserResponse:
-    """启用/禁用用户。
+    """启用/禁用用户（仅 platform_administrator）。
 
     Args:
         user_id: 目标用户 UUID。
@@ -590,7 +743,7 @@ async def delete_user(
     current_user: ManageUserDep,
     session_factory: GovernanceSessionFactoryDep,
 ) -> None:
-    """删除用户（物理删除）。
+    """删除用户（物理删除，仅 platform_administrator）。
 
     Args:
         user_id: 目标用户 UUID。

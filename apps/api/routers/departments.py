@@ -264,27 +264,41 @@ async def get_department_name_map(
     current_user: ReadUserDep,
     service: DepartmentServiceDep,
 ) -> list[DepartmentNameMapItem]:
-    """获取全部门 ID→名称映射（不受部门隔离限制）。
+    """获取部门 ID→名称映射（受组织隔离限制）。
 
     专用于前端名称展示场景（如设备可见单位列渲染），只返回 id 和
-    display_name 两个字段，不含成员数、描述等敏感信息。所有拥有
-    department:read 权限的用户均可查看全部门名称。
+    display_name 两个字段，不含成员数、描述等敏感信息。
+
+    安全约定：
+    - 按当前用户 organization_id 过滤，不跨组织返回数据；
+    - 非管理员（lab_director/lab_member/lab_viewer）额外只返回
+      用户所属实验室及后代实验室的名称。
 
     Args:
         current_user: 当前认证用户（需 department:read 权限）。
         service: 实验室服务（复用其 session factory）。
 
     Returns:
-        list[DepartmentNameMapItem]: 全部门 id→display_name 映射列表。
+        list[DepartmentNameMapItem]: 部门 id→display_name 映射列表。
     """
     import sqlalchemy as sa
 
     from packages.departments.entities import Department
 
     async with service._factory() as session:  # noqa: SLF001
-        stmt = sa.select(Department.id, Department.display_name).order_by(
-            Department.sort_order, Department.display_name
-        )
+        stmt = sa.select(Department.id, Department.display_name).where(
+            Department.organization_id == service._org_id  # type: ignore[attr-defined]
+        ).order_by(Department.sort_order, Department.display_name)
+
+        # 非管理员只返回自己实验室及后代实验室的名称
+        if should_filter_by_department(current_user):
+            from apps.api.dependencies.dept_scope import get_visible_department_ids
+
+            visible_ids = await get_visible_department_ids(current_user, service._factory)  # type: ignore[attr-defined]
+            if not visible_ids:
+                return []
+            stmt = stmt.where(Department.id.in_(visible_ids))
+
         result = await session.execute(stmt)
         rows = result.all()
 

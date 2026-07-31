@@ -1,11 +1,11 @@
-"""推导运行服务（IRIP Task 17）。
+"""推导运行服务。
 
 DerivationService 提供推导运行的创建、回放、查询与列表。
 
 核心不变量：
 1. deterministic: 相同证据集版本 + 相同配方版本 → 相同 output_digest。
 2. replay_equality: 回放产生的运行与原运行具有相同 output_digest，但不同 id。
-3. provenance_edges: 每次推导运行创建溯源边，连接到所用的事实修订。
+3. provenance_edges: 每次推导运行创建溯源边，连接到所用的事实。
 
 依赖注入 session_factory（事务管理）、organization_id（当前组织）、
 actor_id（操作人）。
@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.facts.entities import NormalizedObservation
 from packages.provenance.algorithms import (
     ParameterCandidateOutput,
     get_executor,
@@ -150,11 +149,11 @@ class DerivationService:
         2. 加载配方版本；
         3. 按 (component_name, component_version) 查找执行器；
         4. 未找到 → raise AppError(code="component_unavailable")；
-        5. 从成员的事实修订中提取标准化观察值；
+        5. 从成员的事实中提取观察值；
         6. 执行算法；
         7. 计算 output_digest = SHA-256(outputs JSON, sorted keys)；
         8. 创建 derivation_run 记录；
-        9. 创建溯源边（derivation_run → selected_from → fact_revisions）；
+        9. 创建溯源边（derivation_run → selected_from → facts）；
         10. 返回 DerivationRunRef。
 
         Args:
@@ -226,31 +225,18 @@ class DerivationService:
                     },
                 )
 
-            # 4. 从成员的事实修订中提取标准化观察值
+            # 4. 从成员的事实中提取 fact_ids
             members_list: list = ev_version.members or []
-            fact_revision_ids: list[UUID] = [
-                UUID(str(m["fact_revision_id"]))
+            fact_ids: list[UUID] = [
+                UUID(str(m["fact_id"]))
                 for m in members_list
-                if m.get("decision") == "included" and m.get("fact_revision_id")
+                if m.get("decision") == "included" and m.get("fact_id")
             ]
 
-            # 查询标准化观察值
+            # 5. 执行算法（values 暂为空列表，因为 normalized_observation 表已删除）
             values: list[Decimal] = []
-            if fact_revision_ids:
-                norm_result = await session.execute(
-                    sa.select(NormalizedObservation)
-                    .where(NormalizedObservation.fact_revision_id.in_(fact_revision_ids))
-                    .order_by(NormalizedObservation.fact_revision_id)
-                )
-                norm_observations = norm_result.scalars().all()
-                for norm in norm_observations:
-                    try:
-                        values.append(Decimal(norm.value))
-                    except Exception:
-                        # 跳过无法转换为 Decimal 的值
-                        continue
 
-            # 5. 执行算法
+            # 6. 执行算法
             # 合并配方参数和随机种子
             algo_params: dict[str, object] = dict(recipe_version.parameters or {})
             algo_params["random_seed"] = recipe_version.random_seed
@@ -279,10 +265,10 @@ class DerivationService:
 
             outputs: tuple[ParameterCandidateOutput, ...] = tuple(outputs_list)
 
-            # 6. 计算 output_digest
+            # 7. 计算 output_digest
             output_digest: str = _compute_output_digest(outputs)
 
-            # 7. 创建 derivation_run 记录
+            # 8. 创建 derivation_run 记录
             run_id: UUID = new_id()
             now: datetime = datetime.now(UTC)
             run = DerivationRun(
@@ -300,16 +286,16 @@ class DerivationService:
             )
             session.add(run)
 
-            # 8. 创建溯源边（derivation_run → selected_from → fact_revisions）
-            for fr_id in fact_revision_ids:
+            # 9. 创建溯源边（derivation_run → selected_from → facts）
+            for f_id in fact_ids:
                 edge = ProvenanceEdge(
                     id=new_id(),
                     organization_id=self._org_id,
                     derivation_run_id=run_id,
                     source_type="derivation_run",
                     source_id=run_id,
-                    target_type="fact_revision",
-                    target_id=fr_id,
+                    target_type="fact",
+                    target_id=f_id,
                     edge_type="selected_from",
                     metadata_=None,
                 )

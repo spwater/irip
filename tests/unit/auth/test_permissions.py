@@ -59,7 +59,7 @@ class TestRolePermissionMatrix:
         assert admin_perms == all_perms
 
     def test_lab_director_permissions(self) -> None:
-        """实验室负责人权限：全实验操作 + 管理 + 审批。"""
+        """实验室负责人权限：全实验操作 + 管理 + 审批 + 协作。"""
         perms = set(BUILTIN_ROLES["lab_director"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "standard:read",
@@ -99,10 +99,16 @@ class TestRolePermissionMatrix:
             "flow:execute",
             "flow:read",
             "assistant:use",
+            "conversation:create",
+            "conversation:invite",
+            "conversation:remove_member",
+            "conversation:delete",
+            "conversation:manage",
+            "role:assign",
         }
 
     def test_lab_member_permissions(self) -> None:
-        """实验室成员权限：实验操作 + 只读管理。"""
+        """实验室成员权限：实验操作 + 只读管理 + 协作。"""
         perms = set(BUILTIN_ROLES["lab_member"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
             "fact:read",
@@ -127,6 +133,9 @@ class TestRolePermissionMatrix:
             "flow:execute",
             "flow:read",
             "assistant:use",
+            "conversation:create",
+            "conversation:invite",
+            "conversation:delete",
         }
 
     def test_lab_viewer_permissions(self) -> None:

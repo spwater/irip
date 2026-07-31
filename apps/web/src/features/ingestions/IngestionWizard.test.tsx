@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
-import type { SourcePreview, MappingRankResponse } from '@/api/types';
-import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
+import type { SourcePreview } from '@/api/types';
+import { apiPreviewIngestion } from '@/api/standards-objects';
 import { IngestionWizard } from '@/features/ingestions/IngestionWizard';
 
 // M-08: mock useNavigate（IngestionWizard 在 401 时跳转登录页）
@@ -27,7 +27,6 @@ vi.mock('@/api/client', () => ({
 
 vi.mock('@/api/standards-objects', () => ({
   apiPreviewIngestion: vi.fn(),
-  apiRankMappings: vi.fn(),
 }));
 
 vi.mock('@/api/types', () => ({
@@ -49,29 +48,6 @@ const mockPreview: SourcePreview = {
   total_rows: 3,
 };
 
-const mockMappings: MappingRankResponse = {
-  candidates: [
-    {
-      variableVersionId: 'vv-001',
-      variableCode: 'temperature',
-      score: 0.95,
-      reasons: ['名称匹配', '单位匹配'],
-    },
-    {
-      variableVersionId: 'vv-002',
-      variableCode: 'pressure',
-      score: 0.88,
-      reasons: ['名称匹配'],
-    },
-    {
-      variableVersionId: 'vv-003',
-      variableCode: 'material_type',
-      score: 0.72,
-      reasons: ['类型匹配'],
-    },
-  ],
-};
-
 function renderWizard(): { container: HTMLElement } {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -89,7 +65,6 @@ describe('IngestionWizard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(apiPreviewIngestion).mockResolvedValue(mockPreview);
-    vi.mocked(apiRankMappings).mockResolvedValue(mockMappings);
   });
 
   it('shows preview data from the source', async () => {
@@ -111,7 +86,7 @@ describe('IngestionWizard', () => {
     expect(screen.getByRole('columnheader', { name: '材料' })).toBeVisible();
   });
 
-  it('requires confirmation for every suggested mapping before ingestion', async () => {
+  it('renders submit button after preview', async () => {
     const { container } = renderWizard();
 
     // Step 0: Upload a file
@@ -123,27 +98,8 @@ describe('IngestionWizard', () => {
     });
     await userEvent.upload(fileInput, file);
 
-    // Wait for "下一步" button to appear (Step 1: Preview rendered)
-    const nextButton = await screen.findByRole('button', { name: /下\s*一\s*步/ });
-    await userEvent.click(nextButton);
-
-    // Wait for checkboxes to appear (Step 2: Mapping rendered)
-    const checkboxes = await screen.findAllByRole('checkbox');
-    expect(checkboxes).toHaveLength(3);
-
-    // "确认并导入" button should be disabled initially
-    const confirmButton = screen.getByRole('button', {
-      name: /确\s*认\s*并\s*导\s*入/,
-    });
-    expect(confirmButton).toBeDisabled();
-
-    // Confirm all 3 mappings
-    for (let i = 0; i < 3; i++) {
-      const cbs = screen.getAllByRole('checkbox');
-      await userEvent.click(cbs[i]);
-    }
-
-    // "确认并导入" button should now be enabled
-    expect(confirmButton).not.toBeDisabled();
+    // Wait for "提交" button to appear (Step 1: Preview rendered)
+    const submitButton = await screen.findByRole('button', { name: /提\s*交/ });
+    expect(submitButton).toBeInTheDocument();
   });
 });

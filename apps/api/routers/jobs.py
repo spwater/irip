@@ -13,6 +13,8 @@
 
 import asyncio
 import json
+
+import sqlalchemy as sa
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated
@@ -119,6 +121,7 @@ class JobDetailResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: str | None = None
+    created_by_name: str | None = None
     last_error: dict[str, object] | None = None
     result: dict[str, object] | None = None
     payload: dict[str, object] | None = None
@@ -318,6 +321,19 @@ async def get_job_detail(
 
     ref: JobRef = await service.get(job_id)
     job: Job = await service.get_raw(job_id)
+
+    # JOIN app_user 拿创建者显示名
+    created_by_name = None
+    if job.created_by is not None:
+        from packages.auth.entities import AppUser
+        async with service._factory() as session:
+            result = await session.execute(
+                sa.select(AppUser.display_name).where(AppUser.id == job.created_by)
+            )
+            row = result.first()
+            if row is not None:
+                created_by_name = str(row[0])
+
     return JobDetailResponse(
         id=str(job.id),
         kind=job.kind,
@@ -330,6 +346,7 @@ async def get_job_detail(
         created_at=job.created_at,
         updated_at=job.updated_at,
         created_by=str(job.created_by) if job.created_by is not None else None,
+        created_by_name=created_by_name,
         last_error=job.last_error,
         result=job.result,
         payload=job.payload,

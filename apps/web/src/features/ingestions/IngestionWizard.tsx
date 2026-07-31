@@ -3,13 +3,11 @@ import { useNavigate } from '@tanstack/react-router';
 import {
   Button,
   Card,
-  Checkbox,
   Progress,
   Result,
   Spin,
   Steps,
   Table,
-  Tag,
   Typography,
   Upload,
   message,
@@ -22,8 +20,8 @@ import {
   type JobSummary,
   type JobStatus,
 } from '@/api/client';
-import { apiPreviewIngestion, apiRankMappings } from '@/api/standards-objects';
-import { extractApiError, type MappingCandidate, type SourcePreview } from '@/api/types';
+import { apiPreviewIngestion } from '@/api/standards-objects';
+import { extractApiError, type SourcePreview } from '@/api/types';
 
 const { Text } = Typography;
 
@@ -40,43 +38,19 @@ const INITIAL_POLL_INTERVAL = 2000;
 const MAX_POLL_INTERVAL = 30000;
 const TERMINAL_JOB_STATUSES: JobStatus[] = ['succeeded', 'failed', 'cancelled'];
 
-/** 质量等级 → 颜色 */
-const QUALITY_COLOR: Record<string, string> = {
-  Q0: 'default',
-  Q1: 'blue',
-  Q2: 'gold',
-  Q3: 'green',
-};
-
-/** 根据匹配分数推断质量等级 */
-function scoreToQuality(score: number): {
-  level: string;
-  result: 'pass' | 'warn' | 'fail';
-} {
-  if (score >= 0.9) return { level: 'Q3', result: 'pass' };
-  if (score >= 0.7) return { level: 'Q2', result: 'pass' };
-  if (score >= 0.5) return { level: 'Q1', result: 'warn' };
-  return { level: 'Q0', result: 'fail' };
-}
-
 /** 预览行类型（带唯一 key） */
 type PreviewRow = Record<string, unknown> & { _key: string };
 
-/** 质量校验结果类型 */
-type ValidationResult = MappingCandidate & {
-  level: string;
-  result: 'pass' | 'warn' | 'fail';
-};
-
 /**
- * 数据摄入向导
+ * 数据摄入向导（标准层空表清理后精简版）
  *
- * 步骤：上传文件 → 数据预览 → 字段映射 → 质量校验 → 提交 → 进度 → 结果
+ * 步骤：上传文件 → 数据预览 → 提交 → 进度 → 结果
+ *
+ * 原字段映射与质量校验步骤依赖已删除的映射评分端点（migration 0057），
+ * 已移除。上传后直接预览并提交摄入作业。
  *
  * - 上传：Upload.Dragger 选择文件后自动调用 preview API
  * - 预览：展示来源数据表格
- * - 映射：展示建议映射（含匹配度与原因），每个映射需逐一确认后「确认并导入」按钮才可用
- * - 校验：展示质量检查结果（Q0-Q3，通过/警告/不通过）
  * - 提交：创建摄入作业
  * - 进度：轮询作业状态
  * - 结果：展示成功/失败摘要
@@ -85,15 +59,8 @@ export function IngestionWizard(): JSX.Element {
   const [currentStep, setCurrentStep] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [previewData, setPreviewData] = useState<SourcePreview | null>(null);
-  const [mappings, setMappings] = useState<MappingCandidate[]>([]);
-  const [confirmedMappings, setConfirmedMappings] = useState<Record<string, boolean>>({});
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobSummary | null>(null);
-
-  /** 所有映射是否已确认 */
-  const allMappingsConfirmed =
-    mappings.length > 0 &&
-    mappings.every((m) => confirmedMappings[m.variableVersionId] === true);
 
   // ---- 预览 Mutation ----
   const previewMutation = useMutation({
@@ -107,19 +74,6 @@ export function IngestionWizard(): JSX.Element {
     },
   });
 
-  // ---- 映射排名 Mutation ----
-  const mappingMutation = useMutation({
-    mutationFn: (columns: string[]) => apiRankMappings({ columns }),
-    onSuccess: (data) => {
-      setMappings(data.candidates);
-      setConfirmedMappings({});
-      setCurrentStep(2);
-    },
-    onError: (err: unknown) => {
-      message.error(extractApiError(err));
-    },
-  });
-
   // ---- 提交作业 Mutation ----
   const submitMutation = useMutation({
     mutationFn: () =>
@@ -127,17 +81,15 @@ export function IngestionWizard(): JSX.Element {
         'ingestions.import',
         {
           file_name: file?.name ?? '',
-          mappings: confirmedMappings,
         },
         Date.now().toString(),
       ),
     onSuccess: (data) => {
       setJobId(data.job_id);
-      setCurrentStep(5);
+      setCurrentStep(3);
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
-      setCurrentStep(3);
     },
   });
 
@@ -163,7 +115,7 @@ export function IngestionWizard(): JSX.Element {
           progress: 0,
           retryable: true,
         });
-        setCurrentStep(6);
+        setCurrentStep(4);
         message.warning('摄入状态轮询超时，请稍后查看结果');
       }
       return;
@@ -180,7 +132,7 @@ export function IngestionWizard(): JSX.Element {
 
       // 终态：停止轮询
       if (TERMINAL_JOB_STATUSES.includes(status.status)) {
-        setCurrentStep(6);
+        setCurrentStep(4);
         return;
       }
     } catch (error) {
@@ -211,7 +163,7 @@ export function IngestionWizard(): JSX.Element {
           progress: 0,
           retryable: true,
         });
-        setCurrentStep(6);
+        setCurrentStep(4);
         message.error('连续多次获取状态失败，请检查网络后重试');
         return;
       }
@@ -224,7 +176,7 @@ export function IngestionWizard(): JSX.Element {
   }, [jobId, navigate]);
 
   useEffect(() => {
-    if (currentStep !== 5 || !jobId) return;
+    if (currentStep !== 3 || !jobId) return;
 
     // 初始化轮询状态
     activeRef.current = true;
@@ -244,18 +196,8 @@ export function IngestionWizard(): JSX.Element {
   }, [currentStep, jobId, poll]);
 
   // ---- 事件处理 ----
-  const handleNextToMapping = (): void => {
-    if (previewData) {
-      mappingMutation.mutate(previewData.columns.map((c) => c.name));
-    }
-  };
-
-  const handleConfirmImport = (): void => {
-    setCurrentStep(3);
-  };
-
   const handleSubmit = (): void => {
-    setCurrentStep(4);
+    setCurrentStep(2);
     submitMutation.mutate();
   };
 
@@ -272,8 +214,6 @@ export function IngestionWizard(): JSX.Element {
     setCurrentStep(0);
     setFile(null);
     setPreviewData(null);
-    setMappings([]);
-    setConfirmedMappings({});
     setJobId(null);
     setJobStatus(null);
   };
@@ -292,47 +232,6 @@ export function IngestionWizard(): JSX.Element {
     _key: String(idx),
   }));
 
-  // ---- 质量校验结果 ----
-  const validationResults: ValidationResult[] = mappings.map((m) => {
-    const q = scoreToQuality(m.score);
-    return { ...m, ...q };
-  });
-
-  const validationColumns: ColumnsType<ValidationResult> = [
-    {
-      title: '变量',
-      dataIndex: 'variableCode',
-      key: 'variableCode',
-    },
-    {
-      title: '匹配度',
-      dataIndex: 'score',
-      key: 'score',
-      width: 100,
-      render: (s: number) => `${(s * 100).toFixed(0)}%`,
-    },
-    {
-      title: '质量等级',
-      dataIndex: 'level',
-      key: 'level',
-      width: 100,
-      render: (l: string) => (
-        <Tag color={QUALITY_COLOR[l] ?? 'default'}>{l}</Tag>
-      ),
-    },
-    {
-      title: '结果',
-      dataIndex: 'result',
-      key: 'result',
-      width: 100,
-      render: (r: string) => {
-        const color = r === 'pass' ? 'green' : r === 'warn' ? 'orange' : 'red';
-        const label = r === 'pass' ? '通过' : r === 'warn' ? '警告' : '不通过';
-        return <Tag color={color}>{label}</Tag>;
-      },
-    },
-  ];
-
   return (
     <Card>
       <Steps
@@ -340,8 +239,6 @@ export function IngestionWizard(): JSX.Element {
         items={[
           { title: '上传文件' },
           { title: '数据预览' },
-          { title: '字段映射' },
-          { title: '质量校验' },
           { title: '提交' },
           { title: '进度' },
           { title: '结果' },
@@ -396,91 +293,6 @@ export function IngestionWizard(): JSX.Element {
           <div style={{ marginTop: 16 }}>
             <Button
               type="primary"
-              loading={mappingMutation.isPending}
-              onClick={handleNextToMapping}
-            >
-              下一步
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 2: 字段映射 */}
-      {currentStep === 2 && (
-        <div>
-          <div style={{ marginBottom: 16 }}>
-            <Text strong>请确认以下字段映射：</Text>
-          </div>
-          {mappings.map((m) => (
-            <Card
-              key={m.variableVersionId}
-              size="small"
-              style={{ marginBottom: 8 }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                }}
-              >
-                <Checkbox
-                  checked={confirmedMappings[m.variableVersionId] === true}
-                  onChange={(e) =>
-                    setConfirmedMappings((prev) => ({
-                      ...prev,
-                      [m.variableVersionId]: e.target.checked,
-                    }))
-                  }
-                >
-                  确认
-                </Checkbox>
-                <div style={{ flex: 1 }}>
-                  <div>
-                    <Text strong>变量: {m.variableCode}</Text>
-                  </div>
-                  <div>
-                    <Text type="secondary">
-                      匹配度: {(m.score * 100).toFixed(0)}%
-                    </Text>
-                  </div>
-                  <div>
-                    <Text type="secondary">原因: {m.reasons.join('、')}</Text>
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-          <div style={{ marginTop: 16 }}>
-            <Button
-              type="primary"
-              disabled={!allMappingsConfirmed}
-              onClick={handleConfirmImport}
-            >
-              确认并导入
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: 质量校验 */}
-      {currentStep === 3 && (
-        <div>
-          <div style={{ marginBottom: 16 }}>
-            <Text strong>质量校验结果：</Text>
-          </div>
-          <Table<ValidationResult>
-            columns={validationColumns}
-            dataSource={validationResults.map((v) => ({
-              ...v,
-              key: v.variableVersionId,
-            }))}
-            pagination={false}
-            size="small"
-          />
-          <div style={{ marginTop: 16 }}>
-            <Button
-              type="primary"
               loading={submitMutation.isPending}
               onClick={handleSubmit}
             >
@@ -490,16 +302,16 @@ export function IngestionWizard(): JSX.Element {
         </div>
       )}
 
-      {/* Step 4: 提交 */}
-      {currentStep === 4 && (
+      {/* Step 2: 提交 */}
+      {currentStep === 2 && (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <Spin size="large" />
           <p style={{ marginTop: 16, color: 'var(--ocean-text-muted)' }}>正在创建作业...</p>
         </div>
       )}
 
-      {/* Step 5: 进度 */}
-      {currentStep === 5 && (
+      {/* Step 3: 进度 */}
+      {currentStep === 3 && (
         <div style={{ textAlign: 'center', padding: 48 }}>
           <Progress percent={jobStatus?.progress ?? 0} />
           <p style={{ marginTop: 16 }}>
@@ -508,8 +320,8 @@ export function IngestionWizard(): JSX.Element {
         </div>
       )}
 
-      {/* Step 6: 结果 */}
-      {currentStep === 6 && (
+      {/* Step 4: 结果 */}
+      {currentStep === 4 && (
         <Result
           status={jobStatus?.status === 'succeeded' ? 'success' : 'error'}
           title={jobStatus?.status === 'succeeded' ? '导入成功' : '导入失败'}

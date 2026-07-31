@@ -1,8 +1,10 @@
 """设备仪器管理 ORM 模型。
 
-定义两张表：
-- equipment: 设备仪器主表，code 组织内唯一，关联部门（department_id FK）；
-- equipment_variable: 设备-物理量多对多关联表，复合主键 (equipment_id, variable_id)。
+定义设备仪器主表：
+- equipment: code 组织内唯一，关联部门（department_id FK）。
+
+原 equipment_variable 关联表已随标准层空表清理 DROP（migration 0057），
+代码库中无对应 ORM 类。
 
 风格参考 packages/departments/entities.py：继承 Base，
 使用 GUID / UTCDateTime 自定义类型，Mapped[] + mapped_column()。

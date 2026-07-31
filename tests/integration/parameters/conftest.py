@@ -1,8 +1,11 @@
-"""参数审批集成测试 fixtures（IRIP Task 18）。
+"""参数审批集成测试 fixtures（IRIP Task 18，标准层空表清理后精简版）。
 
-创建完整的 L1→L2→L2.5 证据链：
-已发布变量 → 已发布模板 → 已发布方法 → 工业对象 → 创建事实 →
-冻结证据集 → 发布配方 → 创建推导运行
+创建完整的 L2→L2.5 证据链：
+工业对象 → 创建事实 → 冻结证据集 → 发布配方 → 创建推导运行
+
+原 L1 标准链（已发布变量 → 已发布模板）依赖已删除的 Variable /
+VariableVersion / FactTemplate / FactTemplateVersion（migration 0057）。
+CreateFactCommand 不再需要 template_version_id，param_setup 仅创建工业对象。
 
 供参数审批、过期检测等测试复用。
 """
@@ -15,18 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
 from packages.common.ids import new_id
-from packages.facts.observations import (
-    NormalizedObservationInput,
-    RawObservationInput,
-)
 from packages.facts.service import CreateFactCommand, FactService
 from packages.provenance.derivations import DerivationService
 from packages.provenance.evidence import EvidenceService
 from packages.provenance.recipes import RecipeService
-from packages.standards.methods import Method, MethodVersion
 from packages.standards.objects import IndustrialObject
-from packages.standards.templates import FactTemplate, FactTemplateVersion
-from packages.standards.variables import Variable, VariableVersion
 
 
 @pytest.fixture
@@ -35,7 +31,7 @@ async def param_setup(
     test_user: object,
     sync_engine,
 ) -> dict:
-    """创建完整的 L1 标准链 + L2 事实 + L2.5 推导链。
+    """创建工业对象供创建事实时引用。
 
     返回所有创建实体的 ID，供参数测试使用。
     测试后自动清理。
@@ -43,77 +39,11 @@ async def param_setup(
     org_id = test_user.organization_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
-    variable_id = new_id()
-    variable_version_id = new_id()
-    method_id = new_id()
-    method_version_id = new_id()
     object_id = new_id()
-    template_id = new_id()
-    template_version_id = new_id()
 
     now = datetime.now(UTC)
 
     async with session_scope(async_session_factory) as session:
-        # L1: 已发布变量
-        variable = Variable(
-            id=variable_id,
-            organization_id=org_id,
-            code=f"param_var_{variable_id.hex[:8]}",
-            display_name="参数测试变量",
-            data_type="number",
-            canonical_unit="mm",
-            quantity_kind="length",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(variable)
-        var_version = VariableVersion(
-            id=variable_version_id,
-            variable_id=variable_id,
-            version=1,
-            code=variable.code,
-            display_name=variable.display_name,
-            data_type="number",
-            canonical_unit="mm",
-            quantity_kind="length",
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(var_version)
-
-        # L1: 已发布方法
-        method = Method(
-            id=method_id,
-            organization_id=org_id,
-            code=f"param_method_{method_id.hex[:8]}",
-            display_name="参数测试方法",
-            description="参数审批测试方法",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(method)
-        method_version = MethodVersion(
-            id=method_version_id,
-            method_id=method_id,
-            version=1,
-            code=method.code,
-            display_name=method.display_name,
-            description=method.description,
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(method_version)
-
         # L1: 工业对象
         obj = IndustrialObject(
             id=object_id,
@@ -127,55 +57,13 @@ async def param_setup(
             lock_version=0,
         )
         session.add(obj)
-
-        # L1: 已发布事实模板
-        template = FactTemplate(
-            id=template_id,
-            organization_id=org_id,
-            code=f"param_tpl_{template_id.hex[:8]}",
-            display_name="参数测试模板",
-            fact_type="experiment_run",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(template)
-        template_version = FactTemplateVersion(
-            id=template_version_id,
-            template_id=template_id,
-            version=1,
-            code=template.code,
-            display_name=template.display_name,
-            fact_type="experiment_run",
-            required_conditions=[],
-            observations=[
-                {
-                    "variable_version_id": str(variable_version_id),
-                    "required": True,
-                    "cardinality": "one",
-                }
-            ],
-            required_artifact_roles=[],
-            quality_rule_codes=[],
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(template_version)
         await session.flush()
 
+    # variable_code 是 parameter 表的纯文本列（无 FK 到已删除的 variable 表），
+    # 使用静态字符串即可。
     yield {
-        "variable_id": variable_id,
-        "variable_version_id": variable_version_id,
-        "variable_code": variable.code,
-        "method_id": method_id,
-        "method_version_id": method_version_id,
         "object_id": object_id,
-        "template_id": template_id,
-        "template_version_id": template_version_id,
+        "variable_code": f"param_var_{object_id.hex[:8]}",
         "organization_id": org_id,
         "actor_id": actor_id,
     }
@@ -183,15 +71,6 @@ async def param_setup(
     # 清理（从 L3 到 L1 倒序删除）
     with sync_engine.connect() as conn:
         # L3: 参数
-        conn.execute(
-            sa.text(
-                "DELETE FROM parameter_staleness WHERE parameter_version_id IN ("
-                "SELECT pv.id FROM parameter_version pv "
-                "JOIN parameter p ON pv.parameter_id = p.id "
-                "WHERE p.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
         conn.execute(
             sa.text(
                 "DELETE FROM parameter_candidate WHERE parameter_id IN ("
@@ -245,52 +124,7 @@ async def param_setup(
         # L2: 事实
         conn.execute(
             sa.text(
-                "DELETE FROM quality_assessment WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_revision_link WHERE from_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_artifact WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM normalized_observation WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM raw_observation WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_revision WHERE fact_id IN ("
+                "DELETE FROM fact_data_index WHERE fact_id IN ("
                 "SELECT id FROM fact WHERE organization_id = :oid)"
             ),
             {"oid": org_id},
@@ -301,40 +135,7 @@ async def param_setup(
         )
         # L1
         conn.execute(
-            sa.text(
-                "DELETE FROM fact_template_version WHERE template_id IN ("
-                "SELECT id FROM fact_template WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM fact_template WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM method_version WHERE method_id IN ("
-                "SELECT id FROM method WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM method WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
             sa.text("DELETE FROM industrial_object WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM variable_version WHERE variable_id IN ("
-                "SELECT id FROM variable WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM variable WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -346,33 +147,13 @@ def _make_fact_command(
     value: str,
 ) -> CreateFactCommand:
     """构建创建事实命令。"""
-    raw_id = new_id()
     return CreateFactCommand(
         fact_type="experiment_run",
-        template_version_id=setup["template_version_id"],
         organization_id=setup["organization_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
         ended_at=datetime(2026, 1, 2, tzinfo=UTC),
-        method_version_id=setup["method_version_id"],
-        raw=(
-            RawObservationInput(
-                id=raw_id,
-                source_path="particle_size",
-                source_value=value,
-                source_unit="um",
-            ),
-        ),
-        normalized=(
-            NormalizedObservationInput(
-                variable_version_id=setup["variable_version_id"],
-                raw_observation_id=raw_id,
-                value=value,
-                unit="um",
-            ),
-        ),
-        artifacts=(),
         idempotency_key=None,
         created_by=setup["actor_id"],
     )

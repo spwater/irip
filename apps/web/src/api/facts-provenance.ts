@@ -8,8 +8,6 @@ import type {
   CursorPage,
   FactSummary,
   FactDetail,
-  FactRevision,
-  ObservationsResponse,
   EvidenceSet,
   Recipe,
   DerivationRun,
@@ -80,21 +78,6 @@ export async function apiSearchFactsByData(params: {
 
 export async function apiGetFact(factId: string): Promise<FactDetail> {
   const res = await http.get<FactDetail>(`/facts/${factId}`);
-  return res.data;
-}
-
-export async function apiListFactRevisions(factId: string): Promise<{ items: FactRevision[]; next_cursor: string | null }> {
-  const res = await http.get<{ items: FactRevision[]; next_cursor: string | null }>(`/facts/${factId}/revisions`);
-  return res.data;
-}
-
-export async function apiGetFactRevision(factId: string, revision: number): Promise<FactRevision> {
-  const res = await http.get<FactRevision>(`/facts/${factId}/revisions/${revision}`);
-  return res.data;
-}
-
-export async function apiGetFactObservations(factId: string): Promise<ObservationsResponse> {
-  const res = await http.get<ObservationsResponse>(`/facts/${factId}/observations`);
   return res.data;
 }
 
@@ -313,11 +296,6 @@ export async function apiApproveCandidate(candidateId: string): Promise<Paramete
 
 export async function apiRejectCandidate(candidateId: string): Promise<ParameterCandidate> {
   const res = await http.post<ParameterCandidate>(`/parameters/candidates/${candidateId}/reject`);
-  return res.data;
-}
-
-export async function apiCheckStaleness(parameterId: string): Promise<{ staleness_status: string | null }> {
-  const res = await http.get<{ staleness_status: string | null }>(`/parameters/${parameterId}/staleness`);
   return res.data;
 }
 

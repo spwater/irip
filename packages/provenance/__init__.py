@@ -3,8 +3,8 @@
 提供证据集（EvidenceSet）、推导配方（TransformationRecipe）、推导运行
 （DerivationRun）与溯源图（ProvenanceGraph）的创建、冻结、执行与查询能力。
 
-证据集冻结事实修订快照以保证可复现推导；配方定义转换算法及参数；
-推导运行执行配方并产出参数候选；溯源图将推导结果连接回原始事实与观察值。
+证据集冻结事实快照以保证可复现推导；配方定义转换算法及参数；
+推导运行执行配方并产出参数候选；溯源图将推导结果连接回原始事实。
 
 子模块：
 - entities: ORM 模型（evidence_set / evidence_set_version /

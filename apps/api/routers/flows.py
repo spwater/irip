@@ -65,7 +65,7 @@ ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
 ExecuteUserDep = Annotated[CurrentUser, Depends(require_permission("flow:execute"))]
 
 # 从 facts 路由复用响应模型
-from apps.api.routers.facts import FactListResponse, FactRevisionResponse  # noqa: E402
+from apps.api.routers.facts import FactListResponse, FactResponse  # noqa: E402
 
 
 def get_flow_service() -> FlowRuntimeService:
@@ -607,16 +607,16 @@ async def list_runs(
 
     runs = await service.list_runs(flow_id)
     result = []
-    # 批量查哪些 run 已入库（fact_revision.flow_run_id）
+    # 批量查哪些 run 已入库（fact.flow_run_id）
     run_ids = [r.id for r in runs]
     persisted_ids: set = set()
     if run_ids:
-        from packages.facts.entities import FactRevision
+        from packages.facts.entities import Fact
 
         async with session_scope(service.session_factory) as session:
             persist_stmt = (
-                sa.select(FactRevision.flow_run_id)
-                .where(FactRevision.flow_run_id.in_(run_ids))
+                sa.select(Fact.flow_run_id)
+                .where(Fact.flow_run_id.in_(run_ids))
                 .distinct()
             )
             persist_result = await session.execute(persist_stmt)
@@ -844,7 +844,6 @@ class PersistFactRequest(BaseModel):
     """写入事实请求。"""
 
     object_id: UUID
-    template_version_id: UUID | None = None
     custom_data: dict | None = (
         None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}  # noqa: E501
     )
@@ -854,7 +853,6 @@ class PersistFactResponse(BaseModel):
     """写入事实响应。"""
 
     fact_id: UUID
-    revision: int
     subject_id: str
     raw_count: int
     artifact_id: UUID | None = None
@@ -879,9 +877,17 @@ async def persist_run_as_fact(
     """
     from pathlib import Path
 
+    # DEBUG: 打印请求体
+    import logging as _dbg_log
+    _dbg_log.getLogger(__name__).warning(
+        "DEBUG persist-fact body: object_id=%s, custom_data is None=%s, custom_data keys=%s",
+        body.object_id,
+        body.custom_data is None,
+        list(body.custom_data.keys()) if body.custom_data else "N/A",
+    )
+
     from packages.common.artifacts import ArtifactService
     from packages.common.ids import new_id
-    from packages.facts.observations import RawObservationInput
     from packages.facts.service import CreateFactCommand, FactService
 
     # 1. 获取执行记录和节点输出
@@ -917,13 +923,28 @@ async def persist_run_as_fact(
         )
 
     # 2a. 如果传入了编辑后的自定义数据，覆盖提取的数据
+    import logging as _logging
+    _logging.getLogger(__name__).info(
+        "persist_fact custom_data=%s, points=%d, series=%d",
+        body.custom_data is not None,
+        len(points), len(series),
+    )
     if body.custom_data:
+        _logging.getLogger(__name__).info(
+            "custom_data keys=%s, points_len=%d, series_len=%d",
+            list(body.custom_data.keys()),
+            len(body.custom_data.get("points", [])),
+            len(body.custom_data.get("series", [])),
+        )
         if isinstance(body.custom_data.get("points"), list):
             points = body.custom_data["points"]
         if isinstance(body.custom_data.get("series"), list):
             series = body.custom_data["series"]
         if isinstance(body.custom_data.get("metadata"), dict):
             header = body.custom_data["metadata"]
+    _logging.getLogger(__name__).info(
+        "after override: points=%d, series=%d", len(points), len(series)
+    )
 
     # 3. 从 input_snapshot 获取源文件路径
     input_snapshot = run.input_snapshot or {}
@@ -963,17 +984,39 @@ async def persist_run_as_fact(
             uploaded_by=current_user.user_id,
         )
 
-        # 4a. 上传原始 PDF
-        if source_path and source_path.lower().endswith(".pdf"):
+        # 4a. 保存原始文件到 artifact 存储
+        # 如果 source_path 是 artifact: 前缀，原始文件已经在 MinIO 里了，直接复用 artifact_id
+        if source_path.startswith("artifact:"):
+            try:
+                pdf_artifact_id = UUID(source_path[len("artifact:"):])
+            except ValueError:
+                pass
+        elif source_path:
+            # 本地文件路径，上传到 MinIO
             file_path = Path(source_path)
             if file_path.exists():  # noqa: ASYNC240
-                pdf_data = file_path.read_bytes()  # noqa: ASYNC240
-                pdf_ref = await artifact_svc.put_bytes(
-                    data=pdf_data,
-                    media_type="application/pdf",
+                raw_data = file_path.read_bytes()  # noqa: ASYNC240
+                # 推断 media_type
+                suffix = file_path.suffix.lower()
+                media_types = {
+                    ".pdf": "application/pdf",
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    ".xls": "application/vnd.ms-excel",
+                    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ".doc": "application/msword",
+                    ".txt": "text/plain",
+                    ".csv": "text/csv",
+                }
+                raw_media_type = media_types.get(suffix, "application/octet-stream")
+                raw_ref = await artifact_svc.put_bytes(
+                    data=raw_data,
+                    media_type=raw_media_type,
                     filename=file_path.name,
                 )
-                pdf_artifact_id = pdf_ref.artifact_id
+                pdf_artifact_id = raw_ref.artifact_id
 
         # 4b. 上传提取的数据（metadata + points + series 作为 JSON）
         export_payload = json.dumps(
@@ -989,20 +1032,6 @@ async def persist_run_as_fact(
         data_artifact_id = data_ref.artifact_id
     except Exception:
         pass
-
-    # 5. 只创建一条 raw observation 指向数据 artifact
-    raw_inputs: list[RawObservationInput] = []
-    if data_artifact_id:
-        raw_inputs.append(
-            RawObservationInput(
-                source_path=f"flow_run:{run_id}",
-                source_value=f"artifact:{data_artifact_id}",
-                source_unit=None,
-                source_name=source_path or f"flow_run:{run_id}",
-                artifact_id=data_artifact_id,
-                id=new_id(),
-            )
-        )
 
     # 6. 查询任务信息快照（入库时保存，避免后续反查 JOIN）
     task_code: str | None = None
@@ -1076,10 +1105,6 @@ async def persist_run_as_fact(
         actor_id=current_user.user_id,
     )
 
-    all_artifacts: tuple[UUID, ...] = tuple(
-        aid for aid in [pdf_artifact_id, data_artifact_id] if aid is not None
-    )
-
     # 入库命名：统一用 任务名-文件名(去后缀) 作为子项名，任务名作为分组名
     file_stem = Path(source_filename).stem if source_filename else ""
     subject_id = f"{task_name or ''}-{file_stem}" if file_stem else (task_name or str(run_id))
@@ -1087,16 +1112,11 @@ async def persist_run_as_fact(
 
     command = CreateFactCommand(
         fact_type="experiment_run",
-        template_version_id=body.template_version_id,
         organization_id=service.organization_id,
         object_id=body.object_id,
         subject_id=subject_id,
         started_at=run.started_at or run.created_at,
         ended_at=run.completed_at,
-        method_version_id=None,
-        raw=tuple(raw_inputs),
-        normalized=(),
-        artifacts=all_artifacts,
         idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
         created_by=current_user.user_id,
         task_code=task_code,
@@ -1106,6 +1126,7 @@ async def persist_run_as_fact(
         run_operator=run_operator,
         equipment_name=equipment_name,
         flow_run_id=run_id,
+        source_artifact_id=pdf_artifact_id or data_artifact_id,
     )
 
     ref = await fact_service.create(command)
@@ -1137,7 +1158,7 @@ async def persist_run_as_fact(
             index_rows.append(
                 {
                     "id": new_id(),
-                    "fact_revision_id": __import__("uuid").UUID(ref.revision_id),
+                    "fact_id": ref.fact_id,
                     "row_index": row_idx,
                     "key": str(key),
                     "value_text": val_text,
@@ -1157,8 +1178,7 @@ async def persist_run_as_fact(
         logging.getLogger(__name__).warning(f"Failed to write data index: {e}")
 
     return PersistFactResponse(
-        fact_id=str(ref.fact_id),
-        revision=ref.revision,
+        fact_id=ref.fact_id,
         subject_id=ref.subject_id,
         raw_count=len(points) + sum(len(s.get("rows", [])) for s in series),
         artifact_id=data_artifact_id,
@@ -1183,66 +1203,32 @@ async def list_facts_by_flow(
 
     from packages.common.database import session_scope
     from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
-    from packages.facts.entities import Fact, FactRevision
-    from packages.facts.observations import FactRevisionRef
+    from packages.facts.entities import Fact
 
     async with session_scope(service.session_factory) as session:
-        # flow_definition → flow_definition_version → flow_run → fact_revision
+        # flow_definition → flow_definition_version → flow_run → fact
         stmt = (
-            sa.select(FactRevision)
-            .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+            sa.select(Fact)
+            .join(FlowRun, Fact.flow_run_id == FlowRun.id)
             .join(FlowDefinitionVersionORM, FlowRun.flow_version_id == FlowDefinitionVersionORM.id)
             .where(FlowDefinitionVersionORM.flow_definition_id == flow_id)
-            .order_by(FactRevision.created_at.desc())
+            .order_by(Fact.created_at.desc())
         )
         result = await session.execute(stmt)
-        revisions = result.scalars().all()
+        facts = result.scalars().all()
 
-        # 构造 FactRevisionRef 列表
-        refs: list[FactRevisionRef] = []
-        for rev in revisions:
-            # 查 fact 状态
-            fact = await session.get(Fact, rev.fact_id)
-            refs.append(
-                FactRevisionRef(
-                    fact_id=rev.fact_id,
-                    revision=rev.revision,
-                    revision_id=rev.id,
-                    fact_type=rev.fact_type,
-                    subject_id=rev.subject_id,
-                    status=fact.status if fact else "unknown",
-                )
-            )
-
+        # 构造 FactResponse 列表
         items = [
-            FactRevisionResponse(
-                fact_id=str(r.fact_id),
-                revision=r.revision,
-                revision_id=str(r.revision_id),
-                fact_type=r.fact_type,
-                subject_id=r.subject_id,
-                status=r.status,
+            FactResponse(
+                fact_id=str(f.id),
+                fact_type=f.fact_type,
+                subject_id=f.subject_id,
+                status=f.status,
+                task_code=f.task_code,
+                task_name=f.task_name,
+                department_name=f.department_name,
             )
-            for r in refs
+            for f in facts
         ]
-
-        # 填充快照字段
-        if items:
-            snap_stmt = sa.select(
-                FactRevision.id,
-                FactRevision.task_code,
-                FactRevision.task_name,
-                FactRevision.department_name,
-            ).where(FactRevision.id.in_([__import__("uuid").UUID(i.revision_id) for i in items]))  # noqa: E501
-            snap_result = await session.execute(snap_stmt)
-            snap_map: dict[str, tuple] = {}
-            for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3])
-            for item in items:
-                snap = snap_map.get(item.revision_id)
-                if snap:
-                    item.task_code = snap[0]
-                    item.task_name = snap[1]
-                    item.department_name = snap[2]
 
         return FactListResponse(items=items, next_cursor=None)

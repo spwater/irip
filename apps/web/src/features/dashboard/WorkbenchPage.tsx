@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
-import { Button, Table, Typography } from 'antd';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Table, Typography, DatePicker, Select, Space } from 'antd';
+import dayjs, { type Dayjs } from 'dayjs';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
@@ -8,13 +9,17 @@ import { apiListFlows } from '@/api/flows';
 import { apiListJobs } from '@/api/jobs';
 import type { JobListItem } from '@/api/governance';
 import { apiGetSystemHealth, type SystemHealth } from '@/api/system';
-import { DataHero, MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/shared/ui';
+import { apiListEquipment } from '@/api/equipment-flows';
+import { MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/shared/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
+import { CHART_COLOR_SEQUENCE } from '@/theme/chartTheme';
+import { tokens } from '@/theme/tokens';
 
 const { Text } = Typography;
+const { RangePicker } = DatePicker;
 
-/** 作业状态 → 语义映射（用于 StatusMark） */
+/** 作业状态 -> 语义映射 */
 const JOB_STATUS_SEMANTIC: Record<string, StatusSemantic> = {
   accepted: 'neutral',
   queued: 'info',
@@ -26,7 +31,7 @@ const JOB_STATUS_SEMANTIC: Record<string, StatusSemantic> = {
   cancelled: 'neutral',
 };
 
-/** 作业状态 → 中文标签 */
+/** 作业状态 -> 中文标签 */
 const JOB_STATUS_LABEL: Record<string, string> = {
   accepted: '已接受',
   queued: '排队中',
@@ -38,7 +43,7 @@ const JOB_STATUS_LABEL: Record<string, string> = {
   cancelled: '已取消',
 };
 
-/** 系统健康状态 → 语义映射 */
+/** 系统健康状态 -> 语义映射 */
 const HEALTH_SEMANTIC: Record<string, StatusSemantic> = {
   healthy: 'success',
   ok: 'success',
@@ -47,27 +52,255 @@ const HEALTH_SEMANTIC: Record<string, StatusSemantic> = {
   error: 'danger',
 };
 
-/** 快捷入口配置 */
-const QUICK_ENTRIES: { label: string; desc: string; to: string; search?: Record<string, string> }[] = [
-  { label: '实验室建设', desc: '组织机构 / 设备 / 实验对象', to: '/standards' },
-  { label: '实验执行', desc: '流程编排与运行', to: '/lab-ops', search: { tab: 'flows' } },
-  { label: '实验记录', desc: '原始数据浏览', to: '/lab-ops', search: { tab: 'facts' } },
-  { label: 'AI 助手', desc: '对话与数据查询', to: '/platform', search: { tab: 'assistant' } },
-  { label: '作业中心', desc: '作业追踪与重试', to: '/jobs' },
-];
+// ---- 环形图组件 ----
+
+type DonutDatum = { name: string; value: number };
+
+interface DonutChartProps {
+  title: string;
+  data: DonutDatum[];
+  loading?: boolean;
+  height?: number;
+}
+
+/** 带圆润凸台效果的环形图 */
+function DonutChart({ title, data, loading, height = 220 }: DonutChartProps): JSX.Element {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [echart, setEchart] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import('echarts').then((echarts) => {
+      if (!cancelled && chartRef.current) {
+        const chart = echarts.init(chartRef.current, undefined, { width: chartRef.current.offsetWidth, height });
+        setEchart(chart);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [height]);
+
+  useEffect(() => {
+    if (!echart) return;
+    import('echarts').then(() => {
+      if (!chartRef.current || !echart) return;
+      const chart = echart as { setOption: (opt: unknown) => void; resize: () => void };
+      const hasData = data.some((d) => d.value > 0);
+      chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: tokens.ocean.surface.strong,
+          borderColor: tokens.ocean.border.strong,
+          borderWidth: 1,
+          textStyle: { color: tokens.ocean.text.primary, fontSize: 12 },
+          formatter: '{b}: {c} ({d}%)',
+        },
+        legend: {
+          show: data.length <= 6,
+          bottom: 0,
+          left: 'center',
+          itemWidth: 8,
+          itemHeight: 8,
+          itemGap: 10,
+          textStyle: { color: tokens.ocean.text.secondary, fontSize: 11 },
+        },
+        series: [{
+          name: title,
+          type: 'pie',
+          radius: ['42%', '68%'],
+          center: ['50%', '42%'],
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 6,
+            borderColor: tokens.ocean.surface.strong,
+            borderWidth: 2,
+          },
+          label: {
+            show: true,
+            position: 'center',
+            formatter: hasData
+              ? `{a|${data.reduce((s, d) => s + d.value, 0)}}\n{b|总数}`
+              : '{b|暂无数据}',
+            rich: {
+              a: { fontSize: 28, fontWeight: 700, color: tokens.ocean.text.primary, lineHeight: 34 },
+              b: { fontSize: 12, color: tokens.ocean.text.secondary, lineHeight: 16 },
+            },
+          },
+          emphasis: {
+            itemStyle: {
+              borderRadius: 10,
+              shadowBlur: 12,
+              shadowColor: 'rgba(22, 134, 174, 0.25)',
+            },
+            label: { show: true },
+          },
+          data: hasData ? data : [{ name: '暂无数据', value: 1, itemStyle: { color: 'rgba(72, 107, 126, 0.12)' } }],
+          color: CHART_COLOR_SEQUENCE,
+        }],
+      });
+      chart.resize();
+    });
+  }, [data, echart, title]);
+
+  useEffect(() => {
+    if (!echart) return;
+    const handleResize = () => { (echart as { resize: () => void }).resize(); };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [echart]);
+
+  return (
+    <OceanPanel variant="default" padding={0}>
+      <div style={{ padding: '10px 14px 2px', borderBottom: '1px solid var(--ocean-border-subtle)' }}>
+        <Typography.Text style={{ fontSize: 13, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
+          {title}
+        </Typography.Text>
+      </div>
+      <div ref={chartRef} style={{ width: '100%', height, opacity: loading ? 0.4 : 1, transition: 'opacity 200ms' }} />
+    </OceanPanel>
+  );
+}
+
+// ---- 趋势图组件 ----
+
+interface TrendChartProps {
+  data: { date: string; count: number }[];
+  loading?: boolean;
+  height?: number;
+  dateRange: [Dayjs, Dayjs];
+  equipFilter: string | undefined;
+  equipOptions: { label: string; value: string }[];
+  onDateChange: (dates: [Dayjs, Dayjs] | null) => void;
+  onEquipChange: (val: string | undefined) => void;
+}
+
+/** 数据入库趋势图（柱状图 + 筛选器） */
+function TrendChart({
+  data, loading, height = 280, dateRange, equipFilter,
+  equipOptions, onDateChange, onEquipChange,
+}: TrendChartProps): JSX.Element {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [echart, setEchart] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    import('echarts').then((echarts) => {
+      if (!cancelled && chartRef.current) {
+        const chart = echarts.init(chartRef.current, undefined, { width: chartRef.current.offsetWidth, height });
+        setEchart(chart);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [height]);
+
+  useEffect(() => {
+    if (!echart) return;
+    import('echarts').then(() => {
+      if (!chartRef.current || !echart) return;
+      const chart = echart as { setOption: (opt: unknown) => void; resize: () => void };
+      chart.setOption({
+        backgroundColor: 'transparent',
+        tooltip: {
+          trigger: 'axis',
+          backgroundColor: tokens.ocean.surface.strong,
+          borderColor: tokens.ocean.border.strong,
+          borderWidth: 1,
+          textStyle: { color: tokens.ocean.text.primary, fontSize: 12 },
+          formatter: (params: { name: string; value: number }[]) => {
+            const p = params[0];
+            return p ? `${p.name}<br/>入库 <b>${p.value}</b> 条` : '';
+          },
+        },
+        grid: { left: 40, right: 16, top: 12, bottom: 40 },
+        xAxis: {
+          type: 'category',
+          data: data.map((d) => d.date),
+          axisLine: { lineStyle: { color: 'rgba(24, 102, 133, 0.20)' } },
+          axisTick: { show: false },
+          axisLabel: { color: tokens.ocean.text.secondary, fontSize: 11, rotate: data.length > 20 ? 35 : 0 },
+        },
+        yAxis: {
+          type: 'value',
+          minInterval: 1,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { color: tokens.ocean.text.secondary, fontSize: 11 },
+          splitLine: { lineStyle: { color: 'rgba(24, 102, 133, 0.12)' } },
+        },
+        series: [{
+          type: 'bar',
+          data: data.map((d) => d.count),
+          barMaxWidth: 28,
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: '#1686AE' },
+                { offset: 1, color: 'rgba(22, 134, 174, 0.35)' },
+              ],
+            },
+          },
+          emphasis: {
+            itemStyle: {
+              color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: '#39B9C2' },
+                  { offset: 1, color: 'rgba(57, 185, 194, 0.5)' },
+                ],
+              },
+            },
+          },
+        }],
+      });
+      chart.resize();
+    });
+  }, [data, echart]);
+
+  useEffect(() => {
+    if (!echart) return;
+    const handleResize = () => { (echart as { resize: () => void }).resize(); };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [echart]);
+
+  return (
+    <OceanPanel variant="default" padding={0}>
+      {/* 标题 + 筛选器 */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--ocean-border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+          <Typography.Text style={{ fontSize: 13, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
+            数据入库趋势
+          </Typography.Text>
+          <Space size={8} wrap>
+            <RangePicker
+              size="small"
+              value={dateRange}
+              onChange={(dates) => onDateChange(dates as [Dayjs, Dayjs] | null)}
+              style={{ fontSize: 12 }}
+            />
+            <Select
+              size="small"
+              placeholder="设备"
+              allowClear
+              value={equipFilter}
+              onChange={onEquipChange}
+              options={equipOptions}
+              style={{ width: 130, fontSize: 12 }}
+            />
+          </Space>
+        </div>
+      </div>
+      <div ref={chartRef} style={{ width: '100%', height, opacity: loading ? 0.4 : 1, transition: 'opacity 200ms' }} />
+    </OceanPanel>
+  );
+}
 
 /**
- * 研发看板页面 — 真实数据总览
- *
- * 按设计文档第 10.3 节：
- * 1. 平台态势 DataHero
- * 2. MetricStrip 摘要指标（明确统计口径）
- * 3. 活跃作业列表
- * 4. 系统健康摘要
- * 5. 快捷入口
- *
- * 每个查询独立加载、独立错误处理，一个失败不阻断整页。
- * 不伪造统计值，使用"最近记录"明确口径。
+ * 研发看板页面 -- 真实数据总览
  */
 export function WorkbenchPage(): JSX.Element {
   const navigate = useNavigate();
@@ -75,18 +308,18 @@ export function WorkbenchPage(): JSX.Element {
   usePageHeaderRegistration({
     index: 'MODULE 01 / RESEARCH WORKBENCH',
     title: '研发看板',
-    heroTitle: true,
   }, []);
 
-  // ---- 独立查询 1：事实列表（最近记录） ----
+  // ---- 查询 1：事实列表（30秒轮询） ----
   const { data: factsData } = useQuery({
     queryKey: ['workbench', 'facts'],
     queryFn: () => apiListFacts({ page_size: 100 }),
+    refetchInterval: 30000,
   });
   const factsItems = factsData?.items ?? [];
   const factsCount = factsItems.length;
 
-  // ---- 独立查询 2：流程列表 ----
+  // ---- 查询 2：流程列表 ----
   const { data: flowsData } = useQuery({
     queryKey: ['workbench', 'flows'],
     queryFn: () => apiListFlows(),
@@ -95,7 +328,7 @@ export function WorkbenchPage(): JSX.Element {
   const flowsCount = flowsItems.length;
   const activeFlows = flowsItems.filter((f) => f.status === 'published').length;
 
-  // ---- 独立查询 3：作业列表（最近记录） ----
+  // ---- 查询 3：作业列表 ----
   const { data: jobsData, isLoading: jobsLoading, error: jobsError } = useQuery({
     queryKey: ['workbench', 'jobs'],
     queryFn: () => apiListJobs({ limit: 50 }),
@@ -106,20 +339,117 @@ export function WorkbenchPage(): JSX.Element {
     (j) => ['accepted', 'queued', 'running', 'retry_wait'].includes(j.status),
   ).length;
 
-  // ---- 独立查询 5：系统健康 ----
+  // ---- 查询 4：系统健康 ----
   const { data: healthData, isLoading: healthLoading, error: healthError } = useQuery({
     queryKey: ['workbench', 'health'],
     queryFn: () => apiGetSystemHealth(),
-    // 503 仍展示返回的健康详情，apiGetSystemHealth 已处理
     retry: false,
   });
   const health: SystemHealth | undefined = healthData;
+
+  // ---- 查询 5：设备列表 ----
+  const { data: equipData } = useQuery({
+    queryKey: ['workbench', 'equipment'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  const equipment = equipData?.items ?? [];
+
+  // ---- 趋势图筛选状态 ----
+  const [dateRange, setDateRange] = useState<[Dayjs, Dayjs]>([
+    dayjs().subtract(29, 'day'),
+    dayjs(),
+  ]);
+  const [equipFilter, setEquipFilter] = useState<string | undefined>('');
+
+  // 设备下拉选项（含"全部"选项）
+  const equipOptions = useMemo(
+    () => [
+      { label: '全部设备', value: '' },
+      ...equipment.map((e) => ({ label: e.display_name, value: e.display_name })),
+    ],
+    [equipment],
+  );
+
+  // ---- 聚合：实验室数据占比 ----
+  const labDonutData: DonutDatum[] = useMemo(() => {
+    if (factsCount === 0) {
+      const map = new Map<string, number>();
+      for (const eq of equipment) {
+        const deptName = (eq as { department_name?: string }).department_name ?? '未分配';
+        map.set(deptName, (map.get(deptName) ?? 0) + 1);
+      }
+      return Array.from(map.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8);
+    }
+    const map = new Map<string, number>();
+    for (const f of factsItems) {
+      const name = f.department_name || '未分类';
+      map.set(name, (map.get(name) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [factsItems, factsCount, equipment]);
+
+  // ---- 聚合：设备数据占比 ----
+  const equipDonutData: DonutDatum[] = useMemo(() => {
+    if (factsCount === 0) {
+      const map = new Map<string, number>();
+      for (const eq of equipment) {
+        const name = eq.display_name || eq.code || '未命名';
+        map.set(name, (map.get(name) ?? 0) + 1);
+      }
+      return Array.from(map.entries())
+        .map(([name, value]) => ({ name, value }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8);
+    }
+    const map = new Map<string, number>();
+    for (const f of factsItems) {
+      const name = f.equipment_name || '未分类';
+      map.set(name, (map.get(name) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+  }, [factsItems, factsCount, equipment]);
+
+  // ---- 聚合：入库趋势（按天统计，支持实验室和设备筛选） ----
+  const trendData = useMemo(() => {
+    const start = dateRange[0].startOf('day');
+    const end = dateRange[1].startOf('day');
+    const days: string[] = [];
+    let cursor = start;
+    while (cursor.isBefore(end) || cursor.isSame(end, 'day')) {
+      days.push(cursor.format('MM-DD'));
+      cursor = cursor.add(1, 'day');
+    }
+
+    // 按天计数
+    const dayMap = new Map<string, number>(days.map((d) => [d, 0]));
+
+    // 从 facts 数据中按 created_at 提取日期
+    for (const f of factsItems) {
+      if (!f.created_at) continue;
+      const factDate = dayjs(f.created_at);
+      const dateStr = factDate.format('MM-DD');
+      // 应用筛选
+      if (equipFilter && (f.equipment_name ?? '') !== equipFilter) continue;
+      if (dayMap.has(dateStr)) {
+        dayMap.set(dateStr, (dayMap.get(dateStr) ?? 0) + 1);
+      }
+    }
+
+    return days.map((d) => ({ date: d, count: dayMap.get(d) ?? 0 }));
+  }, [dateRange, factsItems, equipFilter]);
 
   // 最近作业表格列
   const jobColumns: ColumnsType<JobListItem> = useMemo(
     () => [
       {
-        title: '项目名称',
+        title: '任务名称',
         dataIndex: 'flow_name',
         key: 'flow_name',
         width: 200,
@@ -130,19 +460,9 @@ export function WorkbenchPage(): JSX.Element {
         title: '部门',
         dataIndex: 'dept_name',
         key: 'dept_name',
-        width: 120,
+        width: 140,
         ellipsis: true,
         render: (v: string) => v || <Text type="secondary">-</Text>,
-      },
-      {
-        title: '作业 ID',
-        dataIndex: 'id',
-        key: 'id',
-        width: 200,
-        ellipsis: true,
-        render: (v: string) => (
-          <span style={{ fontFamily: 'var(--ocean-font-mono)', fontSize: 12 }}>{v}</span>
-        ),
       },
       {
         title: '状态',
@@ -160,7 +480,6 @@ export function WorkbenchPage(): JSX.Element {
     [],
   );
 
-  // MetricStrip 指标（明确统计口径）
   const metrics = [
     { label: '事实记录（最近返回）', value: factsCount, unit: '条' },
     { label: '流程（已发布）', value: activeFlows, unit: `/${flowsCount}` },
@@ -169,22 +488,28 @@ export function WorkbenchPage(): JSX.Element {
 
   return (
     <div className="ocean-page-enter">
-      {/* 平台态势 DataHero：活跃作业数 */}
-      <DataHero
-        value={activeJobCount}
-        label="当前活跃作业"
-        unit="个"
-        status={activeJobCount > 0 ? 'info' : 'neutral'}
-      />
-
       {/* 摘要指标条 */}
       <div style={{ marginBottom: 24 }}>
         <MetricStrip metrics={metrics} />
       </div>
 
+      {/* 趋势图（宽） + 两个饼图（窄） */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 12, marginBottom: 16, alignItems: 'stretch' }}>
+        <TrendChart
+          data={trendData}
+          loading={!factsData}
+          dateRange={dateRange}
+          equipFilter={equipFilter}
+          equipOptions={equipOptions}
+          onDateChange={(dates) => dates && setDateRange(dates)}
+          onEquipChange={setEquipFilter}
+        />
+        <DonutChart title="实验室数据占比" data={labDonutData} loading={!factsData} height={280} />
+        <DonutChart title="设备数据占比" data={equipDonutData} loading={!factsData} height={280} />
+      </div>
+
       {/* 主区域：左活跃作业 + 右系统健康 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
-        {/* 活跃作业列表 */}
         <OceanPanel variant="strong" padding={0}>
           <div
             style={{
@@ -220,7 +545,7 @@ export function WorkbenchPage(): JSX.Element {
                 loading={jobsLoading}
                 size="small"
                 pagination={false}
-                scroll={{ x: 560 }}
+                scroll={{ x: 460 }}
                 onRow={(record) => ({
                   onClick: () => void navigate({ to: '/jobs/$jobId', params: { jobId: record.id } }),
                   style: { cursor: 'pointer' },
@@ -230,7 +555,6 @@ export function WorkbenchPage(): JSX.Element {
           </div>
         </OceanPanel>
 
-        {/* 系统健康摘要 */}
         <OceanPanel variant="default" padding={16}>
           <Typography.Title level={5} style={{ margin: 0, marginBottom: 12, fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
             系统健康
@@ -275,54 +599,6 @@ export function WorkbenchPage(): JSX.Element {
             </div>
           )}
         </OceanPanel>
-      </div>
-
-      {/* 快捷入口 */}
-      <div style={{ marginTop: 24 }}>
-        <Typography.Title level={5} style={{ marginBottom: 12, fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
-          快捷入口
-        </Typography.Title>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: 12,
-          }}
-        >
-          {QUICK_ENTRIES.map((entry) => (
-            <OceanPanel
-              key={entry.label}
-              variant="default"
-              padding={0}
-              style={{ transition: 'all 180ms var(--ocean-motion-easing)' }}
-            >
-              <button
-                type="button"
-                aria-label={`${entry.label}：${entry.desc}`}
-                onClick={() => void navigate({ to: entry.to, search: entry.search })}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 4,
-                  width: '100%',
-                  padding: 16,
-                  background: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  borderRadius: 'inherit',
-                }}
-              >
-                <Text style={{ fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
-                  {entry.label}
-                </Text>
-                <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
-                  {entry.desc}
-                </Text>
-              </button>
-            </OceanPanel>
-          ))}
-        </div>
       </div>
     </div>
   );

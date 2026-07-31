@@ -3,10 +3,11 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/features/assistant/AssistantPage';
 import { AIToolsPage } from '@/features/ai-tools/AIToolsPage';
 import { ComponentsPage } from '@/features/components/ComponentsPage';
+import { PersonalSettings } from '@/features/platform/PersonalSettings';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
-const VALID_TABS = ['assistant', 'ai-tools', 'components'] as const;
+const VALID_TABS = ['assistant', 'ai-tools', 'components', 'personal-settings'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
 
 /**
@@ -47,6 +48,8 @@ export function PlatformPage(): JSX.Element {
       { key: 'assistant', label: 'AI助手' },
       ...(isAdmin ? [{ key: 'ai-tools', label: '工具插件' }] : []),
       { key: 'components', label: '数据接口' },
+      // irip-ai-collab: 个人设置（所有用户可见）
+      { key: 'personal-settings', label: '个人设置' },
     ];
     return items;
   }, [isAdmin]);
@@ -63,10 +66,15 @@ export function PlatformPage(): JSX.Element {
   );
 
   return (
-    <div className="ocean-page-enter" key={activeTab}>
+    <div
+      className="ocean-page-enter"
+      key={activeTab}
+      style={activeTab === 'assistant' ? { overflow: 'hidden', height: '100%' } : undefined}
+    >
       {activeTab === 'assistant' && <AssistantPage />}
       {activeTab === 'ai-tools' && isAdmin && <AIToolsPage />}
       {activeTab === 'components' && <ComponentsPage prefillObject={prefillObject} editId={editId} />}
+      {activeTab === 'personal-settings' && <PersonalSettings />}
     </div>
   );
 }

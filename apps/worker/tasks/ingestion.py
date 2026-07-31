@@ -26,12 +26,9 @@ async def _process_ingestion_async(
         job_id: 作业 UUID 字符串。
         payload: 作业载荷，包含：
             - file_paths: 文件路径列表（批量）或 file_path（单文件）
-            - mapping_profile_version_id: 映射配置版本 ID
-            - template_version_id: 模板版本 ID
             - object_id: 工业对象 ID
             - organization_id: 组织 ID
             - actor_id: 操作人 ID（可选）
-            - method_version_id: 方法版本 ID（可选）
 
     Returns:
         dict: 摄入结果摘要。
@@ -57,11 +54,7 @@ async def _process_ingestion_async(
     organization_id = UUID(str(payload["organization_id"]))
     actor_id_str = payload.get("actor_id")
     actor_id = UUID(str(actor_id_str)) if actor_id_str else None
-    mapping_profile_version_id = UUID(str(payload["mapping_profile_version_id"]))
-    template_version_id = UUID(str(payload["template_version_id"]))
     object_id = UUID(str(payload["object_id"]))
-    method_version_id_str = payload.get("method_version_id")
-    method_version_id = UUID(str(method_version_id_str)) if method_version_id_str else None
 
     # 构建服务
     fact_service = FactService(
@@ -104,10 +97,7 @@ async def _process_ingestion_async(
 
     results = await pipeline.ingest_batch(
         file_paths=file_paths,
-        mapping_profile_version_id=mapping_profile_version_id,
-        template_version_id=template_version_id,
         object_id=object_id,
-        method_version_id=method_version_id,
     )
 
     # 汇总结果

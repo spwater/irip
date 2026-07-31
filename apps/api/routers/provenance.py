@@ -150,8 +150,6 @@ class EvidenceMemberResponse(BaseModel):
     """证据集成员响应。"""
 
     fact_id: str
-    fact_revision: int
-    fact_revision_id: str
     observation_id: str | None
     decision: str
     reason: str
@@ -263,8 +261,6 @@ def _member_to_response(m: EvidenceMember) -> EvidenceMemberResponse:
     """将 EvidenceMember 转为响应模型。"""
     return EvidenceMemberResponse(
         fact_id=str(m.fact_id),
-        fact_revision=m.fact_revision,
-        fact_revision_id=str(m.fact_revision_id),
         observation_id=str(m.observation_id) if m.observation_id else None,
         decision=m.decision,
         reason=m.reason,

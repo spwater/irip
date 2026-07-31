@@ -21,15 +21,12 @@ export type EquipmentListItem = {
 };
 
 export type EquipmentListResponse = { items: EquipmentListItem[]; next_cursor: string | null; has_more: boolean; };
-export type EquipmentVariable = { id: string; code: string; name_zh: string; name_en: string; quantity_kind: string; data_type: string; status: string; current_version: string | null; };
 
 export async function apiListEquipment(params?: { department_id?: string; status?: string; cursor?: string; limit?: number; }): Promise<EquipmentListResponse> { const res = await http.get<EquipmentListResponse>('/equipment', { params }); return res.data; }
 export async function apiGetEquipment(id: string): Promise<Equipment> { const res = await http.get<Equipment>(`/equipment/${id}`); return res.data; }
 export async function apiCreateEquipment(body: { display_name: string; description?: string; department_id: string; visible_departments?: string[]; sort_order?: number; }): Promise<Equipment> { const res = await http.post<Equipment>('/equipment', body); return res.data; }
 export async function apiUpdateEquipment(id: string, body: { display_name: string; description?: string; department_id?: string; visible_departments?: string[]; sort_order?: number; lock_version: number; }): Promise<Equipment> { const res = await http.patch<Equipment>(`/equipment/${id}`, body); return res.data; }
 export async function apiUpdateEquipmentStatus(id: string, body: { status: string; lock_version: number; }): Promise<Equipment> { const res = await http.patch<Equipment>(`/equipment/${id}/status`, body); return res.data; }
-export async function apiGetEquipmentVariables(id: string): Promise<EquipmentVariable[]> { const res = await http.get<EquipmentVariable[]>(`/equipment/${id}/variables`); return res.data; }
-export async function apiSetEquipmentVariables(id: string, body: { variable_ids: string[]; }): Promise<{ ok: boolean }> { const res = await http.put<{ ok: boolean }>(`/equipment/${id}/variables`, body); return res.data; }
 export async function apiDeleteEquipment(id: string): Promise<void> { await http.delete(`/equipment/${id}`); }
 
 // ============================================================
@@ -49,7 +46,7 @@ export async function apiArchiveComponent(componentId: string): Promise<void> { 
 export async function apiRestoreComponent(componentId: string): Promise<void> { await http.patch(`/components/${componentId}/restore`); }
 export async function apiActivateVersion(versionId: string): Promise<void> { await http.post(`/components/${versionId}/activate`); }
 export async function apiDeleteComponent(componentId: string): Promise<void> { await http.delete(`/components/${componentId}`); }
-export async function apiPersistRunAsFact(runId: string, body: { object_id: string; template_version_id?: string | null; custom_data?: { metadata: Record<string, unknown>; points?: { name: string; value: unknown; unit: string | null }[]; series?: unknown[]; data?: Record<string, unknown>[] } | null; }): Promise<PersistFactResult> { const res = await http.post<PersistFactResult>(`/flows/runs/${runId}/persist-fact`, body); return res.data; }
+export async function apiPersistRunAsFact(runId: string, body: { object_id: string; custom_data?: { metadata: Record<string, unknown>; points?: { name: string; value: unknown; unit: string | null }[]; series?: unknown[]; data?: Record<string, unknown>[] } | null; }): Promise<PersistFactResult> { const res = await http.post<PersistFactResult>(`/flows/runs/${runId}/persist-fact`, body); return res.data; }
 
 // ============================================================
 // V2 Flows API
@@ -62,7 +59,6 @@ export type FlowNodeExecution = { id: string; node_id: string; status: string; i
 export type FlowRunDetail = FlowRunSummary & { node_executions: FlowNodeExecution[]; nodes: FlowNodeExecution[]; };
 export type FlowNodeSchema = { node_id: string; component_name: string; component_version: string; params?: Record<string, unknown>; input_bindings?: Record<string, string>; };
 export type FlowEdgeSchema = { source_node: string; source_port: string; target_node: string; target_port: string; };
-export type FactTemplateVersionItem = { id: string; code: string; display_name: string; fact_type: string; status: string; version_count: number; latest_version: { id: string; template_id: string; version: number; display_name: string; fact_type: string; } | null; };
 
 export async function apiCreateFlow(body: { display_name: string; department_id?: string | null; project_name?: string | null; operator: string; experimental_object_code?: string | null; nodes?: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; }): Promise<FlowSummary> { const res = await http.post<FlowSummary>('/flows/', body); return res.data; }
 export async function apiPublishFlow(flowId: string, body: { nodes: FlowNodeSchema[]; edges?: FlowEdgeSchema[]; random_seed?: number; }): Promise<FlowSummary> { await http.post(`/flows/${flowId}/publish`, body); return apiGetFlow(flowId); }
@@ -72,7 +68,6 @@ export async function apiArchiveFlow(flowId: string): Promise<FlowSummary> { con
 export async function apiRestoreFlow(flowId: string): Promise<FlowSummary> { const res = await http.post<FlowSummary>(`/flows/${flowId}/restore`); return { ...res.data, latest_version: res.data.latest_version ?? null }; }
 export async function apiDeleteFlow(flowId: string): Promise<void> { await http.delete(`/flows/${flowId}`); }
 export async function apiUpdateFlow(flowId: string, displayName: string, departmentId?: string | null, projectName?: string | null, operator?: string | null): Promise<FlowSummary> { const res = await http.patch<FlowSummary>(`/flows/${flowId}`, { display_name: displayName, department_id: departmentId ?? null, project_name: projectName ?? null, operator: operator ?? null }); return { ...res.data, latest_version: res.data.latest_version ?? null }; }
-export async function apiListFactTemplateVersions(): Promise<FactTemplateVersionItem[]> { const res = await http.get<{ items: FactTemplateVersionItem[] }>('/templates', { params: { page_size: 100 } }); return res.data.items; }
 export async function apiCreateFlowRun(flowId: string, body: { inputs?: Record<string, unknown> }): Promise<FlowRunSummary> { const res = await http.post<FlowRunSummary>(`/flows/${flowId}/runs`, body); return res.data; }
 export async function apiListFlowRuns(flowId: string): Promise<FlowRunSummary[]> { const res = await http.get<FlowRunSummary[]>(`/flows/${flowId}/runs`); return res.data; }
 export async function apiResumeFlowRun(runId: string): Promise<FlowRunSummary> { const res = await http.post<FlowRunSummary>(`/flows/runs/${runId}/resume`); return res.data; }

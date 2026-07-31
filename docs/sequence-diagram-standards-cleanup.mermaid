@@ -1,0 +1,25 @@
+sequenceDiagram
+    participant Client
+    participant Router as flows.py / facts router
+    participant FactService
+    participant FactRepo as FactRepository
+    participant DB
+
+    Note over Client,DB: 简化后的 Fact 创建流程（无 template_version_id）
+
+    Client->>Router: POST /flows/{run_id}/persist-fact
+    Note over Router: PersistFactRequest { object_id, custom_data }
+    Router->>FactService: create(CreateFactCommand)
+    Note over FactService: fact_type="experiment_run"<br/>template_version_id 已删除<br/>不再校验模板发布状态
+    FactService->>FactService: 校验 fact_type ∈ FactType 枚举
+    FactService->>FactRepo: find_by_idempotency_key(org_id, key)
+    FactRepo->>DB: SELECT fact WHERE idempotency_key = ?
+    DB-->>FactRepo: None (新事实)
+    FactService->>FactService: 校验 object_id 属于组织
+    FactService->>FactRepo: insert_fact(session, org_id, fact_type, object_id, ...)
+    Note over FactRepo: 无 template_version_id 参数
+    FactRepo->>DB: INSERT INTO fact (...)<br/>不含 template_version_id 列
+    DB-->>FactRepo: Fact ORM
+    FactRepo-->>FactService: Fact
+    FactService-->>Router: FactRef
+    Router-->>Client: PersistFactResponse

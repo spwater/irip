@@ -1,97 +1,16 @@
 /**
- * V1 Standards + Objects + Templates + Methods + Packages + Ingestions API
+ * V1 Objects + Object Types + Ingestions preview API
  *
- * 从 client.ts 拆分，通过 re-export 保持兼容。
+ * 标准层空表清理（migration 0057）后仅保留 Objects / Object Types /
+ * Ingestions preview 相关函数。Variables / Templates / Packages /
+ * Mapping 相关函数已删除（对应后端表与路由已移除）。
  */
 import { http } from './client';
 import type {
   CursorPage,
-  VariableSummary,
-  VariableDetail,
-  VariableVersion,
   IndustrialObject,
-  ObjectRelation,
-  DescendantsResponse,
-  TemplateSummary,
-  MethodSummary,
-  PackageSummary,
   SourcePreview,
-  MappingRankResponse,
 } from './types';
-
-// ============================================================
-// Standards API（/standards）
-// ============================================================
-
-export async function apiCreateVariable(body: {
-  code: string;
-  display_name: string;
-  data_type: string;
-  canonical_unit?: string;
-  quantity_kind?: string;
-  valid_range?: string[];
-}): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>('/standards/variables', body);
-  return res.data;
-}
-
-export async function apiListVariables(params?: {
-  status?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<CursorPage<VariableSummary>> {
-  const res = await http.get<CursorPage<VariableSummary>>('/standards/variables', { params });
-  return res.data;
-}
-
-export async function apiGetVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.get<VariableDetail>(`/standards/variables/${variableId}`);
-  return res.data;
-}
-
-export async function apiListVariableVersions(variableId: string): Promise<VariableVersion[]> {
-  const res = await http.get<VariableVersion[]>(`/standards/variables/${variableId}/versions`);
-  return res.data;
-}
-
-export async function apiSubmitVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/submit`);
-  return res.data;
-}
-
-export async function apiPublishVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/publish`);
-  return res.data;
-}
-
-export async function apiRejectVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/reject`);
-  return res.data;
-}
-
-export async function apiDeprecateVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/deprecate`);
-  return res.data;
-}
-
-export async function apiResubmitVariable(variableId: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/resubmit`);
-  return res.data;
-}
-
-export async function apiAddVariableAlias(variableId: string, alias: string): Promise<VariableDetail> {
-  const res = await http.post<VariableDetail>(`/standards/variables/${variableId}/aliases`, { alias });
-  return res.data;
-}
-
-export async function apiConvertUnits(params: {
-  value: number;
-  from_unit: string;
-  to_unit: string;
-}): Promise<{ value: number; from_unit: string; to_unit: string }> {
-  const res = await http.get<{ value: number; from_unit: string; to_unit: string }>('/standards/units/convert', { params });
-  return res.data;
-}
 
 // ============================================================
 // Objects API（/objects）
@@ -101,7 +20,6 @@ export async function apiCreateObject(body: {
   display_name: string;
   object_type: string;
   description?: string;
-  parent_id?: string;
   equipment_id?: string;
   department_id?: string;
   visible_departments?: string[];
@@ -186,174 +104,6 @@ export async function apiDeleteObjectType(typeId: string): Promise<void> {
   await http.delete(`/object-types/${typeId}`);
 }
 
-export async function apiAddObjectRelation(objectId: string, body: {
-  target_id: string;
-  relation_type: string;
-  description?: string;
-}): Promise<ObjectRelation> {
-  const res = await http.post<ObjectRelation>(`/objects/${objectId}/relations`, body);
-  return res.data;
-}
-
-export async function apiRemoveObjectRelation(objectId: string, relationId: string): Promise<void> {
-  await http.delete(`/objects/${objectId}/relations`, { params: { relation_id: relationId } });
-}
-
-export async function apiListObjectRelations(objectId: string): Promise<ObjectRelation[]> {
-  const res = await http.get<ObjectRelation[]>(`/objects/${objectId}/relations`);
-  return res.data;
-}
-
-/** Alias for apiListObjectRelations */
-export const apiGetObjectRelations = apiListObjectRelations;
-
-export async function apiGetObjectDescendants(objectId: string): Promise<DescendantsResponse> {
-  const res = await http.get<DescendantsResponse>(`/objects/${objectId}/descendants`);
-  return res.data;
-}
-
-// ============================================================
-// Templates API（/templates）
-// ============================================================
-
-export async function apiCreateTemplate(body: {
-  code: string;
-  name_zh: string;
-  description?: string;
-}): Promise<TemplateSummary> {
-  const res = await http.post<TemplateSummary>('/templates', body);
-  return res.data;
-}
-
-export async function apiListTemplates(params?: {
-  status?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<CursorPage<TemplateSummary>> {
-  const res = await http.get<CursorPage<TemplateSummary>>('/templates', { params });
-  return res.data;
-}
-
-export async function apiGetTemplate(templateId: string): Promise<TemplateSummary> {
-  const res = await http.get<TemplateSummary>(`/templates/${templateId}`);
-  return res.data;
-}
-
-export async function apiSubmitTemplate(templateId: string): Promise<TemplateSummary> {
-  const res = await http.post<TemplateSummary>(`/templates/${templateId}/submit`);
-  return res.data;
-}
-
-export async function apiPublishTemplate(templateId: string): Promise<TemplateSummary> {
-  const res = await http.post<TemplateSummary>(`/templates/${templateId}/publish`);
-  return res.data;
-}
-
-export async function apiRejectTemplate(templateId: string): Promise<TemplateSummary> {
-  const res = await http.post<TemplateSummary>(`/templates/${templateId}/reject`);
-  return res.data;
-}
-
-export async function apiDeprecateTemplate(templateId: string): Promise<TemplateSummary> {
-  const res = await http.post<TemplateSummary>(`/templates/${templateId}/deprecate`);
-  return res.data;
-}
-
-export async function apiAddObservationRequirement(templateId: string, body: {
-  variable_id: string;
-  required: boolean;
-}): Promise<unknown> {
-  const res = await http.post(`/templates/${templateId}/observations`, body);
-  return res.data;
-}
-
-// ============================================================
-// Methods API（/methods）
-// ============================================================
-
-export async function apiCreateMethod(body: {
-  code: string;
-  name_zh: string;
-  description?: string;
-}): Promise<MethodSummary> {
-  const res = await http.post<MethodSummary>('/methods', body);
-  return res.data;
-}
-
-export async function apiListMethods(params?: {
-  status?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<CursorPage<MethodSummary>> {
-  const res = await http.get<CursorPage<MethodSummary>>('/methods', { params });
-  return res.data;
-}
-
-export async function apiGetMethod(methodId: string): Promise<MethodSummary> {
-  const res = await http.get<MethodSummary>(`/methods/${methodId}`);
-  return res.data;
-}
-
-export async function apiSubmitMethod(methodId: string): Promise<MethodSummary> {
-  const res = await http.post<MethodSummary>(`/methods/${methodId}/submit`);
-  return res.data;
-}
-
-export async function apiPublishMethod(methodId: string): Promise<MethodSummary> {
-  const res = await http.post<MethodSummary>(`/methods/${methodId}/publish`);
-  return res.data;
-}
-
-// ============================================================
-// Packages API（/packages）
-// ============================================================
-
-export async function apiCreatePackage(body: {
-  code: string;
-  name_zh: string;
-  description?: string;
-}): Promise<PackageSummary> {
-  const res = await http.post<PackageSummary>('/packages', body);
-  return res.data;
-}
-
-export async function apiListPackages(params?: {
-  status?: string;
-  cursor?: string;
-  limit?: number;
-}): Promise<CursorPage<PackageSummary>> {
-  const res = await http.get<CursorPage<PackageSummary>>('/packages', { params });
-  return res.data;
-}
-
-export async function apiGetPackage(packageId: string): Promise<PackageSummary> {
-  const res = await http.get<PackageSummary>(`/packages/${packageId}`);
-  return res.data;
-}
-
-export async function apiAddPackageRef(packageId: string, body: {
-  ref_type: string;
-  ref_id: string;
-}): Promise<unknown> {
-  const res = await http.post(`/packages/${packageId}/refs`, body);
-  return res.data;
-}
-
-export async function apiSubmitPackage(packageId: string): Promise<PackageSummary> {
-  const res = await http.post<PackageSummary>(`/packages/${packageId}/submit`);
-  return res.data;
-}
-
-export async function apiPublishPackage(packageId: string): Promise<PackageSummary> {
-  const res = await http.post<PackageSummary>(`/packages/${packageId}/publish`);
-  return res.data;
-}
-
-export async function apiRejectPackage(packageId: string): Promise<PackageSummary> {
-  const res = await http.post<PackageSummary>(`/packages/${packageId}/reject`);
-  return res.data;
-}
-
 // ============================================================
 // Ingestions API（/ingestions）
 // ============================================================
@@ -377,46 +127,5 @@ export async function apiPreviewSource(body: {
   limit?: number;
 }): Promise<SourcePreview> {
   const res = await http.post<SourcePreview>('/ingestions/preview', body);
-  return res.data;
-}
-
-export async function apiRankMappings(body: {
-  columns: string[];
-  rows?: Record<string, unknown>[];
-}): Promise<MappingRankResponse> {
-  const res = await http.post<MappingRankResponse>('/ingestions/mapping/rank', body);
-  return res.data;
-}
-
-export async function apiCreateMappingProfile(body: {
-  name: string;
-  mappings: Record<string, string>;
-}): Promise<unknown> {
-  const res = await http.post('/ingestions/mapping-profiles', body);
-  return res.data;
-}
-
-export async function apiListMappingProfiles(): Promise<unknown[]> {
-  const res = await http.get<unknown[]>('/ingestions/mapping-profiles');
-  return res.data;
-}
-
-export async function apiGetMappingProfile(profileId: string): Promise<unknown> {
-  const res = await http.get<unknown>(`/ingestions/mapping-profiles/${profileId}`);
-  return res.data;
-}
-
-export async function apiSubmitMappingProfile(profileId: string): Promise<unknown> {
-  const res = await http.post(`/ingestions/mapping-profiles/${profileId}/submit`);
-  return res.data;
-}
-
-export async function apiPublishMappingProfile(profileId: string): Promise<unknown> {
-  const res = await http.post(`/ingestions/mapping-profiles/${profileId}/publish`);
-  return res.data;
-}
-
-export async function apiRejectMappingProfile(profileId: string): Promise<unknown> {
-  const res = await http.post(`/ingestions/mapping-profiles/${profileId}/reject`);
   return res.data;
 }

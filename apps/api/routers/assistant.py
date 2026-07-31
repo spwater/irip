@@ -113,7 +113,12 @@ class SendMessageRequest(BaseModel):
     provider_name: str = Field("offline", max_length=64, description="Provider 名称")
     thinking_enabled: bool = Field(False, description="是否启用思考模式")
     system_context: str | None = Field(
-        None, max_length=100000, description="系统上下文（如实验数据JSON）"
+        None, max_length=1000000, description="系统上下文（如实验数据JSON）"
+    )
+    # irip-ai-collab: @ 人的 user_id 数组；协作对话中 "ai" 表示 @AI 助手
+    mentions: list[str] = Field(
+        default_factory=list,
+        description="@ 人的 user_id 数组；协作对话中包含 'ai' 表示触发 AI 回复",
     )
 
 
@@ -124,6 +129,7 @@ class ConversationResponse(BaseModel):
     """对话响应。"""
 
     id: str
+    user_id: str = ""  # irip-ai-collab: 创建者 ID（前端兼容判断 owner）
     title: str
     provider_mode: str
     pinned: bool = False
@@ -131,6 +137,8 @@ class ConversationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     system_context: str | None = None
+    # irip-ai-collab: 参与者摘要
+    participants: list[dict[str, str]] = Field(default_factory=list)
 
 
 class ConversationListResponse(BaseModel):
@@ -169,6 +177,11 @@ class MessageResponse(BaseModel):
     citations: list[CitationItem] = Field(default_factory=list)
     uncertainty: str | None = None
     created_at: datetime
+    # irip-ai-collab: @ 人 + 发送者信息
+    mentions: list[str] = Field(default_factory=list)
+    sender_user_id: str | None = None
+    sender_display_name: str | None = None
+    sender_avatar_url: str | None = None
 
 
 class MessageListResponse(BaseModel):
@@ -239,6 +252,7 @@ async def create_conversation(
     )
     return ConversationResponse(
         id=str(ref.id),
+        user_id=str(ref.user_id),
         title=ref.title,
         provider_mode=ref.provider_mode,
         pinned=ref.pinned,
@@ -246,6 +260,7 @@ async def create_conversation(
         created_at=ref.created_at,
         updated_at=ref.updated_at,
         system_context=ref.system_context,
+        participants=getattr(ref, "participants", []),
     )
 
 
@@ -257,10 +272,12 @@ async def list_conversations(
     include_archived: bool = Query(False, description="是否包含已归档对话"),
     archived_only: bool = Query(False, description="是否只返回已归档对话"),
     keyword: str | None = Query(None, description="搜索关键词（标题 + 消息内容）"),
+    tab: str | None = Query(None, description="筛选标签（private / same_org / cross_org）"),
 ) -> ConversationListResponse:
-    """列出当前用户的对话（支持关键词搜索）。
+    """列出当前用户的对话（支持关键词搜索 + 三栏筛选）。
 
     有 keyword 时走搜索逻辑（ILIKE 标题 + 子查询消息内容），无 keyword 时走原逻辑。
+    irip-ai-collab: 有 tab 参数时走 list_conversations_with_tab 协作筛选逻辑。
 
     Args:
         current_user: 当前用户。
@@ -269,13 +286,25 @@ async def list_conversations(
         include_archived: 是否包含已归档对话。
         archived_only: 是否只返回已归档对话。
         keyword: 搜索关键词（可选）。
+        tab: 筛选标签（可选，private / same_org / cross_org）。
 
     Returns:
         ConversationListResponse: 对话列表。
     """
     org_id = await _resolve_org_id(current_user)
 
-    if keyword and keyword.strip():
+    # irip-ai-collab: tab 参数走协作筛选逻辑
+    if tab is not None and tab in ("private", "same_org", "cross_org"):
+        refs = await service.list_conversations_with_tab(
+            user_id=current_user.user_id,
+            organization_id=org_id,
+            tab=tab,
+            limit=limit,
+            include_archived=include_archived,
+            archived_only=archived_only,
+            keyword=keyword,
+        )
+    elif keyword and keyword.strip():
         refs = await service.search_conversations(
             user_id=current_user.user_id,
             organization_id=org_id,
@@ -296,6 +325,7 @@ async def list_conversations(
         items=[
             ConversationResponse(
                 id=str(r.id),
+                user_id=str(r.user_id),
                 title=r.title,
                 provider_mode=r.provider_mode,
                 pinned=r.pinned,
@@ -303,6 +333,7 @@ async def list_conversations(
                 created_at=r.created_at,
                 updated_at=r.updated_at,
                 system_context=r.system_context,
+                participants=getattr(r, "participants", []),
             )
             for r in refs
         ]
@@ -334,6 +365,7 @@ async def toggle_pin(
         if r.id == conversation_id:
             return ConversationResponse(
                 id=str(r.id),
+                user_id=str(r.user_id),
                 title=r.title,
                 provider_mode=r.provider_mode,
                 pinned=r.pinned,
@@ -368,6 +400,7 @@ async def toggle_archive(
         if r.id == conversation_id:
             return ConversationResponse(
                 id=str(r.id),
+                user_id=str(r.user_id),
                 title=r.title,
                 provider_mode=r.provider_mode,
                 pinned=r.pinned,
@@ -440,6 +473,7 @@ async def send_message(
         provider_name=body.provider_name,
         thinking_enabled=body.thinking_enabled,
         system_context=body.system_context,
+        mentions=body.mentions,
     )
     return AskResponse(
         conversation_id=str(conversation_id),
@@ -523,6 +557,10 @@ async def list_messages(
                 ],
                 uncertainty=r.uncertainty,
                 created_at=r.created_at,
+                mentions=getattr(r, "mentions", []) if isinstance(getattr(r, "mentions", None), list) else [],
+                sender_user_id=str(r.sender_user_id) if getattr(r, "sender_user_id", None) is not None else None,
+                sender_display_name=getattr(r, "sender_display_name", None),
+                sender_avatar_url=getattr(r, "sender_avatar_url", None),
             )
             for r in refs
         ]

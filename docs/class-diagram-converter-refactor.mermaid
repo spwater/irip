@@ -1,0 +1,95 @@
+classDiagram
+    class ConverterProtocol {
+        <<Protocol>>
+        +execute(params: dict) dict
+    }
+
+    class ConverterResult {
+        +metadata: dict
+        +points: list
+        +series: list
+        +to_dict() dict
+    }
+
+    class TextExtractor {
+        +extract_text(file_path, engine, image_dpi) str|list~str~
+        -_extract_pdf(file_path, image_dpi) str|list~str~
+        -_extract_pdf_as_images(file_path, image_dpi) list~str~
+        -_extract_image_file(file_path) list~str~
+        -_extract_docx(file_path) str
+        -_extract_xlsx(file_path) str
+    }
+
+    class PaddleOCRUtils {
+        -_engine: PPStructure
+        +get_pp_structure() PPStructure
+        +run_pp_structure(image_path) list~dict~
+        +parse_pp_to_structured(result) dict
+    }
+
+    class XrdConverter {
+        +execute(params) dict
+    }
+
+    class LlmConverter {
+        +execute(params) dict
+        -_call_llm(url, headers, body, timeout) Response
+        -_parse_llm_json(content) dict
+    }
+
+    class PdfConverter {
+        +execute(params) dict
+        -_extract_text_layer(file_path) str
+        -_render_to_images(file_path, dpi) list
+        +parse(file_path) dict
+        +convert(file_path) dict
+    }
+
+    class ExcelConverter {
+        +execute(params) dict
+        -_read_workbook(file_path) list
+        -_classify_sheet(sheet_name, rows) tuple
+        +parse(file_path) dict
+        +convert(file_path) dict
+    }
+
+    class WordConverter {
+        +execute(params) dict
+        -_read_docx(file_path) tuple
+        -_classify_content(paragraphs, tables) tuple
+        +parse(file_path) dict
+        +convert(file_path) dict
+    }
+
+    class ImageConverter {
+        +execute(params) dict
+        +parse(file_path) dict
+        +convert(file_path) dict
+    }
+
+    class ConverterRouter {
+        +SUFFIX_TO_PLUGIN: dict
+        +route_and_convert(file_path, params, ai_config_provider) dict
+        -_map_suffix(suffix) str
+        -_fallback_to_llm(params, ai_config_provider) dict
+    }
+
+    class PluginRegistry {
+        +register(name, plugin) void
+        +get(name) ConverterProtocol
+        +list_plugins() list~str~
+    }
+
+    ConverterProtocol <|.. XrdConverter
+    ConverterProtocol <|.. LlmConverter
+    ConverterProtocol <|.. PdfConverter
+    ConverterProtocol <|.. ExcelConverter
+    ConverterProtocol <|.. WordConverter
+    ConverterProtocol <|.. ImageConverter
+
+    LlmConverter ..> TextExtractor : uses
+    PdfConverter ..> TextExtractor : uses
+    PdfConverter ..> PaddleOCRUtils : uses
+    ImageConverter ..> PaddleOCRUtils : uses
+    ConverterRouter ..> PluginRegistry : uses
+    ConverterRouter ..> LlmConverter : fallback

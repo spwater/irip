@@ -27,13 +27,10 @@ from apps.api.routers.auth import auth_router, me_router
 from apps.api.routers.backups import backups_router
 from apps.api.routers.component_preview import component_preview_router
 from apps.api.routers.components import components_router
+from apps.api.routers.collaboration import collaboration_router
+from apps.api.routers.account import account_router
 from apps.api.routers.departments import departments_router
 from apps.api.routers.equipment import equipment_router
-from apps.api.routers.fact_templates import (
-    methods_router,
-    packages_router,
-    templates_router,
-)
 from apps.api.routers.facts import facts_router
 from apps.api.routers.files import files_router
 from apps.api.routers.flows import flows_router
@@ -46,7 +43,6 @@ from apps.api.routers.object_types import object_types_router
 from apps.api.routers.objects import objects_router
 from apps.api.routers.parameters import parameters_router
 from apps.api.routers.provenance import provenance_router
-from apps.api.routers.standards import standards_router
 from apps.api.routers.showcase import showcase_router
 from apps.api.routers.uploads import artifacts_router, uploads_router
 from apps.api.routers.user_departments import user_departments_router
@@ -210,12 +206,8 @@ def create_app() -> FastAPI:
     app.include_router(departments_router)
     app.include_router(equipment_router)
     app.include_router(user_departments_router)
-    app.include_router(standards_router)
     app.include_router(objects_router)
     app.include_router(object_types_router)
-    app.include_router(templates_router)
-    app.include_router(methods_router)
-    app.include_router(packages_router)
     app.include_router(ingestions_router)
     app.include_router(facts_router)
     app.include_router(provenance_router)
@@ -233,6 +225,9 @@ def create_app() -> FastAPI:
     app.include_router(ai_tools_router)
     app.include_router(files_router)
     app.include_router(component_preview_router)
+    # irip-ai-collab: 协作 + 账户管理路由
+    app.include_router(collaboration_router)
+    app.include_router(account_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

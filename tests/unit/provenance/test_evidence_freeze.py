@@ -1,8 +1,7 @@
-"""证据集冻结与配方发布单元测试（IRIP Task 17）。
+"""证据集冻结与配方发布单元测试。
 
 验证：
-- 冻结证据集后，所有成员引用精确事实修订（fact_revision > 0, status="frozen"）；
-- 质量过滤仅纳入质量通过的事实；
+- 冻结证据集后，所有成员引用事实（status="frozen"）；
 - 冻结后证据集不可变（再次冻结 → 错误）；
 - 配方发布创建不可变版本；
 - 推导使用不存在的组件 → AppError(code="component_unavailable")。
@@ -19,10 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.facts.observations import (
-    NormalizedObservationInput,
-    RawObservationInput,
-)
 from packages.facts.service import CreateFactCommand, FactService
 from packages.provenance.evidence import EvidenceService
 from packages.provenance.recipes import RecipeService
@@ -46,7 +41,6 @@ async def evidence_service(
     yield service
 
     # 清理证据集相关数据
-    # T03/H-01: evidence_set_version 现在是不可变表，需要临时禁用触发器才能清理
     with sync_engine.connect() as conn:
         conn.execute(sa.text("SET LOCAL session_replication_role = replica"))
         conn.execute(
@@ -112,33 +106,13 @@ def _make_fact_command(
     idempotency_key: str | None = None,
 ) -> CreateFactCommand:
     """构建创建事实命令的辅助函数。"""
-    raw_id = new_id()
     return CreateFactCommand(
         fact_type="experiment_run",
-        template_version_id=setup["template_version_id"],
         organization_id=setup["organization_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
         ended_at=datetime(2026, 1, 2, tzinfo=UTC),
-        method_version_id=setup["method_version_id"],
-        raw=(
-            RawObservationInput(
-                id=raw_id,
-                source_path="particle_size",
-                source_value=value,
-                source_unit="um",
-            ),
-        ),
-        normalized=(
-            NormalizedObservationInput(
-                variable_version_id=setup["variable_version_id"],
-                raw_observation_id=raw_id,
-                value=value,
-                unit="um",
-            ),
-        ),
-        artifacts=(),
         idempotency_key=idempotency_key,
         created_by=setup["actor_id"],
     )
@@ -148,25 +122,24 @@ class TestEvidenceFreeze:
     """证据集冻结测试。"""
 
     @pytest.mark.asyncio
-    async def test_frozen_evidence_members_reference_exact_revisions(
+    async def test_frozen_evidence_members_reference_facts(
         self,
         evidence_service: EvidenceService,
         fact_service: FactService,
         fact_setup: dict,
     ) -> None:
-        """冻结证据集后，所有成员引用精确事实修订。
+        """冻结证据集后，所有成员引用事实。
 
         验证：
         1. 创建事实；
         2. 创建证据集；
         3. 冻结证据集；
-        4. 所有成员 fact_revision > 0；
+        4. 所有成员 fact_id 存在；
         5. 证据集 status="frozen"。
         """
         # 1. 创建事实
         command = _make_fact_command(fact_setup, subject_id="EV-FREEZE-001")
         ref = await fact_service.create(command)
-        assert ref.revision == 1
 
         # 2. 创建证据集
         create_result = await evidence_service.create_set("Test Evidence Set")
@@ -178,11 +151,10 @@ class TestEvidenceFreeze:
         assert ev_ref.version == 1
         assert ev_ref.member_count >= 1
 
-        # 4. 验证成员引用精确修订
+        # 4. 验证成员引用事实
         members = await evidence_service.list_members(set_id)
         assert len(members) >= 1
         for m in members:
-            assert m.fact_revision > 0
             assert m.decision == "included"
 
         # 验证包含刚创建的事实
@@ -192,54 +164,6 @@ class TestEvidenceFreeze:
         # 5. 验证证据集状态
         set_detail = await evidence_service.get_set(set_id)
         assert set_detail["status"] == "frozen"
-
-    @pytest.mark.asyncio
-    async def test_freeze_with_quality_filter(
-        self,
-        evidence_service: EvidenceService,
-        fact_service: FactService,
-        fact_setup: dict,
-        async_session_factory: async_sessionmaker[AsyncSession],
-    ) -> None:
-        """质量过滤仅纳入质量通过的事实。
-
-        流程：
-        1. 创建事实；
-        2. 手动插入 quality_assessment 记录（overall_status="passed"）；
-        3. 创建证据集并按 quality="passed" 过滤冻结；
-        4. 验证成员包含该事实。
-        """
-        # 1. 创建事实
-        command = _make_fact_command(fact_setup, subject_id="EV-QUALITY-001")
-        ref = await fact_service.create(command)
-
-        # 2. 插入 quality_assessment 记录
-        from packages.common.database import session_scope
-
-        async with session_scope(async_session_factory) as session:
-            await session.execute(
-                sa.text(
-                    "INSERT INTO quality_assessment "
-                    "(fact_revision_id, overall_status, summary, results) "
-                    "VALUES (:fr_id, 'passed', "
-                    '\'{"passed": 1, "warning": 0, "blocked": 0}\'::jsonb, '
-                    "'[]'::jsonb)"
-                ),
-                {"fr_id": ref.revision_id},
-            )
-
-        # 3. 创建证据集并按质量过滤冻结
-        create_result = await evidence_service.create_set("Quality Filter Set")
-        set_id = create_result["set_id"]
-
-        ev_ref = await evidence_service.freeze(set_id, fact_filter={"quality": "passed"})
-        assert ev_ref.status == "frozen"
-        assert ev_ref.member_count >= 1
-
-        # 4. 验证成员包含该事实
-        members = await evidence_service.list_members(set_id)
-        member_fact_ids = {m.fact_id for m in members}
-        assert ref.fact_id in member_fact_ids
 
     @pytest.mark.asyncio
     async def test_frozen_set_immutable(

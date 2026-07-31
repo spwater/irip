@@ -1,13 +1,13 @@
-"""推导回放与溯源图集成测试（IRIP Task 17）。
+"""推导回放与溯源图集成测试（IRIP Task 17，标准层空表清理后精简版）。
 
 验证：
 - 回放推导运行产生相同 output_digest 但不同 run id；
 - 溯源图连通推导 → 事实 → 观察值；
 - 相同证据 + 相同配方 → 相同 output_digest（确定性）。
 
-设置完整的 L1→L2→L2.5 证据链：
-已发布变量 → 已发布模板 → 已发布方法 → 工业对象 → 创建事实 →
-冻结证据集 → 发布配方 → 创建推导运行 → 回放 → 溯源图
+原 L1 标准链（已发布变量 → 已发布模板）依赖已删除的 Variable /
+VariableVersion / FactTemplate / FactTemplateVersion（migration 0057）。
+provenance_setup 仅创建工业对象，CreateFactCommand 不再需要 template_version_id。
 
 使用真实 DB session（非 mock），验证完整确定性回放。
 """
@@ -21,19 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
 from packages.common.ids import new_id
-from packages.facts.observations import (
-    NormalizedObservationInput,
-    RawObservationInput,
-)
 from packages.facts.service import CreateFactCommand, FactService
 from packages.provenance.derivations import DerivationService
 from packages.provenance.evidence import EvidenceService
 from packages.provenance.graph import ProvenanceGraphService
 from packages.provenance.recipes import RecipeService
-from packages.standards.methods import Method, MethodVersion
 from packages.standards.objects import IndustrialObject
-from packages.standards.templates import FactTemplate, FactTemplateVersion
-from packages.standards.variables import Variable, VariableVersion
 
 
 @pytest.fixture
@@ -42,7 +35,7 @@ async def provenance_setup(
     test_user: object,
     sync_engine,
 ) -> dict:
-    """创建完整的 L1 标准链 + L2 事实。
+    """创建工业对象供创建事实时引用。
 
     返回所有创建实体的 ID，供测试使用。
     测试后自动清理。
@@ -50,77 +43,11 @@ async def provenance_setup(
     org_id = test_user.organization_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
-    variable_id = new_id()
-    variable_version_id = new_id()
-    method_id = new_id()
-    method_version_id = new_id()
     object_id = new_id()
-    template_id = new_id()
-    template_version_id = new_id()
 
     now = datetime.now(UTC)
 
     async with session_scope(async_session_factory) as session:
-        # L1: 已发布变量
-        variable = Variable(
-            id=variable_id,
-            organization_id=org_id,
-            code=f"prov_var_{variable_id.hex[:8]}",
-            display_name="溯源测试变量",
-            data_type="number",
-            canonical_unit="mm",
-            quantity_kind="length",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(variable)
-        var_version = VariableVersion(
-            id=variable_version_id,
-            variable_id=variable_id,
-            version=1,
-            code=variable.code,
-            display_name=variable.display_name,
-            data_type="number",
-            canonical_unit="mm",
-            quantity_kind="length",
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(var_version)
-
-        # L1: 已发布方法
-        method = Method(
-            id=method_id,
-            organization_id=org_id,
-            code=f"prov_method_{method_id.hex[:8]}",
-            display_name="溯源测试方法",
-            description="端到端测试方法",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(method)
-        method_version = MethodVersion(
-            id=method_version_id,
-            method_id=method_id,
-            version=1,
-            code=method.code,
-            display_name=method.display_name,
-            description=method.description,
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(method_version)
-
         # L1: 工业对象
         obj = IndustrialObject(
             id=object_id,
@@ -134,54 +61,10 @@ async def provenance_setup(
             lock_version=0,
         )
         session.add(obj)
-
-        # L1: 已发布事实模板
-        template = FactTemplate(
-            id=template_id,
-            organization_id=org_id,
-            code=f"prov_tpl_{template_id.hex[:8]}",
-            display_name="溯源测试模板",
-            fact_type="experiment_run",
-            status="published",
-            version_count=1,
-            created_at=now,
-            updated_at=now,
-            lock_version=0,
-        )
-        session.add(template)
-        template_version = FactTemplateVersion(
-            id=template_version_id,
-            template_id=template_id,
-            version=1,
-            code=template.code,
-            display_name=template.display_name,
-            fact_type="experiment_run",
-            required_conditions=[],
-            observations=[
-                {
-                    "variable_version_id": str(variable_version_id),
-                    "required": True,
-                    "cardinality": "one",
-                }
-            ],
-            required_artifact_roles=[],
-            quality_rule_codes=[],
-            status="published",
-            published_at=now,
-            published_by=actor_id,
-            lock_version=0,
-        )
-        session.add(template_version)
         await session.flush()
 
     yield {
-        "variable_id": variable_id,
-        "variable_version_id": variable_version_id,
-        "method_id": method_id,
-        "method_version_id": method_version_id,
         "object_id": object_id,
-        "template_id": template_id,
-        "template_version_id": template_version_id,
         "organization_id": org_id,
         "actor_id": actor_id,
     }
@@ -223,52 +106,7 @@ async def provenance_setup(
         # L2: 事实
         conn.execute(
             sa.text(
-                "DELETE FROM quality_assessment WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_revision_link WHERE from_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_artifact WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM normalized_observation WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM raw_observation WHERE fact_revision_id IN ("
-                "SELECT fr.id FROM fact_revision fr "
-                "JOIN fact f ON fr.fact_id = f.id "
-                "WHERE f.organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM fact_revision WHERE fact_id IN ("
+                "DELETE FROM fact_data_index WHERE fact_id IN ("
                 "SELECT id FROM fact WHERE organization_id = :oid)"
             ),
             {"oid": org_id},
@@ -279,40 +117,7 @@ async def provenance_setup(
         )
         # L1
         conn.execute(
-            sa.text(
-                "DELETE FROM fact_template_version WHERE template_id IN ("
-                "SELECT id FROM fact_template WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM fact_template WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM method_version WHERE method_id IN ("
-                "SELECT id FROM method WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM method WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
             sa.text("DELETE FROM industrial_object WHERE organization_id = :oid"),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text(
-                "DELETE FROM variable_version WHERE variable_id IN ("
-                "SELECT id FROM variable WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM variable WHERE organization_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -324,33 +129,13 @@ def _make_fact_command(
     value: str,
 ) -> CreateFactCommand:
     """构建创建事实命令。"""
-    raw_id = new_id()
     return CreateFactCommand(
         fact_type="experiment_run",
-        template_version_id=setup["template_version_id"],
         organization_id=setup["organization_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
         ended_at=datetime(2026, 1, 2, tzinfo=UTC),
-        method_version_id=setup["method_version_id"],
-        raw=(
-            RawObservationInput(
-                id=raw_id,
-                source_path="particle_size",
-                source_value=value,
-                source_unit="um",
-            ),
-        ),
-        normalized=(
-            NormalizedObservationInput(
-                variable_version_id=setup["variable_version_id"],
-                raw_observation_id=raw_id,
-                value=value,
-                unit="um",
-            ),
-        ),
-        artifacts=(),
         idempotency_key=None,
         created_by=setup["actor_id"],
     )
@@ -546,9 +331,8 @@ class TestProvenanceGraph:
         4. 创建推导运行；
         5. 获取溯源图；
         6. 图包含 derivation_run 节点；
-        7. 图包含 fact_revision 节点；
-        8. 图包含 observation 节点；
-        9. 边连通 derivation_run → fact_revision → observation。
+        7. 图包含 fact 节点；
+        8. 边连通 derivation_run → fact。
         """
         org_id = provenance_setup["organization_id"]
         actor_id = provenance_setup["actor_id"]
@@ -621,60 +405,19 @@ class TestProvenanceGraph:
         assert len(run_nodes) >= 1
         assert any(n.id == run_ref.id for n in run_nodes)
 
-        # 7. 图包含 fact_revision 节点
-        fr_nodes = [n for n in graph.nodes if n.node_type == "fact_revision"]
-        assert len(fr_nodes) >= 1
-        assert any(n.id == fact_ref.revision_id for n in fr_nodes)
+        # 7. 图包含 fact 节点
+        fact_nodes = [n for n in graph.nodes if n.node_type == "fact"]
+        assert len(fact_nodes) >= 1
 
-        # 8. 图包含 observation 节点
-        obs_nodes = [n for n in graph.nodes if n.node_type == "observation"]
-        assert len(obs_nodes) >= 1
-
-        # 9. 边连通 derivation_run → fact_revision → observation
+        # 8. 边连通 derivation_run → fact
         # 验证存在 selected_from 边
         selected_from_edges = [e for e in graph.edges if e.edge_type == "selected_from"]
         assert len(selected_from_edges) >= 1
 
-        # 验证 derivation_run → fact_revision 边
-        dr_to_fr_edges = [
+        # 验证 derivation_run → fact 边
+        dr_to_fact_edges = [
             e
             for e in graph.edges
-            if e.source_type == "derivation_run" and e.target_type == "fact_revision"
+            if e.source_type == "derivation_run" and e.target_type == "fact"
         ]
-        assert len(dr_to_fr_edges) >= 1
-
-        # 验证 fact_revision → observation 边
-        fr_to_obs_edges = [
-            e
-            for e in graph.edges
-            if e.source_type == "fact_revision" and e.target_type == "observation"
-        ]
-        assert len(fr_to_obs_edges) >= 1
-
-        # 验证溯源路径：从 derivation_run 可达 observation
-        # 构建邻接表
-        adjacency: dict[UUID, list[UUID]] = {}
-        for e in graph.edges:
-            if e.source_id not in adjacency:
-                adjacency[e.source_id] = []
-            adjacency[e.source_id].append(e.target_id)
-
-        # BFS 从 derivation_run 到 observation
-        visited: set[UUID] = set()
-        queue: list[UUID] = [run_ref.id]
-        reached_observations: set[UUID] = set()
-
-        while queue:
-            current = queue.pop(0)
-            if current in visited:
-                continue
-            visited.add(current)
-            for neighbor in adjacency.get(current, []):
-                # 检查是否为 observation 节点
-                neighbor_node = next((n for n in graph.nodes if n.id == neighbor), None)
-                if neighbor_node and neighbor_node.node_type == "observation":
-                    reached_observations.add(neighbor)
-                if neighbor not in visited:
-                    queue.append(neighbor)
-
-        assert len(reached_observations) >= 1, "溯源图应从推导运行可达观察值节点"
+        assert len(dr_to_fact_edges) >= 1

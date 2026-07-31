@@ -215,6 +215,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     mutationFn: apiArchiveComponent,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      void queryClient.refetchQueries({ queryKey: ['components'] });
       message.success('组件已归档');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
@@ -224,6 +225,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     mutationFn: apiRestoreComponent,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      void queryClient.refetchQueries({ queryKey: ['components'] });
       message.success('组件已恢复');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
@@ -233,6 +235,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     mutationFn: apiDeleteComponent,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['components'] });
+      void queryClient.refetchQueries({ queryKey: ['components'] });
       message.success('组件已删除');
     },
     onError: (err: unknown) => message.error(extractApiError(err)),

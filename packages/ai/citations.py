@@ -15,7 +15,7 @@ class Citation:
     """引用（不可变值对象）。
 
     Attributes:
-        object_type: 对象类型（如 ``"parameter_version"``、``"fact_revision"``、
+        object_type: 对象类型（如 ``"parameter_version"``、``"fact"``、
             ``"derivation_run"``、``"model_version"``、``"standard_variable"``）。
         object_id: 对象 UUID（字符串形式）。
         version: 版本标识（如 ``"v3"``、``"rev 2"``、``"run #5"``），

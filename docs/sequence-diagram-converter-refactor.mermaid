@@ -1,0 +1,68 @@
+%% 核心调用序列图：用户上传 PDF，选择 pdf_converter
+
+sequenceDiagram
+    participant U as 用户
+    participant EZ as EZScanExtractor
+    participant Reg as PluginRegistry
+    participant PC as PdfConverter
+    participant TE as TextExtractor
+    participant POCR as PaddleOCRUtils
+    participant LLM as LlmConverter
+
+    U->>EZ: 上传 PDF, 选择 tool_type=pdf_converter
+    EZ->>EZ: 下载 artifact 到临时文件
+    EZ->>EZ: tool_type != llm_converter → ai_config = None
+    EZ->>Reg: get("pdf_converter")
+    Reg-->>EZ: PdfConverter 实例
+    EZ->>PC: execute({file_path, ai_config: None})
+
+    PC->>PC: asyncio.to_thread(convert, file_path)
+    PC->>PC: parse(file_path)
+    PC->>PC: pymupdf 提取文字层
+    alt 文字层充足 (avg_chars >= 50)
+        PC->>PC: 启发式分类文本 → {metadata, points, series}
+    else 文字层不足
+        PC->>PC: pymupdf 渲染页面为图片
+        PC->>POCR: run_pp_structure(image_path)
+        POCR->>POCR: 懒加载 PP-StructureV3 模型
+        POCR-->>PC: OCR + 表格识别结果
+        PC->>PC: parse_pp_to_structured() → {metadata, points, series}
+    end
+
+    PC-->>EZ: {metadata, points, series}
+    EZ->>EZ: 构建 ObservationTable
+    EZ-->>U: ComponentResult
+
+%% ---
+
+%% Fallback 序列图：component_preview 调用路由器
+
+sequenceDiagram
+    participant CP as ComponentPreview
+    participant R as ConverterRouter
+    participant Reg as PluginRegistry
+    participant EC as ExcelConverter
+    participant LLM as LlmConverter
+    participant ACP as AIConfigProvider
+
+    CP->>R: route_and_convert(file_path, params, ai_config_provider)
+    R->>R: 后缀 .xlsx → "excel_converter"
+    R->>Reg: get("excel_converter")
+    Reg-->>R: ExcelConverter 实例
+    R->>EC: execute({file_path, ...params})
+
+    alt Excel 解析成功
+        EC-->>R: {metadata, points, series}
+        R-->>CP: result
+    else Excel 解析失败
+        EC-->>R: raises ExcelConverterError
+        R->>R: 捕获异常, 准备 fallback
+        R->>ACP: get_ai_config()
+        ACP-->>R: ai_config dict
+        R->>Reg: get("llm_converter")
+        Reg-->>R: LlmConverter 实例
+        R->>LLM: execute({file_path, prompt, ai_config})
+        LLM->>LLM: extract_text → 调用 LLM → 解析 JSON
+        LLM-->>R: {metadata, points, series}
+        R-->>CP: result
+    end

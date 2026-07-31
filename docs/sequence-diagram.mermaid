@@ -1,108 +1,54 @@
 sequenceDiagram
-    autonumber
-    actor U as 用户
-    participant W as React Web
-    participant API as FastAPI
-    participant SVC as AuthService/JobService
-    participant AZ as AuthorizationService
+    participant C as Client
+    participant R as FactsRouter
+    participant S as FactService
+    participant Repo as FactRepository
     participant DB as PostgreSQL
-    participant DSP as OutboxDispatcher
-    participant R as Redis (broker)
-    participant WK as Celery Worker
-    participant L as WorkerLease
-    participant S3 as MinIO
-    participant AUD as AuditRecorder
 
-    rect rgb(240, 248, 255)
-    Note over U,AUD: 流程 A — 登录 + 刷新令牌旋转 + 重放检测
-    U->>W: 提交邮箱+密码
-    W->>API: POST /api/v1/auth/login
-    API->>SVC: login(email, password)
-    SVC->>DB: SELECT app_user WHERE email
-    SVC->>SVC: argon2id.verify()
-    alt 校验通过
-        SVC->>DB: INSERT refresh_session(family_id=new, digest, +7d)
-        SVC->>AUD: record(auth.login)
-        SVC-->>API: TokenPair(access 15min, refresh 7d)
-        API-->>W: 200 + HttpOnly SameSite Cookie
-    else 校验失败
-        SVC-->>API: AppError(invalid_credentials)
-        API-->>W: 401
-    end
+    Note over C,DB: 简化后的 Fact 创建流程（无版本链）
 
-    Note over W,DB: 15 分钟后 access token 过期
-    W->>API: POST /auth/refresh (Cookie)
-    API->>SVC: refresh(token)
-    SVC->>DB: SELECT refresh_session WHERE digest FOR UPDATE
-    alt 未撤销且未过期 (正常旋转)
-        SVC->>DB: UPDATE 当前行 revoked, replaced_by=new; INSERT 新行
-        SVC-->>API: 新 TokenPair
-        API-->>W: 200 + 新 Cookie
-    else 已撤销 (重放攻击)
-        SVC->>DB: UPDATE refresh_session SET revoked WHERE family_id (整族撤销)
-        SVC->>AUD: record(auth.refresh_replayed)
-        SVC-->>API: AppError(refresh_replayed)
-        API-->>W: 401
-    end
+    C->>R: POST /api/v1/facts (CreateFactRequest)
+    R->>S: create(CreateFactCommand)
+    S->>S: 校验 fact_type 合法
+    S->>S: 幂等检查（idempotency_key）
+
+    alt 幂等命中
+        S->>Repo: find_by_idempotency_key(org_id, key)
+        Repo->>DB: SELECT FROM fact WHERE org_id AND idempotency_key
+        DB-->>Repo: existing Fact
+        Repo-->>S: Fact
+        S-->>R: FactRef(fact_id, fact_type, subject_id, status)
+    else 新建
+        S->>S: 校验 template_version_id 已发布
+        S->>S: 校验 object_id 属于组织
+        S->>S: 校验 method_version_id 已发布（可选）
+        S->>Repo: insert_fact(org_id, template_version_id, fact_type, object_id, subject_id, method_version_id, flow_run_id, started_at, ended_at, task_code, task_name, department_name, operator, run_operator, equipment_name, status, idempotency_key, created_by)
+        Repo->>DB: INSERT INTO fact (...)
+        DB-->>Repo: Fact ORM
+        Repo-->>S: Fact
+        S-->>R: FactRef(fact_id, fact_type, subject_id, status)
     end
 
-    rect rgb(255, 248, 240)
-    Note over U,AUD: 流程 B — 作业提交 → Outbox → Celery → 租约 → 幂等提交
-    U->>W: 提交作业 (kind, payload, idem_key)
-    W->>API: POST /api/v1/jobs
-    API->>AZ: require(user, "job:create", org)
-    AZ-->>API: ok
-    API->>SVC: accept(kind, payload, key)
-    SVC->>DB: BEGIN; INSERT job(accepted); INSERT outbox_event(job.accepted); COMMIT
-    SVC-->>API: JobRef
-    API-->>W: 202 {job_id}
+    R-->>C: 201 FactResponse(fact_id, fact_type, subject_id, status)
 
-    loop 每 200ms
-        DSP->>DB: SELECT * FROM outbox_event WHERE delivered_at IS NULL
-        DSP->>R: celery.send_task(job_id)
-        DSP->>DB: UPDATE outbox_event SET delivered_at=now
-    end
+    Note over C,DB: 简化后的 Fact 搜索流程
 
-    WK->>L: acquire(job_id, owner, ttl=30s)
-    L->>DB: UPDATE job SET lease_owner, lease_expires_at, status=running WHERE 租约空闲
-    alt 租约冲突
-        L-->>WK: false → 任务不 ACK, Redis 重投
-    else 租约获取
-        loop 每 10s 心跳
-            WK->>L: heartbeat → 续租
-        end
-        WK->>S3: 写中间产物 tmp/jobs/<job_id>/
-        WK->>DB: BEGIN; UPDATE job SET status=succeeded, result WHERE id AND lock_version; COMMIT
-        Note over WK,DB: UNIQUE(org_id, idempotency_key) 拦截重复提交
-        WK->>L: release
-    end
+    C->>R: GET /api/v1/facts/search?q=粒度
+    R->>S: search(query, filters, cursor, page_size)
+    S->>Repo: search_facts(query, org_id, filters, cursor, page_size)
+    Repo->>DB: SELECT FROM fact WHERE search_vector @@ tsquery AND org_id AND filters ORDER BY created_at
+    DB-->>Repo: rows
+    Repo-->>S: [FactRef, next_cursor]
+    S-->>R: [FactRef, next_cursor]
+    R-->>C: FactListResponse(items, next_cursor)
 
-    Note over WK,DB: Worker 崩溃 → 心跳停止
-    DSP->>L: reap_expired()
-    L->>DB: UPDATE job SET status=queued, lease_owner=NULL WHERE lease_expires_at<now
-    end
+    Note over C,DB: 简化后的 Fact 详情获取流程
 
-    rect rgb(240, 255, 240)
-    Note over U,AUD: 流程 C — 工件上传 (预签名 + 去重 + 鉴权)
-    U->>W: 选择文件
-    W->>API: POST /artifacts/presign-upload {filename, size, sha256}
-    API->>AZ: require(user, "artifact:write", org)
-    API->>SVC: presign_upload(meta)
-    SVC->>DB: SELECT artifact_blob WHERE sha256
-    alt 已存在 (秒传)
-        SVC->>DB: INSERT artifact (指向已有 blob)
-        SVC-->>API: ArtifactRef
-        API-->>W: 201 {artifact_id, deduplicated:true}
-    else 不存在
-        SVC->>S3: presign PUT sha256/<前2>/<digest>
-        SVC-->>API: {upload_url}
-        API-->>W: 200 {upload_url}
-        W->>S3: PUT 文件 (直传)
-        W->>API: POST /artifacts/complete {object_key, sha256}
-        API->>SVC: 校验 size + sha256 + media_type
-        SVC->>DB: BEGIN; INSERT artifact_blob; INSERT artifact; COMMIT
-        SVC->>AUD: record(artifact.upload)
-        SVC-->>API: ArtifactRef
-        API-->>W: 201 {artifact_id}
-    end
-    end
+    C->>R: GET /api/v1/facts/{fact_id}
+    R->>S: get(fact_id)
+    S->>Repo: get_fact(fact_id, org_id)
+    Repo->>DB: SELECT FROM fact WHERE id AND org_id
+    DB-->>Repo: Fact
+    Repo-->>S: Fact
+    S-->>R: FactRef(fact_id, fact_type, subject_id, status)
+    R-->>C: FactResponse(fact_id, fact_type, subject_id, status, task_code, ...)

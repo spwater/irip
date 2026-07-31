@@ -108,13 +108,11 @@ class _FakeFactService:
 
     async def create(self, command: Any) -> Any:
         """模拟创建事实，返回含 fact_id 的伪引用。"""
-        from packages.facts.observations import FactRevisionRef
+        from packages.facts.observations import FactRef
 
         self.calls.append(command)
-        return FactRevisionRef(
+        return FactRef(
             fact_id=UUID("00000000-0000-0000-0000-000000000002"),
-            revision=1,
-            revision_id=UUID("00000000-0000-0000-0000-000000000003"),
             fact_type=command.fact_type,
             subject_id=command.subject_id,
             status="active",

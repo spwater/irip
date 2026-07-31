@@ -49,7 +49,7 @@ class OpenAICompatibleProvider:
         api_key: str,
         base_url: str,
         model: str,
-        timeout: float = 30.0,
+        timeout: float = 300.0,
         thinking_enabled: bool = False,
     ) -> None:
         """初始化 OpenAI 兼容 Provider。

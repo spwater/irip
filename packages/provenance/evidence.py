@@ -1,11 +1,10 @@
-"""证据集服务（IRIP Task 17）。
+"""证据集服务。
 
 EvidenceService 提供证据集的创建、冻结、查询与成员管理。
 
 核心不变量：
 1. frozen_immutable: 冻结后的证据集版本不可修改，保证可复现推导。
-2. exact_revisions: 冻结时记录每个成员的精确事实修订号和修订 ID。
-3. quality_filter: 冻结时可按质量状态过滤，仅纳入质量通过的事实修订。
+2. exact_facts: 冻结时记录每个成员的精确事实 ID。
 
 依赖注入 session_factory（事务管理）、organization_id（当前组织）、
 actor_id（操作人）。
@@ -24,29 +23,25 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.facts.entities import Fact, FactRevision
+from packages.facts.entities import Fact
 from packages.provenance.entities import EvidenceSet, EvidenceSetVersion
 
 
 @dataclass(frozen=True)
 class EvidenceMember:
-    """证据集成员（引用特定事实修订）。
+    """证据集成员（引用特定事实）。
 
-    冻结时创建，不可变。记录精确的事实修订号和修订 ID，
+    冻结时创建，不可变。记录精确的事实 ID，
     保证后续推导可复现。
 
     Attributes:
         fact_id: 事实 UUID。
-        fact_revision: 修订号。
-        fact_revision_id: 修订 UUID。
         observation_id: 特定观察值 UUID（可选）。
         decision: 纳入决定（included / excluded）。
         reason: 决定原因。
     """
 
     fact_id: UUID
-    fact_revision: int
-    fact_revision_id: UUID
     observation_id: UUID | None
     decision: Literal["included", "excluded"]
     reason: str
@@ -55,8 +50,6 @@ class EvidenceMember:
         """序列化为 JSONB 可存储的字典。"""
         return {
             "fact_id": str(self.fact_id),
-            "fact_revision": self.fact_revision,
-            "fact_revision_id": str(self.fact_revision_id),
             "observation_id": str(self.observation_id) if self.observation_id else None,
             "decision": self.decision,
             "reason": self.reason,
@@ -67,8 +60,6 @@ class EvidenceMember:
         """从字典反序列化。"""
         return cls(
             fact_id=UUID(str(d["fact_id"])),
-            fact_revision=int(d["fact_revision"]),
-            fact_revision_id=UUID(str(d["fact_revision_id"])),
             observation_id=UUID(str(d["observation_id"])) if d.get("observation_id") else None,
             decision=d["decision"],  # type: ignore[arg-type]
             reason=d.get("reason", ""),
@@ -165,20 +156,19 @@ class EvidenceService:
         set_id: UUID,
         fact_filter: dict | None = None,
     ) -> EvidenceSetRef:
-        """冻结证据集：查询符合条件的事实修订，创建不可变版本。
+        """冻结证据集：查询符合条件的事实，创建不可变版本。
 
         流程：
         1. 加载证据集（必须存在且为 draft 状态）；
-        2. 查询当前组织下的活跃事实的最新修订；
-        3. 可选按质量过滤（fact_filter={"quality": "passed"}）；
-        4. 为每个事实修订创建 EvidenceMember（decision="included"）；
-        5. 创建 evidence_set_version（不可变，members JSONB）；
-        6. 更新 evidence_set status 为 frozen；
-        7. 返回 EvidenceSetRef。
+        2. 查询当前组织下的活跃事实；
+        3. 为每个事实创建 EvidenceMember（decision="included"）；
+        4. 创建 evidence_set_version（不可变，members JSONB）；
+        5. 更新 evidence_set status 为 frozen；
+        6. 返回 EvidenceSetRef。
 
         Args:
             set_id: 证据集 UUID。
-            fact_filter: 过滤条件，如 {"quality": "passed"}。
+            fact_filter: 过滤条件（保留参数兼容，暂不用于质量过滤）。
 
         Returns:
             EvidenceSetRef: 证据集版本引用。
@@ -211,48 +201,31 @@ class EvidenceService:
                     fields={"set_id": str(set_id)},
                 )
 
-            # 2. 查询当前组织下活跃事实的最新修订
+            # 2. 查询当前组织下活跃事实
             stmt = (
-                sa.select(FactRevision)
-                .join(Fact, FactRevision.fact_id == Fact.id)
+                sa.select(Fact)
                 .where(
                     Fact.organization_id == self._org_id,
                     Fact.status == "active",
-                    FactRevision.revision == Fact.current_revision,
                 )
-                .order_by(FactRevision.created_at)
+                .order_by(Fact.created_at)
             )
 
-            # 3. 可选按质量过滤
-            if fact_filter and fact_filter.get("quality") == "passed":
-                # 关联 quality_assessment 表，筛选 overall_status = "passed"
-                qa_table = sa.table(
-                    "quality_assessment",
-                    sa.column("fact_revision_id", sa.UUID),
-                    sa.column("overall_status", sa.Text),
-                )
-                stmt = stmt.join(
-                    qa_table,
-                    qa_table.c.fact_revision_id == FactRevision.id,
-                ).where(qa_table.c.overall_status == "passed")
-
             result = await session.execute(stmt)
-            revisions = result.scalars().all()
+            facts = result.scalars().all()
 
-            # 4. 为每个事实修订创建 EvidenceMember
+            # 3. 为每个事实创建 EvidenceMember
             members: list[EvidenceMember] = []
-            for rev in revisions:
+            for fact in facts:
                 member = EvidenceMember(
-                    fact_id=rev.fact_id,
-                    fact_revision=rev.revision,
-                    fact_revision_id=rev.id,
+                    fact_id=fact.id,
                     observation_id=None,
                     decision="included",
                     reason="自动纳入",
                 )
                 members.append(member)
 
-            # 5. 创建 evidence_set_version
+            # 4. 创建 evidence_set_version
             version_number = 1
             version = EvidenceSetVersion(
                 id=new_id(),

@@ -103,19 +103,17 @@ async def _download_artifact(
 
 
 def _extract_file_content(file_path: Path) -> str | list[str]:
-    """根据文件后缀自动提取文本/图片（复用 ez_scan_extractor 逻辑）。
+    """根据文件后缀自动提取文本（复用公共 text_extractor）。
 
     Args:
         file_path: 临时文件路径。
 
     Returns:
-        str | list[str]: 文本内容或 base64 图片列表。
+        str: 文本内容（图片通过 PaddleOCR 提取为文本）。
     """
-    from packages.plugins.converters.llm_converter.converter import (
-        _extract_text,
-    )
+    from packages.plugins.converters.common.text_extractor import extract_text
 
-    return _extract_text(file_path, engine="auto")
+    return extract_text(file_path, engine="auto")
 
 
 async def _call_llm(
@@ -194,8 +192,7 @@ async def recommend_prompt(
     finally:
         file_path.unlink(missing_ok=True)
 
-    # 构建大模型请求：让 AI 分析文件并生成提示词
-    is_image_mode = isinstance(content, list)
+    # 构建大模型请求：让 AI 分析文件并生成提示词（纯文本模式，不使用多模态）
 
     # 优先从数据库读自定义 meta_prompt，没有才用内置默认
     _default_meta_prompt = (
@@ -286,25 +283,12 @@ async def recommend_prompt(
             "读取自定义 meta_prompt 失败，使用内置默认", exc_info=True
         )  # noqa: E501
 
-    if is_image_mode:
-        user_content: list[dict[str, Any]] = [
-            {"type": "text", "text": meta_prompt},
-        ]
-        for img_data_url in content:
-            user_content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": img_data_url},
-                }
-            )
-        messages = [{"role": "user", "content": user_content}]
-    else:
-        messages = [
-            {
-                "role": "user",
-                "content": f"{meta_prompt}\n\n文件内容：\n{content[:30000]}",
-            }
-        ]
+    messages = [
+        {
+            "role": "user",
+            "content": f"{meta_prompt}\n\n文件内容：\n{content}",
+        }
+    ]
 
     answer = await _call_llm(config, messages)
     return PromptRecommendResponse(prompt=answer)

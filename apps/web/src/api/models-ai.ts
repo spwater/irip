@@ -45,26 +45,137 @@ export async function apiListIngestionTools(): Promise<UnifiedToolDTO[]> {
 
 export type ToolCallSummary = { tool: string; args: Record<string, unknown>; summary: string; status: string; };
 export type Citation = { object_type: string; object_id: string; version: string; label: string; href: string; };
-export type ConversationSummary = { id: string; title: string; provider_mode: string; pinned: boolean; archived: boolean; created_at: string; updated_at: string; system_context: string | null; };
-export type AssistantMessage = { id: string; conversation_id: string; role: 'user' | 'assistant' | 'tool'; content: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; created_at: string; };
+export type ConversationSummary = {
+  id: string;
+  user_id: string;
+  title: string;
+  provider_mode: string;
+  pinned: boolean;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+  system_context: string | null;
+  /** irip-ai-collab: 参与者摘要列表 */
+  participants: { user_id: string; display_name: string; avatar_url: string | null }[];
+};
+export type AssistantMessage = {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content: string;
+  tool_calls: ToolCallSummary[];
+  citations: Citation[];
+  uncertainty: string | null;
+  created_at: string;
+  /** irip-ai-collab: @ 人的 user_id 数组 */
+  mentions: string[];
+  /** irip-ai-collab: 发送者用户 ID（AI 消息为 null） */
+  sender_user_id: string | null;
+  /** irip-ai-collab: 发送者显示名 */
+  sender_display_name: string | null;
+  /** irip-ai-collab: 发送者头像 URL */
+  sender_avatar_url: string | null;
+};
 export type AskResponse = { conversation_id: string; answer: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; provider_mode: string; };
 export type ToolInfo = { name: string; display_name: string; description: string; required_permission: string; };
 export type ProviderStatus = { provider_mode: string; whitelist_tools: ToolInfo[]; candidate_tools: ToolInfo[]; };
 
-type ConversationApiResponse = { id: string; title: string; provider_mode: string; pinned: boolean; archived: boolean; created_at: string; updated_at: string; system_context: string | null; };
-type MessageListApiResponse = { items: Array<{ id: string; conversation_id: string; role: string; content: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; created_at: string; }>; };
+type ConversationApiResponse = {
+  id: string;
+  user_id: string;
+  title: string;
+  provider_mode: string;
+  pinned: boolean;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+  system_context: string | null;
+  /** irip-ai-collab: 参与者摘要 */
+  participants: { user_id: string; display_name: string; avatar_url: string | null }[];
+};
+type MessageListApiResponse = { items: Array<{
+  id: string;
+  conversation_id: string;
+  role: string;
+  content: string;
+  tool_calls: ToolCallSummary[];
+  citations: Citation[];
+  uncertainty: string | null;
+  created_at: string;
+  /** irip-ai-collab: @ 人 + 发送者信息 */
+  mentions: string[];
+  sender_user_id: string | null;
+  sender_display_name: string | null;
+  sender_avatar_url: string | null;
+}>; };
 type ConversationListApiResponse = { items: ConversationApiResponse[]; };
 type ProviderStatusApiResponse = { provider_mode: string; whitelist_tools: ToolInfo[]; candidate_tools: ToolInfo[]; };
 type AskApiResponse = { conversation_id: string; answer: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null; provider_mode: string; };
 
-export async function apiCreateConversation(body: { title?: string; provider_mode?: string; }): Promise<ConversationSummary> { const res = await http.post<ConversationApiResponse>('/assistant/conversations', { title: body.title ?? '', provider_mode: body.provider_mode ?? 'offline' }); return res.data; }
-export async function apiListConversations(params?: { limit?: number; includeArchived?: boolean; archivedOnly?: boolean; keyword?: string; }): Promise<ConversationSummary[]> { const res = await http.get<ConversationListApiResponse>('/assistant/conversations', { params: { limit: params?.limit ?? 50, include_archived: params?.includeArchived ?? false, archived_only: params?.archivedOnly ?? false, keyword: params?.keyword ?? undefined } }); return res.data.items; }
+export async function apiCreateConversation(body: { title?: string; provider_mode?: string; }): Promise<ConversationSummary> {
+  const res = await http.post<ConversationApiResponse>('/assistant/conversations', { title: body.title ?? '', provider_mode: body.provider_mode ?? 'offline' });
+  return { ...res.data, participants: res.data.participants ?? [] };
+}
+
+export async function apiListConversations(params?: {
+  limit?: number;
+  includeArchived?: boolean;
+  archivedOnly?: boolean;
+  keyword?: string;
+  /** irip-ai-collab: 三栏筛选标签 */
+  tab?: 'private' | 'same_org' | 'cross_org';
+}): Promise<ConversationSummary[]> {
+  const res = await http.get<ConversationListApiResponse>('/assistant/conversations', {
+    params: {
+      limit: params?.limit ?? 50,
+      include_archived: params?.includeArchived ?? false,
+      archived_only: params?.archivedOnly ?? false,
+      keyword: params?.keyword ?? undefined,
+      tab: params?.tab ?? undefined,
+    },
+  });
+  return res.data.items.map((c) => ({ ...c, participants: c.participants ?? [] }));
+}
+
 export async function apiTogglePin(conversationId: string): Promise<ConversationSummary> { const res = await http.patch<ConversationSummary>(`/assistant/conversations/${conversationId}/pin`); return res.data; }
 export async function apiToggleArchive(conversationId: string): Promise<ConversationSummary> { const res = await http.patch<ConversationSummary>(`/assistant/conversations/${conversationId}/archive`); return res.data; }
 export async function apiDeleteConversation(conversationId: string): Promise<void> { await http.delete(`/assistant/conversations/${conversationId}`); }
 export async function apiCancelRequest(conversationId: string): Promise<void> { await http.post(`/assistant/conversations/${conversationId}/cancel`); }
-export async function apiSendMessage(conversationId: string, body: { question: string; provider_name?: string; thinking_enabled?: boolean; system_context?: string; }, signal?: AbortSignal): Promise<AskResponse> { const res = await http.post<AskApiResponse>(`/assistant/conversations/${conversationId}/messages`, { question: body.question, provider_name: body.provider_name ?? 'openai_compatible', thinking_enabled: body.thinking_enabled ?? false, system_context: body.system_context ?? null }, { signal }); return res.data; }
-export async function apiListMessages(conversationId: string): Promise<AssistantMessage[]> { const res = await http.get<MessageListApiResponse>(`/assistant/conversations/${conversationId}/messages`); return res.data.items.map((m) => ({ ...m, role: (m.role as 'user' | 'assistant' | 'tool') ?? 'user' })); }
+
+export async function apiSendMessage(
+  conversationId: string,
+  body: {
+    question: string;
+    provider_name?: string;
+    thinking_enabled?: boolean;
+    system_context?: string;
+    /** irip-ai-collab: @ 人的 user_id 数组 */
+    mentions?: string[];
+  },
+  signal?: AbortSignal,
+): Promise<AskResponse> {
+  const res = await http.post<AskApiResponse>(`/assistant/conversations/${conversationId}/messages`, {
+    question: body.question,
+    provider_name: body.provider_name ?? 'openai_compatible',
+    thinking_enabled: body.thinking_enabled ?? false,
+    system_context: body.system_context ?? null,
+    mentions: body.mentions ?? [],
+  }, { signal });
+  return res.data;
+}
+
+export async function apiListMessages(conversationId: string): Promise<AssistantMessage[]> {
+  const res = await http.get<MessageListApiResponse>(`/assistant/conversations/${conversationId}/messages`);
+  return res.data.items.map((m) => ({
+    ...m,
+    role: (m.role as 'user' | 'assistant' | 'tool') ?? 'user',
+    mentions: m.mentions ?? [],
+    sender_user_id: m.sender_user_id ?? null,
+    sender_display_name: m.sender_display_name ?? null,
+    sender_avatar_url: m.sender_avatar_url ?? null,
+  }));
+}
+
 export async function apiGetProviderStatus(): Promise<ProviderStatus> { const res = await http.get<ProviderStatusApiResponse>('/assistant/provider-status'); return res.data; }
 
 // ============================================================

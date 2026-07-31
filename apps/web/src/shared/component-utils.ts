@@ -105,6 +105,7 @@ export function buildManifestYaml(v: ComponentFormValues, originalName?: string)
     : 'name: iface_ffffffff  # 自动生成，无需修改';
   const lines: string[] = [
     nameLine,
+    'version: 1.0.0',
     'kind: ingestion',
     `display_name: "${yamlEscapeDouble(displayName)}"`,
     `description: "${yamlEscapeDouble(description)}"`,

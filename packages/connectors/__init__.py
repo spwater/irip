@@ -1,36 +1,31 @@
-"""连接器包：外部数据源接入与映射评分。
+"""连接器包：外部数据源接入与预览。
 
 公开导出：
-- 值类型与协议：ConnectorSource / PreviewTable / SourceRecord / MappingRule /
-  MappingCandidate / Connector（来自 contracts）。
-- ORM：MappingProfile / MappingProfileVersion / Secret / ProfileStatus /
-  SecretKind（来自 entities）。
-- 服务：MappingService / MappingProfileService / IngestionService / SecretStore
-  （来自 mapping）。
+- 值类型与协议：ConnectorSource / PreviewTable / SourceRecord / Connector
+  （来自 contracts）。
+- ORM：Secret / SecretKind（来自 entities）。
+- 服务：IngestionService / SecretStore（来自 mapping）。
 - 连接器实现：FileConnector / PostgresConnector / RestConnector。
 - 工厂：build_connector(source, secret_store) → Connector 实例。
+
+映射相关类（MappingRule / MappingCandidate / MappingProfile /
+MappingProfileVersion / ProfileStatus / MappingService /
+MappingProfileService）已随标准层空表清理删除（migration 0057）。
 """
 
 from packages.connectors.contracts import (
     Connector,
     ConnectorSource,
-    MappingCandidate,
-    MappingRule,
     PreviewTable,
     SourceRecord,
 )
 from packages.connectors.entities import (
-    MappingProfile,
-    MappingProfileVersion,
-    ProfileStatus,
     Secret,
     SecretKind,
 )
 from packages.connectors.file_connectors import FileConnector
 from packages.connectors.mapping import (
     IngestionService,
-    MappingProfileService,
-    MappingService,
     SecretStore,
 )
 from packages.connectors.postgres_connector import PostgresConnector
@@ -90,15 +85,8 @@ __all__ = [
     "ConnectorSource",
     "FileConnector",
     "IngestionService",
-    "MappingCandidate",
-    "MappingProfile",
-    "MappingProfileService",
-    "MappingProfileVersion",
-    "MappingRule",
-    "MappingService",
     "PostgresConnector",
     "PreviewTable",
-    "ProfileStatus",
     "RestConnector",
     "Secret",
     "SecretKind",

@@ -1,0 +1,202 @@
+classDiagram
+    %% ===== 新增 ORM 实体 =====
+    class ConversationParticipant {
+        +UUID conversation_id PK
+        +UUID user_id PK
+        +str role
+        +datetime joined_at
+    }
+
+    class ParticipantRef {
+        +UUID conversation_id
+        +UUID user_id
+        +str role
+        +datetime joined_at
+    }
+
+    class MentionableUserRef {
+        +UUID id
+        +str display_name
+        +str|None avatar_url
+        +list~str~ roles
+    }
+
+    %% ===== 修改的 ORM 实体 =====
+    class AIMessage {
+        +UUID id
+        +UUID conversation_id
+        +str role
+        +str content
+        +list tool_calls_json
+        +list citations_json
+        +list mentions_json
+        +UUID|None sender_user_id
+        +str|None sender_display_name
+        +str|None sender_avatar_url
+        +str|None uncertainty
+        +datetime created_at
+    }
+
+    class AppUser {
+        +UUID id
+        +UUID|None organization_id
+        +str email
+        +str display_name
+        +str password_hash
+        +str status
+        +list roles
+        +UUID|None department_id
+        +int token_version
+        +str|None avatar_url
+    }
+
+    class AIConversation {
+        +UUID id
+        +UUID organization_id
+        +UUID user_id
+        +str title
+        +str provider_mode
+        +bool pinned
+        +bool archived
+        +str|None system_context
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    %% ===== 关系 =====
+    AIConversation "1" --> "*" ConversationParticipant : conversation_id CASCADE
+    AppUser "1" --> "*" ConversationParticipant : user_id CASCADE
+    AIConversation "1" --> "*" AIMessage : conversation_id CASCADE
+    ConversationParticipant ..> ParticipantRef : 映射为
+
+    %% ===== 服务层 =====
+    class AIService {
+        -AIProvider _provider
+        -ToolRegistry _tool_registry
+        -async_sessionmaker _factory
+        -Clock _clock
+        +create_conversation() ConversationRef
+        +list_conversations() list~ConversationRef~
+        +list_conversations_with_tab() list~ConversationRef~
+        +add_participant() ParticipantRef
+        +remove_participant() None
+        +leave_conversation() None
+        +list_participants() list~ParticipantRef~
+        +list_mentionable_users() list~MentionableUserRef~
+        +ask() AIResponse
+        +list_messages() list~MessageRef~
+        +change_password() None
+        +update_profile() ProfileRef
+    }
+
+    class AccountService {
+        -async_sessionmaker _factory
+        -Clock _clock
+        +change_password(user_id, old_password, new_password) None
+        +update_profile(user_id, display_name?, avatar_url?) ProfileRef
+        +upload_avatar(user_id, file) str
+        +get_profile(user_id) ProfileRef
+    }
+
+    %% ===== 路由层 =====
+    class CollaborationRouter {
+        +POST /conversations/{id}/participants
+        +GET /conversations/{id}/participants
+        +DELETE /conversations/{id}/participants/{user_id}
+        +POST /conversations/{id}/leave
+        +GET /mentionable-users
+    }
+
+    class AccountRouter {
+        +GET /account/profile
+        +PATCH /account/profile
+        +POST /account/password
+        +POST /account/avatar
+    }
+
+    class AssistantRouter {
+        +GET /conversations?tab=private|same_org|cross_org
+        +POST /conversations/{id}/messages
+        +GET /conversations/{id}/messages
+    }
+
+    CollaborationRouter --> AIService : 调用
+    AccountRouter --> AccountService : 调用
+    AssistantRouter --> AIService : 调用
+
+    %% ===== Pydantic Schema =====
+    class InviteMemberRequest {
+        +str user_id
+    }
+
+    class ParticipantResponse {
+        +str user_id
+        +str display_name
+        +str|None avatar_url
+        +str role
+        +datetime joined_at
+    }
+
+    class ParticipantListResponse {
+        +list~ParticipantResponse~ items
+    }
+
+    class MentionableUserResponse {
+        +str id
+        +str display_name
+        +str|None avatar_url
+        +list~str~ roles
+    }
+
+    class ChangePasswordRequest {
+        +str old_password
+        +str new_password
+    }
+
+    class UpdateProfileRequest {
+        +str|None display_name
+        +str|None avatar_url
+    }
+
+    class ProfileResponse {
+        +str id
+        +str email
+        +str display_name
+        +str|None avatar_url
+        +list~str~ roles
+    }
+
+    class SendMessageRequest {
+        +str question
+        +str provider_name
+        +bool thinking_enabled
+        +str|None system_context
+        +list~str~ mentions
+    }
+
+    class MessageResponse {
+        +str id
+        +str conversation_id
+        +str role
+        +str content
+        +list tool_calls
+        +list citations
+        +list~str~ mentions
+        +str|None sender_display_name
+        +str|None sender_avatar_url
+        +str|None uncertainty
+        +datetime created_at
+    }
+
+    class ConversationResponse {
+        +str id
+        +str title
+        +str provider_mode
+        +bool pinned
+        +bool archived
+        +datetime created_at
+        +datetime updated_at
+        +str|None system_context
+        +str tab
+        +list~ParticipantSummary~ participants
+    }

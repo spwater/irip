@@ -57,9 +57,6 @@ import packages.provenance.entities  # noqa: F401, E402
 import packages.standards.methods  # noqa: F401, E402
 import packages.standards.object_type_dict  # noqa: F401, E402
 import packages.standards.objects  # noqa: F401, E402
-import packages.standards.packages  # noqa: F401, E402
-import packages.standards.templates  # noqa: F401, E402
-import packages.standards.variables  # noqa: F401, E402
 import packages.audit.events  # noqa: F401, E402
 import packages.ai.service  # noqa: F401, E402
 import packages.ai.tool_repository  # noqa: F401, E402

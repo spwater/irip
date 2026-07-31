@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     from packages.jobs.worker import JobExecutor, WorkerLeaseManager
 
 # H-02 修复：导入所有 ORM 模型模块，确保 Base.metadata 包含所有表定义，
-# 避免 SQLAlchemy 解析外键时找不到引用表（如 fact_revision.flow_run_id -> flow_run.id）。
+# 避免 SQLAlchemy 解析外键时找不到引用表（如 fact.flow_run_id -> flow_run.id）。
 import packages.ai.service  # noqa: F401, E402
 import packages.ai.tool_repository  # noqa: F401, E402
 import packages.audit.events  # noqa: F401, E402
@@ -52,12 +52,8 @@ import packages.jobs.outbox  # noqa: F401, E402
 import packages.models.entities  # noqa: F401, E402
 import packages.parameters.entities  # noqa: F401, E402
 import packages.provenance.entities  # noqa: F401, E402
-import packages.standards.methods  # noqa: F401, E402
 import packages.standards.object_type_dict  # noqa: F401, E402
 import packages.standards.objects  # noqa: F401, E402
-import packages.standards.packages  # noqa: F401, E402
-import packages.standards.templates  # noqa: F401, E402
-import packages.standards.variables  # noqa: F401, E402
 
 
 class RecordingTaskSender:

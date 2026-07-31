@@ -58,21 +58,28 @@ export function UsersPage(): JSX.Element {
   const [form] = Form.useForm();
   const [createForm] = Form.useForm();
 
-  // 仅 platform_administrator 可访问
+  // irip-ai-collab: 允许 platform_administrator 和 lab_director 访问
   const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+  const isLabDirector: boolean = user?.roles?.includes('lab_director') ?? false;
+  const canManageRoles: boolean = isAdmin || isLabDirector;
+
+  // irip-ai-collab: lab_director 只能分配 lab_member / lab_viewer 角色
+  const assignableRoleOptions = isAdmin
+    ? ROLE_OPTIONS
+    : ROLE_OPTIONS.filter((r) => r.value === 'lab_member' || r.value === 'lab_viewer');
 
   // ---- 数据查询：用户列表 ----
   const { data, isLoading } = useQuery({
     queryKey: ['governance', 'users', statusFilter],
     queryFn: () => apiListUsers({ status: statusFilter, limit: 100 }),
-    enabled: isAdmin,
+    enabled: canManageRoles,
   });
 
   // ---- 数据查询：实验室列表（用于新建账号时选择 + 表格列展示名称）----
   const { data: deptData } = useQuery({
     queryKey: ['departments', 'all'],
     queryFn: () => apiListDepartments({ limit: 100 }),
-    enabled: isAdmin,
+    enabled: canManageRoles,
   });
 
   const departments: DepartmentListItem[] = deptData?.items ?? [];
@@ -168,10 +175,13 @@ export function UsersPage(): JSX.Element {
 
   const handleAssignOpen = (record: UserListItem): void => {
     setAssignTarget(record);
+    // lab_director 只能分配 lab_member / lab_viewer，预填充时过滤掉平台级角色
+    const assignableValues = assignableRoleOptions.map((o) => o.value);
+    const prefillRoles = (record.roles ?? []).filter((r) => assignableValues.includes(r));
     form.setFieldsValue({
       display_name: record.display_name,
       password: undefined,
-      roles: record.roles ?? [],
+      roles: prefillRoles,
       department_id: record.department_id ?? undefined,
     });
   };
@@ -217,10 +227,10 @@ export function UsersPage(): JSX.Element {
   };
 
   // ---- 权限检查 ----
-  if (!isAdmin) {
+  if (!canManageRoles) {
     return (
       <div>
-        <Text type="danger">仅平台管理员可访问此页面。</Text>
+        <Text type="danger">仅平台管理员或实验室负责人可访问此页面。</Text>
       </div>
     );
   }
@@ -301,8 +311,15 @@ export function UsersPage(): JSX.Element {
       title: '操作',
       key: 'action',
       width: 240,
-      render: (_: unknown, record: UserListItem) => (
+      render: (_: unknown, record: UserListItem) => {
+        // lab_director 不能编辑平台级角色用户
+        const hasPlatformRole = (record.roles ?? []).some(
+          (r) => r === 'platform_administrator' || r === 'platform_auditor',
+        );
+        const canEditUser = isAdmin || (isLabDirector && !hasPlatformRole);
+        return (
         <Space size="small">
+          {canEditUser && (
           <Button
             type="link"
             size="small"
@@ -310,41 +327,48 @@ export function UsersPage(): JSX.Element {
           >
             编辑角色
           </Button>
-          <Popconfirm
-            title={
-              record.status === 'active'
-                ? '确定禁用该用户？'
-                : '确定启用该用户？'
-            }
-            onConfirm={() => handleToggleStatus(record)}
-            okText="确定"
-            cancelText="取消"
-          >
-            <Button
-              type="link"
-              size="small"
-              danger={record.status === 'active'}
-            >
-              {record.status === 'active' ? '禁用' : '启用'}
-            </Button>
-          </Popconfirm>
-          <Popconfirm
-            title="确定删除该用户？此操作不可恢复！"
-            onConfirm={() => deleteMutation.mutate(record.id)}
-            okText="确定"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="link"
-              size="small"
-              danger
-            >
-              删除
-            </Button>
-          </Popconfirm>
+          )}
+          {/* irip-ai-collab: 禁用/删除按钮仅 platform_administrator 可见 */}
+          {isAdmin && (
+            <>
+              <Popconfirm
+                title={
+                  record.status === 'active'
+                    ? '确定禁用该用户？'
+                    : '确定启用该用户？'
+                }
+                onConfirm={() => handleToggleStatus(record)}
+                okText="确定"
+                cancelText="取消"
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger={record.status === 'active'}
+                >
+                  {record.status === 'active' ? '禁用' : '启用'}
+                </Button>
+              </Popconfirm>
+              <Popconfirm
+                title="确定删除该用户？此操作不可恢复！"
+                onConfirm={() => deleteMutation.mutate(record.id)}
+                okText="确定"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                >
+                  删除
+                </Button>
+              </Popconfirm>
+            </>
+          )}
         </Space>
-      ),
+        );
+      },
     },
   ];
 
@@ -376,9 +400,11 @@ export function UsersPage(): JSX.Element {
             ...departments.map((d) => ({ value: d.id, label: d.display_name })),
           ]}
         />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
-          新建账号
-        </Button>
+        {isAdmin && (
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+            新建账号
+          </Button>
+        )}
       </Space>
 
       <DataTableShell bodyPadding={0}>
@@ -432,7 +458,7 @@ export function UsersPage(): JSX.Element {
               mode="multiple"
               placeholder="选择角色（可多选）"
               style={{ width: '100%' }}
-              options={ROLE_OPTIONS}
+              options={assignableRoleOptions}
               optionFilterProp="label"
               showSearch
             />
@@ -456,7 +482,8 @@ export function UsersPage(): JSX.Element {
         </Form>
       </Modal>
 
-      {/* 新建账号 Modal */}
+      {/* 新建账号 Modal — irip-ai-collab: 仅 platform_administrator 可见 */}
+      {isAdmin && (
       <Modal
         title="新建账号"
         open={createModalOpen}
@@ -529,6 +556,7 @@ export function UsersPage(): JSX.Element {
           </Form.Item>
         </Form>
       </Modal>
+      )}
     </div>
   );
 }

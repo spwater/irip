@@ -1,14 +1,15 @@
-"""事实管理路由（IRIP Task 15）。
+"""事实管理路由。
 
 端点分组（facts_router, prefix=/api/v1/facts）：
   POST   /api/v1/facts                        — 创建事实（fact:write）
   GET    /api/v1/facts                        — 列表过滤（fact:read）
   GET    /api/v1/facts/search?q=              — 全文搜索（fact:read）
-  GET    /api/v1/facts/{id}                   — 获取最新修订（fact:read）
-  GET    /api/v1/facts/{id}/revisions         — 列出所有修订（fact:read）
-  GET    /api/v1/facts/{id}/revisions/{r}    — 获取特定修订（fact:read）
-  GET    /api/v1/facts/{id}/observations      — 获取观察值（fact:read）
-  POST   /api/v1/facts/{id}/revise           — 创建新修订（fact:write）
+  GET    /api/v1/facts/search-data            — 按数据内容搜索（fact:read）
+  GET    /api/v1/facts/{id}                   — 获取事实（fact:read）
+  GET    /api/v1/facts/{id}/data              — 获取事实数据（fact:read）
+  POST   /api/v1/facts/{id}/archive           — 归档事实（fact:write）
+  DELETE /api/v1/facts/{id}                   — 删除事实（fact:write）
+  DELETE /api/v1/facts/by-task/{task_code}    — 按任务删除事实（fact:write）
 """
 
 import logging
@@ -26,11 +27,7 @@ from apps.api.dependencies.auth import CurrentUser  # noqa: E402
 from apps.api.dependencies.authorization import require_permission  # noqa: E402
 from apps.api.dependencies.dept_scope import should_filter_by_department  # noqa: E402
 from packages.common.errors import AppError  # noqa: E402
-from packages.facts.observations import (  # noqa: E402
-    FactRevisionRef,
-    NormalizedObservation,
-    RawObservation,
-)
+from packages.facts.observations import FactRef  # noqa: E402
 from packages.facts.service import CreateFactCommand, FactService  # noqa: E402
 
 #: 需 fact:write 权限的当前用户依赖。
@@ -59,64 +56,24 @@ facts_router = APIRouter(prefix="/api/v1/facts", tags=["facts"])
 # ---- 请求模型 ----
 
 
-class RawObservationItem(BaseModel):
-    """原始观察值请求项。"""
-
-    source_path: str = Field(..., min_length=1, max_length=500)
-    source_value: str = Field(..., min_length=1)
-    source_unit: str | None = Field(None, max_length=64)
-    source_name: str | None = Field(None, max_length=256)
-    artifact_id: UUID | None = None
-    id: UUID | None = Field(None, description="预生成 ID，用于标准化观察值引用")
-
-
-class NormalizedObservationItem(BaseModel):
-    """标准化观察值请求项。"""
-
-    variable_version_id: UUID
-    raw_observation_id: UUID | None = Field(None, description="原始观察值 ID（必须非空）")
-    value: str = Field(..., min_length=1)
-    unit: str | None = Field(None, max_length=64)
-
-
 class CreateFactRequest(BaseModel):
     """创建事实请求。"""
 
     fact_type: Literal["experiment_run", "simulation_run", "document_record", "model_execution"]
-    template_version_id: UUID
     object_id: UUID
     subject_id: str = Field(..., min_length=1, max_length=256)
-    started_at: datetime
-    ended_at: datetime | None = None
-    method_version_id: UUID | None = None
-    raw: list[RawObservationItem] = Field(default_factory=list)
-    normalized: list[NormalizedObservationItem] = Field(default_factory=list)
-    artifacts: list[UUID] = Field(default_factory=list)
-    idempotency_key: str | None = Field(None, max_length=256)
-
-
-class ReviseFactRequest(BaseModel):
-    """修订事实请求。"""
-
-    reason: str = Field(..., min_length=1, max_length=2000)
-    subject_id: str | None = Field(None, max_length=256)
-    method_version_id: UUID | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
-    raw: list[RawObservationItem] | None = None
-    normalized: list[NormalizedObservationItem] | None = None
-    artifacts: list[UUID] | None = None
+    idempotency_key: str | None = Field(None, max_length=256)
 
 
 # ---- 响应模型 ----
 
 
-class FactRevisionResponse(BaseModel):
-    """事实修订响应。"""
+class FactResponse(BaseModel):
+    """事实响应。"""
 
     fact_id: str
-    revision: int
-    revision_id: str
     fact_type: str
     subject_id: str
     status: str
@@ -127,12 +84,13 @@ class FactRevisionResponse(BaseModel):
     run_operator: str | None = None
     equipment_name: str | None = None
     data_summary: str | None = None
+    created_at: str | None = None
 
 
 class FactListResponse(BaseModel):
     """事实分页列表响应。"""
 
-    items: list[FactRevisionResponse]
+    items: list[FactResponse]
     next_cursor: str | None
     group_counts: dict[str, int] = Field(
         default_factory=dict,
@@ -140,127 +98,39 @@ class FactListResponse(BaseModel):
     )
 
 
-class RawObservationResponse(BaseModel):
-    """原始观察值响应。"""
-
-    id: str
-    fact_revision_id: str
-    source_path: str
-    source_value: str
-    source_unit: str | None
-    source_name: str | None
-    artifact_id: str | None
-
-
-class NormalizedObservationResponse(BaseModel):
-    """标准化观察值响应。"""
-
-    id: str
-    fact_revision_id: str
-    variable_version_id: str
-    raw_observation_id: str
-    value: str
-    unit: str | None
-
-
-class ObservationsResponse(BaseModel):
-    """观察值响应。"""
-
-    raw: list[RawObservationResponse]
-    normalized: list[NormalizedObservationResponse]
-
-
 # ---- 辅助函数 ----
 
 
-def _ref_to_response(ref: FactRevisionRef) -> FactRevisionResponse:
-    """将 FactRevisionRef 转为响应模型。"""
-    return FactRevisionResponse(
+def _ref_to_response(ref: FactRef) -> FactResponse:
+    """将 FactRef 转为响应模型。"""
+    return FactResponse(
         fact_id=str(ref.fact_id),
-        revision=ref.revision,
-        revision_id=str(ref.revision_id),
         fact_type=ref.fact_type,
         subject_id=ref.subject_id,
         status=ref.status,
     )
 
 
-def _raw_to_response(r: RawObservation) -> RawObservationResponse:
-    """将 RawObservation 转为响应模型。"""
-    return RawObservationResponse(
-        id=str(r.id),
-        fact_revision_id=str(r.fact_revision_id),
-        source_path=r.source_path,
-        source_value=r.source_value,
-        source_unit=r.source_unit,
-        source_name=r.source_name,
-        artifact_id=str(r.artifact_id) if r.artifact_id else None,
-    )
-
-
-def _normalized_to_response(
-    n: NormalizedObservation,
-) -> NormalizedObservationResponse:
-    """将 NormalizedObservation 转为响应模型。"""
-    return NormalizedObservationResponse(
-        id=str(n.id),
-        fact_revision_id=str(n.fact_revision_id),
-        variable_version_id=str(n.variable_version_id),
-        raw_observation_id=str(n.raw_observation_id),
-        value=n.value,
-        unit=n.unit,
-    )
-
-
 # ---- 端点 ----
 
 
-@facts_router.post("", response_model=FactRevisionResponse, status_code=201)
+@facts_router.post("", response_model=FactResponse, status_code=201)
 async def create_fact(
     body: CreateFactRequest,
     current_user: WriteUserDep,
     service: FactServiceDep,
-) -> FactRevisionResponse:
-    """创建事实（revision 1）。
+) -> FactResponse:
+    """创建事实。
 
-    创建一个新事实，包含原始与标准化观察值和工件链接。
     支持幂等键去重：相同 idempotency_key 不会创建重复事实。
     """
-    from packages.facts.observations import (
-        NormalizedObservationInput,
-        RawObservationInput,
-    )
-
     command = CreateFactCommand(
         fact_type=body.fact_type,
-        template_version_id=body.template_version_id,
         organization_id=service.organization_id,
         object_id=body.object_id,
         subject_id=body.subject_id,
         started_at=body.started_at,
         ended_at=body.ended_at,
-        method_version_id=body.method_version_id,
-        raw=tuple(
-            RawObservationInput(
-                source_path=r.source_path,
-                source_value=r.source_value,
-                source_unit=r.source_unit,
-                source_name=r.source_name,
-                artifact_id=r.artifact_id,
-                id=r.id,
-            )
-            for r in body.raw
-        ),
-        normalized=tuple(
-            NormalizedObservationInput(
-                variable_version_id=n.variable_version_id,
-                raw_observation_id=n.raw_observation_id,
-                value=n.value,
-                unit=n.unit,
-            )
-            for n in body.normalized
-        ),
-        artifacts=tuple(body.artifacts),
         idempotency_key=body.idempotency_key,
         created_by=current_user.user_id,
     )
@@ -293,7 +163,6 @@ async def list_facts(
         page_size=page_size,
     )
 
-    # 直接从 fact_revision 表读快照字段（零 JOIN）
     items = [_ref_to_response(r) for r in refs]
     group_counts: dict[str, int] = {}
 
@@ -303,15 +172,12 @@ async def list_facts(
 
     if items:
         import sqlalchemy as sa
-        from sqlalchemy import func
 
-        from packages.facts.entities import FactRevision
+        from packages.facts.entities import Fact
 
-        revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
+        fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
         async with service.session_factory() as session:
             # 实验室级数据隔离：通过 flow_run_id 链路过滤事实
-            # FactRevision.flow_run_id → FlowRun → FlowDefinitionVersionORM
-            # → FlowDefinition.department_id
             if should_filter_by_department(current_user):
                 from packages.components.flow_runtime import (
                     FlowDefinition,
@@ -320,8 +186,8 @@ async def list_facts(
                 )
 
                 dept_stmt = (
-                    sa.select(FactRevision.id)
-                    .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+                    sa.select(Fact.id)
+                    .join(FlowRun, Fact.flow_run_id == FlowRun.id)
                     .join(
                         FlowDefinitionVersionORM,
                         FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
@@ -331,14 +197,14 @@ async def list_facts(
                         FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
-                        FactRevision.id.in_(revision_ids),
+                        Fact.id.in_(fact_ids),
                         FlowDefinition.department_id == current_user.department_id,
                     )
                 )
                 dept_result = await session.execute(dept_stmt)
                 allowed_ids = {str(row[0]) for row in dept_result}
-                items = [item for item in items if item.revision_id in allowed_ids]
-                revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
+                items = [item for item in items if item.fact_id in allowed_ids]
+                fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
                 if not items:
                     return FactListResponse(items=[], next_cursor=None, group_counts={})
 
@@ -355,25 +221,26 @@ async def list_facts(
 
             snap_stmt = (
                 sa.select(
-                    FactRevision.id,
-                    FactRevision.task_code,
-                    sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
-                    FactRevision.department_name,
-                    FactRevision.operator,
-                    FactRevision.run_operator,
-                    FactRevision.equipment_name,
+                    Fact.id,
+                    Fact.task_code,
+                    sa.func.coalesce(_FD.display_name, Fact.task_name).label("task_name"),
+                    Fact.department_name,
+                    Fact.operator,
+                    Fact.run_operator,
+                    Fact.equipment_name,
+                    Fact.created_at,
                 )
-                .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
+                .outerjoin(_FR, Fact.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
                 .outerjoin(_FD, _FV.flow_definition_id == _FD.id)
-                .where(FactRevision.id.in_(revision_ids))
+                .where(Fact.id.in_(fact_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6], row[7])
             for item in items:
-                snap = snap_map.get(item.revision_id)
+                snap = snap_map.get(item.fact_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
@@ -381,15 +248,16 @@ async def list_facts(
                     item.operator = snap[3]
                     item.run_operator = snap[4]
                     item.equipment_name = snap[5]
+                    item.created_at = snap[6].isoformat() if snap[6] else None
 
             # 查每个 task_code 的总数（不受分页限制）
             if should_filter_by_department(current_user):
                 count_stmt = (
                     sa.select(
-                        FactRevision.task_code,
-                        func.count(func.distinct(FactRevision.fact_id)),
+                        Fact.task_code,
+                        func.count(func.distinct(Fact.id)),
                     )
-                    .join(FlowRun, FactRevision.flow_run_id == FlowRun.id)
+                    .join(FlowRun, Fact.flow_run_id == FlowRun.id)
                     .join(
                         FlowDefinitionVersionORM,
                         FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
@@ -399,18 +267,18 @@ async def list_facts(
                         FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
-                        FactRevision.task_code.isnot(None),
+                        Fact.task_code.isnot(None),
                         FlowDefinition.department_id == current_user.department_id,
                     )
-                    .group_by(FactRevision.task_code)
+                    .group_by(Fact.task_code)
                 )
             else:
                 count_stmt = (
                     sa.select(
-                        FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id))
-                    )  # noqa: E501
-                    .where(FactRevision.task_code.isnot(None))
-                    .group_by(FactRevision.task_code)
+                        Fact.task_code, func.count(func.distinct(Fact.id))
+                    )
+                    .where(Fact.task_code.isnot(None))
+                    .group_by(Fact.task_code)
                 )
             count_result = await session.execute(count_stmt)
             group_counts = {str(row[0]): row[1] for row in count_result}
@@ -421,7 +289,6 @@ async def list_facts(
 
         from apps.api.main import _build_s3_repo
         from packages.common.artifacts import Artifact, ArtifactService
-        from packages.facts.entities import FactArtifact
 
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
@@ -434,18 +301,43 @@ async def list_facts(
             for item in items:
                 try:
                     fa_stmt = (
-                        sa.select(FactArtifact.artifact_id)
-                        .join(Artifact, FactArtifact.artifact_id == Artifact.id)
+                        sa.select(Artifact.id, Artifact.media_type, Artifact.filename)
                         .where(
-                            FactArtifact.fact_revision_id
-                            == __import__("uuid").UUID(item.revision_id),  # noqa: E501
+                            Artifact.id
+                            == sa.select(Fact.source_artifact_id)
+                            .where(Fact.id == __import__("uuid").UUID(item.fact_id))
+                            .scalar_subquery(),
                             Artifact.media_type == "application/json",
                         )
                         .limit(1)
                     )
                     fa_result = await session.execute(fa_stmt)
-                    artifact_id = fa_result.scalar_one_or_none()
-                    if artifact_id:
+                    art_row = fa_result.first()
+
+                    # fallback: source_artifact_id 指向原始文件（非 JSON），
+                    # 通过 flow_run_id 查找 JSON 结果 artifact
+                    if art_row is None:
+                        flow_run_row = await session.execute(
+                            sa.select(Fact.flow_run_id).where(
+                                Fact.id == __import__("uuid").UUID(item.fact_id)
+                            )
+                        )
+                        flow_run_id_row = flow_run_row.scalar_one_or_none()
+                        if flow_run_id_row:
+                            fb_result = await session.execute(
+                                sa.select(Artifact.id, Artifact.media_type, Artifact.filename)
+                                .where(
+                                    Artifact.media_type == "application/json",
+                                    Artifact.filename
+                                    == f"extract_{flow_run_id_row}.json",
+                                )
+                                .order_by(Artifact.created_at.desc())
+                                .limit(1)
+                            )
+                            art_row = fb_result.first()
+
+                    if art_row:
+                        artifact_id = art_row[0]
                         data_bytes = await artifact_svc.get_bytes(artifact_id)
                         parsed = json_mod.loads(data_bytes.decode("utf-8"))
                         pts = parsed.get("points", [])
@@ -457,7 +349,7 @@ async def list_facts(
                                 f"共{total}个指标："
                                 + "，".join(pairs)
                                 + ("..." if total > 3 else "")
-                            )  # noqa: E501
+                            )
                         elif srs:
                             names = [s.get("name", f"序列{i + 1}") for i, s in enumerate(srs[:3])]
                             total = len(srs)
@@ -465,7 +357,7 @@ async def list_facts(
                                 f"共{total}组序列："
                                 + "，".join(names)
                                 + ("..." if total > 3 else "")
-                            )  # noqa: E501
+                            )
                 except Exception:
                     _logger.warning("生成 data_summary 失败", exc_info=True)
 
@@ -506,9 +398,9 @@ async def search_facts(
     if items:
         import sqlalchemy as sa
 
-        from packages.facts.entities import FactRevision
+        from packages.facts.entities import Fact
 
-        revision_ids = [__import__("uuid").UUID(item.revision_id) for item in items]
+        fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
         async with service.session_factory() as session:
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
@@ -523,25 +415,26 @@ async def search_facts(
 
             snap_stmt = (
                 sa.select(
-                    FactRevision.id,
-                    FactRevision.task_code,
-                    sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
-                    FactRevision.department_name,
-                    FactRevision.operator,
-                    FactRevision.run_operator,
-                    FactRevision.equipment_name,
+                    Fact.id,
+                    Fact.task_code,
+                    sa.func.coalesce(_FD.display_name, Fact.task_name).label("task_name"),
+                    Fact.department_name,
+                    Fact.operator,
+                    Fact.run_operator,
+                    Fact.equipment_name,
+                    Fact.created_at,
                 )
-                .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
+                .outerjoin(_FR, Fact.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
                 .outerjoin(_FD, _FV.flow_definition_id == _FD.id)
-                .where(FactRevision.id.in_(revision_ids))
+                .where(Fact.id.in_(fact_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6], row[7])
             for item in items:
-                snap = snap_map.get(item.revision_id)
+                snap = snap_map.get(item.fact_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
@@ -549,11 +442,12 @@ async def search_facts(
                     item.operator = snap[3]
                     item.run_operator = snap[4]
                     item.equipment_name = snap[5]
+                    item.created_at = snap[6].isoformat() if snap[6] else None
 
             count_stmt = (
-                sa.select(FactRevision.task_code, func.count(func.distinct(FactRevision.fact_id)))
-                .where(FactRevision.task_code.isnot(None))
-                .group_by(FactRevision.task_code)
+                sa.select(Fact.task_code, func.count(func.distinct(Fact.id)))
+                .where(Fact.task_code.isnot(None))
+                .group_by(Fact.task_code)
             )
             count_result = await session.execute(count_stmt)
             group_counts = {str(row[0]): row[1] for row in count_result}
@@ -585,7 +479,7 @@ async def search_facts_by_data(
     """
     import sqlalchemy as sa
 
-    from packages.facts.entities import FactDataIndex, FactRevision
+    from packages.facts.entities import FactDataIndex, Fact
 
     # 构建 WHERE 条件
     conditions = []
@@ -614,20 +508,20 @@ async def search_facts_by_data(
         )
 
     async with service.session_factory() as session:
-        # 查匹配的 fact_revision_id（去重）
+        # 查匹配的 fact_id（去重）
         stmt = (
-            sa.select(FactDataIndex.fact_revision_id)
+            sa.select(FactDataIndex.fact_id)
             .where(sa.and_(*conditions))
             .distinct()
             .limit(page_size)
         )
         result = await session.execute(stmt)
-        revision_ids = [row[0] for row in result]
+        fact_ids = [row[0] for row in result]
 
-        if not revision_ids:
+        if not fact_ids:
             return FactListResponse(items=[], next_cursor=None, group_counts={})
 
-        # 查这些 revision 的快照信息（JOIN FlowDefinition 拿当前 display_name）
+        # 查这些 fact 的快照信息（JOIN FlowDefinition 拿当前 display_name）
         from packages.components.flow_runtime import (
             FlowDefinition as _FD,
         )
@@ -640,52 +534,49 @@ async def search_facts_by_data(
 
         snap_stmt = (
             sa.select(
-                FactRevision.id,
-                FactRevision.fact_id,
-                FactRevision.revision,
-                FactRevision.fact_type,
-                FactRevision.subject_id,
-                FactRevision.task_code,
-                sa.func.coalesce(_FD.display_name, FactRevision.task_name).label("task_name"),
-                FactRevision.department_name,
-                FactRevision.operator,
-                FactRevision.run_operator,
-                FactRevision.equipment_name,
+                Fact.id,
+                Fact.fact_type,
+                Fact.subject_id,
+                Fact.status,
+                Fact.task_code,
+                sa.func.coalesce(_FD.display_name, Fact.task_name).label("task_name"),
+                Fact.department_name,
+                Fact.operator,
+                Fact.run_operator,
+                Fact.equipment_name,
             )
-            .outerjoin(_FR, FactRevision.flow_run_id == _FR.id)
+            .outerjoin(_FR, Fact.flow_run_id == _FR.id)
             .outerjoin(_FV, _FR.flow_version_id == _FV.id)
             .outerjoin(_FD, _FV.flow_definition_id == _FD.id)
-            .where(FactRevision.id.in_(revision_ids))
+            .where(Fact.id.in_(fact_ids))
         )
         snap_result = await session.execute(snap_stmt)
 
-        items: list[FactRevisionResponse] = []
+        items: list[FactResponse] = []
         for row in snap_result:
             items.append(
-                FactRevisionResponse(
-                    fact_id=str(row[1]),
-                    revision=row[2],
-                    revision_id=str(row[0]),
-                    fact_type=row[3],
-                    subject_id=row[4],
-                    status="active",  # status 在 Fact 表，这里统一返回 active
-                    task_code=row[5],
-                    task_name=row[6],
-                    department_name=row[7],
-                    operator=row[8],
-                    run_operator=row[9],
-                    equipment_name=row[10],
+                FactResponse(
+                    fact_id=str(row[0]),
+                    fact_type=row[1],
+                    subject_id=row[2],
+                    status=row[3],
+                    task_code=row[4],
+                    task_name=row[5],
+                    department_name=row[6],
+                    operator=row[7],
+                    run_operator=row[8],
+                    equipment_name=row[9],
                 )
             )
 
         # 查 group_counts
         count_stmt = (
-            sa.select(FactRevision.task_code, sa.func.count(sa.func.distinct(FactRevision.fact_id)))
+            sa.select(Fact.task_code, sa.func.count(sa.func.distinct(Fact.id)))
             .where(
-                FactRevision.id.in_(revision_ids),
-                FactRevision.task_code.isnot(None),
+                Fact.id.in_(fact_ids),
+                Fact.task_code.isnot(None),
             )
-            .group_by(FactRevision.task_code)
+            .group_by(Fact.task_code)
         )
         count_result = await session.execute(count_stmt)
         group_counts = {str(row[0]): row[1] for row in count_result}
@@ -695,7 +586,6 @@ async def search_facts_by_data(
 
         from apps.api.main import _build_s3_repo
         from packages.common.artifacts import Artifact, ArtifactService
-        from packages.facts.entities import FactArtifact
 
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
@@ -707,16 +597,41 @@ async def search_facts_by_data(
         for item in items:
             try:
                 fa_stmt = (
-                    sa.select(FactArtifact.artifact_id)
-                    .join(Artifact, FactArtifact.artifact_id == Artifact.id)
+                    sa.select(Artifact.id)
                     .where(
-                        FactArtifact.fact_revision_id == __import__("uuid").UUID(item.revision_id),
+                        Artifact.id
+                        == sa.select(Fact.source_artifact_id)
+                        .where(Fact.id == __import__("uuid").UUID(item.fact_id))
+                        .scalar_subquery(),
                         Artifact.media_type == "application/json",
                     )
                     .limit(1)
                 )
                 fa_result = await session.execute(fa_stmt)
                 artifact_id = fa_result.scalar_one_or_none()
+
+                # fallback: source_artifact_id 指向原始文件（非 JSON），
+                # 通过 flow_run_id 查找 JSON 结果 artifact
+                if artifact_id is None:
+                    flow_run_row = await session.execute(
+                        sa.select(Fact.flow_run_id).where(
+                            Fact.id == __import__("uuid").UUID(item.fact_id)
+                        )
+                    )
+                    flow_run_id_row = flow_run_row.scalar_one_or_none()
+                    if flow_run_id_row:
+                        fb_result = await session.execute(
+                            sa.select(Artifact.id)
+                            .where(
+                                Artifact.media_type == "application/json",
+                                Artifact.filename
+                                == f"extract_{flow_run_id_row}.json",
+                            )
+                            .order_by(Artifact.created_at.desc())
+                            .limit(1)
+                        )
+                        artifact_id = fb_result.scalar_one_or_none()
+
                 if artifact_id:
                     data_bytes = await artifact_svc.get_bytes(artifact_id)
                     parsed = json_mod.loads(data_bytes.decode("utf-8"))
@@ -727,13 +642,13 @@ async def search_facts_by_data(
                         total = len(pts)
                         item.data_summary = (
                             f"共{total}个指标：" + "，".join(pairs) + ("..." if total > 3 else "")
-                        )  # noqa: E501
+                        )
                     elif srs:
                         names = [s.get("name", f"序列{i + 1}") for i, s in enumerate(srs[:3])]
                         total = len(srs)
                         item.data_summary = (
                             f"共{total}组序列：" + "，".join(names) + ("..." if total > 3 else "")
-                        )  # noqa: E501
+                        )
             except Exception as _e:
                 _logger.warning("生成 data_summary 失败: %s", _e, exc_info=True)
 
@@ -744,59 +659,15 @@ async def search_facts_by_data(
     )
 
 
-@facts_router.get("/{fact_id}", response_model=FactRevisionResponse)
+@facts_router.get("/{fact_id}", response_model=FactResponse)
 async def get_fact(
     fact_id: UUID,
     current_user: ReadUserDep,
     service: FactServiceDep,
-) -> FactRevisionResponse:
-    """获取事实的最新修订。"""
+) -> FactResponse:
+    """获取事实。"""
     ref = await service.get(fact_id)
     return _ref_to_response(ref)
-
-
-@facts_router.get("/{fact_id}/revisions", response_model=FactListResponse)
-async def list_revisions(
-    fact_id: UUID,
-    current_user: ReadUserDep,
-    service: FactServiceDep,
-) -> FactListResponse:
-    """列出事实的所有修订历史。"""
-    refs = await service.list_revisions(fact_id)
-    return FactListResponse(
-        items=[_ref_to_response(r) for r in refs],
-        next_cursor=None,
-    )
-
-
-@facts_router.get(
-    "/{fact_id}/revisions/{revision}",
-    response_model=FactRevisionResponse,
-)
-async def get_revision(
-    fact_id: UUID,
-    revision: int,
-    current_user: ReadUserDep,
-    service: FactServiceDep,
-) -> FactRevisionResponse:
-    """获取事实的特定修订。"""
-    ref = await service.get(fact_id, revision=revision)
-    return _ref_to_response(ref)
-
-
-@facts_router.get("/{fact_id}/observations", response_model=ObservationsResponse)
-async def get_observations(
-    fact_id: UUID,
-    current_user: ReadUserDep,
-    service: FactServiceDep,
-    revision: int | None = Query(None, description="修订号，None 表示最新"),
-) -> ObservationsResponse:
-    """获取事实的观察值（原始 + 标准化）。"""
-    raws, norms = await service.get_observations(fact_id, revision=revision)
-    return ObservationsResponse(
-        raw=[_raw_to_response(r) for r in raws],
-        normalized=[_normalized_to_response(n) for n in norms],
-    )
 
 
 @facts_router.get("/{fact_id}/data")
@@ -815,31 +686,53 @@ async def get_fact_data(
 
     from apps.api.main import _build_s3_repo
     from packages.common.artifacts import ArtifactService
-    from packages.facts.entities import FactArtifact, FactRevision
+    from packages.facts.entities import Fact
 
-    # 获取最新修订
     fact = await service.get(fact_id)
-    revision_id = fact.revision_id
+
+    if fact is None:
+        return {"metadata": {}, "points": [], "series": []}
 
     async with service.session_factory() as session:
-        # 查 fact_artifact + artifact，找 JSON 类型的（提取数据）
         from packages.common.artifacts import Artifact
 
+        # 查找 JSON artifact：优先用 source_artifact_id（如果它是 JSON），
+        # 否则通过 flow_run_id 查找 extract_{run_id}.json 的 artifact
         result = await session.execute(
-            sa.select(FactArtifact, Artifact)
+            sa.select(Artifact)
             .where(
-                FactArtifact.fact_revision_id == revision_id,
-                FactArtifact.artifact_id == Artifact.id,
+                Artifact.id
+                == sa.select(Fact.source_artifact_id)
+                .where(Fact.id == fact_id)
+                .scalar_subquery(),
                 Artifact.media_type == "application/json",
             )
             .limit(1)
         )
-        row = result.first()
-        if row is None:
+        art_record = result.scalar_one_or_none()
+
+        # 如果 source_artifact_id 指向的不是 JSON（指向原始文件），
+        # 通过 flow_run_id 查找 JSON 结果 artifact
+        if art_record is None:
+            flow_run_id_row = (await session.execute(
+                sa.select(Fact.flow_run_id).where(Fact.id == fact_id)
+            )).scalar_one_or_none()
+            if flow_run_id_row is not None:
+                result = await session.execute(
+                    sa.select(Artifact)
+                    .where(
+                        Artifact.media_type == "application/json",
+                        Artifact.filename == f"extract_{flow_run_id_row}.json",
+                    )
+                    .order_by(Artifact.created_at.desc())
+                    .limit(1)
+                )
+                art_record = result.scalar_one_or_none()
+
+        if art_record is None:
             return {"metadata": {}, "points": [], "series": []}
 
-        fa = row[0]
-        # 下载 artifact 内容
+        # 下载 artifact 内容（MinIO 文件不存在时返回空数据而非 500）
         s3_repo = _build_s3_repo()
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
@@ -847,8 +740,18 @@ async def get_fact_data(
             organization_id=service.organization_id,
             uploaded_by=current_user.user_id,
         )
-        data_bytes = await artifact_svc.get_bytes(fa.artifact_id)
-        result_data = json_mod.loads(data_bytes.decode("utf-8"))
+        data_bytes: bytes | None = None
+        json_error: str | None = None
+        try:
+            data_bytes = await artifact_svc.get_bytes(art_record.id)
+        except Exception as exc:
+            _logger.warning("JSON artifact 下载失败: %s — %s", art_record.id, exc)
+            json_error = str(exc)[:200]
+
+        if data_bytes is not None:
+            result_data = json_mod.loads(data_bytes.decode("utf-8"))
+        else:
+            result_data = {"metadata": {}, "points": [], "series": []}
 
         if "points" not in result_data:
             result_data["points"] = []
@@ -858,39 +761,39 @@ async def get_fact_data(
         # 优先从快照字段读任务信息（零 JOIN），旧数据 fallback 到实时反查
         task_info: dict = {}
         try:
-            rev_stmt = sa.select(FactRevision).where(FactRevision.id == revision_id)
-            rev_record = (await session.execute(rev_stmt)).scalar_one_or_none()
-            if rev_record and (rev_record.task_code or rev_record.task_name):
+            fact_stmt = sa.select(Fact).where(Fact.id == fact_id)
+            fact_record = (await session.execute(fact_stmt)).scalar_one_or_none()
+            if fact_record and (fact_record.task_code or fact_record.task_name):
                 # 快照命中
                 task_info = {
-                    "task_name": rev_record.task_name,
-                    "task_source": rev_record.department_name,
-                    "operator": rev_record.operator,
-                    "run_operator": rev_record.run_operator,
-                    "equipment_name": rev_record.equipment_name,
+                    "task_name": fact_record.task_name,
+                    "task_source": fact_record.department_name,
+                    "operator": fact_record.operator,
+                    "run_operator": fact_record.run_operator,
+                    "equipment_name": fact_record.equipment_name,
                     "project_name": None,
                     "data_interface": None,
                     "created_at": None,
                 }
                 # 通过 flow_run_id 外键补查 project_name, data_interface 和 created_at
-                if rev_record.flow_run_id:
+                if fact_record.flow_run_id:
                     from packages.components.flow_runtime import (
                         FlowDefinition,
                         FlowDefinitionVersionORM,
                         FlowRun,
                     )
 
-                    run_stmt = sa.select(FlowRun).where(FlowRun.id == rev_record.flow_run_id)
+                    run_stmt = sa.select(FlowRun).where(FlowRun.id == fact_record.flow_run_id)
                     run_record = (await session.execute(run_stmt)).scalar_one_or_none()
                     if run_record:
                         fv_stmt = sa.select(FlowDefinitionVersionORM).where(
                             FlowDefinitionVersionORM.id == run_record.flow_version_id
-                        )  # noqa: E501
+                        )
                         fv = (await session.execute(fv_stmt)).scalar_one_or_none()
                         if fv:
                             fd_stmt = sa.select(FlowDefinition).where(
                                 FlowDefinition.id == fv.flow_definition_id
-                            )  # noqa: E501
+                            )
                             fd = (await session.execute(fd_stmt)).scalar_one_or_none()
                             if fd:
                                 nodes = fv.nodes_json or []
@@ -900,24 +803,24 @@ async def get_fact_data(
                                         for n in nodes
                                         if n.get("component_name")
                                     }
-                                )  # noqa: E501
+                                )
                                 task_info["project_name"] = fd.project_name
                                 task_info["created_at"] = (
                                     fd.created_at.isoformat() if fd.created_at else None
-                                )  # noqa: E501
+                                )
                                 # 查所属单位名称
                                 if fd.department_id:
                                     from packages.departments.entities import Department
 
                                     dept_stmt = sa.select(Department).where(
                                         Department.id == fd.department_id
-                                    )  # noqa: E501
+                                    )
                                     dept_record = (
                                         await session.execute(dept_stmt)
-                                    ).scalar_one_or_none()  # noqa: E501
+                                    ).scalar_one_or_none()
                                     task_info["department_name"] = (
                                         dept_record.display_name if dept_record else None
-                                    )  # noqa: E501
+                                    )
                                 else:
                                     task_info["department_name"] = None
                                 # 查每个组件的实验对象→设备→部门链路
@@ -936,7 +839,7 @@ async def get_fact_data(
                                         sa.select(ComponentVersion)
                                         .join(
                                             Component, ComponentVersion.component_id == Component.id
-                                        )  # noqa: E501
+                                        )
                                         .where(Component.name == comp_name)
                                         .order_by(ComponentVersion.created_at.desc())
                                         .limit(1)
@@ -947,7 +850,7 @@ async def get_fact_data(
                                             manifest = yaml_lib.safe_load(cv.manifest_yaml)
                                             ds["component_display_name"] = manifest.get(
                                                 "display_name", comp_name
-                                            )  # noqa: E501
+                                            )
                                         except Exception:
                                             ds["component_display_name"] = comp_name
                                     if cv and cv.experimental_object_code:
@@ -956,7 +859,7 @@ async def get_fact_data(
 
                                         obj_stmt = sa.select(IndustrialObject).where(
                                             IndustrialObject.code == cv.experimental_object_code
-                                        )  # noqa: E501
+                                        )
                                         obj = (await session.execute(obj_stmt)).scalar_one_or_none()
                                         if obj:
                                             ds["object_name"] = obj.display_name
@@ -965,10 +868,10 @@ async def get_fact_data(
 
                                                 eq_stmt = sa.select(Equipment).where(
                                                     Equipment.id == obj.equipment_id
-                                                )  # noqa: E501
+                                                )
                                                 eq = (
                                                     await session.execute(eq_stmt)
-                                                ).scalar_one_or_none()  # noqa: E501
+                                                ).scalar_one_or_none()
                                                 if eq:
                                                     ds["equipment_name"] = eq.display_name
                                                     if eq.department_id:
@@ -978,18 +881,18 @@ async def get_fact_data(
 
                                                         dept_stmt = sa.select(Department).where(
                                                             Department.id == eq.department_id
-                                                        )  # noqa: E501
+                                                        )
                                                         dept = (
                                                             await session.execute(dept_stmt)
-                                                        ).scalar_one_or_none()  # noqa: E501
+                                                        ).scalar_one_or_none()
                                                         if dept:
                                                             ds["department_name"] = (
                                                                 dept.display_name
-                                                            )  # noqa: E501
+                                                            )
                                     data_source_list.append(ds)
                                 task_info["data_interface"] = (
                                     ", ".join(comp_names) if comp_names else None
-                                )  # noqa: E501
+                                )
                                 task_info["data_source_list"] = data_source_list
         except Exception as e:
             import logging
@@ -1005,11 +908,9 @@ async def get_fact_data(
                     FlowRun,
                 )
 
-                # 优先用 flow_run_id 外键（不再解析 source_path 字符串）
-                rev_stmt2 = sa.select(FactRevision.flow_run_id).where(
-                    FactRevision.id == revision_id
-                )  # noqa: E501
-                flow_run_id = (await session.execute(rev_stmt2)).scalar_one_or_none()
+                # 用 flow_run_id 外键反查
+                fr_stmt = sa.select(Fact.flow_run_id).where(Fact.id == fact_id)
+                flow_run_id = (await session.execute(fr_stmt)).scalar_one_or_none()
 
                 if flow_run_id:
                     run_stmt = sa.select(FlowRun).where(FlowRun.id == flow_run_id)
@@ -1017,12 +918,12 @@ async def get_fact_data(
                     if run_record:
                         fv_stmt = sa.select(FlowDefinitionVersionORM).where(
                             FlowDefinitionVersionORM.id == run_record.flow_version_id
-                        )  # noqa: E501
+                        )
                         fv = (await session.execute(fv_stmt)).scalar_one_or_none()
                         if fv:
                             fd_stmt = sa.select(FlowDefinition).where(
                                 FlowDefinition.id == fv.flow_definition_id
-                            )  # noqa: E501
+                            )
                             fd = (await session.execute(fd_stmt)).scalar_one_or_none()
                             if fd:
                                 dept_name = None
@@ -1031,10 +932,10 @@ async def get_fact_data(
 
                                     dept_stmt = sa.select(Department).where(
                                         Department.id == fd.department_id
-                                    )  # noqa: E501
+                                    )
                                     dept_record = (
                                         await session.execute(dept_stmt)
-                                    ).scalar_one_or_none()  # noqa: E501
+                                    ).scalar_one_or_none()
                                     if dept_record:
                                         dept_name = dept_record.display_name
 
@@ -1045,7 +946,7 @@ async def get_fact_data(
                                         for n in nodes
                                         if n.get("component_name")
                                     }
-                                )  # noqa: E501
+                                )
 
                                 task_info = {
                                     "task_name": fd.display_name,
@@ -1061,7 +962,7 @@ async def get_fact_data(
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
                                     "created_at": fd.created_at.isoformat()
                                     if fd.created_at
-                                    else None,  # noqa: E501
+                                    else None,
                                 }
             except (sa.exc.SQLAlchemyError, KeyError, ValueError) as e:
                 import logging
@@ -1073,58 +974,35 @@ async def get_fact_data(
                     exc_info=True,
                 )
 
-        # 把任务信息附加到返回结果
         if task_info:
             result_data["task_info"] = task_info
 
-        # 查原始文件（PDF 等）：先从 fact_artifact 找非 JSON 的，再从 raw_observation.source_name 找
+        if json_error:
+            result_data["data_error"] = f"数据文件丢失: {json_error}"
+
+        # 查原始文件（PDF 等）：通过 Fact.source_artifact_id 找非 JSON artifact
         try:
-            # 方式1：从 fact_artifact 找非 JSON artifact
             pdf_stmt = (
-                sa.select(FactArtifact, Artifact)
+                sa.select(Artifact)
                 .where(
-                    FactArtifact.fact_revision_id == revision_id,
-                    FactArtifact.artifact_id == Artifact.id,
+                    Artifact.id
+                    == sa.select(Fact.source_artifact_id)
+                    .where(Fact.id == fact_id)
+                    .scalar_subquery(),
                     Artifact.media_type != "application/json",
                 )
                 .limit(1)
             )
             pdf_result = await session.execute(pdf_stmt)
-            pdf_row = pdf_result.first()
-            if pdf_row:
-                pdf_artifact = pdf_row[1]
+            pdf_artifact = pdf_result.scalar_one_or_none()
+            if pdf_artifact:
                 result_data["source_file"] = {
                     "filename": pdf_artifact.filename or "原始文件",
                     "media_type": pdf_artifact.media_type,
                     "artifact_id": str(pdf_artifact.id),
                 }
-            else:
-                # 方式2：从 raw_observation.source_name 提取 artifact:xxx
-                from packages.facts.entities import RawObservation
-
-                raw_name_stmt = (
-                    sa.select(RawObservation.source_name)
-                    .where(RawObservation.fact_revision_id == revision_id)
-                    .limit(1)
-                )
-                raw_name_result = await session.execute(raw_name_stmt)
-                source_name = raw_name_result.scalar_one_or_none()
-                if source_name and source_name.startswith("artifact:"):
-                    artifact_id_str = source_name[len("artifact:") :]
-                    # 查 artifact 详情
-                    art_stmt = sa.select(Artifact).where(
-                        Artifact.id == __import__("uuid").UUID(artifact_id_str)
-                    )  # noqa: E501
-                    art_result = await session.execute(art_stmt)
-                    art_record = art_result.scalar_one_or_none()
-                    if art_record:
-                        result_data["source_file"] = {
-                            "filename": art_record.filename or "原始文件",
-                            "media_type": art_record.media_type,
-                            "artifact_id": str(art_record.id),
-                        }
         except Exception:
-            _logger.warning("删除 artifact 文件失败", exc_info=True)
+            _logger.warning("查找原始文件失败", exc_info=True)
 
         return result_data
 
@@ -1137,13 +1015,7 @@ async def archive_fact(
 ) -> None:
     """归档实验事实（tombstone，替代物理删除）。
 
-    技术设计文档 F-03 §8.3：不可变表通过 tombstone 模式实现逻辑删除，
-    将 Fact.status 设为 'archived'，不物理删除任何修订或证据记录。
-
-    安全约定：
-    - 事实修订（fact_revision）为不可变表，不允许 UPDATE/DELETE；
-    - 仅更新 Fact 主表的 status 字段（tombstone）；
-    - 归档后事实在列表查询中不可见（status != 'archived' 过滤）。
+    将 Fact.status 设为 'archived'，不物理删除任何证据记录。
 
     Args:
         fact_id: 事实 UUID。
@@ -1189,21 +1061,17 @@ async def delete_fact(
     from apps.api.main import _build_s3_repo
     from packages.common.artifacts import ArtifactService
     from packages.common.database import session_scope
-    from packages.facts.entities import Fact, FactArtifact, FactRevision
+    from packages.facts.entities import Fact
 
-    # 先查出关联的 artifact_id 列表，用于删 MinIO 文件
+    # 先查出关联的 source_artifact_id，用于删 MinIO 文件
     async with service.session_factory() as session:
         art_result = await session.execute(
-            sa.select(FactArtifact.artifact_id).where(
-                FactArtifact.fact_revision_id.in_(
-                    sa.select(FactRevision.id).where(FactRevision.fact_id == fact_id)
-                )
-            )
+            sa.select(Fact.source_artifact_id).where(Fact.id == fact_id)
         )
-        artifact_ids = [row[0] for row in art_result]
+        source_artifact_id = art_result.scalar_one_or_none()
 
     # 删 MinIO 中的 artifact 文件
-    if artifact_ids:
+    if source_artifact_id is not None:
         try:
             s3_repo = _build_s3_repo()
             artifact_svc = ArtifactService(
@@ -1212,15 +1080,12 @@ async def delete_fact(
                 organization_id=service.organization_id,
                 uploaded_by=current_user.user_id,
             )
-            for aid in artifact_ids:
-                await artifact_svc.delete_artifact(aid)
+            await artifact_svc.delete_artifact(source_artifact_id)
         except Exception:
             _logger.warning("删除 artifact 文件失败", exc_info=True)
 
     async with session_scope(service.session_factory) as session:
-        # 删除关联的 FactRevision
-        await session.execute(sa.delete(FactRevision).where(FactRevision.fact_id == fact_id))
-        # 删除 Fact
+        # 删除 Fact（FK CASCADE 会自动删除 FactDataIndex）
         await session.execute(sa.delete(Fact).where(Fact.id == fact_id))
         await session.flush()
 
@@ -1237,25 +1102,18 @@ async def delete_facts_by_task(
     from apps.api.main import _build_s3_repo
     from packages.common.artifacts import ArtifactService
     from packages.common.database import session_scope
-    from packages.facts.entities import Fact, FactArtifact, FactRevision
+    from packages.facts.entities import Fact
 
-    # 先查出关联的 fact_id 和 artifact_id
+    # 先查出关联的 fact_id 和 source_artifact_id
     async with service.session_factory() as session:
         result = await session.execute(
-            sa.select(FactRevision.fact_id, FactRevision.id).where(
-                FactRevision.task_code == task_code
-            )  # noqa: E501
-        )
-        rows = result.all()
-        fact_ids = list({row[0] for row in rows})
-        revision_ids = [row[1] for row in rows]
-
-        art_result = await session.execute(
-            sa.select(FactArtifact.artifact_id).where(
-                FactArtifact.fact_revision_id.in_(revision_ids)
+            sa.select(Fact.id, Fact.source_artifact_id).where(
+                Fact.task_code == task_code
             )
         )
-        artifact_ids = [row[0] for row in art_result]
+        rows = result.all()
+        fact_ids = [row[0] for row in rows]
+        artifact_ids = [row[1] for row in rows if row[1] is not None]
 
     # 删 MinIO 中的 artifact 文件
     if artifact_ids:
@@ -1274,57 +1132,5 @@ async def delete_facts_by_task(
 
     if fact_ids:
         async with session_scope(service.session_factory) as session:
-            await session.execute(sa.delete(FactRevision).where(FactRevision.fact_id.in_(fact_ids)))
             await session.execute(sa.delete(Fact).where(Fact.id.in_(fact_ids)))
             await session.flush()
-
-
-@facts_router.post("/{fact_id}/revise", response_model=FactRevisionResponse)
-async def revise_fact(
-    fact_id: UUID,
-    body: ReviseFactRequest,
-    current_user: WriteUserDep,
-    service: FactServiceDep,
-) -> FactRevisionResponse:
-    """创建事实的新修订（旧修订不可变）。"""
-    from packages.facts.observations import (
-        NormalizedObservationInput,
-        RawObservationInput,
-    )
-
-    changes: dict = {"reason": body.reason}
-    if body.subject_id is not None:
-        changes["subject_id"] = body.subject_id
-    if body.method_version_id is not None:
-        changes["method_version_id"] = body.method_version_id
-    if body.started_at is not None:
-        changes["started_at"] = body.started_at
-    if body.ended_at is not None:
-        changes["ended_at"] = body.ended_at
-    if body.raw is not None:
-        changes["raw"] = tuple(
-            RawObservationInput(
-                source_path=r.source_path,
-                source_value=r.source_value,
-                source_unit=r.source_unit,
-                source_name=r.source_name,
-                artifact_id=r.artifact_id,
-                id=r.id,
-            )
-            for r in body.raw
-        )
-    if body.normalized is not None:
-        changes["normalized"] = tuple(
-            NormalizedObservationInput(
-                variable_version_id=n.variable_version_id,
-                raw_observation_id=n.raw_observation_id,
-                value=n.value,
-                unit=n.unit,
-            )
-            for n in body.normalized
-        )
-    if body.artifacts is not None:
-        changes["artifacts"] = tuple(body.artifacts)
-
-    ref = await service.revise(fact_id, reason=body.reason, changes=changes)
-    return _ref_to_response(ref)

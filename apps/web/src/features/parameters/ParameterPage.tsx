@@ -178,14 +178,6 @@ export function ParameterPage(): JSX.Element {
       align: 'center' as const,
     },
     {
-      title: '陈旧度',
-      dataIndex: 'staleness_status',
-      key: 'staleness_status',
-      width: 100,
-      render: (s: string | null) =>
-        s ? <Tag color="orange">{s}</Tag> : <Tag>正常</Tag>,
-    },
-    {
       title: '操作',
       key: 'action',
       width: 220,

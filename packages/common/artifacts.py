@@ -242,6 +242,14 @@ class ArtifactService:
                 )
                 session.add(blob)
                 await session.flush()
+            else:
+                # blob 记录存在，但 MinIO 文件可能已被删（数据损坏恢复场景）
+                # 检查 S3 文件是否存在，不存在则重新上传
+                try:
+                    await asyncio.to_thread(self._s3.head_object, object_key)
+                except Exception:
+                    # S3 文件不存在，重新上传
+                    await asyncio.to_thread(self._s3.put_object, object_key, data, media_type)
 
             artifact = Artifact(
                 organization_id=self._org_id,

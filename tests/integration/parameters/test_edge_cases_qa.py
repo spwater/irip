@@ -3,9 +3,6 @@
 Additional edge cases not covered by the engineer's test suite:
 - Approve a non-pending candidate → candidate_not_pending
 - Reject by same user (submitter) → self_approval_forbidden
-- Staleness check on parameter with no new facts → current
-- Get version 1 after version 2 published → still readable (duplicate
-  of engineer's test, but validates independently)
 """
 
 import pytest
@@ -123,52 +120,3 @@ class TestQAEdgeCases:
                 comment="self reject",
             )
         assert exc_info.value.code == "self_approval_forbidden"
-
-    @pytest.mark.asyncio
-    async def test_staleness_no_new_facts_returns_current(
-        self,
-        param_setup: dict,
-        async_session_factory: async_sessionmaker[AsyncSession],
-    ) -> None:
-        """Staleness check with no new facts → current.
-
-        Flow:
-        1. Create derivation chain;
-        2. Create parameter + candidate + approve;
-        3. Check staleness immediately → current (no new revisions).
-        """
-        org_id = param_setup["organization_id"]
-        actor_id = param_setup["actor_id"]
-        reviewer_id = new_id()
-
-        chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=2)
-        run_ref = chain["run_ref"]
-
-        param_service = ParameterService(
-            session_factory=async_session_factory,
-            organization_id=org_id,
-            actor_id=actor_id,
-        )
-
-        param_result = await param_service.create_parameter(
-            variable_code=param_setup["variable_code"],
-            object_id=param_setup["object_id"],
-        )
-        parameter_id = param_result["parameter_id"]
-
-        output = run_ref.outputs[0]
-        candidate_result = await param_service.create_candidate(
-            parameter_id=parameter_id,
-            derivation_run_id=run_ref.id,
-            value=str(output.value),
-            unit=output.unit,
-            confidence=str(output.confidence),
-        )
-        version_ref = await param_service.approve(
-            candidate_id=candidate_result["candidate_id"],
-            reviewer=reviewer_id,
-        )
-
-        # Check staleness with no new fact revisions → current
-        state = await param_service.check_staleness(version_ref.version_id)
-        assert state == "current"

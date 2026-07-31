@@ -1,39 +1,17 @@
 /**
- * 标准域 API 模块（F-23: 按领域拆分）
+ * 标准域 API 模块（F-23: 按领域拆分，标准层空表清理后精简版）
  *
- * 从 client.ts 拆分出的标准变量、工业对象、模板、方法、包相关类型和函数。
+ * 标准变量、模板、包相关 API 已随 migration 0057 删除，
+ * 仅保留工业对象（Objects）与对象类型（Object Types）相关函数。
  */
 
 export {
   type CursorPage,
-  type VariableSummary,
-  type VariableDetail,
-  type VariableVersion,
   type IndustrialObject,
-  type ObjectRelation,
-  type DescendantsResponse,
-  type TemplateSummary,
-  type MethodSummary,
-  type PackageSummary,
   type StandardStatus,
   type QualityLevel,
   type PreviewTable,
 } from './types';
-
-// Variables API
-export {
-  apiCreateVariable,
-  apiListVariables,
-  apiGetVariable,
-  apiListVariableVersions,
-  apiSubmitVariable,
-  apiPublishVariable,
-  apiRejectVariable,
-  apiDeprecateVariable,
-  apiResubmitVariable,
-  apiAddVariableAlias,
-  apiConvertUnits,
-} from './standards-objects';
 
 // Objects API
 export {
@@ -43,41 +21,18 @@ export {
   apiUpdateObject,
   apiUpdateObjectStatus,
   apiDeleteObject,
-  apiAddObjectRelation,
-  apiRemoveObjectRelation,
-  apiListObjectRelations,
-  apiGetObjectRelations,
-  apiGetObjectDescendants,
 } from './standards-objects';
 
-// Templates API
+// Object Types API
 export {
-  apiCreateTemplate,
-  apiListTemplates,
-  apiGetTemplate,
-  apiSubmitTemplate,
-  apiPublishTemplate,
-  apiRejectTemplate,
-  apiDeprecateTemplate,
-  apiAddObservationRequirement,
+  apiListObjectTypes,
+  apiCreateObjectType,
+  apiUpdateObjectType,
+  apiDeleteObjectType,
 } from './standards-objects';
 
-// Methods API
+// Ingestions preview API
 export {
-  apiCreateMethod,
-  apiListMethods,
-  apiGetMethod,
-  apiSubmitMethod,
-  apiPublishMethod,
-} from './standards-objects';
-
-// Packages API
-export {
-  apiCreatePackage,
-  apiListPackages,
-  apiGetPackage,
-  apiAddPackageRef,
-  apiSubmitPackage,
-  apiPublishPackage,
-  apiRejectPackage,
+  apiPreviewIngestion,
+  apiPreviewSource,
 } from './standards-objects';

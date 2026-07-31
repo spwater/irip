@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
+  Avatar,
   Button,
   Card,
   Checkbox,
+  Drawer,
   Input,
   List,
   Modal,
   Popconfirm,
+  Select,
   Space,
   Switch,
   Tag,
@@ -14,7 +17,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { SearchOutlined, UserAddOutlined, TeamOutlined } from '@ant-design/icons';
 import {
   useQuery,
   useQueryClient,
@@ -23,6 +26,8 @@ import ProviderStatus from '@/features/assistant/ProviderStatus';
 import MessageThread from '@/features/assistant/MessageThread';
 import ConversationSearch from '@/features/assistant/ConversationSearch';
 import ShowcasePanel from '@/features/assistant/ShowcasePanel';
+import ConversationTabs from '@/features/assistant/ConversationTabs';
+import MentionInput from '@/features/assistant/MentionInput';
 import {
   apiCancelRequest,
   apiCreateConversation,
@@ -35,11 +40,12 @@ import {
   type AssistantMessage,
   type ConversationSummary,
 } from '@/api/models-ai';
+import { apiListParticipants, apiInviteParticipant, apiRemoveParticipant, apiListMentionableUsers } from '@/api/collaboration';
 import { apiListFacts, apiGetFactData } from '@/api/facts-provenance';
 import { extractApiError, type FactSummary } from '@/api/types';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 const { Title, Text } = Typography;
-const { TextArea } = Input;
 
 /**
  * AI 助手主页面
@@ -63,10 +69,18 @@ export function AssistantPage(): JSX.Element {
   const [factContextLabel, setFactContextLabel] = useState<string | null>(null);
   const [factSearchText, setFactSearchText] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [participantDrawerOpen, setParticipantDrawerOpen] = useState(false);
+  const [inviteUserIds, setInviteUserIds] = useState<string[]>([]);
 
   // 搜索关键词 + 橱窗收起状态
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showcaseCollapsed, setShowcaseCollapsed] = useState(false);
+
+  // irip-ai-collab: 协作功能状态
+  const currentUser = useAuthStore((s) => s.user);
+  const [activeTab, setActiveTab] = useState<'private' | 'same_org' | 'cross_org'>('same_org');
+  const [mentions, setMentions] = useState<string[]>([]);
 
   // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
@@ -132,11 +146,16 @@ export function AssistantPage(): JSX.Element {
   const streamingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ---- 对话列表查询（支持关键词搜索） ----
+  // ---- 对话列表查询（支持关键词搜索 + 三栏筛选） ----
   const { data: conversations } = useQuery({
-    queryKey: ['assistant-conversations', showArchived, searchKeyword || undefined],
-    queryFn: () => apiListConversations({ archivedOnly: showArchived, keyword: searchKeyword || undefined }),
+    queryKey: ['assistant-conversations', showArchived, searchKeyword || undefined, activeTab],
+    queryFn: () => apiListConversations({
+      archivedOnly: showArchived,
+      keyword: searchKeyword || undefined,
+      tab: activeTab,
+    }),
     retry: false,
+    refetchInterval: 30_000, // irip-ai-collab: 30 秒轮询刷新
   });
 
   const conversationList: ConversationSummary[] = conversations ?? [];
@@ -156,7 +175,44 @@ export function AssistantPage(): JSX.Element {
     queryFn: () => apiListMessages(selectedConvId!),
     enabled: !!selectedConvId,
     retry: false,
+    refetchInterval: selectedConvId ? 3_000 : false, // irip-ai-collab: 3 秒轮询新消息
   });
+
+  // irip-ai-collab: 查询参与者（判断当前用户是否为 owner）
+  const { data: participantsData } = useQuery({
+    queryKey: ['participants', selectedConvId],
+    queryFn: () => apiListParticipants(selectedConvId!),
+    enabled: !!selectedConvId,
+    retry: false,
+  });
+
+  // irip-ai-collab: 可邀请用户（同 org active 用户）
+  const { data: mentionableUsersData } = useQuery({
+    queryKey: ['mentionable-users'],
+    queryFn: apiListMentionableUsers,
+    enabled: inviteModalOpen,
+    staleTime: 60_000,
+  });
+
+  // 判断当前用户是否为选中对话的 owner
+  // irip-ai-collab: 优先从 participant 记录判断，兼容旧对话（无 participant 记录时按创建者判断）
+  const isOwner = useMemo(() => {
+    if (!selectedConvId || !currentUser) return false;
+    const participants = participantsData ?? [];
+    // 优先从 participant 记录判断
+    if (participants.length > 0) {
+      return participants.some((p) => p.user_id === currentUser.id && p.role === 'owner');
+    }
+    // 兼容旧对话：无 participant 记录时，创建者即 owner
+    const conv = conversationList.find((c) => c.id === selectedConvId);
+    return conv?.user_id === currentUser.id;
+  }, [selectedConvId, currentUser, participantsData, conversationList]);
+
+  // irip-ai-collab: 判断当前对话是否为协作对话（参与者 > 1）
+  const isCollaborative = useMemo(() => {
+    const participants = participantsData ?? [];
+    return participants.length > 1;
+  }, [participantsData]);
 
   // 合并本地消息和数据库消息
   const displayMessages: AssistantMessage[] = (() => {
@@ -176,6 +232,10 @@ export function AssistantPage(): JSX.Element {
         citations: [],
         uncertainty: null,
         created_at: new Date().toISOString(),
+        mentions: [],
+        sender_user_id: null,
+        sender_display_name: null,
+        sender_avatar_url: null,
       };
       return [...dbHistory, ...newLocalMessages, aiMsg];
     }
@@ -208,7 +268,7 @@ export function AssistantPage(): JSX.Element {
         labels.push(label);
         // 传完整的 metadata + points + series
         const compact = { metadata: data.metadata, points: data.points, series: data.series };
-        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(compact, null, 2)}\n\`\`\``);
+        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(compact)}\n\`\`\``);
       }
       const context = `以下是实验数据，请基于此数据回答用户的问题：\n\n${allData.join('\n\n')}`;
       setFactContext(context);
@@ -256,6 +316,9 @@ export function AssistantPage(): JSX.Element {
 
     let convId = selectedConvId;
 
+    // 保存当前 mentions 引用（setMentions 会异步清空）
+    const currentMentions = [...mentions];
+
     // 立即显示用户消息（在创建对话之前就显示，避免首次提问等待期间看不到）
     const userMsg: AssistantMessage = {
       id: `local-${Date.now()}`,
@@ -266,11 +329,20 @@ export function AssistantPage(): JSX.Element {
       citations: [],
       uncertainty: null,
       created_at: new Date().toISOString(),
+      mentions: currentMentions,
+      sender_user_id: currentUser?.id ?? null,
+      sender_display_name: currentUser?.displayName ?? null,
+      sender_avatar_url: currentUser?.avatarUrl ?? null,
     };
     setLocalMessages((prev) => [...prev, userMsg]);
     setInputText('');
+    setMentions([]); // 清空 mentions
     setIsSending(true);
-    setStreamingAnswer('');
+
+    // irip-ai-collab: 根据对话类型判断是否触发 AI 回复
+    // 私有对话（参与者 <= 1）：AI 自动回复（不管 mentions）
+    // 协作对话（参与者 > 1）：mentions 中包含 "ai" 才触发 AI，否则只保存用户消息
+    const isMentionOnly = isCollaborative && !currentMentions.includes('ai');
 
     // 如果没有选中对话，自动创建一个
     if (!convId) {
@@ -291,13 +363,39 @@ export function AssistantPage(): JSX.Element {
       }
     }
 
+    // 协作对话中仅 @人（不 @AI）模式：仅保存用户消息，不显示 AI 流式回复
+    if (isMentionOnly) {
+      try {
+        await apiSendMessage(convId, {
+          question: trimmed,
+          thinking_enabled: thinkingEnabled,
+          system_context: factContext ?? undefined,
+          mentions: currentMentions,
+        });
+        // 直接刷新数据库消息（后端仅保存用户消息，无 AI 回复）
+        void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
+        void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+        setLocalMessages([]);
+        setIsSending(false);
+      } catch (err) {
+        setStreamingAnswer(null);
+        message.error(extractApiError(err));
+        setIsSending(false);
+        void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
+      }
+      return;
+    }
+
+    // 正常 AI 问答模式（私有对话或协作对话中 @AI）
+    setStreamingAnswer('');
+
     // 创建 AbortController 用于中断请求
     abortControllerRef.current = new AbortController();
 
     // 模拟流式输出（逐字显示）
     // 实际 API 返回完整回答后，用定时器逐字追加
     try {
-      const res = await apiSendMessage(convId, { question: trimmed, thinking_enabled: thinkingEnabled, system_context: factContext ?? undefined }, abortControllerRef.current.signal);
+      const res = await apiSendMessage(convId, { question: trimmed, thinking_enabled: thinkingEnabled, system_context: factContext ?? undefined, mentions: currentMentions.length > 0 ? currentMentions : undefined }, abortControllerRef.current.signal);
       const fullAnswer = res.answer || '(无回答)';
 
       // 逐字流式显示
@@ -339,7 +437,7 @@ export function AssistantPage(): JSX.Element {
       // 刷新数据库消息（可能用户消息已保存但 AI 回答失败）
       void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
     }
-  }, [inputText, isSending, selectedConvId, thinkingEnabled, factContext, queryClient]);
+  }, [inputText, isSending, selectedConvId, thinkingEnabled, factContext, queryClient, mentions, currentUser, isCollaborative]);
 
   // 清理定时器
   useEffect(() => {
@@ -380,7 +478,7 @@ export function AssistantPage(): JSX.Element {
   }, [messagesData, isSending, streamingAnswer]);
 
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 140px)' }}>
+    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 180px)', overflow: 'hidden' }}>
       <style>{`
         .ant-list-item:hover .conv-actions {
           opacity: 1 !important;
@@ -431,6 +529,7 @@ export function AssistantPage(): JSX.Element {
         }
       >
         <ConversationSearch onSearch={setSearchKeyword} />
+        <ConversationTabs activeTab={activeTab} onTabChange={setActiveTab} />
         <div style={{ flex: 1, overflow: 'auto' }}>
         <List
           dataSource={conversationList}
@@ -466,6 +565,27 @@ export function AssistantPage(): JSX.Element {
                       {conv.archived && <Tag color='default' style={{ fontSize: 9, margin: 0, padding: '0 4px', lineHeight: '16px' }}>归档</Tag>}
                     </div>
                   </div>
+                }
+                description={
+                  conv.participants && conv.participants.length > 1 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      <Avatar.Group size={20} maxCount={3}>
+                        {conv.participants.slice(0, 3).map((p) => (
+                          <Avatar
+                            key={p.user_id}
+                            src={p.avatar_url}
+                            size={20}
+                            style={{ fontSize: 10 }}
+                          >
+                            {p.display_name?.charAt(0) || '?'}
+                          </Avatar>
+                        ))}
+                      </Avatar.Group>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {conv.participants.length}人协作
+                      </Text>
+                    </div>
+                  ) : undefined
                 }
               />
               {/* hover 悬浮操作按钮 */}
@@ -577,6 +697,34 @@ export function AssistantPage(): JSX.Element {
         }
         extra={<ProviderStatus />}
       >
+        {/* irip-ai-collab: 参与者工具栏 */}
+        {selectedConvId && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
+            <Space size="small">
+              <Avatar.Group size="small" maxCount={5}>
+                {(participantsData ?? []).map((p) => (
+                  <Avatar key={p.user_id} src={p.avatar_url} size={24} style={{ backgroundColor: p.role === 'owner' ? '#faad14' : '#1686AE', fontSize: 11 }}>
+                    {p.display_name.charAt(0)}
+                  </Avatar>
+                ))}
+              </Avatar.Group>
+              {(participantsData ?? []).length > 0 && (
+                <Button size="small" type="text" icon={<TeamOutlined />} onClick={() => setParticipantDrawerOpen(true)}>
+                  {(participantsData ?? []).length}人
+                </Button>
+              )}
+            </Space>
+            {isOwner && (
+              <Button size="small" type="primary" ghost icon={<UserAddOutlined />} onClick={() => {
+                // 打开时预选当前参与者（排除 owner 自己）
+                setInviteUserIds((participantsData ?? []).filter((p) => p.role !== 'owner').map((p) => p.user_id));
+                setInviteModalOpen(true);
+              }}>
+                邀请成员
+              </Button>
+            )}
+          </div>
+        )}
         {/* 消息列表区域 */}
         <div
           style={{
@@ -652,18 +800,21 @@ export function AssistantPage(): JSX.Element {
                 </Button>
               </Tooltip>
             )}
-            <TextArea
+            <MentionInput
               value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="输入问题，Enter 发送"
-              autoSize={{ minRows: 1, maxRows: 4 }}
+              onChange={setInputText}
+              mentions={mentions}
+              onMentionsChange={setMentions}
+              placeholder="输入问题，@ 提及成员，Enter 发送"
+              disabled={isSending}
+              isCollaborative={isCollaborative}
+              participants={participantsData ?? []}
               onPressEnter={(e) => {
                 if (!e.shiftKey) {
                   e.preventDefault();
                   void handleSend();
                 }
               }}
-              disabled={isSending}
               style={{ flex: 1 }}
             />
           </div>
@@ -720,6 +871,95 @@ export function AssistantPage(): JSX.Element {
           </div>
         </div>
       </Card>
+
+      {/* irip-ai-collab: 成员管理 Modal（邀请 + 移除一体） */}
+      <Modal
+        title="管理对话成员"
+        open={inviteModalOpen}
+        onOk={async () => {
+          if (!selectedConvId) return;
+          const currentParticipantIds = new Set((participantsData ?? [])
+            .filter((p) => p.role !== 'owner')
+            .map((p) => p.user_id));
+          const selectedIds = new Set(inviteUserIds);
+          // 需要邀请的：选中的但不在当前参与者里
+          const toInvite = inviteUserIds.filter((id) => !currentParticipantIds.has(id));
+          // 需要移除的：在当前参与者里但没选中的
+          const toRemove = [...currentParticipantIds].filter((id) => !selectedIds.has(id));
+
+          let okCount = 0;
+          let failCount = 0;
+          for (const uid of toInvite) {
+            try { await apiInviteParticipant(selectedConvId, uid); okCount++; } catch { failCount++; }
+          }
+          for (const uid of toRemove) {
+            try { await apiRemoveParticipant(selectedConvId, uid); okCount++; } catch { failCount++; }
+          }
+
+          void queryClient.invalidateQueries({ queryKey: ['participants', selectedConvId] });
+          void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+          setInviteModalOpen(false);
+          if (okCount > 0 && failCount === 0) message.success(`操作成功（${okCount} 项变更）`);
+          else if (failCount > 0) message.warning(`${okCount} 项成功，${failCount} 项失败`);
+          else message.info('无变更');
+        }}
+        onCancel={() => { setInviteModalOpen(false); setInviteUserIds([]); }}
+        okText="保存"
+        cancelText="取消"
+        width={480}
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 12 }}>
+          勾选要加入的成员，取消勾选移除成员。仅限同组织活跃用户。
+        </Text>
+        <Select
+          mode="multiple"
+          placeholder="选择成员"
+          style={{ width: '100%' }}
+          value={inviteUserIds}
+          onChange={setInviteUserIds}
+          showSearch
+          optionFilterProp="label"
+          options={(mentionableUsersData ?? [])
+            .filter((u) => u.id !== currentUser?.id)
+            .map((u) => ({ value: u.id, label: `${u.display_name}${u.roles.length > 0 ? ` (${u.roles.join(', ')})` : ''}` }))}
+          notFoundContent="无可选用户"
+        />
+      </Modal>
+
+      {/* irip-ai-collab: 参与者列表 Drawer */}
+      <Drawer
+        title="对话参与者"
+        open={participantDrawerOpen}
+        onClose={() => setParticipantDrawerOpen(false)}
+        width={320}
+      >
+        <List
+          dataSource={participantsData ?? []}
+          renderItem={(p) => (
+            <List.Item
+              actions={
+                isOwner && p.role !== 'owner'
+                  ? [<Button key="remove" type="link" danger size="small"
+                      onClick={async () => {
+                        if (!selectedConvId) return;
+                        try { await apiRemoveParticipant(selectedConvId, p.user_id);
+                          void queryClient.invalidateQueries({ queryKey: ['participants', selectedConvId] });
+                          message.success('成员已移除');
+                        } catch (err) { message.error(extractApiError(err)); }
+                      }}>移除</Button>]
+                  : undefined
+              }
+            >
+              <List.Item.Meta
+                avatar={<Avatar src={p.avatar_url} style={{ backgroundColor: p.role === 'owner' ? '#faad14' : '#1686AE' }}>{p.display_name.charAt(0)}</Avatar>}
+                title={<Space size={4}><Text>{p.display_name}</Text><Tag color={p.role === 'owner' ? 'gold' : 'blue'} style={{ fontSize: 10 }}>{p.role === 'owner' ? '创建者' : '成员'}</Tag></Space>}
+                description={<Text type="secondary" style={{ fontSize: 12 }}>加入于 {new Date(p.joined_at).toLocaleDateString('zh-CN')}</Text>}
+              />
+            </List.Item>
+          )}
+          locale={{ emptyText: '暂无参与者' }}
+        />
+      </Drawer>
 
       {/* ---- 右侧：分析橱窗 ---- */}
       <ShowcasePanel

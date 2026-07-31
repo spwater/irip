@@ -721,6 +721,13 @@ class ComponentRegistryService:
                     retryable=False,
                     fields={"component_id": str(component_id)},
                 )
+            # 先清除 active_version_id 外键引用，再删版本，避免 FK 约束冲突
+            await session.execute(
+                sa.update(Component)
+                .where(Component.id == component_id)
+                .where(Component.active_version_id.isnot(None))
+                .values(active_version_id=None)
+            )
             # 删除所有版本
             await session.execute(
                 sa.delete(ComponentVersion).where(ComponentVersion.component_id == component_id)

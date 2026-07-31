@@ -261,12 +261,21 @@ async def update_ai_config(
     clock = SystemClock()
     now = clock.now()
 
-    # H-06: 使用单例 crypto（from_env 返回单例实例）
-    crypto = EnvelopeCrypto.from_env()
-    encrypted_api_key = crypto.encrypt(body.api_key)
-
+    # 如果前端传 __use_saved__，保留已保存的密钥不变
     async with session_scope(_get_session_factory()) as session:
         existing = await _get_config_row(session)
+        if body.api_key == "__use_saved__":
+            if existing is None:
+                raise AppError(
+                    code="validation_failed",
+                    message="无法保留密钥：尚未保存过任何配置",
+                    retryable=False,
+                )
+            encrypted_api_key = existing["api_key"]
+        else:
+            # H-06: 使用单例 crypto（from_env 返回单例实例）
+            crypto = EnvelopeCrypto.from_env()
+            encrypted_api_key = crypto.encrypt(body.api_key)
         if existing is None:
             await session.execute(
                 _ai_config_table.insert().values(
@@ -297,9 +306,12 @@ async def update_ai_config(
                 )
             )
 
+    # 返回时用已保存密钥的掩码值（如果是 __use_saved__ 的话）
+    masked_key = _mask_key(body.api_key) if body.api_key != "__use_saved__" else _mask_key(existing["api_key"]) if existing else "***"
+
     return AIConfigResponse(
         base_url=body.base_url,
-        api_key_masked=_mask_key(body.api_key),
+        api_key_masked=masked_key,
         model_name=body.model_name,
         assistant_model_name=body.assistant_model_name,
         enabled=body.enabled,

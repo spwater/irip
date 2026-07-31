@@ -1,0 +1,115 @@
+classDiagram
+    class FactType {
+        <<enumeration>>
+        EXPERIMENT_RUN
+        SIMULATION_RUN
+        DOCUMENT_RECORD
+        MODEL_EXECUTION
+    }
+
+    class CreateFactCommand {
+        -fact_type: Literal
+        -organization_id: UUID
+        -object_id: UUID
+        -subject_id: str
+        -started_at: datetime | None
+        -ended_at: datetime | None
+        -idempotency_key: str | None
+        -created_by: UUID | None
+        -task_code: str | None
+        -task_name: str | None
+        -department_name: str | None
+        -operator: str | None
+        -run_operator: str | None
+        -equipment_name: str | None
+        -flow_run_id: UUID | None
+    }
+
+    class FactService {
+        -_factory: async_sessionmaker
+        -_org_id: UUID
+        -_actor_id: UUID | None
+        +organization_id: UUID
+        +session_factory: async_sessionmaker
+        +create(command: CreateFactCommand) FactRef
+        +get(fact_id: UUID) FactRef
+        +search(query, filters, cursor, page_size) tuple
+        +list_facts(filters, cursor, page_size) tuple
+    }
+
+    class FactRepository {
+        +insert_fact(session, organization_id, fact_type, object_id, status, idempotency_key, created_by, subject_id, flow_run_id, started_at, ended_at, task_code, task_name, department_name, operator, run_operator, equipment_name, source_artifact_id) Fact
+        +get_fact(session, fact_id, org_id) Fact
+        +search_facts(session, query, org_id, filters, cursor, page_size) tuple
+        +list_facts(session, org_id, filters, cursor, page_size) tuple
+        +find_by_idempotency_key(session, org_id, key) Fact | None
+    }
+
+    class Fact {
+        -id: UUID
+        -organization_id: UUID
+        -fact_type: str
+        -object_id: UUID
+        -status: str
+        -lock_version: int
+        -idempotency_key: str | None
+        -created_at: datetime
+        -updated_at: datetime
+        -created_by: UUID | None
+        -subject_id: str
+        -flow_run_id: UUID | None
+        -started_at: datetime | None
+        -ended_at: datetime | None
+        -task_code: str | None
+        -task_name: str | None
+        -department_name: str | None
+        -operator: str | None
+        -run_operator: str | None
+        -equipment_name: str | None
+        -source_artifact_id: UUID | None
+        -search_vector: object
+    }
+
+    class IngestionPipeline {
+        -_factory: async_sessionmaker
+        -_fact_service: FactService
+        -_quality_engine: QualityEngine
+        -_org_id: UUID
+        -_actor_id: UUID | None
+        +ingest_file(file_path, object_id) IngestionResult
+        +ingest_batch(file_paths, object_id) tuple
+    }
+
+    class SecretStore {
+        -_factory: async_sessionmaker
+        -_org_id: UUID
+        +get(secret_id: UUID) str
+    }
+
+    class IngestionService {
+        -_factory: async_sessionmaker
+        -_org_id: UUID
+        -_artifact_service: object | None
+        +preview(source: ConnectorSource, limit: int) PreviewTable
+    }
+
+    class ConnectorSource {
+        +kind: Literal
+        +config: dict
+    }
+
+    class PreviewTable {
+        +columns: tuple
+        +rows: tuple
+        +row_count: int
+    }
+
+    FactType --> FactService : defines valid types
+    CreateFactCommand --> FactService : input
+    FactService --> FactRepository : delegates persistence
+    FactRepository --> Fact : inserts/queries
+    IngestionPipeline --> FactService : creates facts
+    IngestionPipeline --> IngestionResult : returns
+    IngestionService --> SecretStore : resolves credentials
+    IngestionService --> ConnectorSource : accepts
+    IngestionService --> PreviewTable : returns

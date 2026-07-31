@@ -1,0 +1,132 @@
+%% ===== 时序图 1：创建对话 + 邀请成员 =====
+sequenceDiagram
+    actor U as 用户A（创建者）
+    participant FE as 前端
+    participant API as 后端 API
+    participant SVC as AIService
+    participant DB as PostgreSQL
+
+    U->>FE: 点击"新建对话"
+    FE->>API: POST /api/v1/assistant/conversations
+    API->>API: require_permission("assistant:use") 权限校验
+    API->>SVC: create_conversation(user_id, org_id, title)
+    SVC->>DB: INSERT INTO ai_conversation (user_id, org_id, ...)
+    SVC->>DB: INSERT INTO conversation_participant (conversation_id, user_id, role='owner')
+    DB-->>SVC: 对话创建成功
+    SVC-->>API: ConversationRef
+    API-->>FE: 201 ConversationResponse
+    FE->>FE: invalidate ['assistant-conversations']
+    FE-->>U: 对话创建成功，显示在"私有"栏
+
+    U->>FE: 点击"邀请成员"，选择用户B
+    FE->>API: POST /api/v1/collaboration/conversations/{convId}/participants
+    API->>API: require_permission("conversation:invite")
+    API->>SVC: add_participant(conv_id, target_user_id)
+    SVC->>SVC: 校验：target_user_id 同 org 且对话存在
+    SVC->>DB: INSERT INTO conversation_participant (conv_id, user_id, role='member')
+    DB-->>SVC: 参与者添加成功
+    SVC-->>API: ParticipantRef
+    API-->>FE: 201 ParticipantResponse
+    FE->>FE: invalidate ['participants', convId]
+    FE-->>U: 成员列表更新，对话从"私有"移到"同 org"栏
+
+%% ===== 时序图 2：@人发送消息 =====
+sequenceDiagram
+    actor U as 用户A
+    participant FE as 前端 (MentionInput)
+    participant API as 后端 API
+    participant SVC as AIService
+    participant AI as AI Provider
+    participant DB as PostgreSQL
+
+    U->>FE: 输入 "@" 触发成员列表
+    FE->>API: GET /api/v1/collaboration/mentionable-users
+    API->>SVC: list_mentionable_users(user_id, org_id)
+    SVC->>DB: SELECT id, display_name, avatar_url, roles FROM app_user WHERE organization_id = :org_id
+    DB-->>SVC: 成员列表
+    SVC-->>API: list[MentionableUserRef]
+    API-->>FE: 200 MentionableUserResponse[]
+    FE-->>U: 弹出成员下拉列表
+
+    U->>FE: 选择 "@用户B 分析一下D50数据"
+    FE->>FE: 组装请求：question + mentions=["userB_id"]
+    FE->>API: POST /api/v1/assistant/conversations/{convId}/messages
+    API->>API: 校验对话访问权（参与者或创建者）
+    API->>SVC: ask(user, question, conv_id, mentions=["userB_id"])
+    SVC->>DB: INSERT user_msg (role='user', content, mentions=["userB_id"], sender_user_id)
+    SVC->>AI: 构建 AIRequest（含 system_context + 工具）
+    AI-->>SVC: AIResponse（回答 + 工具调用）
+    SVC->>SVC: 执行工具（按操作者 org_id 过滤数据）
+    SVC->>DB: INSERT ai_msg (role='assistant', content, sender_user_id=null)
+    DB-->>SVC: 消息持久化完成
+    SVC-->>API: AIResponse
+    API-->>FE: AskResponse（含 mentions）
+    FE->>FE: invalidate ['assistant-messages', convId]
+    FE-->>U: 消息列表显示：用户A头像 + "@用户B"高亮 + AI回答
+
+%% ===== 时序图 3：对话列表三栏查询 =====
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端 (ConversationTabs)
+    participant Q as TanStack Query
+    participant API as 后端 API
+    participant SVC as AIService
+    participant DB as PostgreSQL
+
+    U->>FE: 切换到"同 org"标签页
+    FE->>Q: useQuery(['assistant-conversations', 'same_org', archived, keyword])
+    Q->>API: GET /api/v1/assistant/conversations?tab=same_org&archived=false
+    API->>API: require_permission("assistant:use")
+    API->>SVC: list_conversations_with_tab(user_id, org_id, tab='same_org')
+    
+    SVC->>DB: SELECT c.* FROM ai_conversation c WHERE (c.user_id = :me OR EXISTS (SELECT 1 FROM conversation_participant p WHERE p.conversation_id = c.id AND p.user_id = :me)) AND c.organization_id = :org_id AND c.archived = false ORDER BY pinned DESC, updated_at DESC
+    DB-->>SVC: 对话列表
+    SVC->>DB: SELECT p.user_id, u.display_name, u.avatar_url FROM conversation_participant p JOIN app_user u ON p.user_id = u.id WHERE p.conversation_id IN (...)
+    DB-->>SVC: 参与者信息
+    SVC-->>API: list[ConversationRef]（含参与者摘要）
+    API-->>Q: 200 ConversationListResponse
+    Q-->>FE: 渲染对话列表（含参与者头像组）
+    FE-->>U: "同 org"栏显示对话列表
+
+    U->>FE: 切换到"跨 org"标签页
+    FE-->>U: 显示占位文案"跨 org 协作功能将在二期上线"
+
+%% ===== 时序图 4：个人设置改密码 =====
+sequenceDiagram
+    actor U as 用户
+    participant FE as 前端 (PersonalSettings)
+    participant API as 后端 API
+    participant SVC as AccountService
+    participant DB as PostgreSQL
+
+    U->>FE: 进入 /platform → 个人设置
+    FE->>API: GET /api/v1/account/profile
+    API->>API: get_current_user (JWT 校验)
+    API->>SVC: get_profile(user_id)
+    SVC->>DB: SELECT id, email, display_name, avatar_url, roles FROM app_user WHERE id = :user_id
+    DB-->>SVC: 用户信息
+    SVC-->>API: ProfileRef
+    API-->>FE: 200 ProfileResponse
+    FE-->>U: 显示个人信息表单
+
+    U->>FE: 输入旧密码 + 新密码 + 确认密码，点击保存
+    FE->>API: POST /api/v1/account/password
+    API->>API: get_current_user (JWT 校验，硬编码 account:password 放行)
+    API->>SVC: change_password(user_id, old_password, new_password)
+    SVC->>DB: SELECT password_hash FROM app_user WHERE id = :user_id
+    DB-->>SVC: 当前密码哈希
+    SVC->>SVC: Argon2id verify(old_password, password_hash)
+    alt 旧密码正确
+        SVC->>SVC: Argon2id hash(new_password)
+        SVC->>DB: UPDATE app_user SET password_hash = :new_hash, token_version = token_version + 1
+        DB-->>SVC: 更新成功
+        SVC-->>API: 成功
+        API-->>FE: 200 { ok: true }
+        FE->>FE: 提示"密码修改成功，请重新登录"
+        FE->>FE: 触发 logout()（token_version 变化使旧 token 失效）
+        FE-->>U: 跳转登录页
+    else 旧密码错误
+        SVC-->>API: AppError(invalid_credentials)
+        API-->>FE: 400 { error: { code: "invalid_credentials" } }
+        FE-->>U: 提示"旧密码不正确"
+    end

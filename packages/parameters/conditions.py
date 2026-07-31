@@ -48,7 +48,6 @@ ALLOWED_CONDITION_FIELDS: frozenset[str] = frozenset(
         "organization_id",
         "object_id",
         "material_code",
-        "method_version_id",
         "temperature_c",
         "humidity_pct",
         "sample_moisture_pct",

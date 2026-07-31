@@ -43,6 +43,5 @@ export {
   apiListCandidates,
   apiApproveCandidate,
   apiRejectCandidate,
-  apiCheckStaleness,
   apiDeprecateParameter,
 } from './facts-provenance';

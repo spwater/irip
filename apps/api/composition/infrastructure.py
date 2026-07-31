@@ -1,11 +1,15 @@
-"""基础设施依赖覆盖 provider（F-20）。
+"""基础设施依赖覆盖 provider（F-20，标准层空表清理后精简版）。
 
 注册：
 - 健康检查依赖（DB 会话工厂、Redis URL、S3 客户端）；
 - 工件服务（ArtifactService）；
 - 治理/审计/备份路由用的 DB 会话工厂；
-- 映射评分服务、映射配置服务、数据源预览服务；
+- 数据源预览服务（IngestionService）；
 - 参数服务。
+
+映射评分服务（MappingService）与映射配置生命周期服务
+（MappingProfileService）依赖的 variable / mapping_profile 表已在
+migration 0057 中 DROP，对应 DI 注册一并删除。
 """
 
 from typing import Annotated
@@ -17,20 +21,13 @@ from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.assistant import get_ai_service  # noqa: F401 (re-export guard)
 from apps.api.routers.audit import get_audit_session_factory
 from apps.api.routers.backups import get_backups_session_factory
-from apps.api.routers.fact_templates import (
-    get_package_service,  # noqa: F401 (re-export guard)
-)
 from apps.api.routers.governance import get_governance_session_factory
 from apps.api.routers.health import (
     get_health_session_factory,
     get_redis_url,
     get_s3_repo,
 )
-from apps.api.routers.ingestions import (
-    get_ingestion_service,
-    get_mapping_profile_service,
-    get_mapping_service,
-)
+from apps.api.routers.ingestions import get_ingestion_service
 from apps.api.routers.parameters import get_parameter_service
 from apps.api.routers.uploads import get_artifact_service
 
@@ -42,11 +39,7 @@ def register(ctx: CompositionContext) -> None:
         ctx: 组合根共享上下文。
     """
     from packages.common.artifacts import ArtifactService
-    from packages.connectors.mapping import (
-        IngestionService,
-        MappingProfileService,
-        MappingService,
-    )
+    from packages.connectors.mapping import IngestionService
     from packages.parameters.service import ParameterService
 
     # 健康检查依赖
@@ -77,32 +70,6 @@ def register(ctx: CompositionContext) -> None:
 
     # 备份/恢复路由用的 DB 会话工厂
     ctx.app.dependency_overrides[get_backups_session_factory] = lambda: ctx.session_factory
-
-    # 映射评分服务
-    async def _get_mapping_service_dep(
-        current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    ) -> MappingService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
-        return MappingService(
-            session_factory=ctx.session_factory,
-            organization_id=org_id,
-            actor_id=current_user.user_id,
-        )
-
-    ctx.app.dependency_overrides[get_mapping_service] = _get_mapping_service_dep
-
-    # 映射配置生命周期服务
-    async def _get_mapping_profile_service_dep(
-        current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    ) -> MappingProfileService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
-        return MappingProfileService(
-            session_factory=ctx.session_factory,
-            organization_id=org_id,
-            actor_id=current_user.user_id,
-        )
-
-    ctx.app.dependency_overrides[get_mapping_profile_service] = _get_mapping_profile_service_dep
 
     # 数据源预览服务
     async def _get_ingestion_service_dep(

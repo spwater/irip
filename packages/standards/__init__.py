@@ -1,61 +1,19 @@
-"""标准管理包：单位转换、标准变量、不可变版本、别名。
+"""标准管理包：工业对象图与对象类型字典。
 
-本包是 V1 粒度 L1->L3 证据链的基础层，提供：
-- units: 基于 Decimal 的单位转换器（仿射变换 + 维度检查）；
-- variables: 标准变量实体 + 不可变版本 + 别名 ORM 模型；
-- state_machine: 标准状态机（draft -> in_review -> published -> deprecated）；
-- repository: 数据访问层；
-- service: 业务编排服务（创建 / 提交 / 发布 / 拒绝 / 弃用 / 重提）。
+本包原包含变量/模板/包/单位转换等标准层组件，但这些表全部为空且
+相关代码已删除（migration 0057 DROP）。当前仅保留：
+
+- objects: 工业对象（IndustrialObject）/ 对象类型字典（ObjectTypeDict）/
+  对象图服务（ObjectGraphService），有 6 条数据在用；
+- methods: 空子包（migration 0056 已废弃，保留空 __init__.py）；
+- 顶层 shim 文件 object_graph.py / object_type_dict.py，供其他模块通过
+  顶层路径导入。
 """
-# ruff: noqa: I001, F401
-# 导入顺序固定（拓扑序）：state_machine -> variables -> methods
-# -> templates -> packages -> objects。
-# variables 子包内部依赖 state_machine；templates 依赖 variables；
-# packages 依赖 methods/templates/variables（懒加载）；各子包内部顺序由各自 __init__.py 保证。
-from packages.standards.state_machine import (
-    StandardStatus,
-    assert_transition,
-)
-from packages.standards.variables import (
-    DataType,
-    QuantityKind,
-    StandardService,
-    StandardsRepository,
-    UnitConverter,
-    Variable,
-    VariableAlias,
-    VariableStatus,
-    VariableVersion,
-)
-from packages.standards.methods import (
-    Method,
-    MethodService,
-    MethodStatus,
-    MethodVersion,
-)
-from packages.standards.templates import (
-    Cardinality,
-    FactTemplate,
-    FactTemplateVersion,
-    FactType,
-    ObservationRequirement,
-    TemplateService,
-    TemplateValidator,
-    ValidationReport,
-)
-from packages.standards.packages import (
-    PackageReference,
-    PackageService,
-    PackageStatus,
-    PackageValidationReport,
-    StandardPackage,
-    StandardPackageVersion,
-)
+# ruff: noqa: F401
 from packages.standards.objects import (
     HIERARCHICAL_RELATIONS,
     IndustrialObject,
     ObjectGraphService,
-    ObjectRelation,
     ObjectType,
     ObjectTypeDict,
     RelationType,

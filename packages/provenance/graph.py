@@ -1,8 +1,8 @@
-"""溯源图服务（IRIP Task 17）。
+"""溯源图服务。
 
 ProvenanceGraphService 提供溯源图的构建、遍历与边管理。
 
-溯源图将推导运行连接回原始事实与观察值，支持从推导结果向上追溯到
+溯源图将推导运行连接回原始事实，支持从推导结果向上追溯到
 原始数据，也支持向下遍历到参数版本。
 
 核心功能：
@@ -10,7 +10,7 @@ ProvenanceGraphService 提供溯源图的构建、遍历与边管理。
 2. get_paths_to_raw: 从参数版本追溯到原始事实的路径。
 3. add_edge: 添加溯源边。
 
-节点类型：fact_revision, observation, intermediate_artifact,
+节点类型：fact, intermediate_artifact,
 derivation_run, parameter_version。
 边类型：selected_from, transformed_by, produced, published_as。
 """
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
 from packages.common.ids import new_id
-from packages.facts.entities import FactRevision, RawObservation
+from packages.facts.entities import Fact
 from packages.provenance.entities import (
     DerivationRun,
     ProvenanceEdge,
@@ -48,8 +48,7 @@ class ProvenanceNode:
 
     id: UUID
     node_type: Literal[
-        "fact_revision",
-        "observation",
+        "fact",
         "intermediate_artifact",
         "derivation_run",
         "parameter_version",
@@ -118,8 +117,8 @@ class ProvenanceGraphService:
     async def get_graph(self, derivation_run_id: UUID) -> ProvenanceGraph:
         """获取推导运行的完整溯源图。
 
-        从 derivation_run 出发，沿 provenance_edge 向上遍历到 fact_revisions，
-        再到 observations，向下遍历到 parameter_versions。
+        从 derivation_run 出发，沿 provenance_edge 向上遍历到 facts，
+        向下遍历到 parameter_versions。
 
         Args:
             derivation_run_id: 推导运行 UUID。
@@ -171,8 +170,8 @@ class ProvenanceGraphService:
             )
             provenance_edges = edge_result.scalars().all()
 
-            # 收集所有 fact_revision IDs
-            fact_revision_ids: list[UUID] = []
+            # 收集所有 fact IDs
+            fact_ids: list[UUID] = []
             for pe in provenance_edges:
                 edge_key = (pe.source_id, pe.target_id, pe.edge_type)
                 if edge_key not in visited_edges:
@@ -187,55 +186,26 @@ class ProvenanceGraphService:
                         )
                     )
 
-                # 收集 fact_revision 目标
-                if pe.target_type == "fact_revision":
-                    fact_revision_ids.append(pe.target_id)
+                # 收集 fact 目标
+                if pe.target_type == "fact":
+                    fact_ids.append(pe.target_id)
 
-            # 加载 fact_revision 节点
-            if fact_revision_ids:
-                fr_result = await session.execute(
-                    sa.select(FactRevision).where(FactRevision.id.in_(fact_revision_ids))
+            # 加载 fact 节点
+            if fact_ids:
+                f_result = await session.execute(
+                    sa.select(Fact).where(Fact.id.in_(fact_ids))
                 )
-                fact_revisions = fr_result.scalars().all()
+                facts = f_result.scalars().all()
 
-                for fr in fact_revisions:
-                    fr_node = ProvenanceNode(
-                        id=fr.id,
-                        node_type="fact_revision",
-                        label=fr.subject_id,
-                        version=str(fr.revision),
-                        status="active",
+                for f in facts:
+                    f_node = ProvenanceNode(
+                        id=f.id,
+                        node_type="fact",
+                        label=f.subject_id,
+                        version="",
+                        status=f.status,
                     )
-                    nodes[fr.id] = fr_node
-
-                    # 加载该事实修订的原始观察值
-                    raw_result = await session.execute(
-                        sa.select(RawObservation).where(RawObservation.fact_revision_id == fr.id)
-                    )
-                    raw_observations = raw_result.scalars().all()
-
-                    for raw_obs in raw_observations:
-                        obs_node = ProvenanceNode(
-                            id=raw_obs.id,
-                            node_type="observation",
-                            label=raw_obs.source_path,
-                            version="",
-                            status="active",
-                        )
-                        nodes[raw_obs.id] = obs_node
-                        # 添加 fact_revision → observation 边
-                        obs_edge_key = (fr.id, raw_obs.id, "produced")
-                        if obs_edge_key not in visited_edges:
-                            visited_edges.add(obs_edge_key)
-                            edges.append(
-                                ProvenanceEdgeRef(
-                                    source_id=fr.id,
-                                    source_type="fact_revision",
-                                    target_id=raw_obs.id,
-                                    target_type="observation",
-                                    edge_type="produced",
-                                )
-                            )
+                    nodes[f.id] = f_node
 
             # 加载 parameter_version 节点（如果有的话）
             for pe in provenance_edges:
@@ -258,17 +228,16 @@ class ProvenanceGraphService:
     async def get_paths_to_raw(self, parameter_version_id: UUID) -> list[list[ProvenanceNode]]:
         """从参数版本追溯到原始事实的路径。
 
-        沿溯源边从参数版本向上遍历，直到到达观察值节点。
+        沿溯源边从参数版本向上遍历，直到到达事实节点。
 
         Args:
             parameter_version_id: 参数版本 UUID。
 
         Returns:
-            list[list[ProvenanceNode]]: 路径列表，每条路径从参数版本到观察值。
+            list[list[ProvenanceNode]]: 路径列表，每条路径从参数版本到事实。
         """
         async with self._factory() as session:
             # BFS: 从 parameter_version 出发，沿边向上遍历
-            # 先查找以 parameter_version 为目标的边
             edges_result = await session.execute(
                 sa.select(ProvenanceEdge).where(
                     ProvenanceEdge.target_id == parameter_version_id,
@@ -282,7 +251,6 @@ class ProvenanceGraphService:
                 return []
 
             paths: list[list[ProvenanceNode]] = []
-            # BFS 队列：(current_node_id, current_node_type, path_so_far)
             queue: deque[tuple[UUID, str, list[ProvenanceNode]]] = deque()
 
             # 初始化：从 parameter_version 节点开始
@@ -301,40 +269,26 @@ class ProvenanceGraphService:
             while queue:
                 current_id, current_type, path = queue.popleft()
 
-                if current_id in visited and current_type != "observation":
+                if current_id in visited and current_type != "fact":
                     continue
                 visited.add(current_id)
 
                 # 加载当前节点信息
                 current_node: ProvenanceNode | None = None
-                if current_type == "fact_revision":
-                    fr = await session.scalar(
-                        sa.select(FactRevision).where(FactRevision.id == current_id)
+                if current_type == "fact":
+                    f = await session.scalar(
+                        sa.select(Fact).where(Fact.id == current_id)
                     )
-                    if fr is not None:
+                    if f is not None:
                         current_node = ProvenanceNode(
-                            id=fr.id,
-                            node_type="fact_revision",
-                            label=fr.subject_id,
-                            version=str(fr.revision),
-                            status="active",
+                            id=f.id,
+                            node_type="fact",
+                            label=f.subject_id,
+                            version="",
+                            status=f.status,
                         )
-                        # 加载该事实修订的观察值
-                        raw_result = await session.execute(
-                            sa.select(RawObservation).where(
-                                RawObservation.fact_revision_id == fr.id
-                            )
-                        )
-                        raw_obs_list = raw_result.scalars().all()
-                        for raw_obs in raw_obs_list:
-                            obs_node = ProvenanceNode(
-                                id=raw_obs.id,
-                                node_type="observation",
-                                label=raw_obs.source_path,
-                                version="",
-                                status="active",
-                            )
-                            paths.append(path + [current_node, obs_node])
+                        paths.append(path + [current_node])
+                        continue
                 elif current_type == "derivation_run":
                     run = await session.scalar(
                         sa.select(DerivationRun).where(DerivationRun.id == current_id)
@@ -347,17 +301,6 @@ class ProvenanceGraphService:
                             version=str(run.id),
                             status=run.status,
                         )
-                elif current_type == "observation":
-                    # 到达观察值，路径完成
-                    current_node = ProvenanceNode(
-                        id=current_id,
-                        node_type="observation",
-                        label="Observation",
-                        version="",
-                        status="active",
-                    )
-                    paths.append(path + [current_node])
-                    continue
 
                 if current_node is None:
                     continue

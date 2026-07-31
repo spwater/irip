@@ -733,73 +733,15 @@ class ModelService:
         if self._fact_service is None:
             return None
         # F-11: 事实写入失败使执行失败（raise 而非吞掉）
-        from packages.facts.observations import (
-            NormalizedObservation,
-            RawObservation,
-        )
         from packages.facts.service import CreateFactCommand
-
-        raw_obs: list[RawObservation] = []
-        norm_obs: list[NormalizedObservation] = []
-        for key, value in inputs.items():
-            raw_id = new_id()
-            raw_obs.append(
-                RawObservation(
-                    id=raw_id,
-                    fact_revision_id=None,
-                    source_path=f"inputs.{key}",
-                    source_value=value,
-                    source_unit="",
-                    source_name=key,
-                    artifact_id=None,
-                )
-            )
-            norm_obs.append(
-                NormalizedObservation(
-                    id=new_id(),
-                    fact_revision_id=None,
-                    variable_version_id=None,
-                    raw_observation_id=raw_id,
-                    value=value,
-                    unit="",
-                )
-            )
-        for key, value in predictions.items():
-            raw_id = new_id()
-            raw_obs.append(
-                RawObservation(
-                    id=raw_id,
-                    fact_revision_id=None,
-                    source_path=f"predictions.{key}",
-                    source_value=value,
-                    source_unit="",
-                    source_name=key,
-                    artifact_id=None,
-                )
-            )
-            norm_obs.append(
-                NormalizedObservation(
-                    id=new_id(),
-                    fact_revision_id=None,
-                    variable_version_id=None,
-                    raw_observation_id=raw_id,
-                    value=value,
-                    unit="",
-                )
-            )
 
         command = CreateFactCommand(
             fact_type="model_execution",
-            template_version_id=None,  # type: ignore[arg-type]
             organization_id=self._org_id,
             object_id=model_id,  # type: ignore[arg-type]
             subject_id=f"model:{model_id}:version:{version_no}",
             started_at=started_at,
             ended_at=ended_at,
-            method_version_id=None,
-            raw=tuple(raw_obs),
-            normalized=tuple(norm_obs),
-            artifacts=(),
             idempotency_key=(f"model-exec-{model_version_id}-{started_at.isoformat()}"),
             created_by=None,  # type: ignore[arg-type]
         )

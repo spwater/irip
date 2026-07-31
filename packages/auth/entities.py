@@ -73,6 +73,8 @@ class AppUser(Base):
         default=0,
         comment="JWT 撤销版本号（H-06: 禁用/改密/改角色时 +1 使旧 token 失效）",
     )
+    # irip-ai-collab: 用户头像 URL（存储 MinIO 预签名或公开 URL）
+    avatar_url: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
 
     refresh_sessions: Mapped[list["RefreshSession"]] = relationship(
         "RefreshSession",

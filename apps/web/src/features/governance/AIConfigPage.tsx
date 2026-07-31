@@ -50,11 +50,13 @@ export function AIConfigPage(): JSX.Element {
   });
 
   // 大模型配置表单回填
+  // api_key 回填掩码值（如 sk-x***abcd），用户看到说明已保存密钥；
+  // 不修改则保存时发 __use_saved__ 让后端保留原值
   useEffect(() => {
     if (config) {
       form.setFieldsValue({
         base_url: config.base_url,
-        api_key: '',
+        api_key: config.api_key_masked || '',
         model_name: config.model_name,
         assistant_model_name: config.assistant_model_name || '',
       });
@@ -140,9 +142,14 @@ export function AIConfigPage(): JSX.Element {
       const values = await form.validateFields();
       // 保留已有的 meta_prompt
       const existingPrompt = config?.meta_prompt || '';
+      // 如果 api_key 未修改（仍是掩码值或为空），发 __use_saved__ 让后端保留原密钥
+      const apiKeyToSend =
+        values.api_key === config?.api_key_masked || !values.api_key
+          ? '__use_saved__'
+          : values.api_key;
       saveMutation.mutate({
         base_url: values.base_url,
-        api_key: values.api_key,
+        api_key: apiKeyToSend,
         model_name: values.model_name,
         assistant_model_name: values.assistant_model_name,
         enabled: true,

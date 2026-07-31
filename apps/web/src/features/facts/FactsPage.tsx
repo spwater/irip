@@ -114,6 +114,7 @@ export function FactsPage(): JSX.Element {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
 
   // ---- 部门列表查询（用于筛选） ----
@@ -366,14 +367,22 @@ export function FactsPage(): JSX.Element {
             expandable={{
               defaultExpandAllRows: false,
               rowExpandable: (record) => record.isGroup,
+              expandedRowKeys: expandedKeys,
+              onExpandedRowsChange: (keys) => setExpandedKeys(keys as string[]),
             }}
             onRow={(record) => ({
               onClick: () => {
-                if (!record.isGroup && record.fact_id) {
+                if (record.isGroup) {
+                  setExpandedKeys((prev) =>
+                    prev.includes(record.key)
+                      ? prev.filter((k) => k !== record.key)
+                      : [...prev, record.key],
+                  );
+                } else if (record.fact_id) {
                   void navigate({ to: `/facts/${record.fact_id}` });
                 }
               },
-              style: record.isGroup ? {} : { cursor: 'pointer' },
+              style: { cursor: 'pointer' },
             })}
           />
         )}

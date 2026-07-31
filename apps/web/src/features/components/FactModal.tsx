@@ -82,14 +82,19 @@ export function FactModal({
   // 可编辑的数据
   const [headerText, setHeaderText] = useState('');
   const [dataText, setDataText] = useState('');
+  const [initialized, setInitialized] = useState(false);
 
-  // 数据加载后初始化编辑框（有 points 或 series 就初始化）
+  // 数据加载后初始化编辑框（仅首次加载时，不覆盖用户编辑）
   useEffect(() => {
-    if (open && runDetail && (points.length > 0 || series.length > 0)) {
+    if (open && runDetail && (points.length > 0 || series.length > 0) && !initialized) {
       setHeaderText(JSON.stringify(header, null, 2));
       setDataText(JSON.stringify({ points, series }, null, 2));
+      setInitialized(true);
     }
-  }, [open, runDetail]);  // eslint-disable-line react-hooks/exhaustive-deps
+    if (!open) {
+      setInitialized(false);
+    }
+  }, [open, runDetail, initialized]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 写入事实 Mutation
   const persistFactMutation = useMutation({
@@ -111,7 +116,6 @@ export function FactModal({
       }
       return apiPersistRunAsFact(runId!, {
         object_id: factObjectId!,
-        template_version_id: null,
         custom_data: customData,
       });
     },

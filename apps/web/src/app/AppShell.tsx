@@ -81,10 +81,10 @@ export function AppShell(): JSX.Element | null {
             theme="light"
             onCollapse={setSiderCollapsed}
             style={{
-              background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0px, rgba(232, 243, 245, 0.15) 100px, rgba(232, 243, 245, 0) 150px), linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)',
-              backgroundRepeat: 'no-repeat, no-repeat',
-              backgroundSize: '100% 100%, 4px 100%',
-              backgroundPosition: '0 0, right 0',
+              background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0px, rgba(232, 243, 245, 0.15) 100px, rgba(232, 243, 245, 0) 150px)',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '100% 100%',
+              backgroundPosition: '0 0',
               borderRight: 'none',
               position: 'fixed',
               left: 0,
@@ -160,7 +160,7 @@ export function AppShell(): JSX.Element | null {
             />
           </Sider>
 
-          <Layout style={{ background: 'linear-gradient(to bottom, var(--ocean-border-subtle) 0px, transparent 150px)', backgroundRepeat: 'no-repeat', backgroundSize: '4px 100%', backgroundPosition: 'left 0', marginLeft: contentMarginLeft, transition: 'margin-left 200ms var(--ocean-motion-easing)' }}>
+          <Layout style={{ marginLeft: contentMarginLeft, transition: 'margin-left 200ms var(--ocean-motion-easing)' }}>
             <DynamicHeader user={user} onLogout={handleLogout} />
 
             <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
@@ -193,17 +193,16 @@ function DynamicHeader({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0%, rgba(232, 243, 245, 0.15) 70%, rgba(232, 243, 245, 0) 100%)',
+        background: 'linear-gradient(to bottom, rgba(120, 175, 195, 0.65) 0px, rgba(232, 243, 245, 0.15) 100px, rgba(232, 243, 245, 0) 150px)',
         backdropFilter: 'blur(6px)',
-        padding: isHero ? '16px 24px' : '12px 24px',
+        padding: isHero ? '16px 24px' : '16px 24px',
         borderBottom: 'none',
-        backgroundImage: 'none',
         position: 'sticky',
         top: 0,
         zIndex: 100,
         height: 'auto',
         lineHeight: 'normal',
-        gap: 8,
+        gap: 0,
       }}
     >
       {/* 第一行：英文索引(小字在上) + 中文标题(大字在下) + 右侧操作 */}
@@ -212,7 +211,7 @@ function DynamicHeader({
           {header.index && (
             <Text
               style={{
-                fontSize: isHero ? 12 : 11,
+                fontSize: isHero ? 12 : 12,
                 letterSpacing: 2,
                 textTransform: 'uppercase',
                 color: 'var(--ocean-text-muted)',
@@ -228,9 +227,10 @@ function DynamicHeader({
               level={2}
               style={{
                 margin: 0,
-                fontSize: isHero ? 40 : 32,
+                fontSize: isHero ? 40 : 48,
                 fontWeight: 800,
                 lineHeight: 1.15,
+                letterSpacing: '0.08em',
                 color: 'var(--ocean-action-primary)',
               }}
             >
@@ -263,7 +263,7 @@ function DynamicHeader({
 
       {/* 第二行：tabs（如果有）—— 胶囊式导航按钮，左边距与内容区对齐（hero模式不显示） */}
       {!isHero && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 9, marginBottom: 8, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 10, marginBottom: -24, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)' }}>
         {hasTabs &&
           header.tabs!.map((tab) => {
             const isActive = header.activeTab === tab.key;

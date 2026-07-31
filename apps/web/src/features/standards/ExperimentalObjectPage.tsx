@@ -378,7 +378,6 @@ export function ExperimentalObjectPage({
           object_type: typeItem.code,
           description: typeItem.description,
           status: '',
-          parent_id: null,
           department_id: null,
           visible_departments: [],
           created_at: '',

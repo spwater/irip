@@ -22,6 +22,13 @@ from apps.api.routers.assistant import (
 from apps.api.routers.assistant import (
     set_ai_session_factory as set_assistant_session_factory,
 )
+from apps.api.routers.collaboration import (
+    get_ai_service as get_collaboration_ai_service,
+)
+from apps.api.routers.account import (
+    get_account_session_factory,
+    get_s3_repo,
+)
 from apps.api.routers.object_types import (
     set_session_factory as set_object_types_session_factory,
 )
@@ -62,3 +69,15 @@ def register(ctx: CompositionContext) -> None:
         )
 
     ctx.app.dependency_overrides[get_ai_service] = _get_ai_service_dep
+    # irip-ai-collab: 协作路由复用同一个 AIService 依赖
+    ctx.app.dependency_overrides[get_collaboration_ai_service] = _get_ai_service_dep
+
+    # irip-ai-collab: 账户路由的 session_factory + S3 注入
+    def _get_account_session_factory_dep() -> object:
+        return ctx.session_factory
+
+    def _get_s3_repo_dep() -> object:
+        return ctx.s3_repo
+
+    ctx.app.dependency_overrides[get_account_session_factory] = _get_account_session_factory_dep
+    ctx.app.dependency_overrides[get_s3_repo] = _get_s3_repo_dep

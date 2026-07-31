@@ -1,4 +1,4 @@
-import { Avatar, Typography } from 'antd';
+import { Avatar, Tag, Typography } from 'antd';
 import CitationList from '@/features/assistant/CitationList';
 import ToolTrace from '@/features/assistant/ToolTrace';
 import type { AssistantMessage, Citation, ToolCallSummary } from '@/api/models-ai';
@@ -249,6 +249,92 @@ function extractTextFromNode(node: ReactNode): string {
 }
 
 /**
+ * 从 React <table> 子节点重建 Markdown 表格文本。
+ * 回退方案：当 tableSnapshots 匹配不到时，从渲染后的 table 节点反向构建 Markdown。
+ */
+function rebuildTableMarkdown(node: ReactNode): string {
+  const extractCellText = (cell: ReactNode): string => {
+    const text = extractTextFromNode(cell).trim();
+    return text || ' ';
+  };
+
+  const processRow = (row: ReactNode): string[] | null => {
+    if (row === null || row === undefined) return null;
+    if (typeof row === 'string' || typeof row === 'number') return null;
+    if (Array.isArray(row)) {
+      const cells: string[] = [];
+      for (const child of row) {
+        const rowCells = processRow(child);
+        if (rowCells) cells.push(...rowCells);
+      }
+      return cells.length > 0 ? cells : null;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof row === 'object' && row !== null && 'props' in (row as any)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const props = (row as any).props as { children?: ReactNode };
+      const tag = (row as any).type;
+      // tr 元素
+      if (tag === 'tr' || (typeof tag === 'string' && tag === 'tr')) {
+        const cells: string[] = [];
+        const children = props.children;
+        if (Array.isArray(children)) {
+          for (const child of children) {
+            const cellText = extractCellText(child);
+            if (cellText) cells.push(cellText);
+          }
+        } else {
+          const cellText = extractCellText(children);
+          if (cellText) cells.push(cellText);
+        }
+        return cells.length > 0 ? cells : null;
+      }
+      // thead/tbody/tfoot → 递归子节点
+      const result = processRow(props.children);
+      return result;
+    }
+    return null;
+  };
+
+  const rows: string[][] = [];
+  const flatten = (n: ReactNode) => {
+    if (Array.isArray(n)) {
+      n.forEach(flatten);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof n === 'object' && n !== null && 'props' in (n as any)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tag = (n as any).type;
+      if (tag === 'tr' || (typeof tag === 'string' && tag === 'tr')) {
+        const cells = processRow(n);
+        if (cells) rows.push(cells);
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        flatten((n as any).props?.children);
+      }
+    }
+  };
+  flatten(node);
+
+  if (rows.length === 0) return extractTextFromNode(node);
+
+  // 构建 Markdown 表格
+  const colCount = Math.max(...rows.map(r => r.length));
+  // 补齐每行列数
+  const normRows = rows.map(r => {
+    while (r.length < colCount) r.push(' ');
+    return r;
+  });
+
+  const header = `| ${normRows[0].join(' | ')} |`;
+  const separator = `| ${normRows[0].map(() => '---').join(' | ')} |`;
+  const dataRows = normRows.slice(1).map(r => `| ${r.join(' | ')} |`);
+
+  return [header, separator, ...dataRows].join('\n');
+}
+
+/**
  * 用 KaTeX JS API 直接渲染公式为 HTML 字符串。
  * 绕开 rehype-katex 的 hast 节点转换（在 react-markdown v10 中有兼容性问题）。
  */
@@ -484,7 +570,11 @@ function BlockifiedMarkdown({
         const idx = getNextIndex();
         // 用独立计数器索引 tableSnapshots（因为 blockCounter 对所有块类型统一递增）
         const tableIdx = tableCounterRef.current++;
-        const tableSnapshot = tableSnapshots[tableIdx] ?? extractTextFromNode(children);
+        let tableSnapshot = tableSnapshots[tableIdx];
+        if (!tableSnapshot) {
+          // 回退：从 React table 子节点重建 Markdown 表格文本
+          tableSnapshot = rebuildTableMarkdown(children);
+        }
         return (
           <BlockWrapper messageId={messageId} blockIndex={idx} blockType="table"
             conversationId={conversationId} systemContext={systemContext} contentSnapshot={tableSnapshot}>
@@ -557,6 +647,52 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 /**
+ * irip-ai-collab: 高亮渲染 @人 文本。
+ *
+ * 将消息内容中 @ 开头的提及文字高亮为蓝色背景。
+ * 简单方案：检测文本中的 @xxx 模式并高亮。
+ */
+function renderMentions(content: string, mentions: string[] | undefined): ReactNode {
+  if (!mentions || mentions.length === 0) {
+    return content;
+  }
+  // 匹配 @后面紧跟非空白字符的模式
+  const parts: ReactNode[] = [];
+  const regex = /@(\S+)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(content)) !== null) {
+    // 添加 @ 之前的普通文本
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    // 高亮 @人名
+    parts.push(
+      <span
+        key={`mention-${key}`}
+        style={{
+          backgroundColor: 'rgba(22, 134, 174, 0.15)',
+          color: '#1686AE',
+          borderRadius: 3,
+          padding: '0 2px',
+          fontWeight: 500,
+        }}
+      >
+        @{match[1]}
+      </span>
+    );
+    lastIndex = match.index + match[0].length;
+    key++;
+  }
+  // 添加剩余文本
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+  return parts.length === 0 ? content : <>{parts}</>;
+}
+
+/**
  * Message thread component.
  *
  * Displays conversation history, distinguishing user messages,
@@ -599,6 +735,11 @@ export function MessageThread({
         const isUser = msg.role === 'user';
         const toolCalls: ToolCallSummary[] = msg.tool_calls ?? [];
         const citations: Citation[] = msg.citations ?? [];
+        // irip-ai-collab: 发送者头像和显示名
+        const senderAvatarUrl = msg.sender_avatar_url;
+        const senderDisplayName = msg.sender_display_name;
+        // irip-ai-collab: 用户消息右对齐浅蓝背景，AI 消息左对齐灰色背景
+        const senderInitial = senderDisplayName ? senderDisplayName.charAt(0).toUpperCase() : 'U';
 
         return (
           <div
@@ -613,14 +754,17 @@ export function MessageThread({
           >
             <Avatar
               size={36}
+              src={isUser ? senderAvatarUrl : undefined}
               style={{
-                backgroundColor: ROLE_COLOR[msg.role] ?? '#1686AE',
+                backgroundColor: isUser
+                  ? (senderAvatarUrl ? 'transparent' : ROLE_COLOR['user'])
+                  : ROLE_COLOR[msg.role] ?? '#1686AE',
                 flexShrink: 0,
                 fontSize: 14,
                 fontWeight: 600,
               }}
             >
-              {ROLE_AVATAR_TEXT[msg.role] ?? 'AI'}
+              {isUser ? (senderAvatarUrl ? null : senderInitial) : (ROLE_AVATAR_TEXT[msg.role] ?? 'AI')}
             </Avatar>
             <div
               style={{
@@ -631,17 +775,33 @@ export function MessageThread({
                 border: `1px solid ${isUser ? 'rgba(22, 134, 174, 0.20)' : 'rgba(20, 118, 94, 0.18)'}`,
               }}
             >
-              <div style={{ marginBottom: 4 }}>
-                <Text
-                  type="secondary"
-                  style={{ fontSize: 11, fontWeight: 600 }}
-                >
-                  {ROLE_LABEL[msg.role] ?? msg.role}
-                </Text>
+              <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                {isUser && senderDisplayName ? (
+                  <>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: 11, fontWeight: 600 }}
+                    >
+                      {senderDisplayName}
+                    </Text>
+                    {msg.mentions && msg.mentions.length > 0 && (
+                      <Tag color="blue" style={{ fontSize: 10, margin: 0, padding: '0 4px', lineHeight: '16px' }}>
+                        @{msg.mentions.length}
+                      </Tag>
+                    )}
+                  </>
+                ) : (
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: 11, fontWeight: 600 }}
+                  >
+                    {ROLE_LABEL[msg.role] ?? msg.role}
+                  </Text>
+                )}
               </div>
               {isUser ? (
                 <Paragraph style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {msg.content}
+                  {renderMentions(msg.content, msg.mentions)}
                 </Paragraph>
               ) : (
                 <div className="ai-markdown-body">

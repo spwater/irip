@@ -118,6 +118,17 @@ class Permission:
     # 系统管理：备份/恢复等系统级运维操作（IRIP V3-T03）
     SYSTEM_MANAGE: str = "system:manage"
 
+    # AI 助手协作（irip-ai-collab 本次新增）
+    CONVERSATION_CREATE: str = "conversation:create"
+    CONVERSATION_INVITE: str = "conversation:invite"
+    CONVERSATION_REMOVE_MEMBER: str = "conversation:remove_member"
+    CONVERSATION_DELETE: str = "conversation:delete"
+    CONVERSATION_MANAGE: str = "conversation:manage"
+
+    # 个人账户（所有角色拥有，在 require_permission 中硬编码放行）
+    ACCOUNT_PROFILE: str = "account:profile"
+    ACCOUNT_PASSWORD: str = "account:password"
+
     @classmethod
     def all(cls) -> list[str]:
         """返回所有权限常量列表。"""
@@ -164,6 +175,13 @@ class Permission:
             cls.AUDIT_READ,
             cls.SYSTEM_HEALTH,
             cls.SYSTEM_MANAGE,
+            cls.CONVERSATION_CREATE,
+            cls.CONVERSATION_INVITE,
+            cls.CONVERSATION_REMOVE_MEMBER,
+            cls.CONVERSATION_DELETE,
+            cls.CONVERSATION_MANAGE,
+            cls.ACCOUNT_PROFILE,
+            cls.ACCOUNT_PASSWORD,
         ]
 
 
@@ -236,6 +254,13 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.FLOW_EXECUTE,
             Permission.FLOW_READ,
             Permission.ASSISTANT_USE,
+            # irip-ai-collab: 协作权限 + 角色分配
+            Permission.CONVERSATION_CREATE,
+            Permission.CONVERSATION_INVITE,
+            Permission.CONVERSATION_REMOVE_MEMBER,
+            Permission.CONVERSATION_DELETE,
+            Permission.CONVERSATION_MANAGE,
+            Permission.ROLE_ASSIGN,
         ],
     },
     RoleCode.LAB_MEMBER.value: {
@@ -263,6 +288,10 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.FLOW_EXECUTE,
             Permission.FLOW_READ,
             Permission.ASSISTANT_USE,
+            # irip-ai-collab: 协作权限（创建/邀请/删除对话）
+            Permission.CONVERSATION_CREATE,
+            Permission.CONVERSATION_INVITE,
+            Permission.CONVERSATION_DELETE,
         ],
     },
     RoleCode.LAB_VIEWER.value: {

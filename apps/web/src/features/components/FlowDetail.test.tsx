@@ -176,7 +176,6 @@ vi.mock('@/api/equipment-flows', () => ({
   apiRestoreFlow: vi.fn(() => Promise.resolve(mocks.mockFlow)),
   apiUpdateFlow: vi.fn(() => Promise.resolve(mocks.mockFlow)),
   apiListEquipment: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
-  apiListFactTemplateVersions: vi.fn(() => Promise.resolve([])),
   apiPersistRunAsFact: vi.fn(),
   apiArchiveComponent: vi.fn(),
   apiRestoreComponent: vi.fn(),

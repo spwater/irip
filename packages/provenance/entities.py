@@ -1,4 +1,4 @@
-"""L2.5 溯源与推导层 ORM 模型（IRIP Task 17）。
+"""L2.5 溯源与推导层 ORM 模型。
 
 定义六张表：
 - evidence_set: 证据集稳定身份（draft/frozen），锁定版本号；
@@ -6,7 +6,7 @@
 - transformation_recipe: 推导配方稳定身份（draft/published/deprecated）；
 - transformation_recipe_version: 推导配方不可变发布版本；
 - derivation_run: 一次配方在证据集上的执行记录；
-- provenance_edge: 溯源图边（连接事实修订、观察值、推导运行、参数版本）。
+- provenance_edge: 溯源图边（连接事实、推导运行、参数版本）。
 
 设计要点：
 - 证据集版本不可变：冻结后 members 固定，保证可复现推导；
@@ -25,7 +25,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-import packages.facts.entities  # noqa: F401 — fact_revision table
+import packages.facts.entities  # noqa: F401 — fact table registration
 
 # 导入被引用的 ORM 模型所在模块，确保 FK 目标表注册到 Base.metadata。
 import packages.jobs.entities  # noqa: F401 — job table
@@ -317,17 +317,17 @@ class DerivationRun(Base):
 class ProvenanceEdge(Base):
     """溯源图边实体（对应 provenance_edge 表）。
 
-    连接溯源图节点：事实修订、观察值、中间工件、推导运行、参数版本。
+    连接溯源图节点：事实、中间工件、推导运行、参数版本。
     支持从推导结果向上追溯到原始事实，也支持向下遍历到参数版本。
 
     Attributes:
         id: 边 UUID（PK）。
         organization_id: 所属组织 ID。
         derivation_run_id: 推导运行 ID（FK→derivation_run）。
-        source_type: 源节点类型（fact_revision / observation /
+        source_type: 源节点类型（fact /
             intermediate_artifact / derivation_run）。
         source_id: 源节点 UUID。
-        target_type: 目标节点类型（fact_revision / observation /
+        target_type: 目标节点类型（fact /
             intermediate_artifact / derivation_run / parameter_version）。
         target_id: 目标节点 UUID。
         edge_type: 边类型（selected_from / transformed_by / produced /

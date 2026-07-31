@@ -113,7 +113,7 @@ class TestImmutableTablesFix:
         assert "evidence_set_version" in module._IMMUTABLE_TABLES
 
     def test_0033_immutable_tables_content(self) -> None:
-        """0033 _IMMUTABLE_TABLES 完整内容校验。"""
+        """0033 _IMMUTABLE_TABLES 完整内容校验（含 fact_revision，后被 0055 删除）。"""
         module = _load_migration_module("0033")
         expected = {
             "fact_revision",
@@ -140,7 +140,7 @@ class TestImmutableTablesFix:
         assert "evidence_set_version" in module._IMMUTABLE_TABLES
 
     def test_0047_immutable_tables_content(self) -> None:
-        """0047 _IMMUTABLE_TABLES 完整内容校验。"""
+        """0047 _IMMUTABLE_TABLES 完整内容校验（含 fact_revision，后被 0055 删除）。"""
         module = _load_migration_module("0047")
         expected = {
             "fact_revision",

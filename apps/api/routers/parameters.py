@@ -1,4 +1,4 @@
-"""L3 参数管理路由（IRIP Task 18）。
+"""L3 参数管理路由。
 
 端点分组（parameters_router, prefix=/api/v1/parameters）：
   POST   /                                     — 创建参数（parameter:write）
@@ -10,7 +10,6 @@
   GET    /{parameter_id}/candidates             — 列出候选（parameter:read）
   POST   /candidates/{candidate_id}/approve     — 审批通过（parameter:approve）
   POST   /candidates/{candidate_id}/reject      — 拒绝候选（parameter:approve）
-  GET    /{parameter_id}/staleness              — 检查过期状态（parameter:read）
   POST   /{parameter_id}/deprecate              — 弃用参数（parameter:publish）
 """
 
@@ -169,12 +168,6 @@ class CandidateListResponse(BaseModel):
     """候选列表响应。"""
 
     items: list[CandidateDetailResponse]
-
-
-class StalenessResponse(BaseModel):
-    """过期状态响应。"""
-
-    review_state: str
 
 
 class DeprecateResponse(BaseModel):
@@ -431,25 +424,6 @@ async def reject_candidate(
         confidence=None,
         status=result["status"],
     )
-
-
-# ---- 过期状态端点 ----
-
-
-@parameters_router.get(
-    "/{parameter_id}/staleness",
-    response_model=StalenessResponse,
-)
-async def check_staleness(
-    parameter_id: UUID,
-    current_user: ReadUserDep,
-    service: ParameterServiceDep,
-) -> StalenessResponse:
-    """检查参数的过期状态。"""
-    # 获取最新已发布版本
-    ref = await service.get_version(parameter_id)
-    state = await service.check_staleness(ref.version_id)
-    return StalenessResponse(review_state=state)
 
 
 # ---- 弃用端点 ----

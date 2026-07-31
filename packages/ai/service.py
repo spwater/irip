@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -29,6 +29,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.ai.citation import CitationGenerator, SignedCitation
 from packages.ai.citations import Citation
+from packages.ai.collaboration_entities import (
+    ConversationParticipant,
+    MentionableUserRef,
+    ParticipantRef,
+)
 from packages.ai.providers import AIProvider, AIRequest, AIResponse
 from packages.ai.showcase_entities import ShowcaseItem, ShowcaseItemRef
 from packages.ai.tools import ToolRegistry
@@ -84,6 +89,10 @@ class AIMessage(Base):
         content: 消息文本内容。
         tool_calls_json: 工具调用 JSONB（工具名、参数、结果摘要）。
         citations_json: 引用 JSONB（object_type / object_id / version / label / href）。
+        mentions: @ 人的 user_id 数组（JSONB，irip-ai-collab 新增）。
+        sender_user_id: 发送者用户 ID（user 消息填用户 ID，assistant/tool 消息为 NULL）。
+        sender_display_name: 发送者显示名（写入时从 app_user 快照，避免 JOIN）。
+        sender_avatar_url: 发送者头像 URL（写入时从 app_user 快照）。
         uncertainty: 不确定性说明（可空）。
         created_at: 创建时间。
     """
@@ -104,6 +113,14 @@ class AIMessage(Base):
     citations_json: Mapped[list] = mapped_column(
         JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
     )
+    # irip-ai-collab: @ 人 user_id 数组
+    mentions: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
+    )
+    # irip-ai-collab: 发送者冗余字段（避免每次 JOIN 查用户表）
+    sender_user_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    sender_display_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    sender_avatar_url: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     uncertainty: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, nullable=False, default=lambda: SystemClock().now()
@@ -120,6 +137,7 @@ class ConversationRef:
         provider_mode: Provider 模式。
         created_at: 创建时间。
         updated_at: 更新时间。
+        participants: 参与者摘要列表（irip-ai-collab 新增）。
     """
 
     id: UUID
@@ -130,6 +148,8 @@ class ConversationRef:
     created_at: datetime
     updated_at: datetime
     system_context: str | None = None
+    user_id: UUID = UUID(int=0)  # irip-ai-collab: 创建者 ID（有默认值避免 dataclass 顺序问题）
+    participants: list[dict[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -143,6 +163,10 @@ class MessageRef:
         content: 消息文本。
         tool_calls: 工具调用列表。
         citations: 引用列表。
+        mentions: @ 人的 user_id 数组（irip-ai-collab 新增）。
+        sender_user_id: 发送者用户 ID（user 消息有值，AI 消息为 None）。
+        sender_display_name: 发送者显示名。
+        sender_avatar_url: 发送者头像 URL。
         uncertainty: 不确定性说明。
         created_at: 创建时间。
     """
@@ -155,6 +179,10 @@ class MessageRef:
     citations: list[dict[str, str]]
     uncertainty: str | None
     created_at: datetime
+    mentions: list[str] = field(default_factory=list)
+    sender_user_id: UUID | None = None
+    sender_display_name: str | None = None
+    sender_avatar_url: str | None = None
 
 
 # ---- 模块级取消注册表 ----
@@ -260,15 +288,32 @@ class AIService:
                 updated_at=now,
             )
             session.add(conv)
+            await session.flush()  # 确保 conv.id 已生成，避免 participant 外键违例
+            # irip-ai-collab: 创建者自动成为 owner 参与者
+            participant = ConversationParticipant(
+                conversation_id=conv.id,
+                user_id=user_id,
+                role="owner",
+                joined_at=now,
+            )
+            session.add(participant)
             await session.flush()
             return ConversationRef(
                 id=conv.id,
+                user_id=conv.user_id,
                 title=conv.title,
                 provider_mode=conv.provider_mode,
                 pinned=False,
                 archived=False,
                 created_at=conv.created_at,
                 updated_at=conv.updated_at,
+                participants=[
+                    {
+                        "user_id": str(user_id),
+                        "display_name": "",
+                        "avatar_url": "",
+                    }
+                ],
             )
 
     async def list_conversations(
@@ -314,6 +359,7 @@ class AIService:
             return [
                 ConversationRef(
                     id=r.id,
+                    user_id=r.user_id,
                     title=r.title,
                     provider_mode=r.provider_mode,
                     pinned=r.pinned,
@@ -445,7 +491,9 @@ class AIService:
     ) -> list[MessageRef]:
         """列出对话中的消息（按创建时间正序）。
 
-        安全检查：对话必须属于当前用户，否则抛 forbidden。
+        安全检查：对话必须属于当前用户或当前用户是参与者，否则抛 forbidden。
+        irip-ai-collab: 访问权从 `conv.user_id == user_id` 扩展为
+        `conv.user_id == user_id OR EXISTS(participant WHERE user_id == user_id)`。
 
         Args:
             conversation_id: 对话 ID。
@@ -455,7 +503,7 @@ class AIService:
             list[MessageRef]: 消息引用列表。
 
         Raises:
-            AppError: code="forbidden"，当对话不属于当前用户时。
+            AppError: code="forbidden"，当对话不属于当前用户且非参与者时。
             AppError: code="not_found"，当对话不存在时。
         """
         async with self._factory() as session:
@@ -469,13 +517,21 @@ class AIService:
                     retryable=False,
                     fields={},
                 )
+            # irip-ai-collab: 创建者或参与者均可访问
             if conv.user_id != user_id:
-                raise AppError(
-                    code="forbidden",
-                    message="无权访问该对话",
-                    retryable=False,
-                    fields={},
+                participant = await session.scalar(
+                    sa.select(ConversationParticipant).where(
+                        ConversationParticipant.conversation_id == conversation_id,
+                        ConversationParticipant.user_id == user_id,
+                    )
                 )
+                if participant is None:
+                    raise AppError(
+                        code="forbidden",
+                        message="无权访问该对话",
+                        retryable=False,
+                        fields={},
+                    )
 
             result = await session.execute(
                 sa.select(AIMessage)
@@ -493,6 +549,10 @@ class AIService:
                     citations=r.citations_json if isinstance(r.citations_json, list) else [],
                     uncertainty=r.uncertainty,
                     created_at=r.created_at,
+                    mentions=r.mentions if isinstance(r.mentions, list) else [],
+                    sender_user_id=r.sender_user_id,
+                    sender_display_name=r.sender_display_name,
+                    sender_avatar_url=r.sender_avatar_url,
                 )
                 for r in rows
             ]
@@ -562,6 +622,7 @@ class AIService:
             return [
                 ConversationRef(
                     id=r.id,
+                    user_id=r.user_id,
                     title=r.title,
                     provider_mode=r.provider_mode,
                     pinned=r.pinned,
@@ -569,6 +630,550 @@ class AIService:
                     created_at=r.created_at,
                     updated_at=r.updated_at,
                     system_context=r.system_context,
+                )
+                for r in rows
+            ]
+
+    # ---- irip-ai-collab: 协作管理 ----
+
+    async def list_conversations_with_tab(
+        self,
+        user_id: UUID,
+        organization_id: UUID,
+        tab: str = "private",
+        limit: int = 50,
+        include_archived: bool = False,
+        archived_only: bool = False,
+        keyword: str | None = None,
+    ) -> list[ConversationRef]:
+        """按 tab 筛选列出对话（irip-ai-collab 新增）。
+
+        tab 分类逻辑（架构文档 §7.2）：
+        - private: user_id == me AND 无其他参与者的对话
+        - same_org: (user_id == me OR participant) AND org == my_org
+        - cross_org: 返回空列表（二期实现）
+
+        结果附带参与者摘要（批量查询 conversation_participant JOIN app_user）。
+
+        Args:
+            user_id: 当前用户 ID。
+            organization_id: 当前用户组织 ID。
+            tab: 筛选标签（private / same_org / cross_org）。
+            limit: 最大返回数。
+            include_archived: 是否包含已归档对话。
+            archived_only: 是否只返回已归档对话。
+            keyword: 搜索关键词（可选，复用 search 逻辑）。
+
+        Returns:
+            list[ConversationRef]: 对话引用列表（含参与者摘要）。
+        """
+        # cross_org 一期返回空列表
+        if tab == "cross_org":
+            return []
+
+        from packages.auth.entities import AppUser
+
+        async with self._factory() as session:
+            # 构建 base 条件
+            conditions: list[sa.ColumnElement[bool]] = []
+
+            if archived_only:
+                conditions.append(AIConversation.archived == sa.true())
+            elif not include_archived:
+                conditions.append(AIConversation.archived == sa.false())
+
+            if tab == "private":
+                # 我创建的 + 无其他参与者的对话
+                conditions.append(AIConversation.user_id == user_id)
+                # 排除有其他参与者的对话（子查询：存在 user_id != me 的参与者）
+                other_participant_exists = (
+                    sa.select(ConversationParticipant.conversation_id)
+                    .where(
+                        ConversationParticipant.conversation_id == AIConversation.id,
+                        ConversationParticipant.user_id != user_id,
+                    )
+                    .exists()
+                )
+                conditions.append(sa.not_(other_participant_exists))
+            elif tab == "same_org":
+                # (user_id == me OR participant) AND org == my_org
+                conditions.append(AIConversation.organization_id == organization_id)
+                participant_or_owner = sa.or_(
+                    AIConversation.user_id == user_id,
+                    sa.select(ConversationParticipant.conversation_id)
+                    .where(
+                        ConversationParticipant.conversation_id == AIConversation.id,
+                        ConversationParticipant.user_id == user_id,
+                    )
+                    .exists(),
+                )
+                conditions.append(participant_or_owner)
+
+            # 关键词搜索
+            if keyword and keyword.strip():
+                pattern = f"%{keyword.strip()}%"
+                matched_conv_ids = (
+                    sa.select(AIMessage.conversation_id)
+                    .where(AIMessage.content.ilike(pattern))
+                    .distinct()
+                    .subquery()
+                )
+                conditions.append(
+                    sa.or_(
+                        AIConversation.title.ilike(pattern),
+                        AIConversation.id.in_(sa.select(matched_conv_ids.c.conversation_id)),
+                    )
+                )
+
+            result = await session.execute(
+                sa.select(AIConversation)
+                .where(*conditions)
+                .order_by(
+                    sa.desc(AIConversation.pinned),
+                    sa.desc(AIConversation.updated_at),
+                )
+                .limit(limit)
+            )
+            rows = result.scalars().all()
+
+            if not rows:
+                return []
+
+            # 批量查询参与者
+            conv_ids = [r.id for r in rows]
+            participant_result = await session.execute(
+                sa.select(
+                    ConversationParticipant.conversation_id,
+                    ConversationParticipant.user_id,
+                    ConversationParticipant.role,
+                    AppUser.display_name,
+                    AppUser.avatar_url,
+                )
+                .select_from(ConversationParticipant)
+                .join(AppUser, AppUser.id == ConversationParticipant.user_id)
+                .where(ConversationParticipant.conversation_id.in_(conv_ids))
+            )
+            participant_rows = participant_result.fetchall()
+
+            # 按对话 ID 分组参与者
+            participants_map: dict[UUID, list[dict[str, str]]] = {}
+            for prow in participant_rows:
+                conv_id = UUID(str(prow[0]))
+                if conv_id not in participants_map:
+                    participants_map[conv_id] = []
+                participants_map[conv_id].append(
+                    {
+                        "user_id": str(prow[1]),
+                        "display_name": str(prow[3] or ""),
+                        "avatar_url": str(prow[4] or ""),
+                    }
+                )
+
+            return [
+                ConversationRef(
+                    id=r.id,
+                    user_id=r.user_id,
+                    title=r.title,
+                    provider_mode=r.provider_mode,
+                    pinned=r.pinned,
+                    archived=r.archived,
+                    created_at=r.created_at,
+                    updated_at=r.updated_at,
+                    system_context=r.system_context,
+                    participants=participants_map.get(r.id, []),
+                )
+                for r in rows
+            ]
+
+    async def add_participant(
+        self,
+        conversation_id: UUID,
+        inviter_user_id: UUID,
+        target_user_id: UUID,
+    ) -> ParticipantRef:
+        """邀请用户加入对话（irip-ai-collab 新增）。
+
+        校验：
+        - 对话存在
+        - inviter 是对话的 owner（或创建者）
+        - target 用户与对话属于同一 organization
+        - target 未已是参与者
+
+        Args:
+            conversation_id: 对话 ID。
+            inviter_user_id: 邀请者用户 ID（需为 owner）。
+            target_user_id: 被邀请用户 ID。
+
+        Returns:
+            ParticipantRef: 新参与者引用。
+
+        Raises:
+            AppError: code="not_found"，对话不存在。
+            AppError: code="forbidden"，邀请者非 owner。
+            AppError: code="conflict"，目标用户已是参与者。
+            AppError: code="validation_failed"，跨 org 邀请。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            conv = await session.scalar(
+                sa.select(AIConversation).where(AIConversation.id == conversation_id)
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 校验邀请者是 owner（或创建者）
+            inviter_participant = await session.scalar(
+                sa.select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id,
+                    ConversationParticipant.user_id == inviter_user_id,
+                )
+            )
+            is_owner = (
+                conv.user_id == inviter_user_id
+                or (inviter_participant is not None and inviter_participant.role == "owner")
+            )
+            if not is_owner:
+                raise AppError(
+                    code="forbidden",
+                    message="仅对话创建者/管理员可邀请成员",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 校验目标用户未已是参与者
+            existing = await session.scalar(
+                sa.select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id,
+                    ConversationParticipant.user_id == target_user_id,
+                )
+            )
+            if existing is not None:
+                raise AppError(
+                    code="conflict",
+                    message="该用户已是对话参与者",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 校验同 org（target 用户的 organization_id 必须与对话的 organization_id 一致）
+            from packages.auth.entities import AppUser
+
+            target_user = await session.scalar(
+                sa.select(AppUser).where(AppUser.id == target_user_id)
+            )
+            if target_user is None:
+                raise AppError(
+                    code="not_found",
+                    message="目标用户不存在",
+                    retryable=False,
+                    fields={},
+                )
+            if target_user.organization_id != conv.organization_id:
+                raise AppError(
+                    code="validation_failed",
+                    message="不能邀请跨组织用户加入对话",
+                    retryable=False,
+                    fields={},
+                )
+
+            participant = ConversationParticipant(
+                conversation_id=conversation_id,
+                user_id=target_user_id,
+                role="member",
+                joined_at=now,
+            )
+            session.add(participant)
+
+            # 更新对话 updated_at
+            await session.execute(
+                sa.update(AIConversation)
+                .values(updated_at=now)
+                .where(AIConversation.id == conversation_id)
+            )
+
+            return ParticipantRef(
+                conversation_id=conversation_id,
+                user_id=target_user_id,
+                role="member",
+                joined_at=now,
+                display_name=target_user.display_name,
+                avatar_url=target_user.avatar_url,
+            )
+
+    async def remove_participant(
+        self,
+        conversation_id: UUID,
+        owner_user_id: UUID,
+        target_user_id: UUID,
+    ) -> None:
+        """移除对话参与者（irip-ai-collab 新增）。
+
+        校验：
+        - 操作者是 owner（或创建者）
+        - 目标用户是参与者
+
+        Args:
+            conversation_id: 对话 ID。
+            owner_user_id: 操作者用户 ID（需为 owner）。
+            target_user_id: 被移除用户 ID。
+
+        Raises:
+            AppError: code="not_found"，对话不存在或目标非参与者。
+            AppError: code="forbidden"，操作者非 owner。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            conv = await session.scalar(
+                sa.select(AIConversation).where(AIConversation.id == conversation_id)
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 校验操作者是 owner
+            owner_participant = await session.scalar(
+                sa.select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id,
+                    ConversationParticipant.user_id == owner_user_id,
+                )
+            )
+            is_owner = (
+                conv.user_id == owner_user_id
+                or (owner_participant is not None and owner_participant.role == "owner")
+            )
+            if not is_owner:
+                raise AppError(
+                    code="forbidden",
+                    message="仅对话创建者/管理员可移除成员",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 查找并删除目标参与者
+            target = await session.scalar(
+                sa.select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id,
+                    ConversationParticipant.user_id == target_user_id,
+                )
+            )
+            if target is None:
+                raise AppError(
+                    code="not_found",
+                    message="目标用户不是对话参与者",
+                    retryable=False,
+                    fields={},
+                )
+
+            await session.delete(target)
+            await session.execute(
+                sa.update(AIConversation)
+                .values(updated_at=now)
+                .where(AIConversation.id == conversation_id)
+            )
+
+    async def leave_conversation(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> None:
+        """退出对话（irip-ai-collab 新增）。
+
+        owner 不能退出（需先转让或删除对话）。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 当前用户 ID。
+
+        Raises:
+            AppError: code="not_found"，对话不存在或非参与者。
+            AppError: code="forbidden"，owner 不能退出。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            participant = await session.scalar(
+                sa.select(ConversationParticipant).where(
+                    ConversationParticipant.conversation_id == conversation_id,
+                    ConversationParticipant.user_id == user_id,
+                )
+            )
+            if participant is None:
+                raise AppError(
+                    code="not_found",
+                    message="你不是该对话的参与者",
+                    retryable=False,
+                    fields={},
+                )
+            if participant.role == "owner":
+                raise AppError(
+                    code="forbidden",
+                    message="对话创建者不能退出，请先删除对话或移除其他成员",
+                    retryable=False,
+                    fields={},
+                )
+
+            await session.delete(participant)
+            await session.execute(
+                sa.update(AIConversation)
+                .values(updated_at=now)
+                .where(AIConversation.id == conversation_id)
+            )
+
+    async def list_participants(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> list[ParticipantRef]:
+        """列出对话参与者（irip-ai-collab 新增）。
+
+        校验访问权：创建者或参与者可查看。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 当前用户 ID。
+
+        Returns:
+            list[ParticipantRef]: 参与者列表（含 display_name, avatar_url）。
+
+        Raises:
+            AppError: code="not_found"，对话不存在。
+            AppError: code="forbidden"，无权访问。
+        """
+        async with self._factory() as session:
+            from packages.auth.entities import AppUser
+
+            conv = await session.scalar(
+                sa.select(AIConversation).where(AIConversation.id == conversation_id)
+            )
+            if conv is None:
+                raise AppError(
+                    code="not_found",
+                    message="对话不存在",
+                    retryable=False,
+                    fields={},
+                )
+
+            # 校验访问权
+            if conv.user_id != user_id:
+                participant = await session.scalar(
+                    sa.select(ConversationParticipant).where(
+                        ConversationParticipant.conversation_id == conversation_id,
+                        ConversationParticipant.user_id == user_id,
+                    )
+                )
+                if participant is None:
+                    raise AppError(
+                        code="forbidden",
+                        message="无权访问该对话",
+                        retryable=False,
+                        fields={},
+                    )
+
+            result = await session.execute(
+                sa.select(
+                    ConversationParticipant.conversation_id,
+                    ConversationParticipant.user_id,
+                    ConversationParticipant.role,
+                    ConversationParticipant.joined_at,
+                    AppUser.display_name,
+                    AppUser.avatar_url,
+                )
+                .select_from(ConversationParticipant)
+                .join(AppUser, AppUser.id == ConversationParticipant.user_id)
+                .where(ConversationParticipant.conversation_id == conversation_id)
+                .order_by(sa.asc(ConversationParticipant.joined_at))
+            )
+            rows = result.fetchall()
+
+            # 如果没有参与者记录（现有对话兼容），返回创建者作为隐式 owner
+            if not rows:
+                creator = await session.scalar(
+                    sa.select(AppUser).where(AppUser.id == conv.user_id)
+                )
+                if creator is not None:
+                    return [
+                        ParticipantRef(
+                            conversation_id=conversation_id,
+                            user_id=conv.user_id,
+                            role="owner",
+                            joined_at=conv.created_at,
+                            display_name=creator.display_name,
+                            avatar_url=creator.avatar_url,
+                        )
+                    ]
+                return []
+
+            return [
+                ParticipantRef(
+                    conversation_id=UUID(str(r[0])),
+                    user_id=UUID(str(r[1])),
+                    role=str(r[2]),
+                    joined_at=r[3],
+                    display_name=str(r[4] or ""),
+                    avatar_url=str(r[5]) if r[5] is not None else None,
+                )
+                for r in rows
+            ]
+
+    async def list_mentionable_users(
+        self,
+        user_id: UUID,
+        organization_id: UUID,
+        department_id: UUID | None = None,
+        roles: list[str] | None = None,
+    ) -> list[MentionableUserRef]:
+        """列出可 @ 的用户（irip-ai-collab 新增）。
+
+        查询同 organization 的 active 用户，返回 id / display_name / avatar_url / roles。
+        irip-ai-collab: platform_administrator 不做 department 过滤（可见全租户），
+        其他角色按 department_id 过滤（只可见同实验室）。
+
+        Args:
+            user_id: 当前用户 ID（排除自己）。
+            organization_id: 当前用户组织 ID。
+            department_id: 当前用户部门 ID（非管理员时按此过滤）。
+            roles: 当前用户角色列表（判断是否为管理员）。
+
+        Returns:
+            list[MentionableUserRef]: 可 @ 用户列表。
+        """
+        from packages.auth.entities import AppUser
+
+        is_admin = roles is not None and "platform_administrator" in roles
+
+        async with self._factory() as session:
+            stmt = sa.select(
+                AppUser.id,
+                AppUser.display_name,
+                AppUser.avatar_url,
+                AppUser.roles,
+            ).where(
+                AppUser.organization_id == organization_id,
+                AppUser.status == "active",
+                AppUser.id != user_id,
+            )
+
+            # 非平台管理员：只返回同 department 的用户
+            if not is_admin and department_id is not None:
+                stmt = stmt.where(AppUser.department_id == department_id)
+
+            stmt = stmt.order_by(sa.asc(AppUser.display_name))
+            result = await session.execute(stmt)
+            rows = result.fetchall()
+            return [
+                MentionableUserRef(
+                    id=UUID(str(r[0])),
+                    display_name=str(r[1] or ""),
+                    avatar_url=str(r[2]) if r[2] is not None else None,
+                    roles=list(r[3]) if isinstance(r[3], list) else [],
                 )
                 for r in rows
             ]
@@ -1001,6 +1606,7 @@ class AIService:
         provider_name: str = "offline",
         thinking_enabled: bool = False,
         system_context: str | None = None,
+        mentions: list[str] | None = None,
     ) -> AIResponse:
         """处理用户问题，返回 AI 回答。
 
@@ -1051,6 +1657,48 @@ class AIService:
             # 验证对话归属并加载历史
             msgs = await self.list_messages(conversation_id, user_id)
             history_messages = [{"role": m.role, "content": m.content} for m in msgs]
+
+        # irip-ai-collab: 根据 conversation_participant 表的参与者数量判断对话类型
+        # 私有对话（参与者 <= 1）：AI 自动回复（不管 mentions）
+        # 协作对话（参与者 > 1）：mentions 中包含 "ai" 标识才调 AI，否则只保存用户消息
+        mentions_list: list[str] = mentions or []
+        participant_count: int | None = None
+        async with self._factory() as session:
+            participant_count = await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(ConversationParticipant)
+                .where(ConversationParticipant.conversation_id == conversation_id)
+            )
+        is_private: bool = participant_count is None or participant_count <= 1
+
+        # 协作对话中：mentions 不含 "ai" 标识 → 仅持久化用户消息，不调 AI
+        if not is_private and "ai" not in mentions_list:
+            mention_only_response = AIResponse(
+                answer="",
+                tool_calls=(),
+                citations=(),
+                uncertainty=None,
+                provider_mode=provider_name,
+            )
+            await self._persist_user_message_only(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                question=question,
+                mentions=mentions_list,
+                sender_display_name=getattr(user, "email", None),
+                sender_avatar_url=None,
+            )
+            # 首次对话后自动生成标题
+            if not history_messages:
+                try:
+                    await self._auto_generate_title(
+                        conversation_id=conversation_id,
+                        question=question,
+                        answer=question[:60],
+                    )
+                except Exception:
+                    pass
+            return mention_only_response
 
         # 构建 user_context（不含凭据）
         user_context: dict[str, Any] = {
@@ -1124,6 +1772,9 @@ class AIService:
                         uncertainty=None,
                         provider_mode=provider_name,
                     ),
+                    mentions=mentions or [],
+                    sender_display_name=getattr(user, "email", None),
+                    sender_avatar_url=None,
                 )
             raise
         finally:
@@ -1316,6 +1967,9 @@ class AIService:
             user_id=user_id,
             question=question,
             response=final_response,
+            mentions=mentions or [],
+            sender_display_name=getattr(user, "email", None),
+            sender_avatar_url=None,
         )
 
         # 首次对话后自动生成标题
@@ -1459,8 +2113,8 @@ class AIService:
         # 直接查数据库（含 data_summary）
         async with self._factory() as session:
             stmt = sa.select(
-                sa.text("f.id, fr.subject_id, fr.fact_type, fr.data_summary")
-            ).select_from(sa.text("fact f JOIN fact_revision fr ON fr.fact_id = f.id"))
+                sa.text("f.id, f.subject_id, f.fact_type")
+            ).select_from(sa.text("fact f"))
             conditions = [sa.text("f.organization_id = :org_id")]
             params: dict[str, Any] = {"org_id": org_id}
             if query:
@@ -1477,8 +2131,8 @@ class AIService:
                     "id": str(r[0]),
                     "subject_id": str(r[1]),
                     "fact_type": str(r[2]),
-                    "data_summary": str(r[3] or ""),
-                }  # noqa: E501
+                    "data_summary": "",
+                }
                 for r in rows
             ]
             return {
@@ -1734,24 +2388,44 @@ class AIService:
         text = re.sub(r"sk-[A-Za-z0-9]{20,}", "[REDACTED]", text)
         return text
 
-    async def _persist_messages(
+    async def _persist_user_message_only(
         self,
         conversation_id: UUID,
         user_id: UUID,
         question: str,
-        response: AIResponse,
+        mentions: list[str] | None = None,
+        sender_display_name: str | None = None,
+        sender_avatar_url: str | None = None,
     ) -> None:
-        """持久化用户消息与 AI 消息到数据库。
+        """仅持久化用户消息（不创建 AI 回复消息）。
+
+        irip-ai-collab: 当消息仅 @人（不触发 AI）时调用此方法，
+        只保存用户消息和 mentions，不生成 assistant 消息。
 
         Args:
             conversation_id: 对话 ID。
             user_id: 用户 ID。
-            question: 用户问题。
-            response: AI 回答。
+            question: 用户问题文本。
+            mentions: @ 人的 user_id 字符串数组。
+            sender_display_name: 发送者显示名（从 app_user 快照）。
+            sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
         """
         now = self._clock.now()
         async with session_scope(self._factory) as session:
-            # 用户消息
+            actual_display_name = sender_display_name
+            actual_avatar_url = sender_avatar_url
+            try:
+                from packages.auth.entities import AppUser
+
+                sender = await session.scalar(
+                    sa.select(AppUser).where(AppUser.id == user_id)
+                )
+                if sender is not None:
+                    actual_display_name = sender.display_name
+                    actual_avatar_url = sender.avatar_url
+            except Exception:
+                pass
+
             user_msg = AIMessage(
                 id=new_id(),
                 conversation_id=conversation_id,
@@ -1761,6 +2435,74 @@ class AIService:
                 citations_json=[],
                 uncertainty=None,
                 created_at=now,
+                mentions=list(mentions) if mentions else [],
+                sender_user_id=user_id,
+                sender_display_name=actual_display_name,
+                sender_avatar_url=actual_avatar_url,
+            )
+            session.add(user_msg)
+
+            await session.execute(
+                sa.update(AIConversation)
+                .values(updated_at=now)
+                .where(AIConversation.id == conversation_id)
+            )
+
+    async def _persist_messages(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+        question: str,
+        response: AIResponse,
+        mentions: list[str] | None = None,
+        sender_display_name: str | None = None,
+        sender_avatar_url: str | None = None,
+    ) -> None:
+        """持久化用户消息与 AI 消息到数据库。
+
+        irip-ai-collab: 用户消息填充 mentions + sender_user_id + sender_display_name
+        + sender_avatar_url；AI 消息 sender 字段为 None。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 用户 ID。
+            question: 用户问题。
+            response: AI 回答。
+            mentions: @ 人的 user_id 字符串数组。
+            sender_display_name: 发送者显示名（从 app_user 快照）。
+            sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
+        """
+        now = self._clock.now()
+        async with session_scope(self._factory) as session:
+            # irip-ai-collab: 从数据库获取发送者 display_name 和 avatar_url 快照
+            actual_display_name = sender_display_name
+            actual_avatar_url = sender_avatar_url
+            try:
+                from packages.auth.entities import AppUser
+
+                sender = await session.scalar(
+                    sa.select(AppUser).where(AppUser.id == user_id)
+                )
+                if sender is not None:
+                    actual_display_name = sender.display_name
+                    actual_avatar_url = sender.avatar_url
+            except Exception:
+                pass
+
+            # 用户消息（irip-ai-collab: 填充 mentions + sender 字段）
+            user_msg = AIMessage(
+                id=new_id(),
+                conversation_id=conversation_id,
+                role="user",
+                content=question,
+                tool_calls_json=[],
+                citations_json=[],
+                uncertainty=None,
+                created_at=now,
+                mentions=list(mentions) if mentions else [],
+                sender_user_id=user_id,
+                sender_display_name=actual_display_name,
+                sender_avatar_url=actual_avatar_url,
             )
             session.add(user_msg)
 

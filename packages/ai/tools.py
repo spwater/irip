@@ -191,7 +191,7 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
     ),
 )
 
-#: 4 个候选工具（需审批，写操作建议）。
+#: 3 个候选工具（需审批，写操作建议）。
 CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="suggest_mapping",
@@ -205,20 +205,6 @@ CANDIDATE_TOOLS: tuple[ToolSpec, ...] = (
                 "target_variable_code": {"type": "string"},
             },
             "required": ["source_field", "target_variable_code"],
-        },
-    ),
-    ToolSpec(
-        name="suggest_fact_revision",
-        display_name="建议事实修订",
-        description="建议对指定事实创建新修订（候选，需人工审批）。",
-        required_permission="fact:write",
-        parameters_schema={
-            "type": "object",
-            "properties": {
-                "fact_id": {"type": "string"},
-                "reason": {"type": "string"},
-            },
-            "required": ["fact_id", "reason"],
         },
     ),
     ToolSpec(

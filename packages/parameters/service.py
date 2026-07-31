@@ -1,13 +1,12 @@
-"""L3 参数业务编排服务（IRIP Task 18）。
+"""L3 参数业务编排服务。
 
 ParameterService 提供参数的创建、候选管理、审批（含职责分离）、
-发布、弃用与过期检查。
+发布与弃用。
 
 核心不变量：
 1. self_approval_forbidden: 提交人不能审批自己的候选；
 2. derivation_not_succeeded: 推导运行未成功时不能审批候选；
-3. published_version_immutable: 已发布的参数版本不可修改；
-4. staleness: 事实产生新修订时，依赖参数变为 review_required。
+3. published_version_immutable: 已发布的参数版本不可修改。
 
 依赖注入 session_factory（事务管理）、organization_id（当前组织）、
 actor_id（操作人）。所有写操作通过 session_scope 事务上下文管理。
@@ -31,10 +30,8 @@ from packages.common.ids import new_id
 from packages.parameters.entities import (
     Parameter,
     ParameterCandidate,
-    ParameterStaleness,
     ParameterVersion,
 )
-from packages.parameters.staleness import StalenessChecker
 from packages.provenance.entities import (
     DerivationRun,
     EvidenceSetVersion,
@@ -367,8 +364,7 @@ class ParameterService:
         5. 更新 parameter.status = published；
         6. 更新候选状态为 approved；
         7. 创建溯源边：parameter_version → published_as → derivation_run；
-        8. 为证据集中所有事实修订创建 staleness 跟踪条目；
-        9. 返回 ParameterVersionRef。
+        8. 返回 ParameterVersionRef。
 
         Args:
             candidate_id: 候选 UUID。
@@ -467,8 +463,6 @@ class ParameterService:
                 confidence_interval=candidate.confidence_interval,
                 conditions=candidate.conditions,
                 derivation_run_id=candidate.derivation_run_id,
-                evidence_set_version_id=run.evidence_set_version_id,
-                recipe_version_id=run.recipe_version_id,
                 status="published",
                 published_at=now,
                 published_by=reviewer,
@@ -506,25 +500,6 @@ class ParameterService:
                 metadata_=None,
             )
             session.add(edge)
-
-            # 9. 为证据集中所有事实修订创建 staleness 跟踪条目
-            ev_version = await session.scalar(
-                sa.select(EvidenceSetVersion).where(
-                    EvidenceSetVersion.id == run.evidence_set_version_id
-                )
-            )
-            if ev_version is not None:
-                members_list: list = ev_version.members or []
-                for member in members_list:
-                    if member.get("decision") == "included" and member.get("fact_revision_id"):
-                        staleness_entry = ParameterStaleness(
-                            id=new_id(),
-                            parameter_version_id=version_id,
-                            fact_revision_id=UUID(str(member["fact_revision_id"])),
-                            review_state="current",
-                            last_checked_at=now,
-                        )
-                        session.add(staleness_entry)
 
             await session.flush()
 
@@ -882,21 +857,6 @@ class ParameterService:
                 }
                 for c in candidates
             ]
-
-    async def check_staleness(self, parameter_version_id: UUID) -> str:
-        """检查参数版本的过期状态。
-
-        查询所有关联的事实修订，检查是否有新修订。
-        如果有新修订 → review_required；否则 current。
-
-        Args:
-            parameter_version_id: 参数版本 UUID。
-
-        Returns:
-            str: 过期状态（"current" 或 "review_required"）。
-        """
-        checker = StalenessChecker(self._factory, self._org_id)
-        return await checker.check_parameter(parameter_version_id)
 
     async def deprecate(self, parameter_id: UUID) -> dict:
         """弃用参数（published → deprecated）。

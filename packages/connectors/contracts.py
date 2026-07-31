@@ -5,9 +5,10 @@
 - ConnectorSource: 连接器无关的数据源描述（kind + kind 特定配置）。
 - PreviewTable: 连接器预览结果（列名 + 行 + 总行数）。
 - SourceRecord: 单条源记录（字段名→值）。
-- MappingRule: 单条映射规则（源路径→目标变量版本）。
-- MappingCandidate: 映射评分候选（变量编码 + 版本 + 分数 + 命中理由）。
 - Connector: 连接器协议（preview 预览 / read 流式读取）。
+
+映射相关值类型（MappingRule / MappingCandidate）已随标准层空表
+清理（migration 0057）删除。
 
 安全约定：
 - 配置中的敏感凭据仅以 ``secret_id`` 引用，绝不在值类型中携带明文 DSN/token。
@@ -17,7 +18,6 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
-from uuid import UUID
 
 
 @dataclass(frozen=True)
@@ -60,42 +60,6 @@ class SourceRecord:
     """
 
     fields: dict[str, str | None]
-
-
-@dataclass(frozen=True)
-class MappingRule:
-    """单条映射规则。
-
-    Attributes:
-        source_path: 源字段路径（列名或 JSON 路径）。
-        target_variable_version_id: 目标已发布标准变量版本 ID。
-        source_unit: 源数据单位代码（可选）。
-        missing_policy: 缺失值策略（reject / null / default）。
-        default_value: 默认值（missing_policy=default 时使用）。
-    """
-
-    source_path: str
-    target_variable_version_id: UUID
-    source_unit: str | None
-    missing_policy: Literal["reject", "null", "default"]
-    default_value: str | None
-
-
-@dataclass(frozen=True)
-class MappingCandidate:
-    """映射评分候选。
-
-    Attributes:
-        variable_code: 变量编码。
-        variable_version_id: 已发布变量版本 ID。
-        score: 归一化分数（0.0-1.0）。
-        reasons: 命中的评分组件名元组（如 ("exact_code", "unit_dimension")）。
-    """
-
-    variable_code: str
-    variable_version_id: UUID
-    score: float
-    reasons: tuple[str, ...]
 
 
 class Connector(Protocol):

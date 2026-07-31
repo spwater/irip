@@ -98,7 +98,6 @@ class ComponentVersionResponse(BaseModel):
     version: str
     kind: str
     runtime: str
-    engine: str
     status: str
     manifest_sha256: str
     published_at: datetime | None

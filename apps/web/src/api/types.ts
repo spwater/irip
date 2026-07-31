@@ -1,7 +1,9 @@
 /**
  * V1 业务 API 类型定义 + 通用类型别名 + 工具函数
  *
- * 从 client.ts 拆分而来，通过 client.ts 的 re-export 保持向后兼容。
+ * 标准层空表清理（migration 0057）后删除了 VariableSummary /
+ * VariableDetail / VariableVersion / TemplateSummary / PackageSummary /
+ * MappingCandidate / MappingRankResponse 类型。
  */
 
 // ============================================================
@@ -15,38 +17,6 @@ export type CursorPage<T> = {
   has_more: boolean;
 };
 
-// ---- Standards: Variables ----
-export type VariableSummary = {
-  id: string;
-  code: string;
-  display_name: string;
-  canonical_unit: string | null;
-  quantity_kind: string | null;
-  data_type: string;
-  status: string;
-  version_count: number;
-  created_at: string;
-  updated_at: string;
-  lock_version: number;
-};
-
-export type VariableDetail = VariableSummary & {
-  description: string | null;
-  canonical_unit: string | null;
-  aliases: string[];
-  lock_version: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export type VariableVersion = {
-  version: string;
-  status: string;
-  created_at: string;
-  created_by: string;
-  change_note: string | null;
-};
-
 // ---- Objects ----
 export type IndustrialObject = {
   id: string;
@@ -55,54 +25,11 @@ export type IndustrialObject = {
   object_type: string;
   description: string | null;
   status: string;
-  parent_id: string | null;
   department_id: string | null;
   visible_departments: string[];
   created_at: string;
   updated_at: string;
   lock_version: number;
-};
-
-export type ObjectRelation = {
-  id: string;
-  source_id: string;
-  target_id: string;
-  relation_type: string;
-  is_active: boolean;
-  created_at: string;
-};
-
-/** 后端 /objects/{id}/descendants 实际返回结构 */
-export type DescendantsResponse = {
-  root_id: string;
-  descendant_ids: string[];
-};
-
-// ---- Templates ----
-export type TemplateSummary = {
-  id: string;
-  code: string;
-  name_zh: string;
-  status: string;
-  current_version: string | null;
-};
-
-// ---- Methods ----
-export type MethodSummary = {
-  id: string;
-  code: string;
-  name_zh: string;
-  status: string;
-  current_version: string | null;
-};
-
-// ---- Packages ----
-export type PackageSummary = {
-  id: string;
-  code: string;
-  name_zh: string;
-  status: string;
-  current_version: string | null;
 };
 
 // ---- Ingestions ----
@@ -118,22 +45,9 @@ export type SourcePreview = {
   total_rows: number;
 };
 
-export type MappingCandidate = {
-  variableVersionId: string;
-  variableCode: string;
-  score: number;
-  reasons: string[];
-};
-
-export type MappingRankResponse = {
-  candidates: MappingCandidate[];
-};
-
 // ---- Facts ----
 export type FactSummary = {
   fact_id: string;
-  revision: number;
-  revision_id: string;
   fact_type: string;
   subject_id: string;
   status: string;
@@ -144,48 +58,14 @@ export type FactSummary = {
   run_operator: string | null;
   equipment_name: string | null;
   data_summary: string | null;
+  created_at: string | null;
 };
 
 export type FactDetail = {
   fact_id: string;
-  revision: number;
-  revision_id: string;
   fact_type: string;
   subject_id: string;
   status: string;
-};
-
-export type FactRevision = {
-  fact_id: string;
-  revision: number;
-  revision_id: string;
-  fact_type: string;
-  subject_id: string;
-  status: string;
-};
-
-export type RawObservation = {
-  id: string;
-  fact_revision_id: string;
-  source_path: string;
-  source_value: string;
-  source_unit: string | null;
-  source_name: string | null;
-  artifact_id: string | null;
-};
-
-export type NormalizedObservation = {
-  id: string;
-  fact_revision_id: string;
-  variable_version_id: string;
-  raw_observation_id: string;
-  value: string;
-  unit: string | null;
-};
-
-export type ObservationsResponse = {
-  raw: RawObservation[];
-  normalized: NormalizedObservation[];
 };
 
 // ---- Provenance ----
@@ -250,7 +130,6 @@ export type ParameterSummary = {
   status: string;
   current_version: string | null;
   evidence_count: number;
-  staleness_status: string | null;
 };
 
 export type ParameterDetail = ParameterSummary & {

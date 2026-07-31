@@ -211,7 +211,7 @@ export function JobDetail(): JSX.Element {
             {job.attempt} / {job.max_attempts}
           </Descriptions.Item>
           <Descriptions.Item label="创建者">
-            {job.created_by ?? <Text type="secondary">-</Text>}
+            {job.created_by_name ?? job.created_by ?? <Text type="secondary">-</Text>}
           </Descriptions.Item>
           <Descriptions.Item label="创建时间">
             {new Date(job.created_at).toLocaleString()}

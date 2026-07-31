@@ -58,6 +58,10 @@ def require_permission(action: str):  # type: ignore[no-untyped-def]
     def _dependency(
         user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> CurrentUser:
+        # irip-ai-collab: 个人账户权限硬编码放行（所有登录用户均可访问）
+        # PRD 5.1: account:profile 和 account:password 不通过角色分配
+        if action in ("account:profile", "account:password"):
+            return user
         for role_code in user.roles:
             role_def = BUILTIN_ROLES.get(role_code)
             if role_def is not None:
