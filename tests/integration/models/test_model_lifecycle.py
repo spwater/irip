@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import io
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -203,10 +203,10 @@ class TestModelLifecycle:
 
         # 1. 创建模型
         model = await model_service.create_model(
-            code="grate_cooler_test", display_name="篦冷机测试模型"
+            code=f"grate_cooler_test_{uuid4().hex[:8]}", display_name="篦冷机测试模型"
         )
         assert model.status == "draft"
-        assert model.code == "grate_cooler_test"
+        assert model.code.startswith("grate_cooler_test")
         model_id = model.id
 
         # 2. 创建版本（带模型工件 ID）
@@ -266,7 +266,7 @@ class TestModelLifecycle:
         """适用域检查拒绝超出范围的输入。"""
         # 创建模型 + 版本 + 验证 + 发布
         model = await model_service.create_model(
-            code="applicability_test", display_name="适用域测试模型"
+            code=f"applicability_test_{uuid4().hex[:8]}", display_name="适用域测试模型"
         )
         model_id = model.id
         artifact_id = UUID("00000000-0000-0000-0000-000000000001")
@@ -280,13 +280,13 @@ class TestModelLifecycle:
         await model_service.validate(
             model_id=model_id,
             version_id=version_id,
-            applicability_domain=test_contract.applicability_domain,
+            applicability_domain={"x": {"min": 0.0, "max": 50.0}, "y": {"min": 0.0, "max": 50.0}},
         )
         await model_service.publish(model_id, version_id)
 
-        # 超出适用域的输入应被拒绝
+        # 超出适用域但在 JSON schema 范围内（x max=100 in schema, max=50 in domain）
         with pytest.raises(AppError) as exc_info:
-            await model_service.predict(model_id, {"x": 150.0, "y": 20.0})
+            await model_service.predict(model_id, {"x": 75.0, "y": 20.0})
         assert exc_info.value.code == "outside_applicability_domain"
 
     @pytest.mark.asyncio
@@ -296,7 +296,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """预测结果写入 model_execution 事实。"""
-        model = await model_service.create_model(code="fact_test", display_name="事实测试模型")
+        model = await model_service.create_model(code=f"fact_test_{uuid4().hex[:8]}", display_name="事实测试模型")
         model_id = model.id
         artifact_id = UUID("00000000-0000-0000-0000-000000000001")
         version = await model_service.create_version(
@@ -334,7 +334,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """废弃模型。"""
-        model = await model_service.create_model(code="deprecate_test", display_name="废弃测试模型")
+        model = await model_service.create_model(code=f"deprecate_test_{uuid4().hex[:8]}", display_name="废弃测试模型")
         model_id = model.id
         deprecated = await model_service.deprecate(model_id)
         assert deprecated.status == "deprecated"
@@ -346,7 +346,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """列表查询与版本列表。"""
-        model = await model_service.create_model(code="list_test", display_name="列表测试模型")
+        model = await model_service.create_model(code=f"list_test_{uuid4().hex[:8]}", display_name="列表测试模型")
         model_id = model.id
 
         # 创建两个版本
@@ -372,7 +372,7 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """非法状态转换被拒绝。"""
-        model = await model_service.create_model(code="state_test", display_name="状态测试模型")
+        model = await model_service.create_model(code=f"state_test_{uuid4().hex[:8]}", display_name="状态测试模型")
         model_id = model.id
         version = await model_service.create_version(model_id=model_id, contract=test_contract)
         version_id = version.id

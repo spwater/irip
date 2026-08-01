@@ -9,7 +9,7 @@ time_cost=2, memory_cost=19456(19MiB), parallelism=1, type=argon2id）。
 """
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import Argon2Error, VerifyMismatchError
 
 _hasher = PasswordHasher()
 
@@ -39,5 +39,7 @@ def verify_password(hashed: str, plain: str) -> bool:
     try:
         _hasher.verify(hashed, plain)
         return True
-    except VerifyMismatchError:
+    except (VerifyMismatchError, Argon2Error):
+        # VerifyMismatchError: 密码不匹配
+        # Argon2Error: 哈希格式无效（如 _DUMMY_HASH 解码失败）
         return False

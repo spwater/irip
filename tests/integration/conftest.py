@@ -376,6 +376,17 @@ def run_bootstrap(
     # bootstrap_platform 需要 IRIP_BOOTSTRAP_ADMIN_PASSWORD 环境变量
     monkeypatch.setenv("IRIP_BOOTSTRAP_ADMIN_PASSWORD", "Admin-IRIP-2026")
 
+    # 测试环境无 worker 运行，写入 fake heartbeat 使 health/ready 通过
+    import time
+    import redis as _redis
+
+    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:56379/0")
+    try:
+        _r = _redis.from_url(redis_url)
+        _r.set("irip:worker:heartbeat", str(time.time()))
+    except Exception:
+        pass
+
     from deployments.compose.bootstrap import ApplicationContainer, bootstrap_platform
 
     s3_repo = _build_health_s3_repo()
