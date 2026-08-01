@@ -82,11 +82,11 @@ async def test_list_departments_with_member_count(
     result = await service.list()
     assert len(result.items) >= 2
     # 按 sort_order 排序
-    codes = [dept.code for dept, _ in result.items]
+    codes = [dept.code for dept, _, _, _ in result.items]
     assert "lab_list_a" in codes
     assert "lab_list_b" in codes
     # member_count 应为 0（无关联用户）
-    for _, count in result.items:
+    for _, count, _, _ in result.items:
         assert count >= 0
 
 
@@ -274,12 +274,12 @@ async def test_disabled_not_in_active_list(
     await service.set_status(to_disable.id, "disabled", 0)
 
     active_result = await service.list(status="active")
-    active_codes = [dept.code for dept, _ in active_result.items]
+    active_codes = [dept.code for dept, _, _, _ in active_result.items]
     assert "lab_active_filter" in active_codes
     assert "lab_disabled_filter" not in active_codes
 
     disabled_result = await service.list(status="disabled")
-    disabled_codes = [dept.code for dept, _ in disabled_result.items]
+    disabled_codes = [dept.code for dept, _, _, _ in disabled_result.items]
     assert "lab_disabled_filter" in disabled_codes
 
 

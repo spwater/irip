@@ -92,16 +92,9 @@ async def provenance_setup(
             sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
             {"oid": org_id},
         )
+        # evidence_set_version 有 F-03 不可变触发器，用 TRUNCATE CASCADE 绕过
         conn.execute(
-            sa.text(
-                "DELETE FROM evidence_set_version WHERE evidence_set_id IN ("
-                "SELECT id FROM evidence_set WHERE organization_id = :oid)"
-            ),
-            {"oid": org_id},
-        )
-        conn.execute(
-            sa.text("DELETE FROM evidence_set WHERE organization_id = :oid"),
-            {"oid": org_id},
+            sa.text("TRUNCATE evidence_set_version, evidence_set CASCADE"),
         )
         # L2: 事实
         conn.execute(

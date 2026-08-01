@@ -164,7 +164,7 @@ def api_client(
     from fastapi.responses import JSONResponse
     from fastapi.testclient import TestClient
 
-    from apps.api.dependencies.auth import get_token_secret
+    from apps.api.dependencies.auth import get_auth_session_factory, get_token_secret
     from apps.api.routers.auth import (
         auth_router,
         get_auth_service,
@@ -188,6 +188,7 @@ def api_client(
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_token_secret] = lambda: token_secret
     app.dependency_overrides[get_me_session_factory] = lambda: async_session_factory
+    app.dependency_overrides[get_auth_session_factory] = lambda: async_session_factory
 
     # 覆盖健康检查依赖
     app.dependency_overrides[get_health_session_factory] = lambda: async_session_factory
@@ -363,6 +364,7 @@ def auth_repository(
 @pytest.fixture
 def run_bootstrap(
     async_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
 ):
     """幂等执行 bootstrap_platform 的可调用 fixture。
 
@@ -371,6 +373,9 @@ def run_bootstrap(
 
     幂等：可安全多次调用。
     """
+    # bootstrap_platform 需要 IRIP_BOOTSTRAP_ADMIN_PASSWORD 环境变量
+    monkeypatch.setenv("IRIP_BOOTSTRAP_ADMIN_PASSWORD", "Admin-IRIP-2026")
+
     from deployments.compose.bootstrap import ApplicationContainer, bootstrap_platform
 
     s3_repo = _build_health_s3_repo()

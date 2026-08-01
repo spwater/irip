@@ -320,11 +320,11 @@ async def test_member_count_aggregation(
 
         result = await dept_service.list()
         dept_item = next(
-            (d for d, c in result.items if d.code == "ud_count_lab"),
+            (d for d, c, _, _ in result.items if d.code == "ud_count_lab"),
             None,
         )
         assert dept_item is not None
-        count = next(c for d, c in result.items if d.code == "ud_count_lab")
+        count = next(c for d, c, _, _ in result.items if d.code == "ud_count_lab")
         assert count == 2
     finally:
         await _cleanup_test_user(async_session_factory, user1)

@@ -176,6 +176,7 @@ async def test_unauthorized_download_returns_401(
     from fastapi.responses import JSONResponse
     from fastapi.testclient import TestClient
 
+    from apps.api.dependencies.auth import get_auth_session_factory
     from apps.api.routers.uploads import (
         artifacts_router,
         get_artifact_service,
@@ -188,8 +189,9 @@ async def test_unauthorized_download_returns_401(
     app = FastAPI(title="IRIP Unauthorized Test")
     app.include_router(artifacts_router)
 
-    # 覆盖 artifact_service 依赖
+    # 覆盖 artifact_service 依赖 + auth session factory
     app.dependency_overrides[get_artifact_service] = lambda: artifact_service
+    app.dependency_overrides[get_auth_session_factory] = lambda: None  # 无 session → 401
 
     # AppError 处理器
     _STATUS_MAP: dict[str, int] = {
