@@ -20,8 +20,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# 沙箱环境标志：沙箱内 httpx 连接会卡住，跳过需要真实网络的测试
-_SANDBOX_ENV = os.environ.get("SANDBOX") is not None or not os.environ.get("IRIP_DATABASE_URL")
+# 沙箱环境标志：仅在显式 SANDBOX 环境变量时跳过
+# 之前还检查 IRIP_DATABASE_URL 是否存在，但这些测试用 mock httpx 不需要数据库
+_SANDBOX_ENV = os.environ.get("SANDBOX") is not None
 
 from packages.common.safe_http import (
     PRIVATE_NETWORKS,

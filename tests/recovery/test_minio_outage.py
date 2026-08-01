@@ -93,7 +93,7 @@ async def test_minio_outage_job_retries(job_harness) -> None:
 async def test_no_results_committed_during_outage(job_harness) -> None:
     """MinIO 中断期间不提交任何结果。"""
     fail_count = [0]
-    max_fails = 3
+    max_fails = 2  # 系统默认 max_attempts=3（1 初始 + 2 重试），不能超过否则进入 FAILED 终态
 
     async def always_fail_handler(job) -> dict:
         if fail_count[0] < max_fails:

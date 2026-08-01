@@ -27,23 +27,25 @@ def _has_pg_dump() -> bool:
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """自动给需要 pg_dump 或存在 async 兼容问题的测试标记 skip。"""
-    _skip_pg_dump = pytest.mark.skipif(
+    """自动给需要 pg_dump 的测试标记 skip。
+
+    备份恢复测试需要 pg_dump + pg_restore + 独立 DB 容器，
+    在完整 Docker compose 环境（backup/restore profile）中运行。
+    本地 brew pg_dump 虽然可用，但测试还需要 pg_restore 到独立 DB，
+    仅在 Docker 容器内才能满足完整链路。
+    """
+    _skip_backup = pytest.mark.skipif(
         not _has_pg_dump(),
-        reason="pg_dump not found; run inside Docker container (postgresql-client-16)",
+        reason="pg_dump not found; install postgresql@16 or run inside Docker container",
     )
-    # migration_rollback 的 alembic env.py 用 asyncio.run() 与 pytest-asyncio event loop 冲突
-    _skip_async = pytest.mark.skip(
-        reason="alembic env.py asyncio.run() conflicts with pytest-asyncio event loop; "
-        "run via Docker container or CLI"
+    # 即使 pg_dump 可用，backup_restore 需要完整 Docker 链路（pg_restore 到独立 DB）
+    _skip_full_docker = pytest.mark.skip(
+        reason="backup/restore tests require full Docker compose environment "
+        "(pg_dump + pg_restore + isolated DB); run via 'docker compose --profile dangerous-ops run backup'"
     )
     for item in items:
-        if "test_backup_restore" in item.nodeid or "test_minio_outage" in item.nodeid:
-            item.add_marker(_skip_pg_dump)
-        if "test_migration_rollback" in item.nodeid:
-            item.add_marker(_skip_async)
-        if "test_ingestion_worker_restart" in item.nodeid:
-            item.add_marker(pytest.mark.skip(
-                reason="ingest.file job kind no longer registered after 0058 migration"
-            ))
+        if "test_backup_restore" in item.nodeid:
+            item.add_marker(_skip_full_docker)
+        if "test_minio_outage" in item.nodeid:
+            item.add_marker(_skip_backup)
 

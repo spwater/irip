@@ -101,4 +101,19 @@ async def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    try:
+        asyncio.run(run_migrations_online())
+    except RuntimeError:
+        # Already in an event loop (e.g. pytest-asyncio) — use nest_asyncio or thread
+        import threading
+
+        result: list = [None]
+
+        def _run_in_thread() -> None:
+            result[0] = asyncio.run(run_migrations_online())
+
+        t = threading.Thread(target=_run_in_thread)
+        t.start()
+        t.join()
+        if isinstance(result[0], BaseException):
+            raise result[0]
