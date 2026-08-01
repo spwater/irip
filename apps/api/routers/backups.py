@@ -93,9 +93,13 @@ class CreateRestoreRequest(BaseModel):
 
     Attributes:
         skip_migrations: 是否跳过迁移步骤。
+        recovery_target_time: PITR 恢复目标时间（ISO 8601），不传时恢复到备份时间点。
     """
 
     skip_migrations: bool = Field(False, description="是否跳过迁移步骤")
+    recovery_target_time: str | None = Field(
+        None, description="PITR 恢复目标时间（ISO 8601），不传时恢复到备份时间点"
+    )
 
 
 class BackupRecordResponse(BaseModel):
@@ -137,6 +141,8 @@ class BackupRecordResponse(BaseModel):
     completed_at: datetime | None
     expires_at: datetime | None
     error_message: str | None
+    backup_method: str | None = Field(None, description="备份方法: pitr | pg_dump")
+    backup_timestamp: datetime | None = Field(None, description="联合时间戳")
 
 
 class BackupRecordListResponse(BaseModel):
@@ -226,6 +232,8 @@ def _to_record_response(record: BackupRecord) -> BackupRecordResponse:
         completed_at=record.completed_at,
         expires_at=record.expires_at,
         error_message=record.error_message,
+        backup_method=record.backup_method,
+        backup_timestamp=record.backup_timestamp,
     )
 
 
@@ -314,6 +322,7 @@ async def create_backup(
                 "name": body.name,
                 "description": body.description,
                 "backup_record_id": str(job_id),
+                "backup_method": "pitr",
                 "triggered_by": str(current_user.user_id),
             },
             idempotency_key=f"backup:{job_id}",
@@ -340,6 +349,7 @@ async def create_backup(
             created_at=now,
             expires_at=None,  # service.create 会按类型计算，此处直接构造
             organization_id=org_id,
+            backup_method="pitr",
         )
         # 按类型设置过期时间
         from datetime import timedelta
@@ -557,6 +567,7 @@ async def create_restore(
                 "backup_id": str(record_id),
                 "backup_dir": record.file_path,
                 "skip_migrations": body.skip_migrations,
+                "recovery_target_time": body.recovery_target_time,
                 "triggered_by": str(current_user.user_id),
                 "pre_restore_created": False,
             },

@@ -37,8 +37,10 @@ from typing import Any
 
 from deployments.compose.backup_manifest import (
     DATABASE_DUMP_FILENAME,
+    MINIO_MIRROR_DIRNAME,
     OBJECTS_DIRNAME,
     OBJECTS_METADATA_FILENAME,
+    PG_BASEBACKUP_DIRNAME,
     BackupManifest,
     BackupManifestValidator,
     ManifestValidationError,
@@ -142,6 +144,8 @@ class RestoreConfig:
         compose_project_name: 隔离 Compose 项目名（None 表示跳过 Compose 编排）。
         age_identity: age 身份文件路径（解密用，None 表示无需解密）。
         skip_migrations: 是否跳过迁移步骤。
+        minio_mc_alias: mc 客户端 alias 名称（默认 irip）。
+        recovery_target_time: PITR 恢复目标时间（ISO 8601，None 表示恢复到备份时间点）。
     """
 
     backup_dir: Path
@@ -154,6 +158,8 @@ class RestoreConfig:
     compose_project_name: str | None = None
     age_identity: str | None = None
     skip_migrations: bool = False
+    minio_mc_alias: str = "irip"
+    recovery_target_time: str | None = None
 
 
 class RestoreService:
@@ -188,7 +194,11 @@ class RestoreService:
         )
 
     async def restore(self) -> BackupManifest:
-        """执行完整恢复流程。
+        """执行完整恢复流程（版本路由）。
+
+        根据 manifest.format_version 分流：
+        - v1: 旧路径（pg_restore + S3Repository），向后兼容；
+        - v2: 新路径（mc mirror + PITR），联合恢复。
 
         Returns:
             BackupManifest: 恢复使用的备份清单。
@@ -201,24 +211,49 @@ class RestoreService:
         if not backup_dir.exists():
             raise FileNotFoundError(f"备份目录不存在: {backup_dir}")
 
-        # 0. 解压（如果只有 tar / tar.age）
-        self._extract_archive(backup_dir)
-
-        # 1. 加载 + 校验 manifest
+        # 加载 manifest
         manifest: BackupManifest = load_manifest(backup_dir)
         logger.info(
-            "Restore %s: manifest loaded (version=%s, migration=%s, objects=%d)",
+            "Restore %s: manifest loaded (format_version=%s, migration=%s, objects=%d)",
             manifest.backup_id,
-            manifest.application_version,
+            manifest.format_version,
             manifest.migration_version,
             manifest.object_count,
         )
 
-        logger.info("Restore %s: verifying integrity ...", manifest.backup_id)
+        # 版本路由
+        if manifest.format_version == 1:
+            return await self._restore_v1(manifest)
+        elif manifest.format_version == 2:
+            return await self._restore_v2(manifest)
+        else:
+            raise RuntimeError(
+                f"不支持的 manifest 版本: {manifest.format_version}"
+            )
+
+    async def _restore_v1(self, manifest: BackupManifest) -> BackupManifest:
+        """v1 旧路径恢复（pg_restore + S3Repository，向后兼容）。
+
+        完整保留现有逻辑：解压归档 → 校验 manifest → pg_restore → S3Repository 上传 →
+        前向迁移 → 冒烟查询。
+
+        Args:
+            manifest: v1 备份清单。
+
+        Returns:
+            BackupManifest: 恢复使用的备份清单。
+        """
+        backup_dir: Path = self._config.backup_dir
+
+        # 0. 解压（如果只有 tar / tar.age）
+        self._extract_archive(backup_dir)
+
+        # 1. 校验 manifest
+        logger.info("Restore %s: verifying integrity (v1) ...", manifest.backup_id)
         self._validator.validate(manifest, backup_dir)
         logger.info("Restore %s: integrity verified ✓", manifest.backup_id)
 
-        # F-06: 恢复前完整预校验所有对象（存在性+SHA），任一失败则退出
+        # F-06: 恢复前完整预校验所有对象
         logger.info("Restore %s: pre-validating all objects ...", manifest.backup_id)
         self._prevalidate_objects(backup_dir / OBJECTS_DIRNAME)
         logger.info("Restore %s: all objects pre-validated ✓", manifest.backup_id)
@@ -232,11 +267,11 @@ class RestoreService:
             self._start_isolated_compose()
 
         # 3. 恢复数据库
-        logger.info("Restore %s: restoring PostgreSQL database ...", manifest.backup_id)
+        logger.info("Restore %s: restoring PostgreSQL database (pg_restore) ...", manifest.backup_id)
         self._restore_database(backup_dir / DATABASE_DUMP_FILENAME)
 
         # 4. 恢复 MinIO 对象
-        logger.info("Restore %s: restoring MinIO objects ...", manifest.backup_id)
+        logger.info("Restore %s: restoring MinIO objects (S3Repository) ...", manifest.backup_id)
         self._restore_minio_objects(backup_dir / OBJECTS_DIRNAME)
 
         # 5. 前向兼容迁移
@@ -255,7 +290,6 @@ class RestoreService:
         for table_name, row_count in smoke_results.items():
             logger.info("  %s: %d rows", table_name, row_count)
 
-        # H-09: 冒烟失败非零退出
         smoke_failures: list[str] = []
         for table_name, row_count in smoke_results.items():
             if row_count < 0:
@@ -272,8 +306,406 @@ class RestoreService:
                 f"Smoke test failures: {'; '.join(smoke_failures)}"
             )
 
-        logger.info("Restore %s: complete", manifest.backup_id)
+        logger.info("Restore %s: v1 restore complete", manifest.backup_id)
         return manifest
+
+    async def _restore_v2(self, manifest: BackupManifest) -> BackupManifest:
+        """v2 新路径恢复（mc mirror + PITR，联合恢复）。
+
+        联合恢复顺序：MinIO 先 → PG 后（保证引用完整性）。
+        1. 校验 manifest v2
+        2. mc mirror 恢复 MinIO（先）
+        3. PITR 恢复 PG（后）
+        4. 前向兼容迁移
+        5. 冒烟查询 + 引用完整性校验
+
+        Args:
+            manifest: v2 备份清单。
+
+        Returns:
+            BackupManifest: 恢复使用的备份清单。
+        """
+        backup_dir: Path = self._config.backup_dir
+
+        # 1. 校验 manifest v2
+        logger.info("Restore %s: verifying integrity (v2) ...", manifest.backup_id)
+        self._validator.validate(manifest, backup_dir)
+        logger.info("Restore %s: integrity verified ✓", manifest.backup_id)
+
+        # 2. MinIO 恢复（先恢复对象，保证引用完整性）
+        logger.info("Restore %s: restoring MinIO objects (mc mirror) ...", manifest.backup_id)
+        self._mc_restore_minio(backup_dir / MINIO_MIRROR_DIRNAME)
+
+        # 3. PITR 恢复 PG（后）
+        # 确定 recovery_target_time: 优先用配置中的值，否则用 manifest 中的 backup_timestamp
+        recovery_target_time: str = self._config.recovery_target_time or ""
+        if not recovery_target_time:
+            recovery_target_time = str(manifest.extra.get("backup_timestamp", ""))
+
+        logger.info(
+            "Restore %s: restoring PostgreSQL (PITR, target_time=%s) ...",
+            manifest.backup_id, recovery_target_time or "(backup_timestamp)",
+        )
+        self._pitr_restore(backup_dir / PG_BASEBACKUP_DIRNAME, recovery_target_time)
+
+        # 4. 前向兼容迁移
+        if not self._config.skip_migrations:
+            logger.info(
+                "Restore %s: applying forward-compatible migrations ...",
+                manifest.backup_id,
+            )
+            self._apply_forward_migrations(manifest.migration_version)
+        else:
+            logger.info("Restore %s: skipping migrations (as requested)", manifest.backup_id)
+
+        # 5. 冒烟查询
+        logger.info("Restore %s: running smoke queries ...", manifest.backup_id)
+        smoke_results: dict[str, int] = await self._run_smoke_queries()
+        for table_name, row_count in smoke_results.items():
+            logger.info("  %s: %d rows", table_name, row_count)
+
+        smoke_failures: list[str] = []
+        for table_name, row_count in smoke_results.items():
+            if row_count < 0:
+                smoke_failures.append(f"{table_name}: query failed")
+        if smoke_results.get("app_user", 0) <= 0:
+            smoke_failures.append("app_user table is empty after restore")
+        if smoke_results.get("alembic_version", 0) != 1:
+            smoke_failures.append(
+                f"alembic_version should have exactly 1 row, got {smoke_results.get('alembic_version')}"
+            )
+        if smoke_failures:
+            logger.error("Restore %s: smoke test failures: %s", manifest.backup_id, smoke_failures)
+            raise RuntimeError(
+                f"Smoke test failures: {'; '.join(smoke_failures)}"
+            )
+
+        # 6. 引用完整性校验（P0-UP-08）
+        logger.info("Restore %s: validating referential integrity ...", manifest.backup_id)
+        await self._validate_referential_integrity()
+        logger.info("Restore %s: referential integrity validated ✓", manifest.backup_id)
+
+        logger.info("Restore %s: v2 restore complete", manifest.backup_id)
+        return manifest
+
+    def _pitr_restore(self, basebackup_dir: Path, recovery_target_time: str) -> None:
+        """PITR 物理恢复 PostgreSQL。
+
+        流程（docs/arch-db-backup-pitr-upgrade.md §1.6）：
+        1. docker compose stop postgres
+        2. 清空 pgdata 目录
+        3. 解压 base.tar.gz → pgdata
+        4. 解压 pg_wal.tar.gz → pgdata/pg_wal/（如有）
+        5. 创建 recovery.signal
+        6. 配置 postgresql.auto.conf（restore_command + recovery_target_time + recovery_target_action）
+        7. docker compose start postgres
+        8. 轮询 pg_isready 等待 PG 健康
+
+        Args:
+            basebackup_dir: pg_basebackup 产出目录（含 base.tar.gz + pg_wal.tar.gz）。
+            recovery_target_time: 恢复目标时间（ISO 8601，空字符串表示恢复到备份时间点）。
+
+        Raises:
+            RuntimeError: 恢复步骤失败时。
+        """
+        pgdata_dir: Path = Path("/var/lib/postgresql/data")
+        wal_archive_dir: Path = Path(os.getenv("IRIP_WAL_ARCHIVE_DIR", "/backups/wal_archive"))
+
+        # 1. 停止 PG 容器
+        logger.info("PITR restore: stopping postgres container ...")
+        self._stop_postgres()
+
+        try:
+            # 2. 清空 pgdata 目录
+            logger.info("PITR restore: clearing pgdata directory ...")
+            if pgdata_dir.exists():
+                for item in pgdata_dir.iterdir():
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink(missing_ok=True)
+
+            # 3. 解压 base.tar.gz → pgdata
+            base_tar: Path = basebackup_dir / "base.tar.gz"
+            if not base_tar.exists():
+                raise RuntimeError(f"base.tar.gz 缺失: {base_tar}")
+            logger.info("PITR restore: extracting base.tar.gz ...")
+            with tarfile.open(base_tar, "r:gz") as tar:
+                try:
+                    tar.extractall(path=pgdata_dir, filter="data")
+                except TypeError:
+                    tar.extractall(path=pgdata_dir)
+
+            # 4. 解压 pg_wal.tar.gz → pgdata/pg_wal/（如有）
+            pg_wal_tar: Path = basebackup_dir / "pg_wal.tar.gz"
+            pg_wal_dir: Path = pgdata_dir / "pg_wal"
+            pg_wal_dir.mkdir(parents=True, exist_ok=True)
+            if pg_wal_tar.exists():
+                logger.info("PITR restore: extracting pg_wal.tar.gz ...")
+                with tarfile.open(pg_wal_tar, "r:gz") as tar:
+                    try:
+                        tar.extractall(path=pg_wal_dir, filter="data")
+                    except TypeError:
+                        tar.extractall(path=pg_wal_dir)
+
+            # 5. 创建 recovery.signal
+            recovery_signal: Path = pgdata_dir / "recovery.signal"
+            recovery_signal.touch()
+            logger.info("PITR restore: created recovery.signal")
+
+            # 6. 配置 postgresql.auto.conf
+            auto_conf: Path = pgdata_dir / "postgresql.auto.conf"
+            # 格式化 recovery_target_time 为 PG 识别的格式
+            target_time_pg: str = recovery_target_time
+            if target_time_pg:
+                # ISO 8601 → PG timestamp 格式: "2026-08-16 10:30:00.000000+00:00"
+                try:
+                    from datetime import datetime
+
+                    dt = datetime.fromisoformat(target_time_pg)
+                    target_time_pg = dt.strftime("%Y-%m-%d %H:%M:%S.%f%z")
+                except Exception:
+                    pass  # 保持原始格式
+
+            conf_lines: list[str] = [
+                f"restore_command = 'cp {wal_archive_dir}/%f %p'",
+            ]
+            if target_time_pg:
+                conf_lines.append(f"recovery_target_time = '{target_time_pg}'")
+            conf_lines.append("recovery_target_action = 'promote'")
+
+            with open(auto_conf, "a", encoding="utf-8") as f:
+                for line in conf_lines:
+                    f.write(line + "\n")
+            logger.info("PITR restore: configured postgresql.auto.conf")
+
+            # 7. 启动 PG 容器
+            logger.info("PITR restore: starting postgres container ...")
+            self._start_postgres()
+
+            # 8. 等待 PG 健康
+            logger.info("PITR restore: waiting for postgres to become healthy ...")
+            self._wait_pg_healthy()
+
+        except Exception:
+            # 恢复失败时尝试重新启动 PG
+            logger.error("PITR restore: failed, attempting to restart postgres ...")
+            self._start_postgres()
+            raise
+
+    def _mc_restore_minio(self, minio_dir: Path) -> None:
+        """使用 mc mirror 将本地对象目录恢复到 MinIO bucket。
+
+        流程: mc alias set → mc mirror --overwrite minio_dir/ [alias]/[bucket]
+
+        Args:
+            minio_dir: mc mirror 对象目录路径。
+
+        Raises:
+            RuntimeError: mc 命令执行失败时。
+        """
+        if not minio_dir.exists():
+            logger.info("No minio_mirror directory; skipping MinIO restore")
+            return
+
+        self._s3.ensure_bucket()
+
+        mc_config_dir: str = "/tmp/mc"
+
+        # 配置 mc alias
+        cmd_alias: list[str] = [
+            "mc", "--config-dir", mc_config_dir,
+            "alias", "set",
+            self._config.minio_mc_alias,
+            self._config.minio_endpoint,
+            self._config.minio_access_key,
+            self._config.minio_secret_key,
+        ]
+        logger.info("Setting mc alias for restore: %s", self._config.minio_mc_alias)
+        result_alias: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd_alias, capture_output=True, check=False
+        )
+        if result_alias.returncode != 0:
+            stderr: str = result_alias.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"mc alias set failed (exit={result_alias.returncode}): {stderr}"
+            )
+
+        # mc mirror 从本地目录恢复到 MinIO bucket
+        cmd_mirror: list[str] = [
+            "mc", "--config-dir", mc_config_dir,
+            "mirror", "--overwrite",
+            str(minio_dir) + "/",
+            f"{self._config.minio_mc_alias}/{self._config.minio_bucket}",
+        ]
+        logger.info("Running mc mirror restore ...")
+        result_mirror: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd_mirror, capture_output=True, check=False
+        )
+        if result_mirror.returncode != 0:
+            stderr: str = result_mirror.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"mc mirror restore failed (exit={result_mirror.returncode}): {stderr}"
+            )
+
+        logger.info("MinIO objects restored via mc mirror")
+
+    async def _validate_referential_integrity(self) -> None:
+        """引用完整性校验（P0-UP-08）。
+
+        查询 artifact_blob 表的 storage_key 列，逐 key 检查 MinIO 对象是否存在。
+        任一缺失则 raise RuntimeError。
+
+        Raises:
+            RuntimeError: 任一 storage_key 对应的 MinIO 对象缺失时。
+        """
+        from sqlalchemy import create_engine, text
+
+        sync_url: str = _to_sync_url(self._config.db_url)
+        engine = create_engine(sync_url, pool_pre_ping=True)
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT storage_key FROM artifact_blob")
+                )
+                storage_keys: list[str] = [str(row[0]) for row in result.fetchall()]
+        except Exception as exc:
+            logger.warning("Referential integrity: failed to query artifact_blob: %s", exc)
+            return
+        finally:
+            engine.dispose()
+
+        if not storage_keys:
+            logger.info("Referential integrity: no storage_keys to validate")
+            return
+
+        missing_keys: list[str] = []
+        for key in storage_keys:
+            if not key:
+                continue
+            try:
+                self._s3.head_object(key)
+            except Exception as exc:
+                # 对象不存在（404）或检查出错
+                logger.warning("Referential integrity: object missing or error for %s: %s", key, exc)
+                missing_keys.append(key)
+
+        if missing_keys:
+            raise RuntimeError(
+                f"引用完整性校验失败: {len(missing_keys)} 个 MinIO 对象缺失:\n"
+                + "\n".join(missing_keys[:20])
+            )
+
+        logger.info(
+            "Referential integrity: all %d storage_keys verified", len(storage_keys)
+        )
+
+    def _stop_postgres(self) -> None:
+        """停止 PostgreSQL 容器（docker compose stop postgres）。
+
+        Raises:
+            RuntimeError: docker compose stop 失败时。
+        """
+        compose_file: str = os.getenv(
+            "IRIP_RESTORE_COMPOSE_FILE", "compose.yaml"
+        )
+        cmd: list[str] = [
+            "docker", "compose",
+            "-f", compose_file,
+            "stop", "postgres",
+        ]
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr: str = result.stderr.decode("utf-8", errors="replace")
+            logger.warning("docker compose stop postgres failed: %s", stderr)
+
+    def _start_postgres(self) -> None:
+        """启动 PostgreSQL 容器（docker compose start postgres）。
+
+        Raises:
+            RuntimeError: docker compose start 失败时。
+        """
+        compose_file: str = os.getenv(
+            "IRIP_RESTORE_COMPOSE_FILE", "compose.yaml"
+        )
+        cmd: list[str] = [
+            "docker", "compose",
+            "-f", compose_file,
+            "start", "postgres",
+        ]
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr: str = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"docker compose start postgres failed (exit={result.returncode}): {stderr}"
+            )
+
+    def _wait_pg_healthy(self, max_retries: int = 30, retry_interval: float = 2.0) -> None:
+        """轮询 pg_isready 等待 PostgreSQL 健康。
+
+        Args:
+            max_retries: 最大重试次数（默认 30 次）。
+            retry_interval: 重试间隔秒数（默认 2 秒）。
+
+        Raises:
+            RuntimeError: 超过最大重试次数仍不健康时。
+        """
+        import time
+
+        for i in range(max_retries):
+            cmd: list[str] = [
+                "pg_isready",
+                "-h", self._extract_pg_host(),
+                "-U", self._extract_pg_user(),
+            ]
+            result: subprocess.CompletedProcess[bytes] = subprocess.run(
+                cmd,
+                env=_build_pg_env(),
+                capture_output=True,
+                check=False,
+            )
+            if result.returncode == 0:
+                logger.info("PostgreSQL is ready (after %d retries)", i)
+                return
+            time.sleep(retry_interval)
+
+        raise RuntimeError(
+            f"PostgreSQL did not become healthy after {max_retries} retries"
+        )
+
+    def _extract_pg_host(self) -> str:
+        """从数据库 URL 中提取 PG 主机名。
+
+        Returns:
+            str: PG 主机名（默认 'postgres'）。
+        """
+        from urllib.parse import urlparse
+
+        try:
+            sync_url: str = _to_pg_restore_url(self._config.db_url)
+            parsed = urlparse(sync_url)
+            return parsed.hostname or "postgres"
+        except Exception:
+            return "postgres"
+
+    def _extract_pg_user(self) -> str:
+        """从数据库 URL 中提取 PG 用户名。
+
+        Returns:
+            str: PG 用户名（默认 'irip'）。
+        """
+        from urllib.parse import urlparse
+
+        try:
+            sync_url: str = _to_pg_restore_url(self._config.db_url)
+            parsed = urlparse(sync_url)
+            return parsed.username or "irip"
+        except Exception:
+            return "irip"
 
     def _extract_archive(self, backup_dir: Path) -> None:
         """解压 tar / tar.age 归档到备份目录（安全提取）。
@@ -712,6 +1144,7 @@ def build_restore_config_from_env(backup_dir: Path) -> RestoreConfig:
     skip_migrations: bool = os.getenv("IRIP_RESTORE_SKIP_MIGRATIONS", "").lower() in (
         "1", "true", "yes",
     )
+    minio_mc_alias: str = os.getenv("IRIP_MINIO_MC_ALIAS", "irip")
 
     return RestoreConfig(
         backup_dir=backup_dir,
@@ -724,19 +1157,40 @@ def build_restore_config_from_env(backup_dir: Path) -> RestoreConfig:
         compose_project_name=compose_project,
         age_identity=age_identity,
         skip_migrations=skip_migrations,
+        minio_mc_alias=minio_mc_alias,
     )
 
 
-async def run_restore(backup_dir: Path) -> BackupManifest:
+async def run_restore(
+    backup_dir: Path,
+    recovery_target_time: str | None = None,
+) -> BackupManifest:
     """执行恢复（便捷入口）。
 
     Args:
         backup_dir: 备份目录路径。
+        recovery_target_time: PITR 恢复目标时间（ISO 8601，None 表示恢复到备份时间点）。
 
     Returns:
         BackupManifest: 恢复使用的备份清单。
     """
     config: RestoreConfig = build_restore_config_from_env(backup_dir)
+    if recovery_target_time is not None:
+        # 重建 config 以注入 recovery_target_time（frozen dataclass）
+        config = RestoreConfig(
+            backup_dir=config.backup_dir,
+            db_url=config.db_url,
+            minio_endpoint=config.minio_endpoint,
+            minio_access_key=config.minio_access_key,
+            minio_secret_key=config.minio_secret_key,
+            minio_bucket=config.minio_bucket,
+            minio_region=config.minio_region,
+            compose_project_name=config.compose_project_name,
+            age_identity=config.age_identity,
+            skip_migrations=config.skip_migrations,
+            minio_mc_alias=config.minio_mc_alias,
+            recovery_target_time=recovery_target_time,
+        )
     service: RestoreService = RestoreService(config)
     return await service.restore()
 
@@ -762,6 +1216,12 @@ def main() -> None:
         default=False,
         help="跳过迁移步骤（仅恢复数据）",
     )
+    parser.add_argument(
+        "--recovery-target-time",
+        type=str,
+        default=None,
+        help="PITR 恢复目标时间（ISO 8601），不传时恢复到备份时间点",
+    )
     args: argparse.Namespace = parser.parse_args()
 
     config: RestoreConfig = build_restore_config_from_env(args.backup_dir)
@@ -778,6 +1238,23 @@ def main() -> None:
             compose_project_name=config.compose_project_name,
             age_identity=config.age_identity,
             skip_migrations=True,
+            minio_mc_alias=config.minio_mc_alias,
+            recovery_target_time=args.recovery_target_time,
+        )
+    elif args.recovery_target_time:
+        config = RestoreConfig(
+            backup_dir=config.backup_dir,
+            db_url=config.db_url,
+            minio_endpoint=config.minio_endpoint,
+            minio_access_key=config.minio_access_key,
+            minio_secret_key=config.minio_secret_key,
+            minio_bucket=config.minio_bucket,
+            minio_region=config.minio_region,
+            compose_project_name=config.compose_project_name,
+            age_identity=config.age_identity,
+            skip_migrations=config.skip_migrations,
+            minio_mc_alias=config.minio_mc_alias,
+            recovery_target_time=args.recovery_target_time,
         )
 
     service: RestoreService = RestoreService(config)

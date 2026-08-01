@@ -231,11 +231,29 @@ async def _backup_handler(job: object) -> dict:
     # 备份成功：更新 backup_record 状态与元数据
     if backup_record_id_str:
         try:
+            # 从 manifest.extra 读取 PITR 元数据（v2 格式）
+            extra: dict = manifest.extra or {}
+            backup_timestamp_str: str = str(extra.get("backup_timestamp", ""))
+            wal_start_lsn: str = str(extra.get("wal_start_lsn", ""))
+            wal_end_lsn: str = str(extra.get("wal_end_lsn", ""))
+
+            # 解析 backup_timestamp 为 datetime
+            backup_timestamp = None
+            if backup_timestamp_str:
+                try:
+                    from datetime import datetime
+                    backup_timestamp = datetime.fromisoformat(backup_timestamp_str)
+                except (ValueError, TypeError):
+                    pass
+
             await service.mark_succeeded(
                 UUID(backup_record_id_str),
                 sha256=manifest.database_sha256,
                 migration_version=manifest.migration_version,
                 application_version=manifest.application_version,
+                backup_timestamp=backup_timestamp,
+                wal_start_lsn=wal_start_lsn if wal_start_lsn else None,
+                wal_end_lsn=wal_end_lsn if wal_end_lsn else None,
             )
         except Exception as exc:
             # 记录更新失败不影响作业成功状态，但记录日志
@@ -334,11 +352,28 @@ async def _restore_handler(job: object) -> dict:
 
             # 执行备份
             pre_manifest = await run_backup()
+            # 从 manifest.extra 读取 PITR 元数据
+            pre_extra: dict = pre_manifest.extra or {}
+            pre_backup_ts_str: str = str(pre_extra.get("backup_timestamp", ""))
+            pre_wal_start: str = str(pre_extra.get("wal_start_lsn", ""))
+            pre_wal_end: str = str(pre_extra.get("wal_end_lsn", ""))
+
+            pre_backup_timestamp = None
+            if pre_backup_ts_str:
+                try:
+                    from datetime import datetime as _dt
+                    pre_backup_timestamp = _dt.fromisoformat(pre_backup_ts_str)
+                except (ValueError, TypeError):
+                    pass
+
             await service.mark_succeeded(
                 pre_restore_id,
                 sha256=pre_manifest.database_sha256,
                 migration_version=pre_manifest.migration_version,
                 application_version=pre_manifest.application_version,
+                backup_timestamp=pre_backup_timestamp,
+                wal_start_lsn=pre_wal_start if pre_wal_start else None,
+                wal_end_lsn=pre_wal_end if pre_wal_end else None,
             )
         except Exception as exc:
             # pre_restore 失败仍保留记录（供诊断），标记失败
@@ -357,13 +392,45 @@ async def _restore_handler(job: object) -> dict:
     # C-02: 通过 backup_id 解析备份目录，不信任客户端路径
     backup_dir = _resolve_backup_dir_by_id(backup_id)
 
+    # 读取 PITR 恢复目标时间（从 payload）
+    recovery_target_time: str | None = payload.get("recovery_target_time")
+
     from deployments.compose.restore import run_restore
 
-    manifest = await run_restore(backup_dir)
+    manifest = await run_restore(backup_dir, recovery_target_time=recovery_target_time)
+
+    # 恢复成功后记录恢复目标时间到 backup_record
+    try:
+        from datetime import datetime as _dt
+
+        restored_target_time = None
+        if recovery_target_time:
+            try:
+                restored_target_time = _dt.fromisoformat(recovery_target_time)
+            except (ValueError, TypeError):
+                pass
+        # 若未传入 recovery_target_time，使用 manifest 中的 backup_timestamp
+        if restored_target_time is None:
+            backup_ts = str(manifest.extra.get("backup_timestamp", "")) if manifest.extra else ""
+            if backup_ts:
+                try:
+                    restored_target_time = _dt.fromisoformat(backup_ts)
+                except (ValueError, TypeError):
+                    pass
+
+        await service.mark_restored(UUID(backup_id), restored_target_time)
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Failed to mark restored for backup_record %s: %s", backup_id, exc
+        )
+
     return {
         "backup_id": manifest.backup_id,
         "restored": True,
         "pre_restore_created": pre_restore_created or True,
+        "recovery_target_time": recovery_target_time,
     }
 
 

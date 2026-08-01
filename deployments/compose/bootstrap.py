@@ -439,7 +439,28 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     container.artifacts.ensure_buckets()
     logger.info("Bootstrap: bucket ready")
 
+    # PITR: 赋予 irip 用户 REPLICATION 权限（pg_basebackup 需要）
+    logger.info("Bootstrap: granting REPLICATION permission to irip user ...")
+    await _grant_replication_permission(container)
+    logger.info("Bootstrap: REPLICATION permission granted")
+
     logger.info("Bootstrap complete.")
+
+
+async def _grant_replication_permission(container: ApplicationContainer) -> None:
+    """赋予 irip 用户 REPLICATION 权限（pg_basebackup 物理备份需要）。
+
+    幂等操作：ALTER USER 重复执行不会报错。
+    使用原始 SQL 执行，不依赖 ORM 模型。
+
+    Args:
+        container: 应用 DI 容器。
+    """
+    async with container._factory() as session:
+        async with session.begin():
+            await session.execute(
+                sa.text("ALTER USER irip REPLICATION;")
+            )
 
 
 def _to_async_url(url: str) -> str:

@@ -1,0 +1,122 @@
+%% PITR 升级 — 类图
+%% docs/arch-db-backup-pitr-upgrade.md §3.4
+
+classDiagram
+    class BackupMethod {
+        <<enumeration>>
+        PITR
+        PG_DUMP
+    }
+
+    class BackupRecord {
+        +UUID id
+        +str backup_type
+        +str|None name
+        +str status
+        +str file_path
+        +str|None sha256
+        +int|None file_size
+        +str|None migration_version
+        +str|None application_version
+        +datetime|None backup_timestamp
+        +str|None wal_start_lsn
+        +str|None wal_end_lsn
+        +datetime|None recovery_target_time
+        +str backup_method
+        +datetime created_at
+        +datetime|None completed_at
+        +datetime|None expires_at
+    }
+
+    class BackupRecordService {
+        -async_sessionmaker _factory
+        +create(backup_type, file_path, backup_method) BackupRecord
+        +get(record_id) BackupRecord
+        +list_by_type(backup_type, status, cursor, limit) tuple
+        +mark_succeeded(record_id, sha256, file_size, backup_timestamp, wal_start_lsn, wal_end_lsn) BackupRecord
+        +mark_failed(record_id, error_message) BackupRecord
+        +mark_restored(record_id, recovery_target_time) BackupRecord
+        +delete(record_id) None
+        +delete_expired() int
+    }
+
+    class BackupConfig {
+        +str db_url
+        +str minio_endpoint
+        +str minio_access_key
+        +str minio_secret_key
+        +str minio_bucket
+        +str minio_region
+        +str minio_mc_alias
+        +str|None minio_mirror_exclude
+        +str|None pg_replication_slot
+        +Path output_dir
+        +str|None age_recipient
+    }
+
+    class BackupService {
+        -BackupConfig _config
+        +backup(output_dir) BackupManifest
+        -_basebackup(target_dir) tuple
+        -_mc_mirror_minio(target_dir) int
+        -_query_wal_lsn() str
+        -_query_migration_version() str
+        -_setup_mc_alias() None
+    }
+
+    class RestoreConfig {
+        +Path backup_dir
+        +str db_url
+        +str minio_endpoint
+        +str minio_access_key
+        +str minio_secret_key
+        +str minio_bucket
+        +str minio_region
+        +str minio_mc_alias
+        +str|None recovery_target_time
+        +str|None compose_project_name
+        +str|None age_identity
+        +bool skip_migrations
+    }
+
+    class RestoreService {
+        -RestoreConfig _config
+        -BackupManifestValidator _validator
+        +restore() BackupManifest
+        -_restore_v1(manifest) BackupManifest
+        -_restore_v2(manifest) BackupManifest
+        -_pitr_restore(basebackup_dir, recovery_target_time) None
+        -_mc_restore_minio(minio_dir) None
+        -_validate_referential_integrity() None
+        -_stop_postgres() None
+        -_start_postgres() None
+        -_wait_pg_healthy() None
+    }
+
+    class BackupManifest {
+        +int format_version
+        +datetime created_at
+        +str application_version
+        +str migration_version
+        +str database_sha256
+        +int object_count
+        +str objects_sha256
+        +bool encrypted
+        +str backup_id
+        +dict extra
+    }
+
+    class BackupManifestValidator {
+        +validate(manifest, backup_dir) bool
+        -_validate_v1(manifest, backup_dir) bool
+        -_validate_v2(manifest, backup_dir) bool
+    }
+
+    BackupRecord --> BackupMethod : backup_method
+    BackupRecordService --> BackupRecord : manages
+    BackupService --> BackupConfig : configured by
+    BackupService --> BackupManifest : produces v2
+    RestoreService --> RestoreConfig : configured by
+    RestoreService --> BackupManifest : validates
+    RestoreService --> BackupManifestValidator : uses
+    BackupManifestValidator --> BackupManifest : validates

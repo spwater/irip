@@ -24,6 +24,9 @@ export type BackupType = 'daily' | 'milestone' | 'pre_restore';
 /** 备份状态 */
 export type BackupStatus = 'pending' | 'succeeded' | 'failed';
 
+/** 备份方法 */
+export type BackupMethod = 'pitr' | 'pg_dump';
+
 /** 备份记录项 */
 export type BackupRecordItem = {
   id: string;
@@ -43,6 +46,8 @@ export type BackupRecordItem = {
   completed_at: string | null;
   expires_at: string | null;
   error_message: string | null;
+  backup_method: BackupMethod | null;
+  backup_timestamp: string | null;
 };
 
 /** 备份记录分页列表响应 */
@@ -71,6 +76,7 @@ export type CreateBackupResponse = {
 /** 恢复备份请求体 */
 export type RestoreBackupBody = {
   skip_migrations?: boolean;
+  recovery_target_time?: string;
 };
 
 /** 恢复备份响应 */
@@ -123,7 +129,7 @@ export async function apiCreateBackup(body: CreateBackupBody): Promise<CreateBac
 }
 
 /**
- * 从备份恢复（先创建 pre_restore 备份再执行 pg_restore）
+ * 从备份恢复（先创建 pre_restore 备份再执行恢复：v1=pg_restore，v2=PITR）
  */
 export async function apiRestoreBackup(
   id: string,

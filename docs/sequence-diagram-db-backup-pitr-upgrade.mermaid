@@ -1,0 +1,45 @@
+%% PITR 升级 — 联合备份 + PITR 恢复时序图
+%% docs/arch-db-backup-pitr-upgrade.md §4
+
+%% 联合备份流程
+sequenceDiagram
+    participant CB as Celery Beat
+    participant DB as Database
+    participant W as Worker
+    participant BS as BackupService
+    participant PG as PostgreSQL
+    participant M as MinIO
+    participant FS as Filesystem
+
+    Note over CB,DB: 1. 创建备份 Job + BackupRecord
+    CB->>DB: 创建 Job(kind=backup, payload={type:daily, backup_method:pitr})
+    CB->>DB: 创建 BackupRecord(backup_method='pitr', status='pending')
+    CB->>DB: OutboxEvent(job.accepted)
+
+    Note over W,BS: 2. Worker 执行联合备份
+    W->>BS: run_backup()
+    BS->>BS: 生成 backup_timestamp = now(UTC).isoformat()
+    BS->>FS: 创建 {backup_id}/pg_basebackup/ 目录
+    BS->>FS: 创建 {backup_id}/minio_mirror/ 目录
+
+    Note over BS,PG: 2a. PG basebackup
+    BS->>PG: SELECT pg_current_wal_lsn() → wal_start_lsn
+    BS->>PG: pg_basebackup -Ft -z -X stream -c fast
+    PG-->>BS: base.tar.gz + pg_wal.tar.gz
+    BS->>PG: SELECT pg_current_wal_lsn() → wal_end_lsn
+
+    Note over BS,M: 2b. MinIO mirror
+    BS->>M: mc alias set irip http://minio:9000 ...
+    BS->>M: mc mirror --overwrite irip/bucket minio_mirror/
+    M-->>BS: 对象镜像完成
+
+    Note over BS,FS: 3. SHA-256 + manifest
+    BS->>BS: sha256(base.tar.gz) + sha256(pg_wal.tar.gz)
+    BS->>BS: aggregate_sha256(minio_mirror/)
+    BS->>PG: SELECT version_num FROM alembic_version
+    BS->>FS: 写入 manifest.json (format_version=2)
+    BS-->>W: BackupManifest v2
+
+    Note over W,DB: 4. 更新 BackupRecord
+    W->>DB: mark_succeeded(backup_timestamp, wal_start_lsn, wal_end_lsn)
+    W->>DB: Job status=succeeded

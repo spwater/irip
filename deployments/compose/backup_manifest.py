@@ -23,7 +23,8 @@ from typing import Any
 from packages.common.hashing import sha256_bytes
 
 #: manifest 格式版本（结构变更时递增）。
-MANIFEST_FORMAT_VERSION: int = 1
+#: v1 = pg_dump + S3Repository 逻辑备份；v2 = pg_basebackup + mc mirror 物理备份（PITR）。
+MANIFEST_FORMAT_VERSION: int = 2
 
 #: manifest 文件名。
 MANIFEST_FILENAME: str = "manifest.json"
@@ -36,6 +37,18 @@ DATABASE_DUMP_FILENAME: str = "database.dump"
 
 #: MinIO 对象目录名。
 OBJECTS_DIRNAME: str = "objects"
+
+#: v2: pg_basebackup 产出目录名。
+PG_BASEBACKUP_DIRNAME: str = "pg_basebackup"
+
+#: v2: base.tar.gz 文件名（pg_basebackup -Ft -z 数据目录）。
+BASE_TAR_GZ_FILENAME: str = "base.tar.gz"
+
+#: v2: pg_wal.tar.gz 文件名（pg_basebackup -X stream WAL）。
+PG_WAL_TAR_GZ_FILENAME: str = "pg_wal.tar.gz"
+
+#: v2: mc mirror 产出目录名。
+MINIO_MIRROR_DIRNAME: str = "minio_mirror"
 
 
 @dataclass(frozen=True)
@@ -241,6 +254,113 @@ def compute_manifest(
     )
 
 
+def _aggregate_sha256_dir(directory: Path) -> tuple[str, int]:
+    """计算目录下全部文件的聚合 SHA-256 + 文件计数。
+
+    聚合策略：遍历目录下所有文件（按路径排序），对每个文件计算 SHA-256，
+    将文件路径 + SHA-256 + 文件大小序列化为 JSON（sort_keys=True），
+    对该 JSON 字节流取 SHA-256。保证确定性。
+
+    Args:
+        directory: 目录路径。
+
+    Returns:
+        tuple: ``(aggregate_sha256, file_count)``。
+    """
+    metadata: list[dict[str, Any]] = []
+    if directory.exists():
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file():
+                continue
+            rel_key: str = str(path.relative_to(directory))
+            metadata.append(
+                {
+                    "key": rel_key,
+                    "sha256": _sha256_file(path),
+                    "size": path.stat().st_size,
+                }
+            )
+    metadata_json: str = json.dumps(metadata, sort_keys=True, ensure_ascii=False)
+    aggregate_sha: str = sha256_bytes(metadata_json.encode("utf-8"))
+    return aggregate_sha, len(metadata)
+
+
+def compute_manifest_v2(
+    pg_basebackup_dir: Path,
+    minio_mirror_dir: Path,
+    application_version: str,
+    migration_version: str,
+    backup_id: str = "",
+    backup_timestamp: str = "",
+    wal_start_lsn: str = "",
+    wal_end_lsn: str = "",
+) -> BackupManifest:
+    """计算 PITR 备份的 BackupManifest v2。
+
+    v2 manifest 的 extra dict 存储 PITR 元数据：
+    - backup_timestamp: 联合时间戳
+    - backup_method: 'pitr'
+    - pg_basebackup_sha256: base.tar.gz 的 SHA-256
+    - pg_wal_sha256: pg_wal.tar.gz 的 SHA-256
+    - minio_mirror_sha256: minio_mirror/ 目录的聚合 SHA-256
+    - minio_mirror_object_count: minio_mirror/ 对象数
+    - wal_start_lsn: 备份开始 WAL LSN
+    - wal_end_lsn: 备份结束 WAL LSN
+
+    v2 复用 v1 的 database_sha256 / object_count / objects_sha256 字段以保持
+    dataclass 兼容性：
+    - database_sha256 = base.tar.gz 的 SHA-256
+    - object_count = minio_mirror 对象数
+    - objects_sha256 = minio_mirror 聚合 SHA-256
+
+    Args:
+        pg_basebackup_dir: pg_basebackup 产出目录（含 base.tar.gz + pg_wal.tar.gz）。
+        minio_mirror_dir: mc mirror 产出目录。
+        application_version: IRIP 应用版本。
+        migration_version: Alembic 迁移版本。
+        backup_id: 备份唯一标识。
+        backup_timestamp: 联合时间戳（UTC ISO 8601）。
+        wal_start_lsn: 备份开始时的 WAL LSN。
+        wal_end_lsn: 备份结束时的 WAL LSN。
+
+    Returns:
+        BackupManifest: format_version=2 的备份清单。
+    """
+    base_tar_path: Path = pg_basebackup_dir / BASE_TAR_GZ_FILENAME
+    pg_wal_tar_path: Path = pg_basebackup_dir / PG_WAL_TAR_GZ_FILENAME
+
+    base_sha: str = _sha256_file(base_tar_path) if base_tar_path.exists() else ""
+    wal_sha: str = _sha256_file(pg_wal_tar_path) if pg_wal_tar_path.exists() else ""
+
+    mirror_sha: str
+    mirror_count: int
+    mirror_sha, mirror_count = _aggregate_sha256_dir(minio_mirror_dir)
+
+    extra: dict[str, Any] = {
+        "backup_timestamp": backup_timestamp,
+        "backup_method": "pitr",
+        "pg_basebackup_sha256": base_sha,
+        "pg_wal_sha256": wal_sha,
+        "minio_mirror_sha256": mirror_sha,
+        "minio_mirror_object_count": mirror_count,
+        "wal_start_lsn": wal_start_lsn,
+        "wal_end_lsn": wal_end_lsn,
+    }
+
+    return BackupManifest(
+        format_version=2,
+        created_at=datetime.now(UTC),
+        application_version=application_version,
+        migration_version=migration_version,
+        database_sha256=base_sha,
+        object_count=mirror_count,
+        objects_sha256=mirror_sha,
+        encrypted=False,
+        backup_id=backup_id,
+        extra=extra,
+    )
+
+
 def write_objects_metadata(objects_dir: Path, metadata: list[dict[str, Any]]) -> Path:
     """将对象元数据写入 ``objects.json``（供恢复时逐对象校验）。
 
@@ -285,9 +405,36 @@ class BackupManifestValidator:
     def validate(self, manifest: BackupManifest, backup_dir: Path) -> bool:
         """校验备份目录中全部 payload 的哈希与 manifest 记录一致。
 
-    Args:
+        根据 manifest.format_version 分流到 v1 或 v2 校验逻辑。
+
+        Args:
             manifest: 备份清单。
-            backup_dir: 备份目录（包含 ``database.dump`` 与 ``objects/`` 子目录）。
+            backup_dir: 备份目录。
+
+        Returns:
+            bool: 全部校验通过返回 True。
+
+        Raises:
+            ManifestValidationError: 任一哈希不匹配或文件缺失时。
+        """
+        if manifest.format_version == 1:
+            return self._validate_v1(manifest, backup_dir)
+        elif manifest.format_version == 2:
+            return self._validate_v2(manifest, backup_dir)
+        else:
+            raise ManifestValidationError(
+                f"不支持的 manifest 版本: {manifest.format_version}",
+                component="format_version",
+            )
+
+    def _validate_v1(self, manifest: BackupManifest, backup_dir: Path) -> bool:
+        """校验 v1 备份（pg_dump + S3Repository 格式）。
+
+        校验 database.dump SHA-256 + objects/ 聚合 SHA-256。
+
+        Args:
+            manifest: 备份清单。
+            backup_dir: 备份目录（包含 database.dump 与 objects/ 子目录）。
 
         Returns:
             bool: 全部校验通过返回 True。
@@ -342,6 +489,97 @@ class BackupManifestValidator:
                     component="objects",
                     expected=manifest.objects_sha256,
                     actual=actual_objects_sha,
+                )
+
+        return True
+
+    def _validate_v2(self, manifest: BackupManifest, backup_dir: Path) -> bool:
+        """校验 v2 备份（pg_basebackup + mc mirror PITR 格式）。
+
+        校验 base.tar.gz SHA-256 + pg_wal.tar.gz SHA-256 + minio_mirror/ 聚合 SHA-256。
+        期望值从 manifest.extra dict 读取。
+
+        Args:
+            manifest: 备份清单（format_version=2）。
+            backup_dir: 备份目录（包含 pg_basebackup/ 与 minio_mirror/ 子目录）。
+
+        Returns:
+            bool: 全部校验通过返回 True。
+
+        Raises:
+            ManifestValidationError: 任一哈希不匹配或文件缺失时。
+        """
+        extra: dict[str, Any] = manifest.extra
+        pg_basebackup_dir: Path = backup_dir / PG_BASEBACKUP_DIRNAME
+        minio_mirror_dir: Path = backup_dir / MINIO_MIRROR_DIRNAME
+
+        # 校验 base.tar.gz
+        expected_base_sha: str = str(extra.get("pg_basebackup_sha256", ""))
+        base_tar_path: Path = pg_basebackup_dir / BASE_TAR_GZ_FILENAME
+        if not base_tar_path.exists():
+            raise ManifestValidationError(
+                f"base.tar.gz 缺失: {base_tar_path}",
+                component="pg_basebackup",
+            )
+        actual_base_sha: str = _sha256_file(base_tar_path)
+        if expected_base_sha and actual_base_sha != expected_base_sha:
+            raise ManifestValidationError(
+                f"base.tar.gz SHA-256 不匹配: expected={expected_base_sha}, "
+                f"actual={actual_base_sha}",
+                component="pg_basebackup",
+                expected=expected_base_sha,
+                actual=actual_base_sha,
+            )
+
+        # 校验 pg_wal.tar.gz（如存在期望值）
+        expected_wal_sha: str = str(extra.get("pg_wal_sha256", ""))
+        pg_wal_tar_path: Path = pg_basebackup_dir / PG_WAL_TAR_GZ_FILENAME
+        if expected_wal_sha:
+            if not pg_wal_tar_path.exists():
+                raise ManifestValidationError(
+                    f"pg_wal.tar.gz 缺失: {pg_wal_tar_path}",
+                    component="pg_wal",
+                )
+            actual_wal_sha: str = _sha256_file(pg_wal_tar_path)
+            if actual_wal_sha != expected_wal_sha:
+                raise ManifestValidationError(
+                    f"pg_wal.tar.gz SHA-256 不匹配: expected={expected_wal_sha}, "
+                    f"actual={actual_wal_sha}",
+                    component="pg_wal",
+                    expected=expected_wal_sha,
+                    actual=actual_wal_sha,
+                )
+
+        # 校验 minio_mirror 聚合 SHA-256
+        expected_mirror_sha: str = str(extra.get("minio_mirror_sha256", ""))
+        expected_mirror_count: int = int(extra.get("minio_mirror_object_count", 0))
+        if not minio_mirror_dir.exists():
+            if expected_mirror_count > 0:
+                raise ManifestValidationError(
+                    f"minio_mirror 目录缺失但 manifest 记录 {expected_mirror_count} 个对象",
+                    component="minio_mirror",
+                )
+        else:
+            actual_mirror_sha: str
+            actual_mirror_count: int
+            actual_mirror_sha, actual_mirror_count = _aggregate_sha256_dir(
+                minio_mirror_dir
+            )
+            if actual_mirror_count != expected_mirror_count:
+                raise ManifestValidationError(
+                    f"minio_mirror 对象数量不匹配: expected={expected_mirror_count}, "
+                    f"actual={actual_mirror_count}",
+                    component="minio_mirror",
+                    expected=str(expected_mirror_count),
+                    actual=str(actual_mirror_count),
+                )
+            if expected_mirror_sha and actual_mirror_sha != expected_mirror_sha:
+                raise ManifestValidationError(
+                    f"minio_mirror 聚合 SHA-256 不匹配: expected={expected_mirror_sha}, "
+                    f"actual={actual_mirror_sha}",
+                    component="minio_mirror",
+                    expected=expected_mirror_sha,
+                    actual=actual_mirror_sha,
                 )
 
         return True

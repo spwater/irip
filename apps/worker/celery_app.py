@@ -75,7 +75,7 @@ celery_app.conf.update(
             "task": "worker.retry_wait_jobs",
             "schedule": 15.0,
         },
-        # 每日数据库备份：每日 02:00 UTC 触发 pg_dump 快照
+        # 每日数据库备份：每日 02:00 UTC 触发 PITR 基础备份（pg_basebackup + mc mirror）
         "daily-backup": {
             "task": "backup.daily",
             "schedule": crontab(hour=2, minute=0),
@@ -259,8 +259,9 @@ def retry_wait_jobs() -> int:
 def daily_backup() -> str:
     """Celery Beat 调度任务：每日数据库自动备份。
 
-    每日 02:00 UTC 触发，创建 Job(kind=backup, payload={type:daily}) + outbox 事件 +
-    backup_record 记录（expires_at = now + 14 days）。Worker 随后执行 pg_dump 快照。
+    每日 02:00 UTC 触发，创建 Job(kind=backup, payload={type:daily, backup_method:pitr}) +
+    outbox 事件 + backup_record 记录（expires_at = now + 14 days）。
+    Worker 随后执行 PITR 基础备份（pg_basebackup + mc mirror）。
 
     Returns:
         str: 创建的作业 UUID（失败时返回错误信息）。
@@ -313,6 +314,7 @@ def daily_backup() -> str:
                 payload={
                     "type": BackupType.DAILY.value,
                     "backup_record_id": str(job_id),
+                    "backup_method": "pitr",
                     "triggered_by": "system",
                 },
                 idempotency_key=f"backup:{job_id}",
@@ -336,6 +338,7 @@ def daily_backup() -> str:
                 created_at=now,
                 expires_at=now + timedelta(days=14),
                 organization_id=org_id,
+                backup_method="pitr",
             )
             session.add(record)
             await session.flush()

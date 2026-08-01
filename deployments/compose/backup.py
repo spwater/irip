@@ -34,14 +34,18 @@ import subprocess
 import tarfile
 import tempfile
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from deployments.compose.backup_manifest import (
     DATABASE_DUMP_FILENAME,
+    MINIO_MIRROR_DIRNAME,
     OBJECTS_DIRNAME,
+    PG_BASEBACKUP_DIRNAME,
     BackupManifest,
     compute_manifest,
+    compute_manifest_v2,
     save_manifest,
     write_objects_metadata,
 )
@@ -136,6 +140,9 @@ class BackupConfig:
         application_version: IRIP 应用版本。
         output_dir: 备份输出目录。
         age_recipient: age 加密 recipient（None 表示不加密）。
+        minio_mc_alias: mc 客户端 alias 名称（默认 irip）。
+        minio_mirror_exclude: mc mirror 排除规则（如 'tmp/*'，None 表示不排除）。
+        pg_replication_slot: pg_basebackup 复制槽名（None 表示不使用复制槽）。
     """
 
     db_url: str
@@ -147,6 +154,9 @@ class BackupConfig:
     application_version: str
     output_dir: Path
     age_recipient: str | None = None
+    minio_mc_alias: str = "irip"
+    minio_mirror_exclude: str | None = None
+    pg_replication_slot: str | None = None
 
 
 class BackupService:
@@ -179,97 +189,278 @@ class BackupService:
         )
 
     async def backup(self, output_dir: Path | None = None) -> BackupManifest:
-        """执行完整备份流程。
+        """执行联合备份流程（PITR v2）。
 
-        C-04: 在 0700 临时目录中生成 dump、objects 和 manifest，
-        加密后原子移动唯一加密制品到最终目录，
-        try/finally 确保清理临时明文（成功和失败路径）。
+        联合备份流程（docs/arch-db-backup-pitr-upgrade.md §1.5）：
+        1. 生成联合时间戳 backup_timestamp（UTC ISO 8601 毫秒精度）
+        2. 查询 wal_start_lsn = pg_current_wal_lsn()
+        3. PG basebackup: pg_basebackup -Ft -z -X stream -c fast → {backup_id}/pg_basebackup/
+        4. 查询 wal_end_lsn = pg_current_wal_lsn()
+        5. MinIO mirror: mc mirror --overwrite → {backup_id}/minio_mirror/
+        6. 计算 SHA-256（base.tar.gz + pg_wal.tar.gz + minio_mirror 聚合）
+        7. 查询 migration_version
+        8. 生成 BackupManifest v2
+        9. 写入 {backup_id}/manifest.json
 
-        每个备份在 output_dir 下创建独立的 {backup_id}/ 子目录，
-        避免多次备份互相覆盖（docs/arch-db-backup.md §1.3）。
+        v2 不再打包 tar.age，各组件独立存储（pg_basebackup/ + minio_mirror/）。
 
         Args:
             output_dir: 输出目录（默认使用配置中的 output_dir）。
 
         Returns:
-            BackupManifest: 备份清单。
+            BackupManifest: format_version=2 的备份清单。
         """
         target_base: Path = output_dir or self._config.output_dir
         target_base.mkdir(parents=True, exist_ok=True)
 
         backup_id: str = str(new_id())
-        # 每个备份创建独立子目录，避免覆盖
         target_dir: Path = target_base / backup_id
         target_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Backup %s: starting (output=%s)", backup_id, target_dir)
+        logger.info("Backup %s: starting PITR backup (output=%s)", backup_id, target_dir)
 
-        # C-04: 1. 创建 0700 临时目录
-        temp_dir: Path = Path(tempfile.mkdtemp(prefix="irip-backup-"))
+        # 1. 生成联合时间戳
+        backup_timestamp: str = datetime.now(UTC).isoformat(timespec="milliseconds")
+        logger.info("Backup %s: backup_timestamp=%s", backup_id, backup_timestamp)
+
+        # 2. 创建子目录
+        pg_basebackup_dir: Path = target_dir / PG_BASEBACKUP_DIRNAME
+        pg_basebackup_dir.mkdir(parents=True, exist_ok=True)
+        minio_mirror_dir: Path = target_dir / MINIO_MIRROR_DIRNAME
+        minio_mirror_dir.mkdir(parents=True, exist_ok=True)
+
+        # 3. PG basebackup + WAL LSN 记录
+        wal_start_lsn, wal_end_lsn = self._basebackup(pg_basebackup_dir)
+        logger.info(
+            "Backup %s: pg_basebackup done (wal_start=%s, wal_end=%s)",
+            backup_id, wal_start_lsn, wal_end_lsn,
+        )
+
+        # 4. MinIO mirror（紧接 PG basebackup 完成）
+        object_count: int = self._mc_mirror_minio(minio_mirror_dir)
+        logger.info("Backup %s: mc mirror done (objects=%d)", backup_id, object_count)
+
+        # 5. 查询 migration_version
+        migration_version: str = await self._query_migration_version()
+        logger.info(
+            "Backup %s: migration_version=%s, object_count=%d",
+            backup_id, migration_version, object_count,
+        )
+
+        # 6. 生成 manifest v2
+        manifest: BackupManifest = compute_manifest_v2(
+            pg_basebackup_dir=pg_basebackup_dir,
+            minio_mirror_dir=minio_mirror_dir,
+            application_version=self._config.application_version,
+            migration_version=migration_version,
+            backup_id=backup_id,
+            backup_timestamp=backup_timestamp,
+            wal_start_lsn=wal_start_lsn,
+            wal_end_lsn=wal_end_lsn,
+        )
+
+        # 7. 写入 manifest.json
+        save_manifest(manifest, target_dir)
+        logger.info("Backup %s: manifest v2 written", backup_id)
+
+        logger.info(
+            "Backup %s: complete (base_sha256=%s..., mirror_objects=%d)",
+            backup_id, manifest.database_sha256[:12], manifest.object_count,
+        )
+        return manifest
+
+    def _basebackup(self, target_dir: Path) -> tuple[str, str]:
+        """使用 pg_basebackup 执行物理基础备份。
+
+        命令: pg_basebackup -Ft -z -X stream -c fast [-C -S slot] -D target_dir
+        产出: base.tar.gz（数据目录）+ pg_wal.tar.gz（备份期间 WAL）
+
+        Args:
+            target_dir: pg_basebackup 输出目录。
+
+        Returns:
+            tuple: (wal_start_lsn, wal_end_lsn)。
+
+        Raises:
+            RuntimeError: pg_basebackup 执行失败时。
+        """
+        # 查询备份开始时的 WAL LSN
+        wal_start_lsn: str = self._query_wal_lsn()
+        logger.info("Basebackup: wal_start_lsn=%s", wal_start_lsn)
+
+        # 构建 pg_basebackup 命令
+        pg_host: str = self._extract_pg_host()
+        cmd: list[str] = [
+            "pg_basebackup",
+            "-h", pg_host,
+            "-U", self._extract_pg_user(),
+            "-D", str(target_dir),
+            "-Ft",
+            "-z",
+            "-P",
+            "-X", "stream",
+            "-c", "fast",
+        ]
+
+        # 可选复制槽
+        if self._config.pg_replication_slot:
+            cmd.extend(["-C", "-S", self._config.pg_replication_slot])
+
+        logger.info("Running pg_basebackup to %s", target_dir)
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd,
+            env=_build_pg_env(),
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            stderr: str = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"pg_basebackup failed (exit={result.returncode}): {stderr}"
+            )
+
+        # 验证产出文件存在
+        base_tar: Path = target_dir / "base.tar.gz"
+        if not base_tar.exists():
+            raise RuntimeError(f"pg_basebackup 未产出 base.tar.gz: {base_tar}")
+
+        # 查询备份结束时的 WAL LSN
+        wal_end_lsn: str = self._query_wal_lsn()
+        logger.info("Basebackup: wal_end_lsn=%s", wal_end_lsn)
+
+        return wal_start_lsn, wal_end_lsn
+
+    def _mc_mirror_minio(self, target_dir: Path) -> int:
+        """使用 mc mirror 将 MinIO bucket 镜像到本地目录。
+
+        流程: mc alias set → mc mirror --overwrite [alias]/[bucket] target_dir/ [--exclude ...]
+        返回镜像的对象数（通过目录扫描统计）。
+
+        使用 --config-dir /tmp/mc 避免 read-only 文件系统冲突（worker 容器
+        设置了 read_only: true + tmpfs: /tmp）。
+
+        Args:
+            target_dir: mc mirror 输出目录。
+
+        Returns:
+            int: 镜像的对象总数。
+
+        Raises:
+            RuntimeError: mc 命令执行失败时。
+        """
+        mc_config_dir: str = "/tmp/mc"
+        self._setup_mc_alias(mc_config_dir)
+
+        cmd: list[str] = [
+            "mc", "--config-dir", mc_config_dir,
+            "mirror", "--overwrite",
+            f"{self._config.minio_mc_alias}/{self._config.minio_bucket}",
+            str(target_dir) + "/",
+        ]
+
+        # 可选排除规则
+        if self._config.minio_mirror_exclude:
+            cmd.extend(["--exclude", self._config.minio_mirror_exclude])
+
+        logger.info("Running mc mirror: %s", " ".join(cmd[:5]) + " ...")
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr: str = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"mc mirror failed (exit={result.returncode}): {stderr}"
+            )
+
+        # 统计镜像的对象数
+        object_count: int = 0
+        for path in target_dir.rglob("*"):
+            if path.is_file():
+                object_count += 1
+
+        logger.info("mc mirror: mirrored %d objects", object_count)
+        return object_count
+
+    def _query_wal_lsn(self) -> str:
+        """查询当前 WAL LSN（pg_current_wal_lsn()）。
+
+        Returns:
+            str: 当前 WAL LSN（如 '0/2000000'）。查询失败时返回空字符串。
+        """
+        sync_url: str = _to_sync_url(self._config.db_url)
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(sync_url, pool_pre_ping=True)
         try:
-            os.chmod(temp_dir, 0o700)
-
-            # C-04: 2. 在临时目录中生成 dump 和 objects
-            database_path: Path = temp_dir / DATABASE_DUMP_FILENAME
-            logger.info("Backup %s: dumping PostgreSQL database ...", backup_id)
-            self._dump_database(database_path)
-
-            objects_dir: Path = temp_dir / OBJECTS_DIRNAME
-            objects_dir.mkdir(parents=True, exist_ok=True)
-            logger.info("Backup %s: exporting MinIO objects ...", backup_id)
-            object_count: int = self._export_minio_objects(objects_dir)
-
-            # C-04: 3. 查询 alembic_version
-            migration_version: str = await self._query_migration_version()
-            logger.info(
-                "Backup %s: migration_version=%s, object_count=%d",
-                backup_id, migration_version, object_count,
-            )
-
-            # C-04: 4. 计算 manifest
-            manifest: BackupManifest = compute_manifest(
-                database_dump_path=database_path,
-                objects_dir=objects_dir,
-                application_version=self._config.application_version,
-                migration_version=migration_version,
-                backup_id=backup_id,
-                encrypted=self._config.age_recipient is not None,
-            )
-
-            # C-04: 5. 写入 manifest（临时目录）
-            save_manifest(manifest, temp_dir)
-            logger.info("Backup %s: manifest written", backup_id)
-
-            # C-04: 6. 打包 tar（临时目录）
-            tar_path: Path = temp_dir / BACKUP_TAR_FILENAME
-            self._create_tar(temp_dir, tar_path)
-
-            # C-04: 7. 加密（临时目录）
-            final_path: Path = tar_path
-            if self._config.age_recipient is not None:
-                encrypted_path: Path = temp_dir / BACKUP_TAR_AGE_FILENAME
-                self._encrypt_tar(tar_path, encrypted_path, self._config.age_recipient)
-                tar_path.unlink(missing_ok=True)
-                final_path = encrypted_path
-                logger.info("Backup %s: encrypted with age -> %s", backup_id, final_path)
-
-            # C-04: 8. 原子移动唯一加密制品到子目录
-            final_dest: Path = target_dir / final_path.name
-            shutil.move(str(final_path), str(final_dest))
-            logger.info("Backup %s: moved encrypted artifact to %s", backup_id, final_dest)
-
-            # C-04: 9. 写入最小公开元数据到子目录
-            save_manifest(manifest, target_dir)
-
-            logger.info(
-                "Backup %s: complete (db_sha256=%s..., objects=%d)",
-                backup_id, manifest.database_sha256[:12], manifest.object_count,
-            )
-            return manifest
-
+            with engine.connect() as conn:
+                result = conn.execute(text("SELECT pg_current_wal_lsn()"))
+                row = result.fetchone()
+                if row is not None:
+                    return str(row[0])
+        except Exception as exc:
+            logger.warning("Failed to query pg_current_wal_lsn: %s", exc)
         finally:
-            # C-04: 10. 成功和失败路径都可靠清理临时明文
-            shutil.rmtree(temp_dir, ignore_errors=True)
-            logger.info("Backup %s: cleaned up temp dir %s", backup_id, temp_dir)
+            engine.dispose()
+        return ""
+
+    def _setup_mc_alias(self, config_dir: str = "/tmp/mc") -> None:
+        """配置 mc alias（mc alias set）。
+
+        使用 BackupConfig 中的 MinIO 连接信息配置 mc alias。
+        使用 --config-dir 避免在 read-only 文件系统中写入失败。
+
+        Args:
+            config_dir: mc 配置目录（默认 /tmp/mc，兼容 read-only FS）。
+
+        Raises:
+            RuntimeError: mc alias set 执行失败时。
+        """
+        cmd: list[str] = [
+            "mc", "--config-dir", config_dir,
+            "alias", "set",
+            self._config.minio_mc_alias,
+            self._config.minio_endpoint,
+            self._config.minio_access_key,
+            self._config.minio_secret_key,
+        ]
+        logger.info("Setting mc alias: %s", self._config.minio_mc_alias)
+        result: subprocess.CompletedProcess[bytes] = subprocess.run(
+            cmd, capture_output=True, check=False
+        )
+        if result.returncode != 0:
+            stderr: str = result.stderr.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"mc alias set failed (exit={result.returncode}): {stderr}"
+            )
+
+    def _extract_pg_host(self) -> str:
+        """从数据库 URL 中提取 PG 主机名。
+
+        Returns:
+            str: PG 主机名（默认 'postgres'）。
+        """
+        from urllib.parse import urlparse
+
+        try:
+            sync_url: str = _to_pg_dump_url(self._config.db_url)
+            parsed = urlparse(sync_url)
+            return parsed.hostname or "postgres"
+        except Exception:
+            return "postgres"
+
+    def _extract_pg_user(self) -> str:
+        """从数据库 URL 中提取 PG 用户名。
+
+        Returns:
+            str: PG 用户名（默认 'irip'）。
+        """
+        from urllib.parse import urlparse
+
+        try:
+            sync_url: str = _to_pg_dump_url(self._config.db_url)
+            parsed = urlparse(sync_url)
+            return parsed.username or "irip"
+        except Exception:
+            return "irip"
 
     def _dump_database(self, output_path: Path) -> None:
         """使用 pg_dump 以 custom 格式导出 PostgreSQL 数据库。
@@ -500,6 +691,11 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
 
     age_recipient: str | None = os.getenv(AGE_RECIPIENT_ENV) or None
 
+    # PITR + mc mirror 配置
+    minio_mc_alias: str = os.getenv("IRIP_MINIO_MC_ALIAS", "irip")
+    minio_mirror_exclude: str | None = os.getenv("IRIP_MINIO_MIRROR_EXCLUDE") or None
+    pg_replication_slot: str | None = os.getenv("IRIP_PG_REPLICATION_SLOT") or None
+
     return BackupConfig(
         db_url=db_url,
         minio_endpoint=endpoint,
@@ -510,6 +706,9 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
         application_version=IRIP_APPLICATION_VERSION,
         output_dir=output_dir,
         age_recipient=age_recipient,
+        minio_mc_alias=minio_mc_alias,
+        minio_mirror_exclude=minio_mirror_exclude,
+        pg_replication_slot=pg_replication_slot,
     )
 
 

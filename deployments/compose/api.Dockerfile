@@ -40,6 +40,16 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # 复制部署脚本（bootstrap/backup/restore），放在 pip install 之后以利用层缓存
 COPY deployments/ ./deployments/
 
+# PITR: 安装 MinIO mc 客户端（mc mirror 备份/恢复对象存储）
+RUN curl -fsSL https://dl.min.io/client/mc/release/linux-amd64/mc \
+      -o /usr/local/bin/mc && \
+    chmod +x /usr/local/bin/mc
+
+# PITR: 安装 docker CLI（PITR 恢复需通过 docker compose stop/start 控制 PG 容器）
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends docker.io && \
+    rm -rf /var/lib/apt/lists/*
+
 # 默认启动 API 服务（worker/scheduler/bootstrap 通过 command 覆盖）
 CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 

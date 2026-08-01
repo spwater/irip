@@ -23,6 +23,13 @@ x-infra-security: &infra-security {}
 services:
   postgres:
     image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    # PITR: 通过 command 参数注入 WAL 归档配置（无需修改 postgresql.conf）
+    command: >
+      postgres
+      -c archive_mode=on
+      -c wal_level=replica
+      -c archive_command='test ! -f /backups/wal_archive/%f && cp %p /backups/wal_archive/%f'
+      -c max_wal_senders=3
     environment:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
       POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
@@ -31,6 +38,10 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - pgrun:/var/run/postgresql
+      # PITR: WAL 归档目录（archive_command 写入此处）
+      - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
+      # PITR: 备份目录（PG 容器需访问 basebackup 产物 + WAL 归档）
+      - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${IRIP_DATABASE_USER:-irip} -d ${IRIP_DATABASE_NAME:-irip}"]
       interval: 5s
@@ -131,8 +142,17 @@ services:
       IRIP_ENV: production
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
       IRIP_BACKUP_AGE_RECIPIENT: ${IRIP_BACKUP_AGE_RECIPIENT:-}
+      # PITR + mc mirror 相关环境变量
+      IRIP_WAL_ARCHIVE_DIR: ${IRIP_WAL_ARCHIVE_DIR:-/backups/wal_archive}
+      IRIP_MINIO_MC_ALIAS: ${IRIP_MINIO_MC_ALIAS:-irip}
+      IRIP_PG_REPLICATION_SLOT: ${IRIP_PG_REPLICATION_SLOT:-}
+      IRIP_MINIO_MIRROR_EXCLUDE: ${IRIP_MINIO_MIRROR_EXCLUDE:-}
     volumes:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+      # PITR: WAL 归档目录（备份/恢复需访问）
+      - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
+      # PITR: Docker socket（恢复需控制 PG 容器 stop/start）
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,8 +182,15 @@ services:
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
+      # PITR + mc mirror 相关环境变量
+      IRIP_WAL_ARCHIVE_DIR: ${IRIP_WAL_ARCHIVE_DIR:-/backups/wal_archive}
+      IRIP_MINIO_MC_ALIAS: ${IRIP_MINIO_MC_ALIAS:-irip}
+      IRIP_PG_REPLICATION_SLOT: ${IRIP_PG_REPLICATION_SLOT:-}
+      IRIP_MINIO_MIRROR_EXCLUDE: ${IRIP_MINIO_MIRROR_EXCLUDE:-}
     volumes:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+      # PITR: WAL 归档目录（beat 任务可能需要查询 WAL 状态）
+      - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
     depends_on:
       postgres:
         condition: service_healthy
@@ -231,8 +258,15 @@ services:
       IRIP_APPLICATION_VERSION: ${IRIP_APPLICATION_VERSION:-0.1.0}
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
       IRIP_BACKUP_AGE_RECIPIENT: ${IRIP_BACKUP_AGE_RECIPIENT:-}
+      # PITR + mc mirror 相关环境变量
+      IRIP_WAL_ARCHIVE_DIR: ${IRIP_WAL_ARCHIVE_DIR:-/backups/wal_archive}
+      IRIP_MINIO_MC_ALIAS: ${IRIP_MINIO_MC_ALIAS:-irip}
+      IRIP_PG_REPLICATION_SLOT: ${IRIP_PG_REPLICATION_SLOT:-}
+      IRIP_MINIO_MIRROR_EXCLUDE: ${IRIP_MINIO_MIRROR_EXCLUDE:-}
     volumes:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+      # PITR: WAL 归档目录（备份时可能需要查询 WAL 状态）
+      - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
     depends_on:
       postgres:
         condition: service_healthy
@@ -257,8 +291,18 @@ services:
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_BACKUP_AGE_IDENTITY: ${IRIP_BACKUP_AGE_IDENTITY:-}
       IRIP_RESTORE_SKIP_MIGRATIONS: ${IRIP_RESTORE_SKIP_MIGRATIONS:-false}
+      # PITR + mc mirror 相关环境变量
+      IRIP_WAL_ARCHIVE_DIR: ${IRIP_WAL_ARCHIVE_DIR:-/backups/wal_archive}
+      IRIP_MINIO_MC_ALIAS: ${IRIP_MINIO_MC_ALIAS:-irip}
+      IRIP_MINIO_MIRROR_EXCLUDE: ${IRIP_MINIO_MIRROR_EXCLUDE:-}
     volumes:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
+      # PITR: WAL 归档目录（PITR 恢复时 PG 从此处读取 WAL）
+      - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
+      # PITR: Docker socket（需控制 PG 容器 stop/start）
+      - /var/run/docker.sock:/var/run/docker.sock
+      # PITR: pgdata 卷（PITR 恢复需写入 PG data 目录）
+      - pgdata:/var/lib/postgresql/data
     depends_on:
       postgres:
         condition: service_healthy

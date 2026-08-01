@@ -17,12 +17,14 @@ import { useMemo, useState } from 'react';
 import {
   Button,
   Col,
+  DatePicker,
   Form,
   Input,
   Modal,
   Row,
   Space,
   Statistic,
+  Switch,
   Table,
   Tabs,
   Tag,
@@ -37,6 +39,7 @@ import {
   apiGetBackupStats,
   apiListBackups,
   apiRestoreBackup,
+  type BackupMethod,
   type BackupRecordItem,
   type BackupStats,
   type BackupStatus,
@@ -75,6 +78,18 @@ const TYPE_LABEL: Record<BackupType, string> = {
   daily: '每日镜像',
   milestone: '里程碑',
   pre_restore: '回滚前备份',
+};
+
+/** 备份方法 → Tag 颜色 */
+const METHOD_TAG_COLOR: Record<string, string> = {
+  pitr: 'blue',
+  pg_dump: 'default',
+};
+
+/** 备份方法 → 中文标签 */
+const METHOD_LABEL: Record<string, string> = {
+  pitr: 'PITR',
+  pg_dump: 'pg_dump',
 };
 
 /** 格式化文件大小为人类可读字符串 */
@@ -121,6 +136,8 @@ export function DatabaseBackupPage(): JSX.Element {
   const [deleteTarget, setDeleteTarget] = useState<BackupRecordItem | null>(null);
   const [createForm] = Form.useForm();
   const [restoreConfirmText, setRestoreConfirmText] = useState<string>('');
+  const [pitreEnabled, setPitreEnabled] = useState<boolean>(false);
+  const [recoveryTargetTime, setRecoveryTargetTime] = useState<string | null>(null);
 
   // ---- 数据查询：汇总统计 ----
   const { data: stats, isLoading: statsLoading } = useQuery<BackupStats>({
@@ -174,12 +191,17 @@ export function DatabaseBackupPage(): JSX.Element {
 
   // ---- 恢复备份 Mutation ----
   const restoreMutation = useMutation({
-    mutationFn: (id: string) => apiRestoreBackup(id),
+    mutationFn: (params: { id: string; recoveryTargetTime?: string }) =>
+      apiRestoreBackup(params.id, {
+        recovery_target_time: params.recoveryTargetTime,
+      }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({ queryKey: ['backups'] });
       message.success(`恢复作业已创建（作业 ID: ${result.job_id.slice(0, 8)}...）`);
       setRestoreTarget(null);
       setRestoreConfirmText('');
+      setPitreEnabled(false);
+      setRecoveryTargetTime(null);
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -233,6 +255,20 @@ export function DatabaseBackupPage(): JSX.Element {
       ),
     },
     {
+      title: '备份方法',
+      dataIndex: 'backup_method',
+      key: 'backup_method',
+      width: 100,
+      render: (method: BackupMethod | null) => {
+        if (!method) return <Text type="secondary">-</Text>;
+        return (
+          <Tag color={METHOD_TAG_COLOR[method] ?? 'default'}>
+            {METHOD_LABEL[method] ?? method}
+          </Tag>
+        );
+      },
+    },
+    {
       title: '迁移版本',
       dataIndex: 'migration_version',
       key: 'migration_version',
@@ -253,6 +289,8 @@ export function DatabaseBackupPage(): JSX.Element {
           onClick={() => {
             setRestoreTarget(record);
             setRestoreConfirmText('');
+            setPitreEnabled(false);
+            setRecoveryTargetTime(null);
           }}
         >
           回滚
@@ -306,6 +344,20 @@ export function DatabaseBackupPage(): JSX.Element {
       ),
     },
     {
+      title: '备份方法',
+      dataIndex: 'backup_method',
+      key: 'backup_method',
+      width: 100,
+      render: (method: BackupMethod | null) => {
+        if (!method) return <Text type="secondary">-</Text>;
+        return (
+          <Tag color={METHOD_TAG_COLOR[method] ?? 'default'}>
+            {METHOD_LABEL[method] ?? method}
+          </Tag>
+        );
+      },
+    },
+    {
       title: '操作',
       key: 'action',
       width: 140,
@@ -318,6 +370,8 @@ export function DatabaseBackupPage(): JSX.Element {
             onClick={() => {
               setRestoreTarget(record);
               setRestoreConfirmText('');
+              setPitreEnabled(false);
+              setRecoveryTargetTime(null);
             }}
           >
             恢复
@@ -354,7 +408,10 @@ export function DatabaseBackupPage(): JSX.Element {
   // ---- 确认恢复 ----
   const handleRestoreConfirm = (): void => {
     if (restoreTarget) {
-      restoreMutation.mutate(restoreTarget.id);
+      restoreMutation.mutate({
+        id: restoreTarget.id,
+        recoveryTargetTime: pitreEnabled && recoveryTargetTime ? recoveryTargetTime : undefined,
+      });
     }
   };
 
@@ -514,6 +571,8 @@ export function DatabaseBackupPage(): JSX.Element {
         onCancel={() => {
           setRestoreTarget(null);
           setRestoreConfirmText('');
+          setPitreEnabled(false);
+          setRecoveryTargetTime(null);
         }}
         okText="执行回滚"
         cancelText="取消"
@@ -522,7 +581,7 @@ export function DatabaseBackupPage(): JSX.Element {
           disabled: restoreConfirmText !== '确认回滚',
           loading: restoreMutation.isPending,
         }}
-        width={480}
+        width={520}
       >
         {restoreTarget && (
           <div>
@@ -539,7 +598,51 @@ export function DatabaseBackupPage(): JSX.Element {
             </p>
             <p style={{ fontSize: 14, lineHeight: 1.8 }}>
               系统会在回滚前自动备份当前状态（pre_restore 类型，保留 7 天）。
+              PITR 恢复将先恢复 MinIO 对象再恢复 PostgreSQL 数据库。
             </p>
+
+            {/* PITR 恢复到指定时间点开关 */}
+            <div style={{ marginTop: 16, marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text strong>恢复到指定时间点</Text>
+                <Switch
+                  checked={pitreEnabled}
+                  onChange={(checked: boolean) => {
+                    setPitreEnabled(checked);
+                    if (!checked) {
+                      setRecoveryTargetTime(null);
+                    }
+                  }}
+                />
+              </div>
+              {pitreEnabled && (
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
+                    选择恢复目标时间（UTC），不选则恢复到备份时间点
+                  </Text>
+                  <DatePicker
+                    showTime
+                    format="YYYY-MM-DD HH:mm:ss"
+                    style={{ width: '100%' }}
+                    onChange={(_value: unknown, dateString: string | string[]) => {
+                      const ds = Array.isArray(dateString) ? dateString[0] : dateString;
+                      if (ds) {
+                        // 转换为 ISO 8601 格式
+                        try {
+                          const dt = new Date(ds + 'Z');
+                          setRecoveryTargetTime(dt.toISOString());
+                        } catch {
+                          setRecoveryTargetTime(null);
+                        }
+                      } else {
+                        setRecoveryTargetTime(null);
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
             <p style={{ marginTop: 16 }}>
               请输入 <Text strong mark>"确认回滚"</Text> 以继续：
             </p>
