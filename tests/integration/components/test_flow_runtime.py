@@ -120,40 +120,8 @@ def fixed_clock() -> FixedClock:
 
 @pytest.fixture
 def runner() -> PythonComponentRunner:
-    """Python 组件运行器（注册 echo + source 组件）。"""
-    r = PythonComponentRunner()
-
-    echo_manifest = ComponentManifest(
-        name="echo_flow",
-        display_name="echo_flow",
-        version="1.0.0",
-        kind="transform",
-        runtime="python",
-        inputs=(PortSpec(name="data", data_type="dataset"),),
-        outputs=(PortSpec(name="data", data_type="dataset"),),
-        parameters={},
-        dependencies=(),
-        raw_yaml=ECHO_YAML,
-        sha256="",
-    )
-    r.register(echo_manifest, EchoComponent())
-
-    source_manifest = ComponentManifest(
-        name="flow_source",
-        display_name="flow_source",
-        version="1.0.0",
-        kind="ingestion",
-        runtime="python",
-        inputs=(),
-        outputs=(PortSpec(name="data", data_type="dataset"),),
-        parameters={},
-        dependencies=(),
-        raw_yaml=SOURCE_YAML,
-        sha256="",
-    )
-    r.register(source_manifest, EchoComponent())
-
-    return r
+    """Python 组件运行器（组件在 _publish_components 中动态注册）。"""
+    return PythonComponentRunner()
 
 
 @pytest.fixture
@@ -243,13 +211,67 @@ async def flow_service(
 
 async def _publish_components(
     registry: ComponentRegistryService,
-) -> None:
-    """发布测试用组件到注册表。"""
+    runner: PythonComponentRunner,
+) -> dict[str, str]:
+    """发布测试用组件到注册表并在 runner 中注册实现。
+
+    publish() 会自动生成组件编码（iface_ 前缀），需在发布后获取实际编码，
+    并在 runner 中按该编码注册组件实现，以便执行时能找到。
+
+    Returns:
+        dict[str, str]: ``{原始名称: 自动生成编码}`` 映射。
+    """
     from packages.components.manifest import ManifestValidator
 
     validator = ManifestValidator(SCHEMA_PATH)
-    await registry.publish(validator.validate(SOURCE_YAML))
-    await registry.publish(validator.validate(ECHO_YAML))
+
+    # 发布 source 组件
+    v1 = await registry.publish(validator.validate(SOURCE_YAML))
+    comp1, _ = await registry.get_version_by_id(v1.id)
+
+    # 发布 echo 组件
+    v2 = await registry.publish(validator.validate(ECHO_YAML))
+    comp2, _ = await registry.get_version_by_id(v2.id)
+
+    # 在 runner 中注册实现（使用自动生成的编码）
+    runner.register(
+        ComponentManifest(
+            name=comp1.name,
+            display_name=comp1.name,
+            version=v1.version,
+            kind="ingestion",
+            runtime="python",
+            inputs=(),
+            outputs=(PortSpec(name="data", data_type="dataset"),),
+            parameters={},
+            dependencies=(),
+            raw_yaml=v1.manifest_yaml,
+            sha256=v1.manifest_sha256,
+        ),
+        EchoComponent(),
+    )
+
+    runner.register(
+        ComponentManifest(
+            name=comp2.name,
+            display_name=comp2.name,
+            version=v2.version,
+            kind="transform",
+            runtime="python",
+            inputs=(PortSpec(name="data", data_type="dataset"),),
+            outputs=(PortSpec(name="data", data_type="dataset"),),
+            parameters={},
+            dependencies=(),
+            raw_yaml=v2.manifest_yaml,
+            sha256=v2.manifest_sha256,
+        ),
+        EchoComponent(),
+    )
+
+    return {
+        "flow_source": comp1.name,
+        "echo_flow": comp2.name,
+    }
 
 
 @pytest.mark.asyncio
@@ -260,9 +282,10 @@ class TestFlowExecution:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """流程执行成功：创建 → 发布 → 执行。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         # 1. 创建流程定义
         definition = await flow_service.create_definition(
@@ -276,13 +299,13 @@ class TestFlowExecution:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "hello"},
             ),
             FlowNode(
                 node_id="echo",
-                component_name="echo_flow",
+                component_name=name_map["echo_flow"],
                 component_version="1.0.0",
                 input_bindings={"data": "source:data"},
             ),
@@ -323,9 +346,10 @@ class TestFlowExecution:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """相同输入和版本产生相同的 output_digest。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         definition = await flow_service.create_definition(
             code="test_flow_digest",
@@ -335,7 +359,7 @@ class TestFlowExecution:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "consistency_test"},
             ),
@@ -378,9 +402,10 @@ class TestFlowResume:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """恢复执行时跳过已成功节点。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         definition = await flow_service.create_definition(
             code="test_flow_resume",
@@ -390,13 +415,13 @@ class TestFlowResume:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "resume_test"},
             ),
             FlowNode(
                 node_id="echo",
-                component_name="echo_flow",
+                component_name=name_map["echo_flow"],
                 component_version="1.0.0",
                 input_bindings={"data": "source:data"},
             ),
@@ -436,9 +461,10 @@ class TestFlowCancel:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """取消处于 pending 状态的执行。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         definition = await flow_service.create_definition(
             code="test_flow_cancel",
@@ -448,7 +474,7 @@ class TestFlowCancel:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "cancel_test"},
             ),
@@ -479,9 +505,10 @@ class TestFlowRetry:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """重试已成功节点应失败（仅失败节点可重试）。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         definition = await flow_service.create_definition(
             code="test_flow_retry_succeeded",
@@ -491,7 +518,7 @@ class TestFlowRetry:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "test"},
             ),
@@ -518,9 +545,10 @@ class TestFlowRetry:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """重试不存在的节点应失败。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         definition = await flow_service.create_definition(
             code="test_flow_retry_nonexistent",
@@ -530,7 +558,7 @@ class TestFlowRetry:
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
                 params={"value": "test"},
             ),
@@ -561,15 +589,16 @@ class TestFlowDefinition:
         self,
         flow_service: FlowRuntimeService,
         registry_service: ComponentRegistryService,
+        runner: PythonComponentRunner,
     ) -> None:
         """创建定义时进行 DAG 校验。"""
-        await _publish_components(registry_service)
+        name_map = await _publish_components(registry_service, runner)
 
         # 有效 DAG
         nodes = (
             FlowNode(
                 node_id="source",
-                component_name="flow_source",
+                component_name=name_map["flow_source"],
                 component_version="1.0.0",
             ),
         )

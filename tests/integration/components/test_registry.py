@@ -1,8 +1,8 @@
 """组件注册表集成测试。
 
 验证（IRIP V2-T01）：
-- 发布组件版本后不可变（重复发布抛 conflict）；
-- 按 kind + version 查询；
+- 发布组件版本后自动生成编码与版本号；
+- 按 name + version 查询；
 - 列表过滤（kind / status）；
 - 废弃组件。
 
@@ -54,7 +54,7 @@ outputs:
     data_type: dataset
 """
 
-#: 有效清单 YAML — ingestion 组件 v2。
+#: 有效清单 YAML — ingestion 组件 v2（内容不同，用于测试版本递增）。
 VALID_YAML_INGESTION_V2: str = """\
 name: csv_ingestion
 version: 2.0.0
@@ -65,6 +65,8 @@ inputs:
     data_type: artifact
 outputs:
   - name: dataset
+    data_type: dataset
+  - name: metadata
     data_type: dataset
 """
 
@@ -122,7 +124,7 @@ class TestPublishComponent:
         registry_service: ComponentRegistryService,
         validator: ManifestValidator,
     ) -> None:
-        """发布后创建组件主记录和版本记录。"""
+        """发布后创建组件主记录和版本记录（自动生成编码，版本号 1.0.0）。"""
         manifest = validator.validate(VALID_YAML_INGESTION)
         version = await registry_service.publish(manifest)
 
@@ -131,34 +133,45 @@ class TestPublishComponent:
         assert version.status == "published"
         assert version.published_at is not None
         assert version.manifest_sha256 == manifest.sha256
-        assert version.manifest_yaml == manifest.raw_yaml
+        # manifest_yaml 中 name 已被替换为自动生成的编码
+        comp, _ = await registry_service.get_version_by_id(version.id)
+        assert comp.name in version.manifest_yaml
 
-    async def test_published_version_is_immutable(
+    async def test_publish_same_manifest_creates_new_component(
         self,
         registry_service: ComponentRegistryService,
         validator: ManifestValidator,
     ) -> None:
-        """发布同一版本时抛出 conflict（已发布版本不可变）。"""
+        """重复发布相同清单会创建新组件（自动生成不同编码），不抛 conflict。"""
         manifest = validator.validate(VALID_YAML_INGESTION)
-        await registry_service.publish(manifest)
+        version1 = await registry_service.publish(manifest)
+        version2 = await registry_service.publish(manifest)
 
-        with pytest.raises(AppError) as exc_info:
-            await registry_service.publish(manifest)
-        assert exc_info.value.code == "conflict"
+        # 两次发布创建不同的组件（自动生成不同编码）
+        comp1, _ = await registry_service.get_version_by_id(version1.id)
+        comp2, _ = await registry_service.get_version_by_id(version2.id)
+        assert comp1.name != comp2.name
+        assert version1.version == "1.0.0"
+        assert version2.version == "1.0.0"
 
     async def test_publish_new_version_succeeds(
         self,
         registry_service: ComponentRegistryService,
         validator: ManifestValidator,
     ) -> None:
-        """同一组件发布新版本成功。"""
+        """同一组件发布新版本成功（版本号自动递增 patch）。"""
         manifest_v1 = validator.validate(VALID_YAML_INGESTION)
-        await registry_service.publish(manifest_v1)
+        version_v1 = await registry_service.publish(manifest_v1)
 
-        manifest_v2 = validator.validate(VALID_YAML_INGESTION_V2)
+        # 获取自动生成的组件名，用它发布新版本
+        comp, _ = await registry_service.get_version_by_id(version_v1.id)
+        v2_yaml = VALID_YAML_INGESTION_V2.replace(
+            "name: csv_ingestion", f"name: {comp.name}"
+        )
+        manifest_v2 = validator.validate(v2_yaml)
         version_v2 = await registry_service.publish(manifest_v2)
 
-        assert version_v2.version == "2.0.0"
+        assert version_v2.version == "1.0.1"
         assert version_v2.status == "published"
 
     async def test_publish_kind_mismatch_fails(
@@ -168,9 +181,16 @@ class TestPublishComponent:
     ) -> None:
         """同名组件 kind 不一致时抛出 conflict。"""
         manifest1 = validator.validate(VALID_YAML_INGESTION)
-        await registry_service.publish(manifest1)
+        version1 = await registry_service.publish(manifest1)
 
-        mismatched_yaml = VALID_YAML_INGESTION.replace("kind: ingestion", "kind: transform")
+        # 获取自动生成的组件名
+        comp, _ = await registry_service.get_version_by_id(version1.id)
+        component_name = comp.name
+
+        # 用自动生成的名字但不同 kind 发布
+        mismatched_yaml = VALID_YAML_INGESTION.replace(
+            "name: csv_ingestion", f"name: {component_name}"
+        ).replace("kind: ingestion", "kind: transform")
         manifest2 = validator.validate(mismatched_yaml)
         with pytest.raises(AppError) as exc_info:
             await registry_service.publish(manifest2)
@@ -186,13 +206,14 @@ class TestGetComponent:
         registry_service: ComponentRegistryService,
         validator: ManifestValidator,
     ) -> None:
-        """按 name + version 查询成功。"""
+        """按 name + version 查询成功（使用自动生成的编码）。"""
         manifest = validator.validate(VALID_YAML_INGESTION)
-        await registry_service.publish(manifest)
+        version = await registry_service.publish(manifest)
 
-        version = await registry_service.get("csv_ingestion", "1.0.0")
-        assert version.version == "1.0.0"
-        assert version.manifest_sha256 == manifest.sha256
+        comp, _ = await registry_service.get_version_by_id(version.id)
+        result = await registry_service.get(comp.name, "1.0.0")
+        assert result.version == "1.0.0"
+        assert result.manifest_sha256 == manifest.sha256
 
     async def test_get_nonexistent_name_fails(
         self,
@@ -210,10 +231,11 @@ class TestGetComponent:
     ) -> None:
         """查询不存在的版本抛出 not_found。"""
         manifest = validator.validate(VALID_YAML_INGESTION)
-        await registry_service.publish(manifest)
+        version = await registry_service.publish(manifest)
 
+        comp, _ = await registry_service.get_version_by_id(version.id)
         with pytest.raises(AppError) as exc_info:
-            await registry_service.get("csv_ingestion", "99.0.0")
+            await registry_service.get(comp.name, "99.0.0")
         assert exc_info.value.code == "not_found"
 
     async def test_get_version_by_id(
@@ -226,7 +248,7 @@ class TestGetComponent:
         version = await registry_service.publish(manifest)
 
         comp, ver = await registry_service.get_version_by_id(version.id)
-        assert comp.name == "csv_ingestion"
+        assert comp.name.startswith("iface_")
         assert ver.version == "1.0.0"
         assert ver.id == version.id
 
@@ -285,13 +307,14 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """按 status 过滤。"""
-        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
-        await registry_service.deprecate("csv_ingestion")
+        version = await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
+        comp, _ = await registry_service.get_version_by_id(version.id)
+        await registry_service.deprecate(comp.name)
 
         items = await registry_service.list(status="deprecated")
         assert len(items) == 1
-        comp, _ver = items[0]
-        assert comp.status == "deprecated"
+        comp_item, _ver = items[0]
+        assert comp_item.status == "deprecated"
 
         items = await registry_service.list(status="published")
         assert len(items) == 0
@@ -309,15 +332,22 @@ class TestListComponents:
         registry_service: ComponentRegistryService,
         validator: ManifestValidator,
     ) -> None:
-        """同一组件多版本均出现在列表中。"""
-        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
-        await registry_service.publish(validator.validate(VALID_YAML_INGESTION_V2))
+        """同一组件多版本，列表返回组件及其当前活跃版本。"""
+        version_v1 = await registry_service.publish(
+            validator.validate(VALID_YAML_INGESTION)
+        )
+        comp, _ = await registry_service.get_version_by_id(version_v1.id)
+        component_name = comp.name
+
+        v2_yaml = VALID_YAML_INGESTION_V2.replace(
+            "name: csv_ingestion", f"name: {component_name}"
+        )
+        await registry_service.publish(validator.validate(v2_yaml))
 
         items = await registry_service.list()
-        assert len(items) == 2
-        versions = [ver.version for _comp, ver in items]
-        assert "1.0.0" in versions
-        assert "2.0.0" in versions
+        assert len(items) == 1  # 同一组件只出现一次
+        _comp, ver = items[0]
+        assert ver.version == "1.0.1"  # 当前活跃版本为最新
 
 
 @pytest.mark.asyncio
@@ -330,9 +360,12 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃已发布组件。"""
-        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
+        version = await registry_service.publish(
+            validator.validate(VALID_YAML_INGESTION)
+        )
+        comp, _ = await registry_service.get_version_by_id(version.id)
 
-        component = await registry_service.deprecate("csv_ingestion")
+        component = await registry_service.deprecate(comp.name)
         assert component.status == "deprecated"
 
     async def test_deprecate_nonexistent_fails(
@@ -350,11 +383,14 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃后仍可通过 status=deprecated 列出。"""
-        await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
-        await registry_service.deprecate("csv_ingestion")
+        version = await registry_service.publish(
+            validator.validate(VALID_YAML_INGESTION)
+        )
+        comp, _ = await registry_service.get_version_by_id(version.id)
+        await registry_service.deprecate(comp.name)
 
         items = await registry_service.list(status="deprecated")
         assert len(items) == 1
-        comp, _ver = items[0]
-        assert comp.name == "csv_ingestion"
-        assert comp.status == "deprecated"
+        comp_item, _ver = items[0]
+        assert comp_item.name == comp.name
+        assert comp_item.status == "deprecated"
