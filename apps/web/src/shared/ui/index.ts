@@ -45,3 +45,6 @@ export type { OceanEmptyStateProps } from './OceanEmptyState';
 
 export { OceanSkeleton } from './OceanSkeleton';
 export type { OceanSkeletonProps, OceanSkeletonType } from './OceanSkeleton';
+
+export { WaveLine } from './WaveLine';
+export type { WaveLineProps } from './WaveLine';

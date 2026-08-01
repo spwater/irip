@@ -1,13 +1,13 @@
 /**
- * IRIP Data Ocean「潮线 Tideline」空间样式
+ * IRIP Data Ocean「潮线 Tideline」空间样式 · 水光版
  *
- * 视觉语言（数据之海第二版）：
- * - 潮汐层：双层 SVG 波浪缓慢漂移（流动感的核心）
- * - 数据流：一条对角光带 + 稀疏粒子，表达"数据在海中流动"
- * - 半调网点：角落渐变网点纹理，印刷感
+ * 视觉语言（数据之海 · 流动感）：
+ * - 潮汐层：双层 SVG 波浪缓慢漂移（流动感核心）
+ * - 数据流：对角光带 + 稀疏粒子，表达"数据在海中流动"
+ * - 水光：深浅靠透明渐变与玻璃光泽过渡，不用实色撞色块
+ * - 曲线：波形细线、圆头题注条、圆润面板——无斜切几何
  * - 水印大字：超大描边空心英文，构建空间纵深
- * - 斜切几何：clip-path 平行四边形切割，打破矩形管理后台感
- * - 深潮锚点：局部中深蓝块 + 亮青细线，第一眼识别
+ * - 半调网点：角落渐变网点纹理
  *
  * 克制约束：
  * - 运动背景层不超过 3 个（波浪×2 + 光带），粒子低幅低频
@@ -35,7 +35,6 @@
 
 /* ------------------------------------------------------------
  * 潮汐波浪层：两条水平漂移的波，一深一浅、一快一慢
- * SVG path 内联在背景图里，wave 宽 200%，位移 -50% 无缝循环
  * ---------------------------------------------------------- */
 .ocean-backdrop__tide {
   position: absolute;
@@ -111,32 +110,33 @@
 }
 
 /* ------------------------------------------------------------
- * 数据粒子：稀疏小方块沿对角缓慢上浮（5 颗，低频低幅）
+ * 数据粒子：稀疏小圆点沿对角缓慢上浮（5 颗，低频低幅）
  * ---------------------------------------------------------- */
 .ocean-backdrop__particle {
   position: absolute;
-  width: 4px;
-  height: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
   background: var(--ocean-current-bright);
   opacity: 0;
   animation: ocean-particle-rise 18s linear infinite;
 }
 
 .ocean-backdrop__particle--1 { left: 12%; bottom: 18%; animation-delay: 0s; }
-.ocean-backdrop__particle--2 { left: 34%; bottom: 10%; animation-delay: -6s; width: 3px; height: 3px; }
+.ocean-backdrop__particle--2 { left: 34%; bottom: 10%; animation-delay: -6s; width: 4px; height: 4px; }
 .ocean-backdrop__particle--3 { left: 58%; bottom: 22%; animation-delay: -11s; }
-.ocean-backdrop__particle--4 { left: 76%; bottom: 8%; animation-delay: -3s; width: 3px; height: 3px; }
+.ocean-backdrop__particle--4 { left: 76%; bottom: 8%; animation-delay: -3s; width: 4px; height: 4px; }
 .ocean-backdrop__particle--5 { left: 90%; bottom: 26%; animation-delay: -14s; }
 
 @keyframes ocean-particle-rise {
-  0% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
-  12% { opacity: 0.55; }
-  60% { opacity: 0.3; }
-  100% { opacity: 0; transform: translate3d(36px, -30vh, 0) rotate(120deg); }
+  0% { opacity: 0; transform: translate3d(0, 0, 0) scale(0.6); }
+  12% { opacity: 0.5; transform: translate3d(6px, -4vh, 0) scale(1); }
+  60% { opacity: 0.28; }
+  100% { opacity: 0; transform: translate3d(30px, -26vh, 0) scale(0.7); }
 }
 
 /* ------------------------------------------------------------
- * 网格层：斜向细网格，比正交网格更有动感
+ * 网格层：低透明度细网格
  * ---------------------------------------------------------- */
 .ocean-backdrop__grid {
   position: absolute;
@@ -144,12 +144,12 @@
   background-image:
     linear-gradient(
       to right,
-      rgba(11, 74, 111, 0.045) 1px,
+      rgba(11, 74, 111, 0.04) 1px,
       transparent 1px
     ),
     linear-gradient(
       to bottom,
-      rgba(11, 74, 111, 0.045) 1px,
+      rgba(11, 74, 111, 0.04) 1px,
       transparent 1px
     );
   background-size: 80px 80px;
@@ -169,7 +169,7 @@
 }
 
 /* ------------------------------------------------------------
- * 半调网点：右上 + 左下两片，印刷纹理感
+ * 半调网点：右上 + 左下两片
  * ---------------------------------------------------------- */
 .ocean-backdrop__halftone {
   position: absolute;
@@ -177,7 +177,7 @@
   height: 420px;
   background-image: radial-gradient(
     circle,
-    rgba(11, 74, 111, 0.16) 1.2px,
+    rgba(11, 74, 111, 0.13) 1.2px,
     transparent 1.6px
   );
   background-size: 14px 14px;
@@ -198,7 +198,7 @@
 }
 
 /* ------------------------------------------------------------
- * 光域：保留两处大范围柔光（层次，不运动）
+ * 光域：两处大范围柔光
  * ---------------------------------------------------------- */
 .ocean-backdrop__glow {
   position: absolute;
@@ -215,7 +215,7 @@
   opacity: 0.5;
   background: radial-gradient(
     circle,
-    rgba(14, 91, 132, 0.28) 0%,
+    rgba(14, 91, 132, 0.24) 0%,
     rgba(14, 91, 132, 0) 70%
   );
 }
@@ -228,7 +228,7 @@
   opacity: 0.45;
   background: radial-gradient(
     circle,
-    rgba(23, 184, 206, 0.2) 0%,
+    rgba(23, 184, 206, 0.18) 0%,
     rgba(23, 184, 206, 0) 70%
   );
 }
@@ -244,7 +244,6 @@
 
 /* ============================================================
  * 水印大字：超大描边空心英文，空间纵深签名
- * 用法：页面标题区 / 登录品牌区背后的英文单词
  * ========================================================== */
 .ocean-watermark {
   position: absolute;
@@ -256,7 +255,7 @@
   text-transform: uppercase;
   white-space: nowrap;
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(11, 74, 111, 0.13);
+  -webkit-text-stroke: 1.5px rgba(11, 74, 111, 0.12);
   user-select: none;
   pointer-events: none;
   z-index: 0;
@@ -268,54 +267,59 @@
 }
 
 /* ============================================================
- * 斜切几何工具类
+ * 渐变文字：深潮蓝 → 潮流青，水光感（IRIP 大字 / Hero 数字）
  * ========================================================== */
-
-/* 右下角斜切面板 */
-.ocean-cut {
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--ocean-cut-md)), calc(100% - var(--ocean-cut-md)) 100%, 0 100%);
-}
-
-/* 左右双斜（平行四边形） */
-.ocean-cut--parallel {
-  clip-path: polygon(var(--ocean-cut-sm) 0, 100% 0, calc(100% - var(--ocean-cut-sm)) 100%, 0 100%);
-}
-
-/* 深潮块：中深蓝渐变 + 斜切 + 亮青顶线（Hero / 品牌 / 强调） */
-.ocean-abyss-block {
-  position: relative;
-  background: var(--ocean-abyss-gradient);
-  color: #eaf6f9;
-}
-
-.ocean-abyss-block::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--ocean-current-bright) 0%, rgba(23, 184, 206, 0) 78%);
-  pointer-events: none;
+.ocean-flow-text {
+  background: linear-gradient(115deg, #0c4a6b 0%, #0e6a92 46%, #17b8ce 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ============================================================
- * 刻度尺：细线 + 均匀刻度，仪器感（页头底部 / 面板顶部）
+ * 水光玻璃面板：选中态、强调面板的轻盈材质
+ * 深浅来自透明渐变与顶部光泽，不是实色块
+ * ========================================================== */
+.ocean-water-glass {
+  background: linear-gradient(
+    120deg,
+    rgba(23, 184, 206, 0.13) 0%,
+    rgba(23, 184, 206, 0.05) 55%,
+    rgba(23, 184, 206, 0.02) 100%
+  );
+  border: 1px solid rgba(23, 184, 206, 0.28);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 6px 18px rgba(14, 91, 132, 0.10);
+}
+
+/* ============================================================
+ * 圆头渐变题注条：页面标题左侧的流动标记（无斜切）
+ * ========================================================== */
+.ocean-title-ribbon {
+  width: 4px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0e5b84 0%, #17b8ce 100%);
+  box-shadow: 0 0 10px rgba(23, 184, 206, 0.35);
+}
+
+/* ============================================================
+ * 刻度尺：细线 + 均匀刻度（页头底部 / 面板顶部）
  * ========================================================== */
 .ocean-ticks {
   height: 10px;
   background-image:
     repeating-linear-gradient(
       to right,
-      rgba(11, 74, 111, 0.3) 0,
-      rgba(11, 74, 111, 0.3) 1px,
+      rgba(11, 74, 111, 0.28) 0,
+      rgba(11, 74, 111, 0.28) 1px,
       transparent 1px,
       transparent 10px
     );
   background-size: 100% 5px;
   background-repeat: no-repeat;
   background-position: bottom;
-  border-bottom: 1px solid rgba(11, 74, 111, 0.18);
+  border-bottom: 1px solid rgba(11, 74, 111, 0.16);
 }
 
 /* ============================================================
@@ -324,7 +328,7 @@
 .ocean-panel {
   background: var(--ocean-surface-default);
   border: 1px solid var(--ocean-border-subtle);
-  border-radius: var(--ocean-radius-sm);
+  border-radius: var(--ocean-radius-md);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
 }
@@ -332,7 +336,7 @@
 .ocean-panel--strong {
   background: var(--ocean-surface-strong);
   border: 1px solid var(--ocean-border-subtle);
-  border-radius: var(--ocean-radius-sm);
+  border-radius: var(--ocean-radius-md);
   /* 稳定 surface：不使用实时 backdrop-filter，避免滚动卡顿 */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -341,16 +345,9 @@
 .ocean-panel--structural {
   background: var(--ocean-surface-structural);
   border: 1px solid var(--ocean-border-subtle);
-  border-radius: var(--ocean-radius-sm);
+  border-radius: var(--ocean-radius-md);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-/* 强调面板：左侧亮青斜切缘 */
-.ocean-panel--edged {
-  border-left: 3px solid var(--ocean-current-bright);
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
 }
 
 /* ============================================================
@@ -360,19 +357,9 @@
   background: var(--ocean-border-subtle);
 }
 
-/* ------------------------------------------------------------
- * 斜线分隔符：指标条 / 列表项之间的斜杠分隔
- * ---------------------------------------------------------- */
-.ocean-slash-divider {
-  width: 1px;
-  align-self: stretch;
-  background: rgba(11, 74, 111, 0.2);
-  transform: skewX(-14deg);
-}
-
 /* ============================================================
  * 导航菜单覆盖（AppShell 的 antd Menu）
- * 选中项：深潮渐变带 + 左缘亮青 + 右端斜切
+ * 选中项：水光玻璃 + 左缘圆头渐变条，文字深潮蓝
  * ========================================================== */
 .ocean-sider-menu.ant-menu {
   background: transparent;
@@ -382,36 +369,48 @@
   position: relative;
   margin-inline: 0;
   width: 100%;
-  border-radius: 2px;
+  border-radius: 10px;
   transition: background var(--ocean-motion-control) var(--ocean-motion-easing),
     color var(--ocean-motion-control) var(--ocean-motion-easing),
-    transform var(--ocean-motion-instant) var(--ocean-motion-easing);
+    transform var(--ocean-motion-instant) var(--ocean-motion-easing),
+    box-shadow var(--ocean-motion-control) var(--ocean-motion-easing);
 }
 
 .ocean-sider-menu.ant-menu .ant-menu-item:hover {
-  transform: translateX(2px);
+  transform: translateX(3px);
 }
 
 .ocean-sider-menu.ant-menu .ant-menu-item-selected {
-  background: var(--ocean-abyss-gradient-x) !important;
-  color: #eaf6f9 !important;
-  clip-path: polygon(0 0, 100% 0, calc(100% - var(--ocean-cut-sm)) 100%, 0 100%);
-  box-shadow: 0 8px 20px rgba(7, 51, 78, 0.28);
+  background: linear-gradient(
+    120deg,
+    rgba(23, 184, 206, 0.16) 0%,
+    rgba(23, 184, 206, 0.06) 58%,
+    rgba(23, 184, 206, 0.02) 100%
+  ) !important;
+  color: var(--ocean-abyss-deep) !important;
+  font-weight: 600;
+  border: 1px solid rgba(23, 184, 206, 0.30);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 8px 20px rgba(14, 91, 132, 0.12);
 }
 
+/* 左缘圆头渐变条：选中项的"潮位线" */
 .ocean-sider-menu.ant-menu .ant-menu-item-selected::before {
   content: '';
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
+  top: 50%;
+  transform: translateY(-50%);
   width: 3px;
-  background: var(--ocean-current-bright);
+  height: 60%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #0e5b84 0%, #17b8ce 100%);
 }
 
 .ocean-sider-menu.ant-menu .ant-menu-item-selected .ocean-nav-item__num,
 .ocean-sider-menu.ant-menu .ant-menu-item-selected .ocean-nav-item__en {
-  color: var(--ocean-current-on-deep) !important;
+  color: var(--ocean-current-bright) !important;
 }
 
 /* 菜单项内部结构：编号 + 中文 + 英文小标 */
@@ -430,7 +429,6 @@
 
 .ocean-nav-item__label {
   font-size: 14px;
-  font-weight: 500;
   flex: 1;
 }
 
@@ -444,7 +442,7 @@
 }
 
 /* ============================================================
- * 登录页签名元素
+ * 登录页：卡片顶部渐变光边
  * ========================================================== */
 .ocean-login-card {
   position: relative;
@@ -458,7 +456,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--ocean-current-bright) 0%, rgba(23, 184, 206, 0) 82%);
+  background: linear-gradient(90deg, rgba(14, 91, 132, 0.7) 0%, var(--ocean-current-bright) 46%, rgba(23, 184, 206, 0) 88%);
 }
 
 /* ============================================================

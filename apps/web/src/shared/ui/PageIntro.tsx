@@ -106,16 +106,8 @@ export function PageIntro({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'stretch', gap: 12 }}>
-            {/* 斜切题注条：深潮渐变 + 亮青影 */}
-            <span
-              aria-hidden="true"
-              style={{
-                width: 5,
-                background: 'var(--ocean-abyss-gradient)',
-                transform: 'skewX(-10deg)',
-                boxShadow: '2px 0 0 rgba(23, 184, 206, 0.5)',
-              }}
-            />
+            {/* 圆头渐变题注条：深潮蓝 → 潮流青 */}
+            <span className="ocean-title-ribbon" aria-hidden="true" />
             <Title
               level={2}
               style={{
@@ -124,7 +116,7 @@ export function PageIntro({
                 fontWeight: 800,
                 lineHeight: 1.15,
                 letterSpacing: '0.04em',
-                color: 'var(--ocean-abyss-deep)',
+                color: '#0C4667',
               }}
             >
               {title}

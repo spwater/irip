@@ -1,5 +1,5 @@
 /**
- * DataHero — 核心数字视觉「潮线 Tideline」
+ * DataHero — 核心数字视觉「潮线 Tideline · 水光版」
  *
  * 职责：
  * - 一个核心数字、名称或状态
@@ -8,12 +8,13 @@
  *
  * 视觉规则：
  * - 核心数字 48–96px，tabular-nums
- * - deep 变体：深潮渐变块 + 右下角斜切 + 亮青数字（看板/总览主视觉）
+ * - deep 变体：超大渐变数字（深潮蓝→潮流青）+ 波形细线，无底色块
  * - 默认变体：浅底亮青数字
  */
 import type { CSSProperties } from 'react';
 import { Typography } from 'antd';
 import { STATUS_SEMANTIC_COLOR, type StatusSemantic } from '@/theme/tokens';
+import { WaveLine } from './WaveLine';
 
 const { Text } = Typography;
 
@@ -26,7 +27,7 @@ export interface DataHeroProps {
   unit?: string;
   /** 状态语义，用于强调色 */
   status?: StatusSemantic;
-  /** 深潮变体：深蓝渐变块上的亮青数字（第一眼主视觉） */
+  /** 深潮变体：超大渐变数字 + 波形线（看板/总览主视觉） */
   deep?: boolean;
   /** 透传样式 */
   style?: CSSProperties;
@@ -39,6 +40,7 @@ export interface DataHeroProps {
  *   标签（小字、次级）
  *   核心数字（大字、tabular-nums）
  *   单位（紧贴数字右侧）
+ *   波形细线（deep 变体）
  */
 export function DataHero({
   value,
@@ -51,11 +53,11 @@ export function DataHero({
   const accentColor = status
     ? STATUS_SEMANTIC_COLOR[status]
     : deep
-      ? 'var(--ocean-current-on-deep)'
+      ? undefined
       : 'var(--ocean-current-bright)';
 
-  const labelColor = deep ? 'rgba(234, 246, 249, 0.72)' : 'var(--ocean-text-secondary)';
-  const unitColor = deep ? 'rgba(234, 246, 249, 0.72)' : 'var(--ocean-text-secondary)';
+  const labelColor = 'var(--ocean-text-secondary)';
+  const unitColor = 'var(--ocean-text-secondary)';
 
   const body = (
     <>
@@ -75,12 +77,12 @@ export function DataHero({
         style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}
       >
         <span
-          className="ocean-data-hero__value ocean-tabular-nums"
+          className={`ocean-data-hero__value ocean-tabular-nums${deep ? ' ocean-flow-text' : ''}`}
           style={{
-            fontSize: 72,
-            fontWeight: deep ? 700 : 400,
+            fontSize: deep ? 88 : 72,
+            fontWeight: deep ? 800 : 400,
             lineHeight: 1.05,
-            color: accentColor,
+            ...(accentColor ? { color: accentColor } : {}),
             fontVariantNumeric: 'tabular-nums',
             fontFeatureSettings: '"tnum"',
             letterSpacing: '-0.5px',
@@ -101,18 +103,17 @@ export function DataHero({
           </Text>
         ) : null}
       </div>
+      {deep ? <WaveLine width={140} height={8} style={{ marginTop: 10 }} /> : null}
     </>
   );
 
   if (deep) {
     return (
       <div
-        className="ocean-data-hero ocean-abyss-block ocean-tide-enter"
+        className="ocean-data-hero ocean-tide-enter"
         style={{
           display: 'inline-block',
-          padding: '24px 48px 28px 28px',
-          clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 22px), calc(100% - 22px) 100%, 0 100%)',
-          boxShadow: '0 20px 48px rgba(7, 51, 78, 0.28)',
+          padding: '8px 24px 8px 4px',
           ...style,
         }}
       >

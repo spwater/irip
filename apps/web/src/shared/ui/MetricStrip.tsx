@@ -65,12 +65,12 @@ export function MetricStrip({
             position: 'relative',
             background: 'var(--ocean-surface-default)',
             border: '1px solid var(--ocean-border-subtle)',
-            borderRadius: 4,
+            borderRadius: 10,
             padding: '14px 16px',
             overflow: 'hidden',
           }}
         >
-          {/* 顶部亮青渐变线 */}
+          {/* 顶部水光渐变线 */}
           <span
             aria-hidden="true"
             style={{
@@ -79,7 +79,7 @@ export function MetricStrip({
               left: 0,
               right: 0,
               height: 2,
-              background: 'linear-gradient(90deg, var(--ocean-current-bright) 0%, rgba(23, 184, 206, 0) 72%)',
+              background: 'linear-gradient(90deg, rgba(14, 91, 132, 0.45) 0%, rgba(23, 184, 206, 0.4) 46%, rgba(23, 184, 206, 0) 82%)',
             }}
           />
           <Text
@@ -100,7 +100,7 @@ export function MetricStrip({
                 fontSize: 30,
                 fontWeight: 700,
                 lineHeight: 1.1,
-                color: 'var(--ocean-abyss-deep)',
+                color: '#0E5B84',
                 fontVariantNumeric: 'tabular-nums',
                 fontFeatureSettings: '"tnum"',
                 letterSpacing: '-0.5px',

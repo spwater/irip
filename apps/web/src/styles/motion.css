@@ -72,20 +72,20 @@
 }
 
 /* ============================================================
- * 潮线进入：斜向滑入（标题、Hero、品牌块），克制过冲
+ * 潮线进入：水流式浮上（标题、Hero、品牌区），无斜切无过冲
  * ========================================================== */
 .ocean-tide-enter {
-  animation: ocean-tide-enter 480ms var(--ocean-motion-easing-tide) both;
+  animation: ocean-tide-enter 520ms var(--ocean-motion-easing-tide) both;
 }
 
 @keyframes ocean-tide-enter {
   from {
     opacity: 0;
-    transform: translate3d(-16px, 10px, 0) skewX(-2deg);
+    transform: translate3d(0, 14px, 0);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0) skewX(0deg);
+    transform: translate3d(0, 0, 0);
   }
 }
 

@@ -4,6 +4,7 @@ import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useAuthStore } from './AuthProvider';
 import { OceanBackdrop } from '@/shared/layout/OceanBackdrop';
+import { WaveLine } from '@/shared/ui/WaveLine';
 
 const { Title, Text } = Typography;
 
@@ -21,10 +22,10 @@ const CAPABILITIES: ReadonlyArray<{ idx: string; label: string }> = [
 ];
 
 /**
- * 登录页面「潮线 Tideline」
+ * 登录页面「潮线 Tideline · 水光版」
  *
- * - 左侧：超大水印 DATA OCEAN + 深潮斜切品牌块 + 编号能力索引
- * - 右侧：玻璃登录卡（顶部亮青线 + 右下角斜切）
+ * - 左侧：DATA/OCEAN 双水印 + 渐变文字大标题 + 波形线 + 编号能力索引
+ * - 右侧：圆角玻璃登录卡（顶部渐变光边）
  * - 表单字段、校验、loading、错误 message、认证成功重定向保持不变
  * - 小于 900px 改单列，隐藏左侧视觉区
  */
@@ -105,36 +106,31 @@ export function LoginPage(): JSX.Element {
             Ocean
           </span>
 
-          {/* 深潮品牌块：斜切 + 亮青顶线 */}
+          {/* 品牌区：渐变文字 + 波形线（无底色块） */}
           <div
-            className="ocean-abyss-block ocean-tide-enter"
-            style={{
-              position: 'relative',
-              maxWidth: 480,
-              padding: '36px 40px 44px',
-              clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 28px), calc(100% - 28px) 100%, 0 100%)',
-              boxShadow: '0 28px 64px rgba(7, 51, 78, 0.32)',
-            }}
+            className="ocean-tide-enter"
+            style={{ position: 'relative', maxWidth: 520 }}
           >
             <Text
               style={{
                 fontSize: 10,
                 letterSpacing: 3,
                 textTransform: 'uppercase',
-                color: 'var(--ocean-current-on-deep)',
+                color: 'var(--ocean-current-bright)',
                 fontFamily: 'var(--ocean-font-mono)',
+                fontWeight: 600,
               }}
             >
               Industrial Research Intelligence Platform
             </Text>
             <h1
+              className="ocean-flow-text"
               style={{
-                margin: '14px 0 0',
-                fontSize: 64,
+                margin: '16px 0 0',
+                fontSize: 88,
                 fontWeight: 800,
                 lineHeight: 0.98,
-                color: '#EAF6F9',
-                letterSpacing: 3,
+                letterSpacing: 4,
               }}
             >
               IRIP
@@ -142,22 +138,25 @@ export function LoginPage(): JSX.Element {
             <Text
               style={{
                 display: 'block',
-                marginTop: 16,
-                fontSize: 17,
-                color: 'rgba(234, 246, 249, 0.85)',
+                marginTop: 18,
+                fontSize: 19,
+                color: 'var(--ocean-text-secondary)',
                 lineHeight: 1.6,
+                letterSpacing: 1,
               }}
             >
               数据之海 · 工业研究智能平台
             </Text>
+            {/* 波形细线：品牌的流动标记 */}
+            <WaveLine width={220} height={10} style={{ marginTop: 22 }} />
             {/* 装饰坐标行 */}
             <Text
               style={{
                 display: 'block',
-                marginTop: 20,
+                marginTop: 16,
                 fontSize: 9,
                 letterSpacing: 2,
-                color: 'rgba(79, 224, 236, 0.55)',
+                color: 'var(--ocean-text-muted)',
                 fontFamily: 'var(--ocean-font-mono)',
               }}
             >
@@ -165,10 +164,10 @@ export function LoginPage(): JSX.Element {
             </Text>
           </div>
 
-          {/* 能力索引：编号 + 斜线 */}
+          {/* 能力索引：编号 + 圆头小横 */}
           <div
             className="ocean-tide-enter ocean-tide-enter--d2"
-            style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 44, position: 'relative' }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 48, position: 'relative' }}
           >
             {CAPABILITIES.map((item) => (
               <div key={item.idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -187,10 +186,10 @@ export function LoginPage(): JSX.Element {
                 <span
                   aria-hidden="true"
                   style={{
-                    width: 18,
-                    height: 1,
-                    background: 'var(--ocean-current-bright)',
-                    transform: 'skewX(-30deg)',
+                    width: 16,
+                    height: 2,
+                    borderRadius: 999,
+                    background: 'linear-gradient(90deg, #0E5B84, #17B8CE)',
                     flex: '0 0 auto',
                   }}
                 />
@@ -225,10 +224,9 @@ export function LoginPage(): JSX.Element {
               maxWidth: 400,
               background: 'var(--ocean-surface-strong)',
               border: '1px solid var(--ocean-border-subtle)',
-              borderRadius: 4,
-              clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%)',
-              boxShadow: '0 24px 64px rgba(29, 78, 103, 0.20)',
-              backdropFilter: 'blur(6px)',
+              borderRadius: 14,
+              boxShadow: '0 24px 64px rgba(29, 78, 103, 0.18)',
+              backdropFilter: 'blur(8px)',
             }}
           >
             <Title
@@ -236,7 +234,7 @@ export function LoginPage(): JSX.Element {
               style={{
                 textAlign: 'center',
                 marginBottom: 8,
-                color: 'var(--ocean-abyss-deep)',
+                color: '#0C4667',
                 fontWeight: 800,
                 letterSpacing: '0.08em',
               }}
@@ -283,11 +281,13 @@ export function LoginPage(): JSX.Element {
                   loading={loading}
                   block
                   style={{
-                    background: 'var(--ocean-abyss-gradient-x)',
+                    background: 'linear-gradient(115deg, #0E5B84 0%, #1296AC 60%, #17B8CE 100%)',
                     border: 'none',
+                    borderRadius: 10,
+                    height: 40,
                     fontWeight: 600,
                     letterSpacing: 4,
-                    clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)',
+                    boxShadow: '0 8px 20px rgba(14, 91, 132, 0.28)',
                   }}
                 >
                   登录

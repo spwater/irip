@@ -6,6 +6,7 @@ import { useAuthStore } from '@/features/auth/AuthProvider';
 import { JobDrawer, JobDrawerButton } from '@/features/jobs/JobDrawer';
 import { OceanBackdrop } from '@/shared/layout/OceanBackdrop';
 import { ContentFrame } from '@/shared/layout/ContentFrame';
+import { WaveLine } from '@/shared/ui/WaveLine';
 import { PageHeaderProvider, usePageHeader } from './PageHeaderContext';
 
 const { Sider, Header, Content } = Layout;
@@ -42,11 +43,11 @@ const HEADER_WATERMARK: Record<string, string> = {
 };
 
 /**
- * 主布局「潮线 Tideline」：
+ * 主布局「潮线 Tideline · 水光版」：
  * OceanBackdrop 包裹 → AppShell
- *   ├─ Sider（深潮品牌块 + 编号导航 + 斜切选中带）
+ *   ├─ Sider（渐变文字品牌区 + 波形线 + 编号导航 + 水光玻璃选中态）
  *   ├─ Layout
- *   │  ├─ Header（水印大字 + 深蓝标题 + 刻度线）
+ *   │  ├─ Header（水印大字 + 圆头渐变题注条 + 深青标题）
  *   │  └─ Content（ContentFrame → Outlet）
  *   └─ JobDrawer
  */
@@ -96,11 +97,11 @@ export function AppShell(): JSX.Element | null {
             theme="light"
             onCollapse={setSiderCollapsed}
             style={{
-              background: 'linear-gradient(to bottom, rgba(166, 211, 230, 0.55) 0px, rgba(234, 246, 249, 0.12) 180px, rgba(234, 246, 249, 0) 320px)',
+              background: 'linear-gradient(to bottom, rgba(166, 211, 230, 0.42) 0px, rgba(234, 246, 249, 0.10) 200px, rgba(234, 246, 249, 0) 340px)',
               backgroundRepeat: 'no-repeat',
               backgroundSize: '100% 100%',
               backgroundPosition: '0 0',
-              borderRight: '1px solid rgba(11, 74, 111, 0.10)',
+              borderRight: '1px solid rgba(11, 74, 111, 0.08)',
               position: 'fixed',
               left: 0,
               top: 0,
@@ -109,23 +110,21 @@ export function AppShell(): JSX.Element | null {
               zIndex: 200,
             }}
           >
-            {/* 品牌块：深潮渐变 + 斜切底边 + 亮青顶线 */}
+            {/* 品牌区：渐变文字 + 波形线（无底色块） */}
             <div
-              className="ocean-abyss-block ocean-tide-enter"
+              className="ocean-tide-enter"
               style={{
-                margin: '14px 12px 18px',
-                padding: '18px 18px 26px',
-                clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%)',
-                boxShadow: '0 14px 32px rgba(7, 51, 78, 0.30)',
+                margin: '8px 4px 20px',
+                padding: '16px 18px 0',
               }}
             >
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 <span
+                  className="ocean-flow-text"
                   style={{
-                    fontSize: 30,
+                    fontSize: 34,
                     fontWeight: 800,
-                    letterSpacing: 2,
-                    color: '#EAF6F9',
+                    letterSpacing: 2.5,
                     lineHeight: 1,
                   }}
                 >
@@ -136,7 +135,7 @@ export function AppShell(): JSX.Element | null {
                     fontSize: 9,
                     letterSpacing: 2,
                     textTransform: 'uppercase',
-                    color: 'var(--ocean-current-on-deep)',
+                    color: 'var(--ocean-current-bright)',
                     fontFamily: 'var(--ocean-font-mono)',
                     fontWeight: 600,
                     lineHeight: 1,
@@ -150,7 +149,7 @@ export function AppShell(): JSX.Element | null {
                   display: 'block',
                   marginTop: 8,
                   fontSize: 11,
-                  color: 'rgba(234, 246, 249, 0.82)',
+                  color: 'var(--ocean-text-secondary)',
                   fontWeight: 500,
                   lineHeight: 1,
                   letterSpacing: 3,
@@ -158,19 +157,8 @@ export function AppShell(): JSX.Element | null {
               >
                 工业研究智能平台
               </span>
-              {/* 装饰坐标行 */}
-              <span
-                style={{
-                  display: 'block',
-                  marginTop: 12,
-                  fontSize: 8,
-                  letterSpacing: 1.6,
-                  color: 'rgba(79, 224, 236, 0.55)',
-                  fontFamily: 'var(--ocean-font-mono)',
-                }}
-              >
-                31.23°N · TIDE-07 · ALPHA
-              </span>
+              {/* 波形细线：品牌区的流动标记 */}
+              <WaveLine width={150} height={8} style={{ marginTop: 12 }} />
             </div>
 
             <Menu
@@ -223,7 +211,7 @@ export function AppShell(): JSX.Element | null {
   );
 }
 
-/** 动态 Header：水印大字 + 深蓝标题 + 刻度线 + 右侧操作 */
+/** 动态 Header：水印大字 + 圆头渐变题注条 + 深青标题 + 右侧操作 */
 function DynamicHeader({
   user,
   onLogout,
@@ -290,25 +278,17 @@ function DynamicHeader({
           )}
           {header.title && (
             <div style={{ display: 'flex', alignItems: 'stretch', gap: 14 }}>
-              {/* 斜切题注条 */}
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 6,
-                  background: 'var(--ocean-abyss-gradient)',
-                  transform: 'skewX(-10deg)',
-                  boxShadow: '2px 0 0 rgba(23, 184, 206, 0.55)',
-                }}
-              />
+              {/* 圆头渐变题注条 */}
+              <span className="ocean-title-ribbon" aria-hidden="true" />
               <Title
                 level={2}
                 style={{
                   margin: 0,
-                  fontSize: isHero ? 44 : 44,
+                  fontSize: 44,
                   fontWeight: 800,
                   lineHeight: 1.12,
                   letterSpacing: '0.06em',
-                  color: 'var(--ocean-abyss-deep)',
+                  color: '#0C4667',
                 }}
               >
                 {header.title}
@@ -323,8 +303,8 @@ function DynamicHeader({
             <Avatar
               size="small"
               style={{
-                backgroundColor: 'var(--ocean-abyss-deep)',
-                color: '#4FE0EC',
+                background: 'linear-gradient(135deg, #0E5B84 0%, #17B8CE 100%)',
+                color: '#FFFFFF',
                 fontWeight: 700,
               }}
             >
@@ -340,7 +320,7 @@ function DynamicHeader({
         </Space>
       </div>
 
-      {/* 第二行：tabs（如果有）—— 斜切胶囊导航，左边距与内容区对齐（hero模式不显示） */}
+      {/* 第二行：tabs（如果有）—— 圆润玻璃胶囊，左边距与内容区对齐（hero模式不显示） */}
       {!isHero && (
         <div style={{ display: 'flex', gap: 10, marginTop: 12, marginBottom: -24, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)', position: 'relative', zIndex: 1 }}>
         {hasTabs &&
@@ -357,20 +337,25 @@ function DynamicHeader({
                   padding: '8px 22px',
                   fontSize: 14,
                   fontWeight: isActive ? 600 : 400,
-                  color: isActive ? '#EAF6F9' : 'var(--ocean-text-secondary)',
-                  background: isActive ? 'var(--ocean-abyss-gradient-x)' : 'transparent',
-                  border: isActive ? 'none' : '1px solid rgba(11, 74, 111, 0.16)',
-                  clipPath: 'polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%)',
-                  borderRadius: 0,
+                  color: isActive ? 'var(--ocean-abyss-deep)' : 'var(--ocean-text-secondary)',
+                  background: isActive
+                    ? 'linear-gradient(120deg, rgba(23, 184, 206, 0.16) 0%, rgba(23, 184, 206, 0.05) 60%, rgba(23, 184, 206, 0.02) 100%)'
+                    : 'transparent',
+                  border: isActive
+                    ? '1px solid rgba(23, 184, 206, 0.32)'
+                    : '1px solid transparent',
+                  borderRadius: 999,
                   cursor: 'pointer',
                   transition: 'all 200ms var(--ocean-motion-easing)',
                   lineHeight: 1.4,
                   whiteSpace: 'nowrap',
-                  boxShadow: isActive ? '0 6px 16px rgba(7, 51, 78, 0.24)' : 'none',
+                  boxShadow: isActive
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.6), 0 6px 16px rgba(14, 91, 132, 0.10)'
+                    : 'none',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(11, 74, 111, 0.06)';
+                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.07)';
                     e.currentTarget.style.color = 'var(--ocean-abyss-deep)';
                   }
                 }}
@@ -382,7 +367,7 @@ function DynamicHeader({
                 }}
                 onFocus={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(11, 74, 111, 0.06)';
+                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.07)';
                     e.currentTarget.style.color = 'var(--ocean-abyss-deep)';
                   }
                 }}
