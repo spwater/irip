@@ -1,0 +1,174 @@
+%% 数据库备份系统 — 类图
+%% IRIP 平台治理 — 数据库备份与恢复
+
+classDiagram
+    class BackupType {
+        <<enumeration>>
+        DAILY
+        MILESTONE
+        PRE_RESTORE
+    }
+
+    class BackupStatus {
+        <<enumeration>>
+        PENDING
+        SUCCEEDED
+        FAILED
+    }
+
+    class BackupRecord {
+        +UUID id
+        +str type
+        +str|None name
+        +str status
+        +str backup_dir
+        +str|None database_sha256
+        +int object_count
+        +str|None migration_version
+        +str|None application_version
+        +int|None size_bytes
+        +UUID|None created_by
+        +datetime created_at
+        +datetime|None completed_at
+        +datetime|None expires_at
+        +str|None error_message
+        +UUID|None job_id
+    }
+
+    class BackupRecordService {
+        -async_sessionmaker _factory
+        +create(type, name, job_id, created_by, expires_at) BackupRecord
+        +list(type, status, cursor, limit) tuple
+        +get(record_id) BackupRecord
+        +mark_succeeded(record_id, manifest, backup_dir, size_bytes) BackupRecord
+        +mark_failed(record_id, error_message) BackupRecord
+        +delete(record_id) None
+        +cleanup_expired() int
+    }
+
+    class BackupService {
+        -BackupConfig _config
+        -S3Repository _s3
+        +backup(output_dir) BackupManifest
+        -_dump_database(path) None
+        -_export_minio_objects(dir) int
+        -_query_migration_version() str
+        -_create_tar(src, dest) None
+        -_encrypt_tar(src, dest, recipient) None
+    }
+
+    class RestoreService {
+        -RestoreConfig _config
+        -BackupManifestValidator _validator
+        -S3Repository _s3
+        +restore() BackupManifest
+        -_extract_archive(backup_dir) None
+        -_prevalidate_objects(objects_dir) None
+        -_restore_database(dump_path) None
+        -_restore_minio_objects(objects_dir) None
+        -_apply_forward_migrations(version) None
+        -_run_smoke_queries() dict
+    }
+
+    class BackupManifest {
+        +int format_version
+        +datetime created_at
+        +str application_version
+        +str migration_version
+        +str database_sha256
+        +int object_count
+        +str objects_sha256
+        +bool encrypted
+        +str backup_id
+        +dict extra
+        +to_dict() dict
+        +to_json() str
+        +from_dict(data) BackupManifest
+        +from_json(json_str) BackupManifest
+    }
+
+    class BackupConfig {
+        +str db_url
+        +str minio_endpoint
+        +str minio_access_key
+        +str minio_secret_key
+        +str minio_bucket
+        +str minio_region
+        +str application_version
+        +Path output_dir
+        +str|None age_recipient
+    }
+
+    class RestoreConfig {
+        +Path backup_dir
+        +str db_url
+        +str minio_endpoint
+        +str minio_access_key
+        +str minio_secret_key
+        +str minio_bucket
+        +str minio_region
+        +str|None compose_project_name
+        +str|None age_identity
+        +bool skip_migrations
+    }
+
+    class BackupManifestValidator {
+        +validate(manifest, backup_dir) bool
+        +verify_checksum(component, path, expected) bool
+    }
+
+    class Job {
+        +UUID id
+        +UUID organization_id
+        +str kind
+        +str status
+        +dict payload
+        +str idempotency_key
+        +int attempt
+        +int max_attempts
+        +datetime created_at
+        +datetime updated_at
+        +int lock_version
+    }
+
+    class JobExecutor {
+        -WorkerLeaseManager _lease_manager
+        -async_sessionmaker _factory
+        -dict _handlers
+        +register_handler(kind, handler) None
+        +execute(job_id, owner) JobResult
+        -_heartbeat_loop(job_id, owner, token) None
+        -_commit_success(job_id, lock_version, result) bool
+        -_commit_failure(job_id, lock_version, error, attempt, max) None
+        -_commit_retry(job_id, lock_version, error, attempt, max) None
+    }
+
+    class JobKindPolicy {
+        +dict POLICIES
+        +validate(kind, permissions, via_general) KindPolicy
+        +is_general_submit_allowed(kind) bool
+        +get_policy(kind) KindPolicy|None
+        +registered_kinds() list
+    }
+
+    class KindPolicy {
+        +str required_permission
+        +str queue
+        +int timeout_seconds
+        +int max_retries
+        +bool allow_general_submit
+    }
+
+    BackupRecord --> BackupType : type
+    BackupRecord --> BackupStatus : status
+    BackupRecordService --> BackupRecord : manages
+    BackupService --> BackupManifest : produces
+    RestoreService --> BackupManifest : validates
+    RestoreService --> BackupManifestValidator : uses
+    BackupService --> BackupConfig : configured by
+    RestoreService --> RestoreConfig : configured by
+    JobExecutor --> Job : executes
+    JobKindPolicy --> KindPolicy : contains
+    JobKindPolicy ..> Job : validates kind
+    BackupRecord --> Job : job_id FK
+    BackupRecord --> AppUser : created_by FK

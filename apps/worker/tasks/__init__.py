@@ -24,10 +24,27 @@ import os
 from pathlib import Path
 from uuid import UUID
 
-from packages.common.database import build_session_factory
+from packages.common.database import build_session_factory, session_scope
 from packages.common.errors import AppError
 from packages.common.job_policy import JobKindPolicy
 from packages.jobs.worker import JobExecutor, WorkerLeaseManager
+
+
+def _async_db_url() -> str:
+    """构建异步数据库 URL（psycopg_async 驱动）。
+
+    从 IRIP_DATABASE_URL 环境变量读取，将同步驱动前缀转为异步驱动前缀。
+
+    Returns:
+        str: 异步数据库连接字符串。
+    """
+    db_url = os.getenv(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    )
+    if db_url.startswith("postgresql+psycopg://"):
+        return db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+    return db_url
 
 
 async def _execute_job_async(job_id: str) -> str:
@@ -42,14 +59,7 @@ async def _execute_job_async(job_id: str) -> str:
     Returns:
         str: 作业 UUID。
     """
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
-    )
-    if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
-    else:
-        async_url = db_url
+    async_url = _async_db_url()
 
     factory = build_session_factory(async_url)
     lease_manager = WorkerLeaseManager(factory)
@@ -178,7 +188,11 @@ def _validate_job_kind(job: object) -> None:
 async def _backup_handler(job: object) -> dict:
     """备份作业 handler。
 
-    执行 PostgreSQL + MinIO 全量备份，生成完整性 manifest。
+    执行 PostgreSQL + MinIO 全量备份，生成完整性 manifest，并更新 backup_record 状态。
+
+    从 payload 读取 type/backup_record_id，执行 run_backup() 后：
+    - 成功：调用 BackupRecordService.mark_succeeded() 记录 manifest 信息；
+    - 失败：调用 BackupRecordService.mark_failed() 记录错误原因。
 
     C-02/H-09: org_id 从服务端 job 属性获取，不从 payload 取。
 
@@ -189,17 +203,54 @@ async def _backup_handler(job: object) -> dict:
         dict: 备份结果（含 backup_id、manifest 路径）。
     """
     _validate_job_kind(job)
+    from uuid import UUID
+
     from deployments.compose.backup import run_backup
+    from packages.backups.service import BackupRecordService
 
     # H-09: org_id 从 job 取，不从 payload 取（服务端生成，不可被客户端覆盖）
     org_id = getattr(job, "organization_id", None)
+    payload: dict = getattr(job, "payload", None) or {}
+    backup_record_id_str: str = payload.get("backup_record_id", "")
+    backup_type: str = payload.get("type", "daily")
 
-    manifest = await run_backup()
+    factory = build_session_factory(_async_db_url())
+    service: BackupRecordService = BackupRecordService(factory)
+
+    try:
+        manifest = await run_backup()
+    except Exception as exc:
+        # 备份失败：更新 backup_record 状态
+        if backup_record_id_str:
+            try:
+                await service.mark_failed(UUID(backup_record_id_str), str(exc))
+            except Exception:
+                pass
+        raise
+
+    # 备份成功：更新 backup_record 状态与元数据
+    if backup_record_id_str:
+        try:
+            await service.mark_succeeded(
+                UUID(backup_record_id_str),
+                sha256=manifest.database_sha256,
+                migration_version=manifest.migration_version,
+                application_version=manifest.application_version,
+            )
+        except Exception as exc:
+            # 记录更新失败不影响作业成功状态，但记录日志
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Failed to update backup_record %s: %s", backup_record_id_str, exc
+            )
+
     return {
         "backup_id": manifest.backup_id,
         "database_sha256": manifest.database_sha256,
         "object_count": manifest.object_count,
         "organization_id": str(org_id) if org_id else None,
+        "backup_type": backup_type,
     }
 
 
@@ -209,6 +260,12 @@ async def _restore_handler(job: object) -> dict:
     C-02: 使用签名 backup_id 而非 backup_dir 路径。
     通过 backup_id 在备份输出目录中查找对应的 manifest，
     不信任客户端提供的任意路径。
+
+    增强逻辑（docs/arch-db-backup.md §4.3）：
+    - Step 1: 创建 pre_restore 备份（先备份当前状态，使回滚可撤销）；
+    - Step 2: 通过 backup_id 解析备份目录，执行 pg_restore。
+
+    pre_restore 逻辑内联在 handler 中（不创建额外 Job，避免多 Job 链式依赖）。
 
     Args:
         job: 作业 ORM 实例。
@@ -221,8 +278,18 @@ async def _restore_handler(job: object) -> dict:
         AppError: code="not_found"，当 backup_id 对应的备份不存在时。
     """
     _validate_job_kind(job)
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    from packages.backups.entities import BackupRecord, BackupStatus, BackupType
+    from packages.backups.service import BackupRecordService
+    from packages.common.ids import new_id
+
     payload: dict = getattr(job, "payload", None) or {}
     backup_id: str = payload.get("backup_id", "")
+    pre_restore_created: bool = payload.get("pre_restore_created", False)
+    org_id = getattr(job, "organization_id", None)
+
     if not backup_id:
         raise AppError(
             code="validation_failed",
@@ -231,6 +298,62 @@ async def _restore_handler(job: object) -> dict:
             fields={"field": "backup_id"},
         )
 
+    factory = build_session_factory(_async_db_url())
+    service: BackupRecordService = BackupRecordService(factory)
+
+    # ---- Step 1: 创建 pre_restore 备份（仅执行一次）----
+    if not pre_restore_created:
+        from deployments.compose.backup import run_backup
+
+        pre_restore_id: UUID = new_id()
+        now: datetime = datetime.now(UTC)
+        backup_output_dir: str = os.getenv("IRIP_BACKUP_OUTPUT_DIR", "/backups")
+        from pathlib import Path
+
+        pre_restore_dir: str = str(Path(backup_output_dir) / str(pre_restore_id))
+
+        # 创建 pre_restore 备份记录
+        try:
+            record = BackupRecord(
+                id=pre_restore_id,
+                job_id=getattr(job, "id", None),
+                backup_type=BackupType.PRE_RESTORE.value,
+                name=f"pre_restore_{backup_id}",
+                description=None,
+                backup_date=None,
+                file_path=pre_restore_dir,
+                status=BackupStatus.PENDING.value,
+                created_by=None,
+                created_at=now,
+                expires_at=now + timedelta(days=7),
+                organization_id=org_id if org_id is not None else new_id(),
+            )
+            async with session_scope(factory) as session:
+                session.add(record)
+                await session.flush()
+
+            # 执行备份
+            pre_manifest = await run_backup()
+            await service.mark_succeeded(
+                pre_restore_id,
+                sha256=pre_manifest.database_sha256,
+                migration_version=pre_manifest.migration_version,
+                application_version=pre_manifest.application_version,
+            )
+        except Exception as exc:
+            # pre_restore 失败仍保留记录（供诊断），标记失败
+            try:
+                await service.mark_failed(pre_restore_id, str(exc))
+            except Exception:
+                pass
+            # 不中断恢复流程——pre_restore 是安全网，失败不应阻止用户恢复
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "pre_restore backup failed (continuing with restore): %s", exc
+            )
+
+    # ---- Step 2: 执行恢复 ----
     # C-02: 通过 backup_id 解析备份目录，不信任客户端路径
     backup_dir = _resolve_backup_dir_by_id(backup_id)
 
@@ -240,6 +363,7 @@ async def _restore_handler(job: object) -> dict:
     return {
         "backup_id": manifest.backup_id,
         "restored": True,
+        "pre_restore_created": pre_restore_created or True,
     }
 
 

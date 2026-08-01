@@ -185,16 +185,22 @@ class BackupService:
         加密后原子移动唯一加密制品到最终目录，
         try/finally 确保清理临时明文（成功和失败路径）。
 
+        每个备份在 output_dir 下创建独立的 {backup_id}/ 子目录，
+        避免多次备份互相覆盖（docs/arch-db-backup.md §1.3）。
+
         Args:
             output_dir: 输出目录（默认使用配置中的 output_dir）。
 
         Returns:
             BackupManifest: 备份清单。
         """
-        target_dir: Path = output_dir or self._config.output_dir
-        target_dir.mkdir(parents=True, exist_ok=True)
+        target_base: Path = output_dir or self._config.output_dir
+        target_base.mkdir(parents=True, exist_ok=True)
 
         backup_id: str = str(new_id())
+        # 每个备份创建独立子目录，避免覆盖
+        target_dir: Path = target_base / backup_id
+        target_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Backup %s: starting (output=%s)", backup_id, target_dir)
 
         # C-04: 1. 创建 0700 临时目录
@@ -246,12 +252,12 @@ class BackupService:
                 final_path = encrypted_path
                 logger.info("Backup %s: encrypted with age -> %s", backup_id, final_path)
 
-            # C-04: 8. 原子移动唯一加密制品到最终目录
+            # C-04: 8. 原子移动唯一加密制品到子目录
             final_dest: Path = target_dir / final_path.name
             shutil.move(str(final_path), str(final_dest))
             logger.info("Backup %s: moved encrypted artifact to %s", backup_id, final_dest)
 
-            # C-04: 9. 写入最小公开元数据到最终目录
+            # C-04: 9. 写入最小公开元数据到子目录
             save_manifest(manifest, target_dir)
 
             logger.info(

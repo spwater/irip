@@ -206,6 +206,7 @@ def compute_manifest(
     migration_version: str,
     backup_id: str = "",
     encrypted: bool = False,
+    extra: dict[str, Any] | None = None,
 ) -> BackupManifest:
     """计算 PostgreSQL dump SHA-256 + MinIO 对象 SHA-256，生成 BackupManifest。
 
@@ -216,6 +217,7 @@ def compute_manifest(
         migration_version: Alembic 迁移版本（alembic_version head revision）。
         backup_id: 备份唯一标识（UUID 字符串）。
         encrypted: 备份包是否已加密。
+        extra: 可选扩展字段（如 backup_type、name、description），向后兼容。
 
     Returns:
         BackupManifest: 包含全部校验和的备份清单。
@@ -235,6 +237,7 @@ def compute_manifest(
         objects_sha256=objects_sha,
         encrypted=encrypted,
         backup_id=backup_id,
+        extra=extra if extra is not None else {},
     )
 
 

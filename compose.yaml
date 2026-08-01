@@ -129,6 +129,10 @@ services:
       IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
+      IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
+      IRIP_BACKUP_AGE_RECIPIENT: ${IRIP_BACKUP_AGE_RECIPIENT:-}
+    volumes:
+      - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -157,6 +161,9 @@ services:
       IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
+      IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
+    volumes:
+      - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
     depends_on:
       postgres:
         condition: service_healthy
@@ -264,3 +271,4 @@ volumes:
   pgrun:
   miniodata:
   redisdata:
+  backups:

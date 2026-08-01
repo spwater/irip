@@ -4,6 +4,7 @@ import { UsersPage } from '@/features/governance/UsersPage';
 import { AuditPage } from '@/features/governance/AuditPage';
 import { SystemHealthPage } from '@/features/governance/SystemHealthPage';
 import { AIConfigPage } from '@/features/governance/AIConfigPage';
+import { DatabaseBackupPage } from '@/features/governance/DatabaseBackupPage';
 import { JobsPage } from '@/features/jobs/JobsPage';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { useAuthStore } from '@/features/auth/AuthProvider';
@@ -34,6 +35,7 @@ export function GovernanceConsole(): JSX.Element {
     if (isAdmin) {
       items.push({ key: 'audit', label: '审计事件' });
       items.push({ key: 'jobs', label: '作业中心' });
+      items.push({ key: 'db-backup', label: '数据库备份' });
     }
     return items;
   }, [isAdmin, isLabDirector]);
@@ -66,6 +68,7 @@ export function GovernanceConsole(): JSX.Element {
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'audit' && isAdmin && <AuditPage />}
       {activeTab === 'jobs' && isAdmin && <JobsPage />}
+      {activeTab === 'db-backup' && isAdmin && <DatabaseBackupPage />}
     </div>
   );
 }

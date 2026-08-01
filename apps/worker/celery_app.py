@@ -18,6 +18,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from celery import Celery
+from celery.schedules import crontab
 
 #: Redis URL（从环境变量读取，默认本地测试 Redis）。
 REDIS_URL: str = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
@@ -73,6 +74,16 @@ celery_app.conf.update(
         "retry-wait-jobs": {
             "task": "worker.retry_wait_jobs",
             "schedule": 15.0,
+        },
+        # 每日数据库备份：每日 02:00 UTC 触发 pg_dump 快照
+        "daily-backup": {
+            "task": "backup.daily",
+            "schedule": crontab(hour=2, minute=0),
+        },
+        # 备份保留策略清理：每日 03:00 UTC 清理过期 daily/pre_restore 备份
+        "backup-retention-cleanup": {
+            "task": "backup.retention_cleanup",
+            "schedule": crontab(hour=3, minute=0),
         },
     },
 )
@@ -239,6 +250,139 @@ def retry_wait_jobs() -> int:
         return count
 
     return asyncio.run(_retry())
+
+
+# ---- 数据库备份调度任务 ----
+
+
+@celery_app.task(name="backup.daily")
+def daily_backup() -> str:
+    """Celery Beat 调度任务：每日数据库自动备份。
+
+    每日 02:00 UTC 触发，创建 Job(kind=backup, payload={type:daily}) + outbox 事件 +
+    backup_record 记录（expires_at = now + 14 days）。Worker 随后执行 pg_dump 快照。
+
+    Returns:
+        str: 创建的作业 UUID（失败时返回错误信息）。
+    """
+    import asyncio
+    import os
+    from datetime import UTC, datetime, timedelta
+    from uuid import UUID
+
+    import sqlalchemy as sa
+
+    from packages.backups.entities import BackupRecord, BackupStatus, BackupType
+    from packages.common.database import build_session_factory, session_scope
+    from packages.common.ids import new_id
+    from packages.jobs.entities import Job, JobStatus
+    from packages.jobs.outbox import OutboxDispatcher
+
+    db_url = os.getenv(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    )
+    if db_url.startswith("postgresql+psycopg://"):
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+    else:
+        async_url = db_url
+
+    factory = build_session_factory(async_url)
+
+    # 系统自动备份使用默认组织 ID（从环境变量读取）
+    org_id_str: str = os.getenv("IRIP_SYSTEM_ORG_ID", "")
+    try:
+        org_id: UUID = UUID(org_id_str) if org_id_str else new_id()
+    except ValueError:
+        org_id = new_id()
+
+    backup_output_dir: str = os.getenv("IRIP_BACKUP_OUTPUT_DIR", "/backups")
+    from pathlib import Path
+
+    async def _create_daily_backup() -> str:
+        job_id: UUID = new_id()
+        now: datetime = datetime.now(UTC)
+        backup_dir: str = str(Path(backup_output_dir) / str(job_id))
+
+        async with session_scope(factory) as session:
+            job = Job(
+                id=job_id,
+                organization_id=org_id,
+                kind="backup",
+                status=JobStatus.ACCEPTED.value,
+                payload={
+                    "type": BackupType.DAILY.value,
+                    "backup_record_id": str(job_id),
+                    "triggered_by": "system",
+                },
+                idempotency_key=f"backup:{job_id}",
+                attempt=0,
+                max_attempts=1,
+                created_at=now,
+                updated_at=now,
+            )
+            session.add(job)
+
+            record = BackupRecord(
+                id=job_id,
+                job_id=job_id,
+                backup_type=BackupType.DAILY.value,
+                name=None,
+                description=None,
+                backup_date=now.date(),
+                file_path=backup_dir,
+                status=BackupStatus.PENDING.value,
+                created_by=None,
+                created_at=now,
+                expires_at=now + timedelta(days=14),
+                organization_id=org_id,
+            )
+            session.add(record)
+            await session.flush()
+
+            await OutboxDispatcher.enqueue(
+                session,
+                aggregate_type="job",
+                aggregate_id=job_id,
+                event_type="job.accepted",
+                payload={"job_id": str(job_id), "kind": "backup"},
+            )
+        return str(job_id)
+
+    return asyncio.run(_create_daily_backup())
+
+
+@celery_app.task(name="backup.retention_cleanup")
+def retention_cleanup() -> int:
+    """Celery Beat 调度任务：清理过期备份。
+
+    每日 03:00 UTC 触发，查询 expires_at < now() 的备份记录，
+    删除文件系统目录和数据库记录。仅清理 daily 和 pre_restore（milestone 永久保留）。
+
+    Returns:
+        int: 实际清理的记录数量。
+    """
+    import asyncio
+    import os
+
+    from packages.backups.service import BackupRecordService
+
+    db_url = os.getenv(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    )
+    if db_url.startswith("postgresql+psycopg://"):
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+    else:
+        async_url = db_url
+
+    factory = build_session_factory(async_url)
+    service: BackupRecordService = BackupRecordService(factory)
+
+    async def _cleanup() -> int:
+        return await service.delete_expired()
+
+    return asyncio.run(_cleanup())
 
 
 # ---- F-19: Worker 健康检查 HTTP 端点 ----

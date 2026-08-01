@@ -1,0 +1,132 @@
+%% 数据库备份系统 — 时序图
+%% IRIP 平台治理 — 数据库备份与恢复
+
+%% 4.1 每日自动备份流程
+sequenceDiagram
+    participant CB as Celery Beat
+    participant DB as Database
+    participant BR as BackupRecordService
+    participant OD as Outbox Dispatcher
+    participant W as Worker
+    participant BS as BackupService
+    participant PG as PostgreSQL
+    participant M as MinIO
+    participant FS as Filesystem
+
+    CB->>DB: 创建 Job(kind=backup, payload={type:daily})
+    CB->>BR: create(type=daily, job_id, expires_at=now+14d)
+    CB->>DB: 创建 outbox_event(job.accepted)
+    Note over CB,DB: 同一事务提交
+
+    OD->>W: dispatch → celery.send_task(jobs.execute)
+    W->>DB: 获取租约 + 读取 Job
+    W->>BR: mark_running(backup_record_id)
+
+    W->>BS: run_backup(output_dir=/backups/{backup_id}/)
+    BS->>PG: pg_dump --format=custom
+    BS->>M: 导出 MinIO 全部对象
+    BS->>BS: 计算 SHA-256 + 生成 manifest
+    BS->>FS: 写入 {backup_id}/manifest.json + backup.tar.age
+    BS-->>W: 返回 BackupManifest
+
+    W->>BR: mark_succeeded(record_id, manifest, backup_dir, size)
+    W->>DB: 更新 Job status=succeeded
+    W->>W: 释放租约
+
+%% 4.2 里程碑手动备份流程
+sequenceDiagram
+    participant U as 用户
+    participant API as API Router
+    participant DB as Database
+    participant BR as BackupRecordService
+    participant OD as Outbox Dispatcher
+    participant W as Worker
+    participant BS as BackupService
+
+    U->>API: POST /api/v1/backups {type:milestone, name:"v1.0发布"}
+    API->>API: 验证 system:manage 权限
+    API->>API: 验证 type=milestone 时 name 必填
+    API->>BR: create(type=milestone, name, job_id, expires_at=NULL)
+    API->>DB: 创建 Job(kind=backup, payload={type, name, backup_record_id})
+    API->>DB: 创建 outbox_event
+    API-->>U: 202 {job_id, backup_record_id}
+
+    OD->>W: dispatch → execute
+    W->>BS: run_backup()
+    BS-->>W: BackupManifest
+    W->>BR: mark_succeeded(record_id, manifest)
+    W->>DB: Job status=succeeded
+
+%% 4.3 回滚恢复流程（含 pre_restore 自动备份）
+sequenceDiagram
+    participant U as 用户
+    participant API as API Router
+    participant DB as Database
+    participant BR as BackupRecordService
+    participant OD as Outbox Dispatcher
+    participant W as Worker
+    participant BS as BackupService
+    participant RS as RestoreService
+    participant PG as PostgreSQL
+
+    U->>API: POST /api/v1/backups/{id}/restore
+    API->>BR: get(id) → 验证 status=succeeded
+    API->>DB: 创建 Job(kind=restore, payload={backup_id, skip_migrations})
+    API->>DB: 创建 outbox_event
+    API-->>U: 202 {job_id}
+
+    OD->>W: dispatch → execute
+    Note over W: Step 1: 创建 pre_restore 备份
+    W->>BR: create(type=pre_restore, name="pre_restore_{id}", expires_at=now+7d)
+    W->>BS: run_backup(output_dir=/backups/{pre_restore_id}/)
+    BS-->>W: BackupManifest
+    W->>BR: mark_succeeded(pre_restore_record_id, manifest)
+
+    Note over W: Step 2: 执行恢复
+    W->>BS: _resolve_backup_dir_by_id(backup_id)
+    W->>RS: run_restore(backup_dir)
+    RS->>RS: 校验 manifest 完整性 (SHA-256)
+    RS->>PG: pg_restore --clean --if-exists
+    RS->>RS: 恢复 MinIO 对象
+    RS->>RS: 前向兼容迁移 (alembic upgrade head)
+    RS->>RS: 冒烟查询验证
+    RS-->>W: BackupManifest
+
+    W->>DB: 更新 Job status=succeeded
+
+%% 4.4 保留策略清理流程
+sequenceDiagram
+    participant CB as Celery Beat
+    participant RC as retention_cleanup task
+    participant BR as BackupRecordService
+    participant FS as Filesystem
+
+    CB->>RC: 每日 03:00 UTC 触发
+    RC->>BR: cleanup_expired()
+    BR->>BR: SELECT * FROM backup_record WHERE expires_at < now() AND status='succeeded'
+    loop 每条过期记录
+        BR->>FS: shutil.rmtree(backup_dir)
+        BR->>BR: DELETE FROM backup_record WHERE id = ?
+    end
+    BR-->>RC: 返回清理数量
+    RC->>RC: 记录日志: "Cleaned up N expired backups"
+
+%% 4.5 删除备份流程
+sequenceDiagram
+    participant U as 用户
+    participant API as API Router
+    participant BR as BackupRecordService
+    participant FS as Filesystem
+
+    U->>API: DELETE /api/v1/backups/{id}
+    API->>API: 验证 system:manage 权限
+    API->>BR: get(id)
+    alt type == daily AND expires_at > now()
+        API->>API: 拒绝: 运行中的每日备份不可手动删除
+    else type == pre_restore
+        API->>API: 拒绝: pre_restore 备份不可手动删除
+    else
+        API->>FS: shutil.rmtree(backup_dir)
+        API->>BR: delete(id)
+        API-->>U: 204
+    end
