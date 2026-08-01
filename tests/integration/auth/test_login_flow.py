@@ -129,21 +129,28 @@ def test_logout_invalidates_session(api_client, seeded_user) -> None:
     assert refresh.json()["error"]["code"] == "invalid_credentials"
 
 
-def test_me_with_access_token(api_client, seeded_user) -> None:
+def test_me_with_access_token(api_client, sync_engine) -> None:
     """有效 access token 访问 /me：返回当前用户信息。"""
-    login = api_client.post(
-        "/api/v1/auth/login",
-        json={"email": seeded_user.email, "password": "Correct-Horse-2026!"},
-    )
-    access_token = login.json()["access_token"]
+    from tests.integration.conftest import SeededUser, _insert_user, _cleanup_user
 
-    me = api_client.get("/api/v1/me", headers={"Authorization": f"Bearer {access_token}"})
-    assert me.status_code == 200
-    assert me.json()["email"] == seeded_user.email
-    assert me.json()["id"] == str(seeded_user.id)
-    assert me.json()["display_name"] == seeded_user.display_name
-    assert me.json()["roles"] == []
-    assert "permissions" in me.json()
+    user_id = _insert_user(sync_engine, "me-test@irip.local", "Me Test User", "Correct-Horse-2026!", "active")
+    seeded = SeededUser(user_id=user_id, email="me-test@irip.local", password="Correct-Horse-2026!", display_name="Me Test User")
+    try:
+        login = api_client.post(
+            "/api/v1/auth/login",
+            json={"email": seeded.email, "password": "Correct-Horse-2026!"},
+        )
+        access_token = login.json()["access_token"]
+
+        me = api_client.get("/api/v1/me", headers={"Authorization": f"Bearer {access_token}"})
+        assert me.status_code == 200
+        assert me.json()["email"] == seeded.email
+        assert me.json()["id"] == str(seeded.id)
+        assert me.json()["display_name"] == seeded.display_name
+        assert me.json()["roles"] == []
+        assert "permissions" in me.json()
+    finally:
+        _cleanup_user(sync_engine, user_id)
 
 
 def test_me_without_token(api_client) -> None:
