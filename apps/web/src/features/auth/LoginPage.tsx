@@ -4,7 +4,6 @@ import { MailOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { useAuthStore } from './AuthProvider';
 import { OceanBackdrop } from '@/shared/layout/OceanBackdrop';
-import { GradLine } from '@/shared/ui/GradLine';
 
 const { Title, Text } = Typography;
 
@@ -147,8 +146,6 @@ export function LoginPage(): JSX.Element {
             >
               数据之海 · 工业研究智能平台
             </Text>
-            {/* 渐变直线：品牌的流动标记（左深右浅） */}
-            <GradLine width={240} thickness={2} style={{ marginTop: 22 }} />
             {/* 装饰坐标行 */}
             <Text
               style={{

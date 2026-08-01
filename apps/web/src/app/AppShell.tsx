@@ -245,8 +245,6 @@ function SiderClock(): JSX.Element {
       >
         {dayjs(now).format('YYYY-MM-DD')} 星期{WEEKDAYS_CN[now.getDay()]}
       </span>
-      {/* 渐变分隔线 */}
-      <GradLine width="100%" thickness={1} opacity={0.5} style={{ margin: '8px 0 6px' }} />
       {/* 版本行 */}
       <span
         style={{
