@@ -12,13 +12,21 @@ interface LoginFormValues {
   password: string;
 }
 
+/** 平台能力索引（登录页左侧品牌区） */
+const CAPABILITIES: ReadonlyArray<{ idx: string; label: string }> = [
+  { idx: '01', label: '实验数据采集与事实管理' },
+  { idx: '02', label: '流程编排与自动执行' },
+  { idx: '03', label: '模型版本与预测工作台' },
+  { idx: '04', label: 'AI 助手与数据溯源' },
+];
+
 /**
- * 登录页面 — 入口页原型（设计文档第 10.1 节）
+ * 登录页面「潮线 Tideline」
  *
- * - 桌面约 55:45 双区布局：左侧数据关系品牌，右侧登录 surface
+ * - 左侧：超大水印 DATA OCEAN + 深潮斜切品牌块 + 编号能力索引
+ * - 右侧：玻璃登录卡（顶部亮青线 + 右下角斜切）
  * - 表单字段、校验、loading、错误 message、认证成功重定向保持不变
  * - 小于 900px 改单列，隐藏左侧视觉区
- * - 不预填演示账号
  */
 export function LoginPage(): JSX.Element {
   const login = useAuthStore((s) => s.login);
@@ -48,7 +56,7 @@ export function LoginPage(): JSX.Element {
 
   return (
     <>
-      {/* 全局极地雾蓝背景 */}
+      {/* 全局潮汐背景 */}
       <OceanBackdrop />
 
       <div
@@ -58,9 +66,10 @@ export function LoginPage(): JSX.Element {
           minHeight: '100vh',
           display: 'flex',
           alignItems: 'stretch',
+          overflow: 'hidden',
         }}
       >
-        {/* 左侧：数据关系品牌区（55%，< 900px 隐藏） */}
+        {/* 左侧：品牌视觉区（55%，< 900px 隐藏） */}
         <div
           style={{
             flex: '55',
@@ -72,14 +81,47 @@ export function LoginPage(): JSX.Element {
           }}
           className="ocean-login-brand"
         >
-          {/* 品牌标识 */}
-          <div style={{ marginBottom: 48 }}>
+          {/* 超大水印：DATA OCEAN */}
+          <span
+            className="ocean-watermark ocean-watermark--solid"
+            aria-hidden="true"
+            style={{
+              left: -24,
+              top: '8%',
+              fontSize: 'clamp(120px, 12.5vw, 240px)',
+            }}
+          >
+            Data
+          </span>
+          <span
+            className="ocean-watermark"
+            aria-hidden="true"
+            style={{
+              left: 40,
+              top: 'calc(8% + clamp(110px, 11vw, 220px))',
+              fontSize: 'clamp(120px, 12.5vw, 240px)',
+            }}
+          >
+            Ocean
+          </span>
+
+          {/* 深潮品牌块：斜切 + 亮青顶线 */}
+          <div
+            className="ocean-abyss-block ocean-tide-enter"
+            style={{
+              position: 'relative',
+              maxWidth: 480,
+              padding: '36px 40px 44px',
+              clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 28px), calc(100% - 28px) 100%, 0 100%)',
+              boxShadow: '0 28px 64px rgba(7, 51, 78, 0.32)',
+            }}
+          >
             <Text
               style={{
-                fontSize: 11,
+                fontSize: 10,
                 letterSpacing: 3,
                 textTransform: 'uppercase',
-                color: 'var(--ocean-text-muted)',
+                color: 'var(--ocean-current-on-deep)',
                 fontFamily: 'var(--ocean-font-mono)',
               }}
             >
@@ -87,12 +129,12 @@ export function LoginPage(): JSX.Element {
             </Text>
             <h1
               style={{
-                margin: '8px 0 0',
-                fontSize: 48,
-                fontWeight: 650,
-                lineHeight: 1.1,
-                color: 'var(--ocean-text-primary)',
-                letterSpacing: 1,
+                margin: '14px 0 0',
+                fontSize: 64,
+                fontWeight: 800,
+                lineHeight: 0.98,
+                color: '#EAF6F9',
+                letterSpacing: 3,
               }}
             >
               IRIP
@@ -100,37 +142,58 @@ export function LoginPage(): JSX.Element {
             <Text
               style={{
                 display: 'block',
-                marginTop: 12,
-                fontSize: 18,
-                color: 'var(--ocean-text-secondary)',
+                marginTop: 16,
+                fontSize: 17,
+                color: 'rgba(234, 246, 249, 0.85)',
                 lineHeight: 1.6,
-                maxWidth: 420,
               }}
             >
               数据之海 · 工业研究智能平台
             </Text>
+            {/* 装饰坐标行 */}
+            <Text
+              style={{
+                display: 'block',
+                marginTop: 20,
+                fontSize: 9,
+                letterSpacing: 2,
+                color: 'rgba(79, 224, 236, 0.55)',
+                fontFamily: 'var(--ocean-font-mono)',
+              }}
+            >
+              31.23°N 121.47°E · TIDE-07 · RESEARCH STATION
+            </Text>
           </div>
 
-          {/* 能力索引 */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
-              { idx: '01', label: '实验数据采集与事实管理' },
-              { idx: '02', label: '流程编排与自动执行' },
-              { idx: '03', label: '模型版本与预测工作台' },
-              { idx: '04', label: 'AI 助手与数据溯源' },
-            ].map((item) => (
-              <div key={item.idx} style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+          {/* 能力索引：编号 + 斜线 */}
+          <div
+            className="ocean-tide-enter ocean-tide-enter--d2"
+            style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 44, position: 'relative' }}
+          >
+            {CAPABILITIES.map((item) => (
+              <div key={item.idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span
                   style={{
                     fontSize: 11,
                     letterSpacing: 2,
-                    color: 'var(--ocean-action-primary)',
+                    color: 'var(--ocean-abyss-deep)',
                     fontFamily: 'var(--ocean-font-mono)',
+                    fontWeight: 700,
                     flex: '0 0 auto',
                   }}
                 >
                   {item.idx}
                 </span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    width: 18,
+                    height: 1,
+                    background: 'var(--ocean-current-bright)',
+                    transform: 'skewX(-30deg)',
+                    flex: '0 0 auto',
+                  }}
+                />
                 <Text
                   style={{
                     fontSize: 15,
@@ -156,14 +219,16 @@ export function LoginPage(): JSX.Element {
           className="ocean-login-form"
         >
           <Card
+            className="ocean-login-card ocean-tide-enter ocean-tide-enter--d1"
             style={{
               width: '100%',
               maxWidth: 400,
               background: 'var(--ocean-surface-strong)',
               border: '1px solid var(--ocean-border-subtle)',
-              borderRadius: 8,
-              boxShadow: 'var(--ocean-shadow-panel)',
-              backdropFilter: 'blur(4px)',
+              borderRadius: 4,
+              clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%)',
+              boxShadow: '0 24px 64px rgba(29, 78, 103, 0.20)',
+              backdropFilter: 'blur(6px)',
             }}
           >
             <Title
@@ -171,8 +236,9 @@ export function LoginPage(): JSX.Element {
               style={{
                 textAlign: 'center',
                 marginBottom: 8,
-                color: 'var(--ocean-text-primary)',
-                fontWeight: 650,
+                color: 'var(--ocean-abyss-deep)',
+                fontWeight: 800,
+                letterSpacing: '0.08em',
               }}
             >
               IRIP 控制台
@@ -216,6 +282,13 @@ export function LoginPage(): JSX.Element {
                   htmlType="submit"
                   loading={loading}
                   block
+                  style={{
+                    background: 'var(--ocean-abyss-gradient-x)',
+                    border: 'none',
+                    fontWeight: 600,
+                    letterSpacing: 4,
+                    clipPath: 'polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%)',
+                  }}
                 >
                   登录
                 </Button>

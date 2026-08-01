@@ -10,7 +10,7 @@ import { apiListJobs } from '@/api/jobs';
 import type { JobListItem } from '@/api/governance';
 import { apiGetSystemHealth, type SystemHealth } from '@/api/system';
 import { apiListEquipment } from '@/api/equipment-flows';
-import { MetricStrip, OceanPanel, FeedbackState, StatusMark } from '@/shared/ui';
+import { MetricStrip, OceanPanel, FeedbackState, StatusMark, DataHero } from '@/shared/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { CHART_COLOR_SEQUENCE } from '@/theme/chartTheme';
@@ -130,7 +130,7 @@ function DonutChart({ title, data, loading, height = 220 }: DonutChartProps): JS
             itemStyle: {
               borderRadius: 10,
               shadowBlur: 12,
-              shadowColor: 'rgba(22, 134, 174, 0.25)',
+              shadowColor: 'rgba(14, 91, 132, 0.28)',
             },
             label: { show: true },
           },
@@ -237,8 +237,8 @@ function TrendChart({
               type: 'linear',
               x: 0, y: 0, x2: 0, y2: 1,
               colorStops: [
-                { offset: 0, color: '#1686AE' },
-                { offset: 1, color: 'rgba(22, 134, 174, 0.35)' },
+                { offset: 0, color: '#0E5B84' },
+                { offset: 1, color: 'rgba(14, 91, 132, 0.32)' },
               ],
             },
           },
@@ -248,8 +248,8 @@ function TrendChart({
                 type: 'linear',
                 x: 0, y: 0, x2: 0, y2: 1,
                 colorStops: [
-                  { offset: 0, color: '#39B9C2' },
-                  { offset: 1, color: 'rgba(57, 185, 194, 0.5)' },
+                  { offset: 0, color: '#17B8CE' },
+                  { offset: 1, color: 'rgba(23, 184, 206, 0.45)' },
                 ],
               },
             },
@@ -488,9 +488,26 @@ export function WorkbenchPage(): JSX.Element {
 
   return (
     <div className="ocean-page-enter">
-      {/* 摘要指标条 */}
-      <div style={{ marginBottom: 24 }}>
-        <MetricStrip metrics={metrics} />
+      {/* 数据主视觉：深潮 Hero + 摘要指标条（非对称构图） */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'stretch',
+          gap: 16,
+          marginBottom: 24,
+          flexWrap: 'wrap',
+        }}
+      >
+        <DataHero
+          deep
+          value={factsCount}
+          unit="条"
+          label="事实记录 · 当前返回"
+          style={{ flex: '0 0 auto' }}
+        />
+        <div style={{ flex: 1, minWidth: 420, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <MetricStrip metrics={metrics} />
+        </div>
       </div>
 
       {/* 趋势图（宽） + 两个饼图（窄） */}

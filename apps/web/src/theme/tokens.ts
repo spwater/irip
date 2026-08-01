@@ -19,11 +19,33 @@ export const tokens = {
   ocean: {
     canvas: {
       /** 页面空间渐变起点 */
-      start: '#A9D2DF',
+      start: '#A6D3E6',
       /** 主内容背景 */
-      middle: '#CFE5EA',
+      middle: '#CBE4EE',
       /** 亮部与留白区 */
-      end: '#E8F3F5',
+      end: '#EAF6F9',
+    },
+    /** 深潮锚点（局部中深蓝，构成第一眼识别） */
+    abyss: {
+      /** 中深蓝主锚点：品牌块、导航选中、Hero、标题强调 */
+      deep: '#0B4A6F',
+      /** 更深一级：渐变终点、按压态 */
+      deeper: '#07334E',
+      /** 深潮墨色：深色块上的描边与细节 */
+      ink: '#052A42',
+      /** 深潮渐变（品牌块 / 选中带 / Hero） */
+      gradient: 'linear-gradient(135deg, #0E5B84 0%, #0B4A6F 46%, #07334E 100%)',
+      /** 深潮横向渐变（导航选中带） */
+      gradientX: 'linear-gradient(100deg, #0E5B84 0%, #0B4A6F 58%, #083B5C 100%)',
+    },
+    /** 潮流青（数据流、强调线、流动高光） */
+    current: {
+      /** 亮潮流青 */
+      bright: '#17B8CE',
+      /** 柔和潮流青（光域、轨迹） */
+      soft: 'rgba(23, 184, 206, 0.32)',
+      /** 深潮上的亮青文字/数字 */
+      onDeep: '#4FE0EC',
     },
     /** 内容面板材质 */
     surface: {
@@ -52,19 +74,19 @@ export const tokens = {
       /** 选中、聚焦和强调边缘 */
       strong: 'rgba(14, 118, 156, 0.34)',
     },
-    /** 主操作 */
+    /** 主操作（深潮蓝，区别于常规 AntD 蓝） */
     action: {
       /** 主要按钮、链接、焦点 */
-      primary: '#1686AE',
+      primary: '#0E5B84',
       /** 主操作悬停 */
-      hover: '#0E769C',
+      hover: '#0B4A6F',
       /** 按下、选中、键盘焦点 */
-      active: '#075C7D',
+      active: '#07334E',
     },
     /** 强调 */
     accent: {
       /** 数据轨迹、关键数字、流动强调 */
-      current: '#39B9C2',
+      current: '#17B8CE',
     },
     /** 状态语义 */
     status: {

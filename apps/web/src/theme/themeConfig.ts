@@ -65,18 +65,19 @@ export const dataOceanTheme: ThemeConfig = {
       headerHeight: 56,
       headerPadding: '0 24px',
     },
-    // 菜单：选中项中蓝光带 + 左侧细线 + 文字增强
+    // 菜单：选中态由 ocean.css .ocean-sider-menu 的深潮渐变带接管，
+    // 这里仅提供未覆盖场景的回退色
     Menu: {
       itemBg: 'transparent',
       subMenuItemBg: 'transparent',
       itemColor: tokens.ocean.text.primary,
-      itemHoverColor: tokens.ocean.text.primary,
-      itemHoverBg: 'rgba(142, 191, 208, 0.18)',
-      itemSelectedColor: '#FFFFFF',
-      itemSelectedBg: tokens.ocean.action.primary,
+      itemHoverColor: tokens.ocean.abyss.deep,
+      itemHoverBg: 'rgba(14, 91, 132, 0.10)',
+      itemSelectedColor: '#EAF6F9',
+      itemSelectedBg: tokens.ocean.abyss.deep,
       itemHeight: 40,
       groupTitleColor: tokens.ocean.text.muted,
-      itemBorderRadius: 4,
+      itemBorderRadius: 2,
       activeBarBorderWidth: 0,
       activeBarHeight: 24,
     },

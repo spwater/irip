@@ -12,10 +12,10 @@
  */
 import { tokens } from './tokens';
 
-/** 主色序列（建议 6 色，按文档顺序） */
+/** 主色序列（潮线版：深潮蓝起调，亮青跟进） */
 export const CHART_COLOR_SEQUENCE: string[] = [
-  '#1686AE',
-  '#39B9C2',
+  '#0E5B84',
+  '#17B8CE',
   '#6FA9BE',
   '#6655A4',
   '#14765E',

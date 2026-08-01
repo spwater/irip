@@ -72,6 +72,30 @@
 }
 
 /* ============================================================
+ * 潮线进入：斜向滑入（标题、Hero、品牌块），克制过冲
+ * ========================================================== */
+.ocean-tide-enter {
+  animation: ocean-tide-enter 480ms var(--ocean-motion-easing-tide) both;
+}
+
+@keyframes ocean-tide-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(-16px, 10px, 0) skewX(-2deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) skewX(0deg);
+  }
+}
+
+/* 阶梯延迟：同屏多个 .ocean-tide-enter 依次浮上 */
+.ocean-tide-enter--d1 { animation-delay: 60ms; }
+.ocean-tide-enter--d2 { animation-delay: 120ms; }
+.ocean-tide-enter--d3 { animation-delay: 180ms; }
+.ocean-tide-enter--d4 { animation-delay: 240ms; }
+
+/* ============================================================
  * 控件状态过渡类（选中、展开、标签变化）
  * ========================================================== */
 .ocean-motion-control {
@@ -98,7 +122,8 @@
 @media (prefers-reduced-motion: reduce) {
   .ocean-enter,
   .ocean-page-enter,
-  .ocean-focus-enter {
+  .ocean-focus-enter,
+  .ocean-tide-enter {
     animation: none;
     /* 仅允许 80ms 内的透明度变化或无动画显示 */
     transition: opacity 80ms linear;

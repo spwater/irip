@@ -62,12 +62,26 @@ export function MetricStrip({
           key={m.label}
           className="ocean-metric-strip__item"
           style={{
+            position: 'relative',
             background: 'var(--ocean-surface-default)',
             border: '1px solid var(--ocean-border-subtle)',
-            borderRadius: 6,
+            borderRadius: 4,
             padding: '14px 16px',
+            overflow: 'hidden',
           }}
         >
+          {/* 顶部亮青渐变线 */}
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 2,
+              background: 'linear-gradient(90deg, var(--ocean-current-bright) 0%, rgba(23, 184, 206, 0) 72%)',
+            }}
+          />
           <Text
             style={{
               display: 'block',
@@ -83,12 +97,13 @@ export function MetricStrip({
             <span
               className="ocean-tabular-nums"
               style={{
-                fontSize: 28,
-                fontWeight: 500,
+                fontSize: 30,
+                fontWeight: 700,
                 lineHeight: 1.1,
-                color: 'var(--ocean-text-primary)',
+                color: 'var(--ocean-abyss-deep)',
                 fontVariantNumeric: 'tabular-nums',
                 fontFeatureSettings: '"tnum"',
+                letterSpacing: '-0.5px',
               }}
             >
               {m.value}

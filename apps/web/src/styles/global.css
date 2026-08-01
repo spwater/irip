@@ -17,9 +17,21 @@
  * ========================================================== */
 :root {
   /* 画布渐变 */
-  --ocean-canvas-start: #a9d2df;
-  --ocean-canvas-middle: #cfe5ea;
-  --ocean-canvas-end: #e8f3f5;
+  --ocean-canvas-start: #a6d3e6;
+  --ocean-canvas-middle: #cbe4ee;
+  --ocean-canvas-end: #eaf6f9;
+
+  /* 深潮锚点（局部中深蓝，第一眼识别） */
+  --ocean-abyss-deep: #0b4a6f;
+  --ocean-abyss-deeper: #07334e;
+  --ocean-abyss-ink: #052a42;
+  --ocean-abyss-gradient: linear-gradient(135deg, #0e5b84 0%, #0b4a6f 46%, #07334e 100%);
+  --ocean-abyss-gradient-x: linear-gradient(100deg, #0e5b84 0%, #0b4a6f 58%, #083b5c 100%);
+
+  /* 潮流青（数据流、强调线、流动高光） */
+  --ocean-current-bright: #17b8ce;
+  --ocean-current-soft: rgba(23, 184, 206, 0.32);
+  --ocean-current-on-deep: #4fe0ec;
 
   /* 面板材质 */
   --ocean-surface-default: rgba(240, 250, 251, 0.72);
@@ -38,13 +50,13 @@
   --ocean-border-input: rgba(24, 102, 133, 0.2);
   --ocean-border-split: rgba(24, 102, 133, 0.14);
 
-  /* 主操作 */
-  --ocean-action-primary: #1686ae;
-  --ocean-action-hover: #0e769c;
-  --ocean-action-active: #075c7d;
+  /* 主操作（深潮蓝） */
+  --ocean-action-primary: #0e5b84;
+  --ocean-action-hover: #0b4a6f;
+  --ocean-action-active: #07334e;
 
   /* 强调 */
-  --ocean-accent-current: #39b9c2;
+  --ocean-accent-current: #17b8ce;
 
   /* 状态 */
   --ocean-status-success: #14765e;
@@ -84,6 +96,13 @@
   --ocean-motion-focus: 320ms;
   --ocean-motion-page: 600ms;
   --ocean-motion-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  /* 潮线动效：更有个性的进入缓动（轻微过冲，无弹跳） */
+  --ocean-motion-easing-tide: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 斜切量 */
+  --ocean-cut-sm: 8px;
+  --ocean-cut-md: 14px;
+  --ocean-cut-lg: 22px;
 
   /* 字体 */
   --ocean-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
