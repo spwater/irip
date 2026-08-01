@@ -22,6 +22,7 @@ import {
 } from '@/api/client';
 import { apiPreviewIngestion } from '@/api/standards-objects';
 import { extractApiError, type SourcePreview } from '@/api/types';
+import { useJobStore } from '@/features/jobs/useJobStore';
 
 const { Text } = Typography;
 
@@ -86,6 +87,7 @@ export function IngestionWizard(): JSX.Element {
       ),
     onSuccess: (data) => {
       setJobId(data.job_id);
+      useJobStore.getState().addJob(data.job_id);
       setCurrentStep(3);
     },
     onError: (err: unknown) => {

@@ -285,7 +285,7 @@ function DynamicHeader({
         flexDirection: 'column',
         background: 'linear-gradient(to bottom, rgba(203, 228, 238, 0.72) 0px, rgba(234, 246, 249, 0.18) 120px, rgba(234, 246, 249, 0) 170px)',
         backdropFilter: 'blur(8px)',
-        padding: isHero ? '16px 24px' : '16px 24px',
+        padding: isHero ? '16px 24px' : '16px 24px 36px',
         borderBottom: 'none',
         position: 'sticky',
         top: 0,
@@ -375,7 +375,7 @@ function DynamicHeader({
 
       {/* 第二行：tabs（如果有）—— 圆润玻璃胶囊，左边距与内容区对齐（hero模式不显示） */}
       {!isHero && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, marginBottom: -24, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, marginBottom: -14, minHeight: hasTabs ? undefined : 42, paddingLeft: 'clamp(20px, 1.4vw, 32px)', position: 'relative', zIndex: 1 }}>
         {hasTabs &&
           header.tabs!.map((tab) => {
             const isActive = header.activeTab === tab.key;
@@ -390,12 +390,12 @@ function DynamicHeader({
                   padding: '8px 22px',
                   fontSize: 14,
                   fontWeight: isActive ? 600 : 400,
-                  color: isActive ? 'var(--ocean-abyss-deep)' : 'var(--ocean-text-secondary)',
+                  color: isActive ? '#0C4667' : 'var(--ocean-text-secondary)',
                   background: isActive
-                    ? 'linear-gradient(120deg, rgba(23, 184, 206, 0.16) 0%, rgba(23, 184, 206, 0.05) 60%, rgba(23, 184, 206, 0.02) 100%)'
+                    ? 'linear-gradient(120deg, rgba(23, 184, 206, 0.38) 0%, rgba(23, 184, 206, 0.18) 55%, rgba(23, 184, 206, 0.08) 100%)'
                     : 'transparent',
                   border: isActive
-                    ? '1px solid rgba(23, 184, 206, 0.32)'
+                    ? '1px solid rgba(23, 184, 206, 0.55)'
                     : '1px solid transparent',
                   borderRadius: 999,
                   cursor: 'pointer',
@@ -403,12 +403,12 @@ function DynamicHeader({
                   lineHeight: 1.4,
                   whiteSpace: 'nowrap',
                   boxShadow: isActive
-                    ? 'inset 0 1px 0 rgba(255,255,255,0.6), 0 6px 16px rgba(14, 91, 132, 0.10)'
+                    ? 'inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 14px rgba(14, 91, 132, 0.18)'
                     : 'none',
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.07)';
+                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.12)';
                     e.currentTarget.style.color = 'var(--ocean-abyss-deep)';
                   }
                 }}
@@ -420,7 +420,7 @@ function DynamicHeader({
                 }}
                 onFocus={(e) => {
                   if (!isActive) {
-                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.07)';
+                    e.currentTarget.style.background = 'rgba(23, 184, 206, 0.12)';
                     e.currentTarget.style.color = 'var(--ocean-abyss-deep)';
                   }
                 }}

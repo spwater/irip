@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Button, Drawer, Empty, Progress, Spin, Tag, Typography } from 'antd';
+import { Drawer, Empty, Progress, Spin, Tag, Typography } from 'antd';
 import { useJobStore, ACTIVE_STATUSES } from './useJobStore';
 import type { JobStatus } from '@/api/client';
 
@@ -98,7 +98,7 @@ export function JobDrawer(): JSX.Element {
 }
 
 /**
- * 作业进度按钮 — 可放在 Header 中打开抽屉
+ * 作业进度按钮 — 渐变半透明胶囊，与 Header tab 统一风格
  */
 export function JobDrawerButton(): JSX.Element {
   const setDrawerOpen = useJobStore((s) => s.setDrawerOpen);
@@ -106,8 +106,33 @@ export function JobDrawerButton(): JSX.Element {
   const activeCount = jobs.filter((j) => ACTIVE_STATUSES.includes(j.status)).length;
 
   return (
-    <Button onClick={() => setDrawerOpen(true)}>
+    <button
+      type="button"
+      onClick={() => setDrawerOpen(true)}
+      style={{
+        padding: '8px 22px',
+        fontSize: 14,
+        fontWeight: 500,
+        color: 'var(--ocean-abyss-deep)',
+        background: 'linear-gradient(120deg, rgba(23, 184, 206, 0.38) 0%, rgba(23, 184, 206, 0.18) 55%, rgba(23, 184, 206, 0.08) 100%)',
+        border: '1px solid rgba(23, 184, 206, 0.55)',
+        borderRadius: 999,
+        cursor: 'pointer',
+        transition: 'all 200ms var(--ocean-motion-easing)',
+        lineHeight: 1.4,
+        whiteSpace: 'nowrap',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 14px rgba(14, 91, 132, 0.18)',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = 'linear-gradient(120deg, rgba(23, 184, 206, 0.48) 0%, rgba(23, 184, 206, 0.28) 55%, rgba(23, 184, 206, 0.16) 100%)';
+        e.currentTarget.style.borderColor = 'rgba(23, 184, 206, 0.7)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'linear-gradient(120deg, rgba(23, 184, 206, 0.38) 0%, rgba(23, 184, 206, 0.18) 55%, rgba(23, 184, 206, 0.08) 100%)';
+        e.currentTarget.style.borderColor = 'rgba(23, 184, 206, 0.55)';
+      }}
+    >
       作业进度{activeCount > 0 ? ` (${activeCount})` : ''}
-    </Button>
+    </button>
   );
 }

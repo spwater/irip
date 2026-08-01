@@ -283,14 +283,14 @@
 .ocean-water-glass {
   background: linear-gradient(
     120deg,
-    rgba(23, 184, 206, 0.13) 0%,
-    rgba(23, 184, 206, 0.05) 55%,
-    rgba(23, 184, 206, 0.02) 100%
+    rgba(23, 184, 206, 0.38) 0%,
+    rgba(23, 184, 206, 0.18) 55%,
+    rgba(23, 184, 206, 0.08) 100%
   );
-  border: 1px solid rgba(23, 184, 206, 0.28);
+  border: 1px solid rgba(23, 184, 206, 0.55);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 6px 18px rgba(14, 91, 132, 0.10);
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 14px rgba(14, 91, 132, 0.18);
 }
 
 /* ============================================================
@@ -383,16 +383,16 @@
 .ocean-sider-menu.ant-menu .ant-menu-item-selected {
   background: linear-gradient(
     120deg,
-    rgba(23, 184, 206, 0.16) 0%,
-    rgba(23, 184, 206, 0.06) 58%,
-    rgba(23, 184, 206, 0.02) 100%
+    rgba(23, 184, 206, 0.38) 0%,
+    rgba(23, 184, 206, 0.18) 55%,
+    rgba(23, 184, 206, 0.08) 100%
   ) !important;
-  color: var(--ocean-abyss-deep) !important;
+  color: #0C4667 !important;
   font-weight: 600;
-  border: 1px solid rgba(23, 184, 206, 0.30);
+  border: 1px solid rgba(23, 184, 206, 0.55);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    0 8px 20px rgba(14, 91, 132, 0.12);
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 14px rgba(14, 91, 132, 0.18);
 }
 
 /* 左缘圆头渐变条：选中项的"潮位线" */
