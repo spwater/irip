@@ -14,7 +14,7 @@
 import type { CSSProperties } from 'react';
 import { Typography } from 'antd';
 import { STATUS_SEMANTIC_COLOR, type StatusSemantic } from '@/theme/tokens';
-import { WaveLine } from './WaveLine';
+import { GradLine } from './GradLine';
 
 const { Text } = Typography;
 
@@ -103,7 +103,7 @@ export function DataHero({
           </Text>
         ) : null}
       </div>
-      {deep ? <WaveLine width={140} height={8} style={{ marginTop: 10 }} /> : null}
+      {deep ? <GradLine width={150} thickness={2} style={{ marginTop: 12 }} /> : null}
     </>
   );
 

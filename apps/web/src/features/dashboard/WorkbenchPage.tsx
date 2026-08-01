@@ -10,7 +10,7 @@ import { apiListJobs } from '@/api/jobs';
 import type { JobListItem } from '@/api/governance';
 import { apiGetSystemHealth, type SystemHealth } from '@/api/system';
 import { apiListEquipment } from '@/api/equipment-flows';
-import { MetricStrip, OceanPanel, FeedbackState, StatusMark, DataHero } from '@/shared/ui';
+import { MetricStrip, OceanPanel, FeedbackState, StatusMark, DataHero, EcgLine } from '@/shared/ui';
 import type { StatusSemantic } from '@/theme/tokens';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { CHART_COLOR_SEQUENCE } from '@/theme/chartTheme';
@@ -525,9 +525,9 @@ export function WorkbenchPage(): JSX.Element {
         <DonutChart title="设备数据占比" data={equipDonutData} loading={!factsData} height={280} />
       </div>
 
-      {/* 主区域：左活跃作业 + 右系统健康 */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'start' }}>
-        <OceanPanel variant="strong" padding={0}>
+      {/* 主区域：左活跃作业 + 右系统健康（两栏等高） */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 16, alignItems: 'stretch' }}>
+        <OceanPanel variant="strong" padding={0} style={{ height: '100%' }}>
           <div
             style={{
               display: 'flex',
@@ -572,10 +572,20 @@ export function WorkbenchPage(): JSX.Element {
           </div>
         </OceanPanel>
 
-        <OceanPanel variant="default" padding={16}>
-          <Typography.Title level={5} style={{ margin: 0, marginBottom: 12, fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
-            系统健康
-          </Typography.Title>
+        <OceanPanel variant="default" padding={16} style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {/* 标题行：系统健康 + 状态标记 */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+            <Typography.Title level={5} style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ocean-text-primary)' }}>
+              系统健康
+            </Typography.Title>
+            {!healthLoading && !healthError && health && (
+              <StatusMark
+                semantic={HEALTH_SEMANTIC[health.status] ?? 'neutral'}
+                label={health.status === 'healthy' || health.status === 'ok' ? '正常' : health.status === 'degraded' ? '降级' : '异常'}
+                shape="dot"
+              />
+            )}
+          </div>
           {healthLoading ? (
             <FeedbackState state="loading" title="检查中…" style={{ padding: 24 }} />
           ) : healthError || !health ? (
@@ -585,25 +595,33 @@ export function WorkbenchPage(): JSX.Element {
               description="可能后端未就绪或网络异常"
             />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <StatusMark
-                semantic={HEALTH_SEMANTIC[health.status] ?? 'neutral'}
-                label={health.status === 'healthy' || health.status === 'ok' ? '正常' : health.status === 'degraded' ? '降级' : '异常'}
-                shape="dot"
+            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between', gap: 8 }}>
+              {/* 心电图主视觉：大脉搏图，颜色随健康状态 */}
+              <EcgLine
+                status={HEALTH_SEMANTIC[health.status] ?? 'neutral'}
+                width="100%"
+                height={72}
+                stretch
               />
-              {health.migration_version && (
+
+              {/* 版本与事件 */}
+              <div style={{ display: 'flex', gap: 20 }}>
+                {health.migration_version && (
+                  <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
+                    迁移版本 <span style={{ fontFamily: 'var(--ocean-font-mono)', color: 'var(--ocean-text-primary)' }}>{health.migration_version}</span>
+                  </Text>
+                )}
                 <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
-                  迁移版本：<span style={{ fontFamily: 'var(--ocean-font-mono)' }}>{health.migration_version}</span>
+                  待处理事件 <span className="ocean-tabular-nums" style={{ color: 'var(--ocean-text-primary)' }}>{health.outbox_backlog}</span>
                 </Text>
-              )}
-              <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
-                待处理事件：<span className="ocean-tabular-nums">{health.outbox_backlog}</span>
-              </Text>
+              </div>
+
+              {/* 分项检查：撑满剩余空间 */}
               {health.checks.length > 0 && (
-                <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1, justifyContent: 'space-evenly', borderTop: '1px solid var(--ocean-border-subtle)', paddingTop: 8 }}>
                   {health.checks.map((c) => (
                     <div key={c.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>{c.name}</Text>
+                      <Text style={{ fontSize: 12, color: 'var(--ocean-text-secondary)', fontFamily: 'var(--ocean-font-mono)' }}>{c.name}</Text>
                       <StatusMark
                         semantic={c.status === 'healthy' || c.status === 'ok' ? 'success' : c.status === 'degraded' ? 'warning' : 'danger'}
                         label={c.status === 'healthy' || c.status === 'ok' ? '正常' : c.status}
@@ -613,6 +631,16 @@ export function WorkbenchPage(): JSX.Element {
                   ))}
                 </div>
               )}
+
+              {/* 查看详情 → 治理控制台 */}
+              <Button
+                type="link"
+                size="small"
+                onClick={() => void navigate({ to: '/governance' })}
+                style={{ alignSelf: 'flex-end', padding: 0, fontSize: 12, height: 'auto' }}
+              >
+                查看详情 →
+              </Button>
             </div>
           )}
         </OceanPanel>

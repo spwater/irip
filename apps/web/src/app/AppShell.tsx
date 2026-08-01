@@ -6,8 +6,9 @@ import { useAuthStore } from '@/features/auth/AuthProvider';
 import { JobDrawer, JobDrawerButton } from '@/features/jobs/JobDrawer';
 import { OceanBackdrop } from '@/shared/layout/OceanBackdrop';
 import { ContentFrame } from '@/shared/layout/ContentFrame';
-import { WaveLine } from '@/shared/ui/WaveLine';
+import { GradLine } from '@/shared/ui/GradLine';
 import { PageHeaderProvider, usePageHeader } from './PageHeaderContext';
+import dayjs from 'dayjs';
 
 const { Sider, Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -157,8 +158,8 @@ export function AppShell(): JSX.Element | null {
               >
                 工业研究智能平台
               </span>
-              {/* 波形细线：品牌区的流动标记 */}
-              <WaveLine width={150} height={8} style={{ marginTop: 12 }} />
+              {/* 渐变直线：品牌区的流动标记（左深右浅） */}
+              <GradLine width={160} thickness={2} style={{ marginTop: 14 }} />
             </div>
 
             <Menu
@@ -174,25 +175,8 @@ export function AppShell(): JSX.Element | null {
               }}
             />
 
-            {/* 底部状态行 */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 14,
-                left: 20,
-                right: 20,
-                display: 'flex',
-                justifyContent: 'space-between',
-                fontFamily: 'var(--ocean-font-mono)',
-                fontSize: 9,
-                letterSpacing: 1.5,
-                color: 'var(--ocean-text-muted)',
-                textTransform: 'uppercase',
-              }}
-            >
-              <span>v0.2.0</span>
-              <span>Sea of Data</span>
-            </div>
+            {/* 底部：大号实时时钟 + 日期 + 版本行 */}
+            <SiderClock />
           </Sider>
 
           <Layout style={{ marginLeft: contentMarginLeft, transition: 'margin-left 200ms var(--ocean-motion-easing)' }}>
@@ -208,6 +192,77 @@ export function AppShell(): JSX.Element | null {
       </PageHeaderProvider>
       <JobDrawer />
     </>
+  );
+}
+
+/** 星期中文映射 */
+const WEEKDAYS_CN = ['日', '一', '二', '三', '四', '五', '六'] as const;
+
+/** 侧边栏底部时钟：大号等宽时间 + 日期星期 + 版本行（每秒刷新） */
+function SiderClock(): JSX.Element {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 18,
+        left: 22,
+        right: 22,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}
+    >
+      {/* 大号等宽时间 */}
+      <span
+        className="ocean-tabular-nums"
+        style={{
+          fontFamily: 'var(--ocean-font-mono)',
+          fontSize: 27,
+          fontWeight: 600,
+          letterSpacing: 2,
+          color: '#0E5B84',
+          lineHeight: 1.1,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {dayjs(now).format('HH:mm:ss')}
+      </span>
+      {/* 日期 + 星期 */}
+      <span
+        style={{
+          fontFamily: 'var(--ocean-font-mono)',
+          fontSize: 12,
+          letterSpacing: 1,
+          color: 'var(--ocean-text-secondary)',
+        }}
+      >
+        {dayjs(now).format('YYYY-MM-DD')} 星期{WEEKDAYS_CN[now.getDay()]}
+      </span>
+      {/* 渐变分隔线 */}
+      <GradLine width="100%" thickness={1} opacity={0.5} style={{ margin: '8px 0 6px' }} />
+      {/* 版本行 */}
+      <span
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          fontFamily: 'var(--ocean-font-mono)',
+          fontSize: 10,
+          letterSpacing: 1.5,
+          color: 'var(--ocean-text-muted)',
+          textTransform: 'uppercase',
+        }}
+      >
+        <span>v0.2.0</span>
+        <span>Sea of Data</span>
+      </span>
+    </div>
   );
 }
 

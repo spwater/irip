@@ -46,5 +46,8 @@ export type { OceanEmptyStateProps } from './OceanEmptyState';
 export { OceanSkeleton } from './OceanSkeleton';
 export type { OceanSkeletonProps, OceanSkeletonType } from './OceanSkeleton';
 
-export { WaveLine } from './WaveLine';
-export type { WaveLineProps } from './WaveLine';
+export { GradLine } from './GradLine';
+export type { GradLineProps } from './GradLine';
+
+export { EcgLine } from './EcgLine';
+export type { EcgLineProps } from './EcgLine';
