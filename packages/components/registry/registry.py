@@ -761,10 +761,12 @@ class ComponentRegistryService:
                 .where(Component.active_version_id.isnot(None))
                 .values(active_version_id=None)
             )
-            # 删除所有版本
+            # 删除所有版本（component_version 是不可变表，需通过 GUC 开关临时允许 DELETE）
+            await session.execute(sa.text("SET LOCAL app.allow_immutable_delete = 'on'"))
             await session.execute(
                 sa.delete(ComponentVersion).where(ComponentVersion.component_id == component_id)
             )
+            await session.execute(sa.text("SET LOCAL app.allow_immutable_delete = 'off'"))
             # 删除主记录
             await session.execute(
                 sa.delete(Component).where(
