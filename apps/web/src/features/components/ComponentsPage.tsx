@@ -42,6 +42,7 @@ import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { apiListIngestionTools } from '@/api/models-ai';
 import { extractApiError, type IndustrialObject } from '@/api/types';
+import { DepartmentSelector } from '@/shared/DepartmentSelector';
 import {
   buildManifestYaml,
   compareVersions,
@@ -277,13 +278,14 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const handlePublish = async (): Promise<void> => {
     try {
       if (advancedMode) {
-        const values = await form.validateFields(['manifest_yaml', 'experimental_object_code']);
+        const values = await form.validateFields(['manifest_yaml', 'experimental_object_code', 'department_id']);
         publishMutation.mutate({
           manifest_yaml: values.manifest_yaml as string,
           experimental_object_code: (values.experimental_object_code as string) ?? null,
+          department_id: (values.department_id as string) ?? null,
         });
       } else {
-        const values = await form.validateFields([...FORM_FIELD_NAMES]);
+        const values = await form.validateFields([...FORM_FIELD_NAMES, 'department_id']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
@@ -295,6 +297,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           manifest_yaml: yaml,
           experimental_object_code: (values.experimental_object_code as string) ?? null,
           equipment_id: (values.equipment_id as string) ?? null,
+          department_id: (values.department_id as string) ?? null,
         });
       }
     } catch {
@@ -599,6 +602,9 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           </Space>
         </div>
         <Form form={form} layout="vertical">
+          <Form.Item name="department_id" label="归属部门">
+            <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+          </Form.Item>
           {advancedMode ? (
             <Form.Item
               name="manifest_yaml"

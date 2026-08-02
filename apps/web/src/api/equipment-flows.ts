@@ -40,7 +40,8 @@ export type PersistFactResult = { fact_id: string; revision: number; subject_id:
 
 export async function apiListComponents(params?: { kind?: string; status?: string; }): Promise<CursorPage<ComponentSummary>> { const res = await http.get<{ items: ComponentSummary[] }>('/components/', { params }); return { items: res.data.items, next_cursor: null, has_more: false }; }
 export async function apiGetComponent(id: string): Promise<ComponentDetail> { const res = await http.get<ComponentDetail>(`/components/${id}`); return res.data; }
-export async function apiPublishComponent(body: { manifest_yaml: string; experimental_object_code?: string | null; equipment_id?: string | null; }): Promise<ComponentSummary> { const res = await http.post<ComponentSummary>('/components/', body); return res.data; }
+export async function apiPublishComponent(body: { manifest_yaml: string; experimental_object_code?: string | null; equipment_id?: string | null; department_id?: string | null; }): Promise<ComponentSummary> { const res = await http.post<ComponentSummary>('/components/', body); return res.data; }
+export async function apiUpdateComponent(componentId: string, body: { department_id?: string | null; visible_departments?: string[] | null; }): Promise<void> { await http.patch(`/components/${componentId}`, body); }
 export async function apiListComponentVersions(componentId: string): Promise<ComponentVersionItem[]> { const res = await http.get<ComponentVersionItem[]>(`/components/${componentId}/versions`); return res.data; }
 export async function apiArchiveComponent(componentId: string): Promise<void> { await http.patch(`/components/${componentId}/archive`); }
 export async function apiRestoreComponent(componentId: string): Promise<void> { await http.patch(`/components/${componentId}/restore`); }
