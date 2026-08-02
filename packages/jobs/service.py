@@ -181,8 +181,9 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：跨部门作业返回 not_found
-            if job.department_id != self._dept_id:
+            # 租户隔离检查：不可见部门作业返回 not_found
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
+            if job.department_id not in visible_ids:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -407,8 +408,9 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：跨部门作业返回 not_found
-            if job.department_id != self._dept_id:
+            # 租户隔离检查：不可见部门作业返回 not_found
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
+            if job.department_id not in visible_ids:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",

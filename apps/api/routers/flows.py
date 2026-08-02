@@ -35,7 +35,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.common.errors import AppError
 from packages.components.flow_runtime import (
     PROTECTED_PARAMS,
@@ -433,16 +432,6 @@ async def list_flows(
         FlowListResponse: 流程列表。
     """
     items = await service.list_definitions(status=status)
-
-    # 实验室级数据隔离：非管理员只看自己实验室的流程
-    if should_filter_by_department(current_user):
-        if current_user.department_id is None:
-            return FlowListResponse(items=[])
-        items = [
-            (definition, version)
-            for definition, version in items
-            if definition.department_id == current_user.department_id
-        ]
 
     return FlowListResponse(
         items=[_definition_to_response(definition, version) for definition, version in items]
