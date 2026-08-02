@@ -116,15 +116,16 @@ export function FlowDetail(): JSX.Element {
   const [batchPrompt, setBatchPrompt] = useState<string>('');
   const [runParams, setRunParams] = useState<[string, unknown][]>([]);
 
-  /** 管理权限检查：所有者 + 上级向下（不含同部门非所有者） */
+  /** 管理权限检查：所有者 + 上级向下 + 负责人管本部门 */
   const canManage = (flow: FlowSummary | undefined | null): boolean => {
     if (!flow || !currentUser) return false;
     // root 成员 / 平台管理员不受限
     if (currentUser.isRootMember) return true;
     // 数据所有者可管理
     if (flow.owner_user_id && currentUser.id === flow.owner_user_id) return true;
+    // 实验室负责人可管本部门成员的数据
+    if (currentUser.roles.includes('lab_director') && flow.department_id === currentUser.departmentId) return true;
     // 非同部门 → 需要后端判断是否是上级，前端保守返回 false
-    // （同部门非所有者无管理权，跨部门需后端验证）
     return false;
   };
 
