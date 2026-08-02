@@ -314,6 +314,9 @@ class ComponentRegistryService:
                 session.add(component)
                 await session.flush()
             else:
+                # 编辑发新版本：更新归属部门（如果传了新的）
+                if department_id is not None:
+                    component.department_id = department_id
                 # 2. kind 一致性校验
                 if component.kind != manifest.kind:
                     raise AppError(
