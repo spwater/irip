@@ -374,7 +374,16 @@ class ObjectGraphService:
             sa.select(IndustrialObject).where(IndustrialObject.id == object_id)
         )
         obj = result.scalar_one_or_none()
-        if obj is None or obj.department_id != self._dept_id:
+        if obj is None:
+            raise AppError(
+                code="not_found",
+                message="工业对象不存在",
+                retryable=False,
+                fields={"object_id": str(object_id)},
+            )
+        # 可见性检查：对象部门必须在可见集中
+        visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
+        if obj.department_id not in visible_ids:
             raise AppError(
                 code="not_found",
                 message="工业对象不存在",
