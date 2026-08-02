@@ -372,17 +372,6 @@ export function WorkbenchPage(): JSX.Element {
 
   // ---- 聚合：实验室数据占比 ----
   const labDonutData: DonutDatum[] = useMemo(() => {
-    if (factsCount === 0) {
-      const map = new Map<string, number>();
-      for (const eq of equipment) {
-        const deptName = (eq as { department_name?: string }).department_name ?? '未分配';
-        map.set(deptName, (map.get(deptName) ?? 0) + 1);
-      }
-      return Array.from(map.entries())
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 8);
-    }
     const map = new Map<string, number>();
     for (const f of factsItems) {
       const name = f.department_name || '未分类';
@@ -391,21 +380,10 @@ export function WorkbenchPage(): JSX.Element {
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [factsItems, factsCount, equipment]);
+  }, [factsItems]);
 
   // ---- 聚合：设备数据占比 ----
   const equipDonutData: DonutDatum[] = useMemo(() => {
-    if (factsCount === 0) {
-      const map = new Map<string, number>();
-      for (const eq of equipment) {
-        const name = eq.display_name || eq.code || '未命名';
-        map.set(name, (map.get(name) ?? 0) + 1);
-      }
-      return Array.from(map.entries())
-        .map(([name, value]) => ({ name, value }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 8);
-    }
     const map = new Map<string, number>();
     for (const f of factsItems) {
       const name = f.equipment_name || '未分类';
@@ -414,7 +392,7 @@ export function WorkbenchPage(): JSX.Element {
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [factsItems, factsCount, equipment]);
+  }, [factsItems]);
 
   // ---- 聚合：入库趋势（按天统计，支持实验室和设备筛选） ----
   const trendData = useMemo(() => {
