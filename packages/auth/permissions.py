@@ -267,6 +267,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
         "display_name": "实验室成员",
         "permissions": [
             Permission.STANDARD_READ,
+            Permission.STANDARD_WRITE,
             Permission.FACT_READ,
             Permission.FACT_WRITE,
             Permission.ARTIFACT_READ,
