@@ -1,7 +1,7 @@
 """allow controlled DELETE on immutable tables via GUC
 
-Revision ID: ec4b55a466ce
-Revises: 780b980397b7
+Revision ID: 0068
+Revises: 0067
 Create Date: 2026-08-02 18:17:29.125607
 """
 
@@ -12,8 +12,8 @@ from alembic import op
 
 
 
-revision: str = 'ec4b55a466ce'
-down_revision: str | None = '780b980397b7'
+revision: str = '0068'
+down_revision: str | None = '0067'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
