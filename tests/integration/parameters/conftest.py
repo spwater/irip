@@ -51,6 +51,8 @@ async def param_setup(
             object_type="lab",
             code=f"param_obj_{object_id.hex[:8]}",
             display_name="参数测试对象",
+            visibility_scope="tree",
+            owner_user_id=actor_id,
             status="active",
             created_at=now,
             updated_at=now,

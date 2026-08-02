@@ -55,6 +55,8 @@ async def provenance_setup(
             object_type="lab",
             code=f"prov_obj_{object_id.hex[:8]}",
             display_name="溯源测试对象",
+            visibility_scope="tree",
+            owner_user_id=actor_id,
             status="active",
             created_at=now,
             updated_at=now,

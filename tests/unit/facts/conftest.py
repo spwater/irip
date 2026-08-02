@@ -92,6 +92,8 @@ async def fact_setup(
             object_type="lab",
             code=f"test_obj_{object_id.hex[:8]}",
             display_name="测试对象",
+            visibility_scope="tree",
+            owner_user_id=actor_id,
             status="active",
             created_at=now,
             updated_at=now,

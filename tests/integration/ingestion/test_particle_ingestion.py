@@ -57,6 +57,8 @@ async def particle_ingestion_setup(
             object_type="lab",
             code=f"ps_obj_{object_id.hex[:8]}",
             display_name="粒度实验室",
+            visibility_scope="tree",
+            owner_user_id=actor_id,
             status="active",
             created_at=now,
             updated_at=now,
