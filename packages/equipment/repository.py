@@ -130,17 +130,22 @@ class EquipmentRepository:
         )
 
         # 部门过滤 + 可见性过滤
-        # 使用 compute_visible_dept_ids 做上下对称可见性（与 RLS 同源）
-        from packages.common.dept_visibility import compute_visible_dept_ids
-
+        # department_id + visible_dept_id 同时存在时做 OR 可见性过滤
         if department_id is not None and visible_dept_id is not None:
-            visible_ids = await compute_visible_dept_ids(session, department_id)
-            dept_condition = Equipment.department_id.in_(visible_ids)
+            dept_ids = await _get_descendant_dept_ids(session, department_id)
+            dept_condition = (
+                Equipment.department_id.in_(dept_ids)
+                if dept_ids
+                else Equipment.department_id == department_id
+            )
             visible_condition = Equipment.visible_departments.contains([str(visible_dept_id)])
             query = query.where(sa.or_(dept_condition, visible_condition))
         elif department_id is not None:
-            visible_ids = await compute_visible_dept_ids(session, department_id)
-            query = query.where(Equipment.department_id.in_(visible_ids))
+            dept_ids = await _get_descendant_dept_ids(session, department_id)
+            if dept_ids:
+                query = query.where(Equipment.department_id.in_(dept_ids))
+            else:
+                query = query.where(Equipment.department_id == department_id)
         elif visible_dept_id is not None:
             query = query.where(Equipment.visible_departments.contains([str(visible_dept_id)]))
 
