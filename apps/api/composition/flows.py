@@ -39,6 +39,7 @@ def register(ctx: CompositionContext) -> None:
         return ComponentRegistryService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
+            actor_id=current_user.user_id,
         )
 
     ctx.app.dependency_overrides[get_component_registry_service] = (
@@ -53,6 +54,7 @@ def register(ctx: CompositionContext) -> None:
         registry = ComponentRegistryService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
+            actor_id=current_user.user_id,
         )
         if _flow_runner is None:
             _flow_runner = PythonComponentRunner()

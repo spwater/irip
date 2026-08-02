@@ -224,6 +224,7 @@ class ComponentRegistryService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
+        actor_id: UUID,
         clock: Clock | None = None,
     ) -> None:
         """初始化组件注册表服务。
@@ -231,10 +232,12 @@ class ComponentRegistryService:
         Args:
             session_factory: 异步会话工厂。
             department_id: 当前部门 ID。
+            actor_id: 当前操作者用户 ID（用于组件所有者 owner_user_id）。
             clock: 时钟（可选，默认使用 SystemClock）。
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._actor_id = actor_id
         self._clock: Clock = clock if clock is not None else SystemClock()
 
     # ---- 公开只读属性（替代路由直接访问私有属性） ----
@@ -243,6 +246,11 @@ class ComponentRegistryService:
     def department_id(self) -> UUID:
         """当前部门 ID（公开只读访问，替代 ``service._dept_id``）。"""
         return self._dept_id
+
+    @property
+    def actor_id(self) -> UUID:
+        """当前操作者用户 ID（公开只读访问）。"""
+        return self._actor_id
 
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -295,6 +303,7 @@ class ComponentRegistryService:
                 # 新建接口：用自动生成的编码
                 component = Component(
                     department_id=self._dept_id,
+                    owner_user_id=self._actor_id,
                     name=gen_code("iface"),
                     kind=manifest.kind,
                     status="draft",

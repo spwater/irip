@@ -111,6 +111,7 @@ async def registry_service(
     return ComponentRegistryService(
         session_factory=async_session_factory,
         department_id=test_user.department_id,  # type: ignore[attr-defined]
+        actor_id=test_user.user_id,  # type: ignore[attr-defined]
         clock=fixed_clock,
     )
 

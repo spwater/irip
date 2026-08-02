@@ -318,6 +318,7 @@ class TestComponentRegistryIdorFix:
         service = ComponentRegistryService(
             session_factory=MagicMock(),
             department_id=uuid4(),
+            actor_id=uuid4(),
         )
 
         with patch(
@@ -348,6 +349,7 @@ class TestComponentRegistryIdorFix:
         service = ComponentRegistryService(
             session_factory=MagicMock(),
             department_id=fake_component.department_id,
+            actor_id=uuid4(),
         )
 
         with patch(
@@ -366,6 +368,7 @@ class TestComponentRegistryIdorFix:
         service = ComponentRegistryService(
             session_factory=MagicMock(),
             department_id=uuid4(),
+            actor_id=uuid4(),
         )
 
         with patch(
@@ -385,6 +388,7 @@ class TestComponentRegistryIdorFix:
         service = ComponentRegistryService(
             session_factory=MagicMock(),
             department_id=uuid4(),
+            actor_id=uuid4(),
         )
 
         with patch(
@@ -408,6 +412,7 @@ class TestComponentRegistryIdorFix:
         service = ComponentRegistryService(
             session_factory=MagicMock(),
             department_id=uuid4(),
+            actor_id=uuid4(),
         )
 
         with patch(

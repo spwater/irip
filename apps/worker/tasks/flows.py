@@ -72,6 +72,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     registry = ComponentRegistryService(
         session_factory=factory,
         department_id=department_id,
+        actor_id=department_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
@@ -274,6 +275,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     registry = ComponentRegistryService(
         session_factory=factory,
         department_id=department_id,
+        actor_id=department_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
