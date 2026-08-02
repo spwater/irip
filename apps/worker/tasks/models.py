@@ -18,6 +18,7 @@ from typing import Any
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.sysuser import get_system_service_user_id
 
 
 def _build_session_factory() -> Any:
@@ -121,7 +122,7 @@ async def _train_model_async(payload: dict) -> dict:
     """
 
     department_id = UUID(str(payload["department_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
+    user_id = UUID(str(payload.get("user_id", str(await get_system_service_user_id()))))
     code: str = str(payload["code"])
     display_name: str = str(payload["display_name"])
     version_id = UUID(str(payload["version_id"]))
@@ -167,7 +168,7 @@ async def _predict_model_async(payload: dict) -> dict:
         dict: 预测结果摘要。
     """
     department_id = UUID(str(payload["department_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
+    user_id = UUID(str(payload.get("user_id", str(await get_system_service_user_id()))))
     model_id = UUID(str(payload["model_id"]))
     inputs: dict[str, Any] = dict(payload.get("inputs", {}))
 
@@ -195,7 +196,7 @@ async def _publish_model_async(payload: dict) -> dict:
         dict: 发布结果摘要。
     """
     department_id = UUID(str(payload["department_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
+    user_id = UUID(str(payload.get("user_id", str(await get_system_service_user_id()))))
     model_id = UUID(str(payload["model_id"]))
     version_id = UUID(str(payload["version_id"]))
 

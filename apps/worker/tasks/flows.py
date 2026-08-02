@@ -17,6 +17,7 @@ import os
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
+from apps.worker.tasks.sysuser import get_system_service_user_id
 
 
 async def _execute_flow_async(run_id: str, payload: dict) -> dict:
@@ -69,10 +70,14 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     department_id = UUID(str(payload["department_id"]))
 
+    # 系统服务用户 ID：worker 无用户会话，用 system_service 用户作为
+    # actor_id / created_by / uploaded_by 的合法 app_user 引用（替代 department_id）。
+    sys_user_id = await get_system_service_user_id()
+
     registry = ComponentRegistryService(
         session_factory=factory,
         department_id=department_id,
-        actor_id=department_id,
+        actor_id=sys_user_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
@@ -80,7 +85,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     job_service = JobService(
         session_factory=factory,
         department_id=department_id,
-        created_by=department_id,
+        created_by=sys_user_id,
     )
 
     # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
@@ -98,13 +103,13 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         s3_repo=s3_repo,
         session_factory=factory,
         department_id=department_id,
-        uploaded_by=department_id,
+        uploaded_by=sys_user_id,
     )
 
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
-        actor_id=department_id,
+        actor_id=sys_user_id,
         registry=registry,
         runner=runner,
         job_service=job_service,
@@ -273,10 +278,14 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
 
     department_id = UUID(str(payload["department_id"]))
 
+    # 系统服务用户 ID：worker 无用户会话，用 system_service 用户作为
+    # actor_id / created_by / uploaded_by 的合法 app_user 引用（替代 department_id）。
+    sys_user_id = await get_system_service_user_id()
+
     registry = ComponentRegistryService(
         session_factory=factory,
         department_id=department_id,
-        actor_id=department_id,
+        actor_id=sys_user_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
@@ -284,7 +293,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     job_service = JobService(
         session_factory=factory,
         department_id=department_id,
-        created_by=department_id,
+        created_by=sys_user_id,
     )
 
     # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
@@ -302,13 +311,13 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
         s3_repo=s3_repo,
         session_factory=factory,
         department_id=department_id,
-        uploaded_by=department_id,
+        uploaded_by=sys_user_id,
     )
 
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
-        actor_id=department_id,
+        actor_id=sys_user_id,
         registry=registry,
         runner=runner,
         job_service=job_service,

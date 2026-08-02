@@ -45,6 +45,15 @@ ADMIN_DISPLAY_NAME: str = "平台管理员"
 #: 引导管理员默认角色。
 ADMIN_ROLE_CODE: str = "platform_administrator"
 
+#: 系统服务用户邮箱（不可登录，仅用于 worker FK 引用）。
+SYSTEM_SERVICE_EMAIL: str = "system@irip.local"
+
+#: 系统服务用户显示名。
+SYSTEM_SERVICE_DISPLAY_NAME: str = "系统服务"
+
+#: 系统服务用户角色（复用平台管理员角色）。
+SYSTEM_SERVICE_ROLE_CODE: str = "platform_administrator"
+
 
 @dataclass(frozen=True)
 class SentinelDepartment:
@@ -262,6 +271,103 @@ class UserRepository:
         return user_id
 
     @staticmethod
+    async def get_or_create_system_service(
+        session: AsyncSession,
+        department_id: UUID,
+        email: str = SYSTEM_SERVICE_EMAIL,
+        display_name: str = SYSTEM_SERVICE_DISPLAY_NAME,
+    ) -> UUID:
+        """幂等获取或创建系统服务用户（挂 system 哨兵部门）。
+
+        系统服务用户用于 Celery worker 无用户会话时，作为 actor_id /
+        created_by / uploaded_by 的合法 app_user 引用。无密码（password_hash
+        为空字符串，不可登录），状态为 active。
+
+        若 system@irip.local 不存在则创建（含 platform_administrator 角色，
+        department_id=system 哨兵部门 ID），已存在则返回其 ID。
+
+        幂等角色修复：若系统服务用户已存在但 roles 为空，补写角色。
+        幂等部门修复：若系统服务用户已存在但 department_id 为空，补写部门。
+
+        Args:
+            session: 异步数据库会话。
+            department_id: system 哨兵部门 ID。
+            email: 系统服务用户邮箱。
+            display_name: 系统服务用户显示名。
+
+        Returns:
+            UUID: 系统服务用户 ID。
+        """
+        result = await session.execute(
+            sa.text("SELECT id, roles, department_id FROM app_user WHERE email = :email"),
+            {"email": email},
+        )
+        existing = result.first()
+        if existing is not None:
+            user_id = UUID(str(existing[0]))
+            existing_roles = existing[1]
+            existing_dept = existing[2]
+
+            if not existing_roles:
+                await session.execute(
+                    sa.text(
+                        "UPDATE app_user SET roles = CAST(:roles AS jsonb) "
+                        "WHERE id = :uid"
+                    ),
+                    {
+                        "roles": json.dumps([SYSTEM_SERVICE_ROLE_CODE]),
+                        "uid": str(user_id),
+                    },
+                )
+
+            if existing_dept is None:
+                await session.execute(
+                    sa.text(
+                        "UPDATE app_user SET department_id = :dept_id "
+                        "WHERE id = :uid"
+                    ),
+                    {
+                        "dept_id": str(department_id),
+                        "uid": str(user_id),
+                    },
+                )
+
+            return user_id
+
+        user_id = new_id()
+        await session.execute(
+            sa.text(
+                "INSERT INTO app_user "
+                "(id, email, display_name, department_id, "
+                "password_hash, status, lock_version, roles) "
+                "VALUES (:id, :email, :name, :dept_id, '', 'active', 0, "
+                "CAST(:roles AS jsonb))"
+            ),
+            {
+                "id": str(user_id),
+                "email": email,
+                "name": display_name,
+                "dept_id": str(department_id),
+                "roles": json.dumps([SYSTEM_SERVICE_ROLE_CODE]),
+            },
+        )
+
+        # 同时创建 app_user_department 关联（is_primary=true）
+        await session.execute(
+            sa.text(
+                "INSERT INTO app_user_department (user_id, department_id, is_primary) "
+                "VALUES (:uid, :dept_id, true) "
+                "ON CONFLICT (user_id, department_id) DO NOTHING"
+            ),
+            {
+                "uid": str(user_id),
+                "dept_id": str(department_id),
+            },
+        )
+
+        return user_id
+
+    @staticmethod
     async def count_by_email(session: AsyncSession, email: str) -> int:
         """按邮箱统计用户数（用于幂等性验证）。"""
         result = await session.execute(
@@ -456,6 +562,25 @@ class _UsersPort:
                     password=password,
                 )
 
+    async def get_or_create_system_service(self, department_id: UUID) -> UUID:
+        """幂等获取或创建系统服务用户（挂 system 哨兵部门）。
+
+        系统服务用户无密码、不可登录，仅用于 Celery worker 作为
+        actor_id / created_by / uploaded_by 的合法 app_user 引用。
+
+        Args:
+            department_id: system 哨兵部门 ID。
+
+        Returns:
+            UUID: 系统服务用户 ID。
+        """
+        async with self._factory() as session:
+            async with session.begin():
+                return await UserRepository.get_or_create_system_service(
+                    session,
+                    department_id=department_id,
+                )
+
 
 async def bootstrap_platform(container: ApplicationContainer) -> None:
     """幂等引导平台：哨兵部门 → 角色 → 管理员 → 种子部门 → bucket。
@@ -500,6 +625,12 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     )
     logger.info("Bootstrap: admin user ready")
 
+    logger.info("Bootstrap: ensuring system service user (department=system) ...")
+    system_user_id = await container.users.get_or_create_system_service(
+        department_id=system_dept.id,
+    )
+    logger.info("Bootstrap: system service user ready (id=%s)", system_user_id)
+
     logger.info("Bootstrap: seeding departments ...")
     await container.departments.seed_departments(root_dept.id)
     logger.info("Bootstrap: departments ready")
@@ -517,9 +648,11 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     logger.info(
         "Bootstrap: set these for Beat worker:\n"
         "  IRIP_ROOT_DEPT_ID=%s\n"
-        "  IRIP_SYSTEM_DEPT_ID=%s",
+        "  IRIP_SYSTEM_DEPT_ID=%s\n"
+        "  IRIP_SYSTEM_SERVICE_USER_ID=%s",
         root_dept.id,
         system_dept.id,
+        system_user_id,
     )
 
     logger.info("Bootstrap complete.")
