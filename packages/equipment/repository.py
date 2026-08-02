@@ -218,9 +218,8 @@ class EquipmentRepository:
         equipment_id: UUID,
         status: str,
         lock_version: int,
-        department_id: UUID,
     ) -> Equipment | None:
-        """UPDATE 设备状态（乐观锁，软禁用/启用，含租户隔离）。"""
+        """UPDATE 设备状态（乐观锁，软禁用/启用，RLS 处理租户隔离）。"""
         result = await session.execute(
             sa.update(Equipment)
             .values(
@@ -230,7 +229,6 @@ class EquipmentRepository:
             )
             .where(
                 Equipment.id == equipment_id,
-                Equipment.department_id == department_id,
                 Equipment.lock_version == lock_version,
             )
             .returning(Equipment)

@@ -142,7 +142,7 @@ class EquipmentService:
             now = self._clock.now()
             equipment = Equipment(
                 id=new_id(),
-                department_id=self._dept_id,
+                department_id=department_id,
                 code=code,
                 display_name=display_name,
                 description=description,
@@ -327,13 +327,12 @@ class EquipmentService:
                 equipment_id=equipment_id,
                 status=status,
                 lock_version=lock_version,
-                department_id=self._dept_id,
             )
             if updated is not None:
                 return updated
 
             existing = await EquipmentRepository.select_by_id(session, equipment_id)
-            if existing is None or existing.department_id != self._dept_id:
+            if existing is None:
                 raise AppError(
                     code="not_found",
                     message="设备不存在",
@@ -368,7 +367,6 @@ class EquipmentService:
             await session.execute(
                 sa.delete(Equipment).where(
                     Equipment.id == equipment_id,
-                    Equipment.department_id == self._dept_id,
                 )
             )
 

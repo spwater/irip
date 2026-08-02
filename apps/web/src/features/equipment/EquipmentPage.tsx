@@ -277,24 +277,12 @@ export function EquipmentPage({
         ),
     },
     {
-      title: '可见单位',
-      key: 'visible_departments',
+      title: '描述',
+      dataIndex: 'description',
+      key: 'description',
       width: 293,
-      render: (_: unknown, record: EquipmentListItem) => {
-        const ids = record.visible_departments ?? [];
-        if (!ids.length) {
-          return <Text type="secondary">-</Text>;
-        }
-        return (
-          <Space size={4} wrap>
-            {ids.map((id) => (
-              <Tag key={id} color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>
-                {deptMap.get(id) ?? id.slice(0, 8)}
-              </Tag>
-            ))}
-          </Space>
-        );
-      },
+      render: (desc: string | null) =>
+        desc ? <Text type="secondary" style={{ fontSize: 13 }}>{desc}</Text> : <Text type="secondary">-</Text>,
     },
     {
       title: '状态',
