@@ -93,12 +93,11 @@ async def get_visible_department_ids(
         return []  # 无实验室用户
 
     # 调用 DB 函数 current_visible_dept_ids()
-    # 该函数读取 GUC app.current_dept_id，此处通过 SET LOCAL 设置后调用
+    # 该函数读取 GUC app.current_user_id，需通过 set_user_guc 安全设置
+    from packages.common.tenant_guc import set_user_guc
+
     async with session_factory() as session:
-        await session.execute(
-            sa.text("SET LOCAL app.current_dept_id = :dept_id"),
-            {"dept_id": str(user.department_id)},
-        )
+        await set_user_guc(session, user.user_id)
         result = await session.execute(
             sa.text("SELECT id FROM current_visible_dept_ids()")
         )
