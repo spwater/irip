@@ -99,7 +99,7 @@ async def get_visible_department_ids(
     async with session_factory() as session:
         await set_user_guc(session, user.user_id)
         result = await session.execute(
-            sa.text("SELECT id FROM current_visible_dept_ids()")
+            sa.text("SELECT current_visible_dept_ids FROM current_visible_dept_ids()")
         )
         return [
             row[0] if isinstance(row[0], UUID) else UUID(str(row[0]))
