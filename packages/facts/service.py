@@ -180,11 +180,14 @@ class FactService:
                 )
 
         async with session_scope(self._factory) as session:
-            # 3. 校验工业对象属于组织
+            # 3. 校验工业对象在可见部门范围内
+            from packages.common.dept_visibility import compute_visible_dept_ids
+
+            visible_ids = await compute_visible_dept_ids(session, command.department_id, self._actor_id)
             obj = await session.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.id == command.object_id,
-                    IndustrialObject.department_id == command.department_id,
+                    IndustrialObject.department_id.in_(visible_ids),
                 )
             )
             if obj is None:
