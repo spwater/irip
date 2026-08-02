@@ -287,6 +287,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_READ,
             Permission.PROVENANCE_WRITE,
             Permission.COMPONENT_READ,
+            Permission.FLOW_MANAGE,
             Permission.FLOW_EXECUTE,
             Permission.FLOW_READ,
             Permission.ASSISTANT_USE,
