@@ -234,7 +234,7 @@ export function DepartmentManagement(): JSX.Element {
     ? getDescendantIds(items, editingDept.id)
     : new Set<string>();
   const parentOptions = items
-    .filter((item) => !excludeIds.has(item.id) && item.code !== 'system')
+    .filter((item) => !excludeIds.has(item.id))
     .map((item) => ({
       value: item.id,
       label: item.display_name,

@@ -3,7 +3,6 @@
  *
  * 从 /api/v1/departments 获取部门树，使用 Ant Design TreeSelect 渲染。
  * - root 显示为"公共（{机构名}）"
- * - system 哨兵不出现
  * - 多部门用户可见选择器，单部门用户隐藏（自动用 primary）
  * - 普通用户禁选 root（仅管理员可挂 root），通过 allowRoot props 控制
  */
@@ -12,9 +11,6 @@ import { TreeSelect } from 'antd';
 import type { TreeSelectProps } from 'antd';
 import { useQuery } from '@tanstack/react-query';
 import { apiListDepartments, type DepartmentListItem } from '@/api/departments';
-
-/** 哨兵部门 code 集合 */
-const SENTINEL_CODES = new Set(['root', 'system']);
 
 /** 树节点类型 */
 type DeptTreeNode = {
@@ -29,8 +25,7 @@ function buildDeptTree(items: DepartmentListItem[], allowRoot: boolean): DeptTre
   const map = new Map<string, DeptTreeNode>();
   const roots: DeptTreeNode[] = [];
 
-  // 过滤掉 system 哨兵
-  const filtered = items.filter((d) => d.code !== 'system');
+  const filtered = items;
 
   // 创建节点
   for (const item of filtered) {
@@ -87,7 +82,7 @@ export type DepartmentSelectorProps = {
  * 部门树选择器组件
  *
  * 从 API 获取部门列表，构建树形结构，使用 Ant Design TreeSelect 渲染。
- * root 哨兵显示为"公共（{名称}）"，system 哨兵不出现。
+ * root 哨兵显示为"公共（{名称}）"。
  * 普通用户禁选 root（通过 allowRoot=false 控制）。
  */
 export function DepartmentSelector({
