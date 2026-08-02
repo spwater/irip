@@ -1837,12 +1837,14 @@ class FlowRuntimeService:
                         sa.delete(FlowRun).where(FlowRun.flow_version_id.in_(version_ids))
                     )
 
-                # 4. 删除流程版本
+                # 4. 删除流程版本（flow_definition_version 是不可变表，需 GUC 开关）
+                await session.execute(sa.text("SET LOCAL app.allow_immutable_delete = 'on'"))
                 await session.execute(
                     sa.delete(FlowDefinitionVersionORM).where(
                         FlowDefinitionVersionORM.flow_definition_id == flow_id
                     )
                 )
+                await session.execute(sa.text("SET LOCAL app.allow_immutable_delete = 'off'"))
 
             # 5. 删除流程定义本身
             await session.execute(
