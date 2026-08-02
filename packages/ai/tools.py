@@ -259,6 +259,24 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         category="ingestion",
     ),
     ToolSpec(
+        name="raman_converter",
+        display_name="拉曼光谱解析器",
+        description="解析拉曼光谱 TXT 文件，提取两列数据（拉曼位移 cm⁻¹ + 光谱强度）"
+        "为结构化 JSON（metadata/points/series）。支持 Tab 或空格分隔的纯数值文件。",
+        required_permission="",
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "拉曼光谱 TXT 文件路径（artifact: 前缀或本地路径）",
+                },
+            },
+            "required": ["file_path"],
+        },
+        category="ingestion",
+    ),
+    ToolSpec(
         name="llm_converter",
         display_name="大模型解析器",
         description="用于大模型对数据的解析。",
