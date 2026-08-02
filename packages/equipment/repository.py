@@ -141,8 +141,6 @@ class EquipmentRepository:
         elif department_id is not None:
             visible_ids = await compute_visible_dept_ids(session, department_id)
             query = query.where(Equipment.department_id.in_(visible_ids))
-            else:
-                query = query.where(Equipment.department_id == department_id)
         elif visible_dept_id is not None:
             query = query.where(Equipment.visible_departments.contains([str(visible_dept_id)]))
 
