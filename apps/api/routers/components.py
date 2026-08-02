@@ -24,10 +24,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.dependencies.dept_scope import (
-    get_visible_department_ids,
-    should_filter_by_department,
-)
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
@@ -306,42 +302,8 @@ async def list_components(
     """
     items = await service.list(kind=kind, status=status)
 
-    # 部门级数据隔离：非管理员用户只能看到自己实验室及后代实验室的数据接口。
-    # 数据接口通过 experimental_object_code → industrial_object 继承可见性。
-    # 实验对象的 department_id（所属单位）和 visible_departments（可见单位）
-    # 都用于判断接口可见性。
-    if should_filter_by_department(current_user):
-        visible_dept_ids = await get_visible_department_ids(current_user, service.session_factory)
-        if visible_dept_ids:
-            import sqlalchemy as sa
-
-            from packages.common.database import session_scope
-            from packages.standards.objects import IndustrialObject
-
-            async with session_scope(service.session_factory) as session:
-                # 查出所属单位或可见单位包含可见部门的实验对象 code
-                visible_codes_result = await session.execute(
-                    sa.select(IndustrialObject.code).where(
-                        sa.or_(
-                            IndustrialObject.department_id.in_(visible_dept_ids),
-                            sa.text(
-                                "EXISTS (SELECT 1 FROM unnest(visible_departments) AS vd "
-                                "WHERE vd::text = ANY(:dept_ids)"
-                            ).bindparams(dept_ids=list(visible_dept_ids)),
-                        )
-                    )
-                )
-                visible_codes = {row[0] for row in visible_codes_result.fetchall()}
-
-            # 过滤 items，只保留 experimental_object_code 在 visible_codes 内的。
-            # experimental_object_code 为 NULL 的组件不在可见范围内，不显示。
-            items = [
-                (comp, ver) for comp, ver in items if ver.experimental_object_code in visible_codes
-            ]
-        else:
-            # 无实验室用户（非管理员且 department_id 为 NULL）：看不到任何数据接口
-            items = []
-
+    # 可见性由 service 层通过 compute_visible_dept_ids() 处理（含后代向下遍历），
+    # 路由层不再做硬编码 department_id 过滤。
     return ComponentListResponse(
         items=[
             ComponentListItemResponse(

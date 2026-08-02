@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from apps.api.composition import lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.dependencies.dept_scope import get_visible_department_ids
 from packages.audit.events import AuditEventData
 from packages.audit.redaction import redact
 from packages.audit.repository import AuditRecorder
@@ -284,15 +285,21 @@ async def list_users(
     """
     is_lab_director_only: bool = _is_lab_director(current_user) and not _is_platform_admin(current_user)
 
+    # irip-ai-collab: lab_director 只能查看可见部门（含下级）的用户
+    # 使用 get_visible_department_ids 做向下遍历，而非硬编码精确 department_id 匹配
+    visible_dept_ids: list[UUID] = []
+    if is_lab_director_only:
+        if current_user.department_id is None:
+            # 无 org 的 lab_director 返回空
+            return UserListResponse(items=[], next_cursor=None, has_more=False)
+        visible_dept_ids = await get_visible_department_ids(current_user, session_factory)
+
     async with session_factory() as session:
         stmt = sa.select(AppUser).order_by(AppUser.created_at.desc())
 
-        # irip-ai-collab: lab_director 只能查看同 org 用户
+        # irip-ai-collab: lab_director 只能查看可见部门（含下级）的用户
         if is_lab_director_only:
-            if current_user.department_id is None:
-                # 无 org 的 lab_director 返回空
-                return UserListResponse(items=[], next_cursor=None, has_more=False)
-            stmt = stmt.where(AppUser.department_id == current_user.department_id)
+            stmt = stmt.where(AppUser.department_id.in_(visible_dept_ids))
 
         if status is not None:
             stmt = stmt.where(AppUser.status == status)

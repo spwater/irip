@@ -205,17 +205,8 @@ async def list_objects(
     Returns:
         ObjectListResponse: 分页列表。
     """
-    # 实验室级数据隔离：非管理员按 department_id + visible_departments 过滤
-    # 可见性规则：department_id == 用户实验室 OR visible_departments 包含用户实验室
-    if should_filter_by_department(current_user):
-        if current_user.department_id is None:
-            return ObjectListResponse(items=[], next_cursor=None)
-        filter_dept_id = current_user.department_id
-        filter_visible_dept_id = current_user.department_id
-    else:
-        filter_dept_id = None
-        filter_visible_dept_id = None
-
+    # 可见性由 service 层通过 compute_visible_dept_ids() 处理（含后代向下遍历），
+    # 路由层不再做硬编码 department_id 过滤。
     # 多类型过滤：逗号分隔 → list 传给 service 做 IN 查询
     if object_type and "," in object_type:
         types = [t.strip() for t in object_type.split(",") if t.strip()]
@@ -223,8 +214,6 @@ async def list_objects(
             object_type=types,
             cursor=cursor,
             page_size=page_size,
-            department_id=filter_dept_id,
-            visible_dept_id=filter_visible_dept_id,
         )
         return ObjectListResponse(
             items=[_object_to_list_item(obj) for obj in items],
@@ -235,8 +224,6 @@ async def list_objects(
         object_type=object_type,
         cursor=cursor,
         page_size=page_size,
-        department_id=filter_dept_id,
-        visible_dept_id=filter_visible_dept_id,
     )
     return ObjectListResponse(
         items=[_object_to_list_item(obj) for obj in items],

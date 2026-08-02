@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.departments import get_department_service
-from apps.api.dependencies.dept_scope import can_reparent_department, should_filter_by_department
+from apps.api.dependencies.dept_scope import can_reparent_department
 from packages.common.errors import AppError
 from packages.departments.service import DepartmentService
 
@@ -203,43 +203,9 @@ async def list_departments(
     """
     result = await service.list(status=status, cursor=cursor, limit=limit)
 
-    # 实验室级数据隔离：非管理员只返回可见部门（primary + 额外 + 子孙 + 祖先）
-    if should_filter_by_department(current_user):
-        if current_user.department_id is None:
-            return DepartmentListResponse(items=[], next_cursor=None, has_more=False)
-
-        # 使用 current_visible_dept_ids() 获取用户所有可见部门（含多部门并集）
-        import sqlalchemy as sa
-
-        from packages.common.database import session_scope
-        from packages.common.principal import Principal
-
-        async with session_scope(
-            service._factory,  # noqa: SLF001
-            principal=Principal(
-                user_id=current_user.user_id,
-                department_id=current_user.department_id,
-                email=current_user.email,
-                roles=current_user.roles,
-                scope=None,
-                token_version=0,
-                is_active=True,
-            ),
-        ) as session:
-            visible_result = await session.execute(
-                sa.text("SELECT * FROM current_visible_dept_ids()")
-            )
-            allowed_ids: set[UUID] = {row[0] for row in visible_result}
-
-        # 过滤结果：只保留可见部门
-        filtered_items = [
-            (dept, member_count, children_count, equipment_count)
-            for dept, member_count, children_count, equipment_count in result.items
-            if dept.id in allowed_ids
-        ]
-        result_items = filtered_items
-    else:
-        result_items = result.items
+    # 可见性由 RLS / current_visible_dept_ids() 在数据库层处理，
+    # 路由层不再做冗余的 should_filter_by_department 过滤。
+    result_items = result.items
 
     items = [
         DepartmentListItem(
@@ -291,19 +257,10 @@ async def get_department_name_map(
 
     async with service._factory() as session:  # noqa: SLF001
         # 阶段2: department 表是结构数据，RLS 按 current_visible_dept_ids() 过滤
-        # 无需手动加 department_id 条件
+        # 可见性由数据库层 RLS 处理，路由层不再做冗余过滤。
         stmt = sa.select(Department.id, Department.display_name).order_by(
             Department.sort_order, Department.display_name
         )
-
-        # 非管理员只返回自己实验室及后代实验室的名称
-        if should_filter_by_department(current_user):
-            from apps.api.dependencies.dept_scope import get_visible_department_ids
-
-            visible_ids = await get_visible_department_ids(current_user, service._factory)  # type: ignore[attr-defined]
-            if not visible_ids:
-                return []
-            stmt = stmt.where(Department.id.in_(visible_ids))
 
         result = await session.execute(stmt)
         rows = result.all()

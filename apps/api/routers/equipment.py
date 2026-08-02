@@ -243,16 +243,11 @@ async def list_equipment(
     Returns:
         EquipmentListResponse: 分页列表。
     """
-    # 实验室级数据隔离：非管理员强制使用自己的 department_id
-    # 可见性规则：department_id == 用户实验室 OR visible_departments 包含用户实验室
-    if should_filter_by_department(current_user):
-        if current_user.department_id is None:
-            return EquipmentListResponse(items=[], next_cursor=None, has_more=False)
-        dept_id = current_user.department_id
-        visible_dept_id = current_user.department_id
-    else:
-        dept_id = UUID(department_id) if department_id is not None else None
-        visible_dept_id = None
+    # 可见性由 service 层通过 RLS / compute_visible_dept_ids() 处理，
+    # 路由层不再做硬编码 department_id 过滤。
+    # department_id 查询参数仅用于显式筛选（如管理员按部门过滤）。
+    dept_id = UUID(department_id) if department_id is not None else None
+    visible_dept_id = None
     result = await service.list(
         department_id=dept_id,
         visible_dept_id=visible_dept_id,

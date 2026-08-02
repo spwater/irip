@@ -25,7 +25,6 @@ from sqlalchemy import func  # noqa: E402
 
 from apps.api.dependencies.auth import CurrentUser  # noqa: E402
 from apps.api.dependencies.authorization import require_permission  # noqa: E402
-from apps.api.dependencies.dept_scope import should_filter_by_department  # noqa: E402
 from packages.common.errors import AppError  # noqa: E402
 from packages.facts.observations import FactRef  # noqa: E402
 from packages.facts.service import CreateFactCommand, FactService  # noqa: E402
@@ -166,10 +165,6 @@ async def list_facts(
     items = [_ref_to_response(r) for r in refs]
     group_counts: dict[str, int] = {}
 
-    # 实验室级数据隔离：非管理员且无实验室 → 返回空列表
-    if should_filter_by_department(current_user) and current_user.department_id is None:
-        return FactListResponse(items=[], next_cursor=None, group_counts={})
-
     if items:
         import sqlalchemy as sa
 
@@ -177,37 +172,6 @@ async def list_facts(
 
         fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
         async with service.session_factory() as session:
-            # 实验室级数据隔离：通过 flow_run_id 链路过滤事实
-            if should_filter_by_department(current_user):
-                from packages.components.flow_runtime import (
-                    FlowDefinition,
-                    FlowDefinitionVersionORM,
-                    FlowRun,
-                )
-
-                dept_stmt = (
-                    sa.select(Fact.id)
-                    .join(FlowRun, Fact.flow_run_id == FlowRun.id)
-                    .join(
-                        FlowDefinitionVersionORM,
-                        FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
-                    )
-                    .join(
-                        FlowDefinition,
-                        FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
-                    )
-                    .where(
-                        Fact.id.in_(fact_ids),
-                        FlowDefinition.department_id == current_user.department_id,
-                    )
-                )
-                dept_result = await session.execute(dept_stmt)
-                allowed_ids = {str(row[0]) for row in dept_result}
-                items = [item for item in items if item.fact_id in allowed_ids]
-                fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
-                if not items:
-                    return FactListResponse(items=[], next_cursor=None, group_counts={})
-
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
                 FlowDefinition as _FD,
@@ -251,35 +215,13 @@ async def list_facts(
                     item.created_at = snap[6].isoformat() if snap[6] else None
 
             # 查每个 task_code 的总数（不受分页限制）
-            if should_filter_by_department(current_user):
-                count_stmt = (
-                    sa.select(
-                        Fact.task_code,
-                        func.count(func.distinct(Fact.id)),
-                    )
-                    .join(FlowRun, Fact.flow_run_id == FlowRun.id)
-                    .join(
-                        FlowDefinitionVersionORM,
-                        FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
-                    )
-                    .join(
-                        FlowDefinition,
-                        FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
-                    )
-                    .where(
-                        Fact.task_code.isnot(None),
-                        FlowDefinition.department_id == current_user.department_id,
-                    )
-                    .group_by(Fact.task_code)
+            count_stmt = (
+                sa.select(
+                    Fact.task_code, func.count(func.distinct(Fact.id))
                 )
-            else:
-                count_stmt = (
-                    sa.select(
-                        Fact.task_code, func.count(func.distinct(Fact.id))
-                    )
-                    .where(Fact.task_code.isnot(None))
-                    .group_by(Fact.task_code)
-                )
+                .where(Fact.task_code.isnot(None))
+                .group_by(Fact.task_code)
+            )
             count_result = await session.execute(count_stmt)
             group_counts = {str(row[0]): row[1] for row in count_result}
 
