@@ -1029,19 +1029,19 @@ class FlowRuntimeService:
         Raises:
             AppError: code="not_found"，当版本不存在。
         """
-        # 验证版本存在
-        await self.get_definition_by_id(flow_version_id)
+        # 验证版本存在并获取流程定义（用于 department_id）
+        flow_def, _version = await self.get_definition_by_id(flow_version_id)
 
         run_id: UUID = new_id()
         input_snapshot: dict[str, Any] = inputs or {}
 
-        # 创建作业
+        # 创建作业（department_id 用流程定义的归属部门，而非执行者部门）
         job_ref: Any = await self._job_service.accept(
             kind="flow_execute",
             payload={
                 "run_id": str(run_id),
                 "flow_version_id": str(flow_version_id),
-                "department_id": str(self._dept_id),
+                "department_id": str(flow_def.department_id),
             },
             idempotency_key=f"flow-run-{run_id}",
         )
@@ -1049,7 +1049,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run = FlowRun(
                 id=run_id,
-                department_id=self._dept_id,
+                department_id=flow_def.department_id,
                 flow_version_id=flow_version_id,
                 status="pending",
                 job_id=job_ref.job_id,

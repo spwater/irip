@@ -213,7 +213,16 @@ class FactRepository:
         """
         result = await session.execute(sa.select(Fact).where(Fact.id == fact_id))
         fact = result.scalar_one_or_none()
-        if fact is None or fact.department_id != org_id:
+        if fact is None:
+            raise AppError(
+                code="not_found",
+                message="事实不存在",
+                retryable=False,
+                fields={"fact_id": str(fact_id)},
+            )
+        # 可见性检查：fact 部门必须在可见集中
+        visible_ids = await compute_visible_dept_ids(session, org_id)
+        if fact.department_id not in visible_ids:
             raise AppError(
                 code="not_found",
                 message="事实不存在",

@@ -607,9 +607,44 @@ async def get_fact(
     current_user: ReadUserDep,
     service: FactServiceDep,
 ) -> FactResponse:
-    """获取事实。"""
+    """获取事实（含 JOIN 快照字段）。"""
+    import sqlalchemy as sa
+    from packages.facts.entities import Fact
+    from packages.components.flow_runtime import FlowDefinition as _FD, FlowDefinitionVersionORM as _FV, FlowRun as _FR
+
     ref = await service.get(fact_id)
-    return _ref_to_response(ref)
+    resp = _ref_to_response(ref)
+
+    # 补充 JOIN 快照字段（与列表 API 一致）
+    async with service.session_factory() as session:
+        snap_stmt = (
+            sa.select(
+                Fact.id,
+                Fact.task_code,
+                sa.func.coalesce(_FD.display_name, Fact.task_name).label("task_name"),
+                Fact.department_name,
+                Fact.operator,
+                Fact.run_operator,
+                Fact.equipment_name,
+                Fact.created_at,
+            )
+            .outerjoin(_FR, Fact.flow_run_id == _FR.id)
+            .outerjoin(_FV, _FR.flow_version_id == _FV.id)
+            .outerjoin(_FD, _FV.flow_definition_id == _FD.id)
+            .where(Fact.id == fact_id)
+        )
+        snap_result = await session.execute(snap_stmt)
+        snap = snap_result.first()
+        if snap:
+            resp.task_code = snap[1]
+            resp.task_name = snap[2]
+            resp.department_name = snap[3]
+            resp.operator = snap[4]
+            resp.run_operator = snap[5]
+            resp.equipment_name = snap[6]
+            resp.created_at = snap[7].isoformat() if snap[7] else None
+
+    return resp
 
 
 @facts_router.get("/{fact_id}/data")
