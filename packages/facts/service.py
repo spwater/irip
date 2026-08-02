@@ -201,6 +201,8 @@ class FactService:
                 department_id=command.department_id,
                 fact_type=command.fact_type,
                 object_id=command.object_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 status="active",
                 idempotency_key=command.idempotency_key,
                 created_by=command.created_by,

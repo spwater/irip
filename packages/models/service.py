@@ -89,6 +89,7 @@ class ModelService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
+        actor_id: UUID,
         artifact_service: Any,
         fact_service: Any | None = None,
         clock: Clock | None = None,
@@ -98,16 +99,25 @@ class ModelService:
         Args:
             session_factory: 异步会话工厂。
             department_id: 当前部门 ID。
+            actor_id: 当前操作者用户 ID（用于模型所有者 owner_user_id）。
             artifact_service: 工件服务实例（用于上传/下载模型工件）。
             fact_service: 事实服务实例（用于写 model_execution 事实）。
             clock: 时钟（默认 SystemClock）。
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._actor_id = actor_id
         self._artifact_service = artifact_service
         self._fact_service = fact_service
         self._clock: Clock = clock if clock is not None else SystemClock()
         self._applicability_checker = ApplicabilityChecker()
+
+    # ---- 公开只读属性 ----
+
+    @property
+    def actor_id(self) -> UUID:
+        """当前操作者用户 ID（公开只读访问）。"""
+        return self._actor_id
 
     # ---- 创建与版本管理 ----
 
@@ -150,6 +160,8 @@ class ModelService:
             model = Model(
                 id=new_id(),
                 department_id=self._dept_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 code=code,
                 display_name=display_name,
                 status="draft",

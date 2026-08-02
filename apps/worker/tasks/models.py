@@ -96,6 +96,7 @@ def _build_model_service(factory: Any, department_id: UUID, user_id: UUID) -> An
     return ModelService(
         session_factory=factory,
         department_id=department_id,
+        actor_id=user_id,
         artifact_service=artifact_service,
         fact_service=fact_service,
     )

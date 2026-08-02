@@ -542,6 +542,7 @@ class FlowRuntimeService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
+        actor_id: UUID,
         registry: ComponentRegistryService,
         runner: ComponentRunner,
         job_service: Any,
@@ -554,6 +555,7 @@ class FlowRuntimeService:
         Args:
             session_factory: 异步会话工厂。
             department_id: 当前部门 ID。
+            actor_id: 当前操作者用户 ID（用于流程定义所有者 owner_user_id）。
             registry: 组件注册表服务。
             runner: 组件运行器（PythonComponentRunner 或 CLIComponentRunner）。
             job_service: 作业服务（创建异步作业触发执行）。
@@ -564,6 +566,7 @@ class FlowRuntimeService:
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._actor_id = actor_id
         self._registry = registry
         self._runner = runner
         self._job_service = job_service
@@ -578,6 +581,11 @@ class FlowRuntimeService:
     def department_id(self) -> UUID:
         """当前部门 ID（公开只读访问）。"""
         return self._dept_id
+
+    @property
+    def actor_id(self) -> UUID:
+        """当前操作者用户 ID（公开只读访问）。"""
+        return self._actor_id
 
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -644,6 +652,8 @@ class FlowRuntimeService:
                 code=code,
                 display_name=display_name,
                 department_id=department_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 project_name=project_name,
                 operator=operator,
                 experimental_object_code=experimental_object_code,

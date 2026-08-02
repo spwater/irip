@@ -42,6 +42,7 @@ def register(ctx: CompositionContext) -> None:
         return ModelService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
+            actor_id=current_user.user_id,
             artifact_service=art_svc,
             fact_service=fact_svc,
         )

@@ -277,6 +277,9 @@ class ArtifactService:
                     await asyncio.to_thread(self._s3.put_object, object_key, data, media_type)
 
             artifact = Artifact(
+                department_id=self._dept_id,
+                owner_user_id=self._uploaded_by,
+                visibility_scope="tree",
                 sha256=sha256,
                 filename=filename,
                 media_type=media_type,

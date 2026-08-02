@@ -135,6 +135,8 @@ class RecipeService:
             recipe = TransformationRecipe(
                 id=new_id(),
                 department_id=self._dept_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 code=code.strip(),
                 display_name=display_name.strip(),
                 status="draft",

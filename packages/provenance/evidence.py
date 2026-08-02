@@ -138,6 +138,8 @@ class EvidenceService:
             evidence_set = EvidenceSet(
                 id=new_id(),
                 department_id=self._dept_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 name=name.strip(),
                 status="draft",
                 lock_version=0,

@@ -156,11 +156,13 @@ def _train_tiny_model() -> bytes:
 @pytest_asyncio.fixture
 async def model_service(
     async_session_factory: Any,
+    test_user: object,
 ) -> Any:
     """构建 ModelService 实例（含模拟工件服务与事实服务）。
 
     Args:
         async_session_factory: 异步会话工厂 fixture。
+        test_user: 测试用户 fixture（提供 user_id 作为 actor_id）。
 
     Returns:
         ModelService: 模型服务实例。
@@ -175,6 +177,7 @@ async def model_service(
     service = ModelService(
         session_factory=async_session_factory,
         department_id=org_id,
+        actor_id=test_user.user_id,  # type: ignore[attr-defined]
         artifact_service=artifact_service,
         fact_service=fact_service,
     )

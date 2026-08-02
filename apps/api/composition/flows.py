@@ -73,6 +73,7 @@ def register(ctx: CompositionContext) -> None:
         return FlowRuntimeService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
+            actor_id=current_user.user_id,
             registry=registry,
             runner=_flow_runner,
             job_service=job_svc,

@@ -104,6 +104,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
+        actor_id=department_id,
         registry=registry,
         runner=runner,
         job_service=job_service,
@@ -307,6 +308,7 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
+        actor_id=department_id,
         registry=registry,
         runner=runner,
         job_service=job_service,

@@ -164,6 +164,8 @@ class ParameterService:
             param = Parameter(
                 id=new_id(),
                 department_id=self._dept_id,
+                owner_user_id=self._actor_id,
+                visibility_scope="tree",
                 variable_code=variable_code.strip(),
                 object_id=object_id,
                 status=ParameterStatus.DRAFT.value,

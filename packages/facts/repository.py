@@ -120,6 +120,8 @@ class FactRepository:
         department_id: UUID,
         fact_type: str,
         object_id: UUID,
+        owner_user_id: UUID,
+        visibility_scope: str = "tree",
         status: str = "active",
         idempotency_key: str | None = None,
         created_by: UUID | None = None,
@@ -142,6 +144,8 @@ class FactRepository:
             department_id: 部门 ID。
             fact_type: 事实类型。
             object_id: 工业对象 ID。
+            owner_user_id: 所有者用户 ID（NOT NULL）。
+            visibility_scope: 可见范围（默认 tree）。
             status: 状态（默认 active）。
             idempotency_key: 幂等键（可选）。
             created_by: 创建人 ID（可选）。
@@ -163,6 +167,8 @@ class FactRepository:
         fact = Fact(
             id=new_id(),
             department_id=department_id,
+            owner_user_id=owner_user_id,
+            visibility_scope=visibility_scope,
             fact_type=fact_type,
             object_id=object_id,
             status=status,
