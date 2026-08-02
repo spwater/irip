@@ -22,7 +22,6 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import ProviderStatus from '@/features/assistant/ProviderStatus';
 import MessageThread from '@/features/assistant/MessageThread';
 import ConversationSearch from '@/features/assistant/ConversationSearch';
 import ShowcasePanel from '@/features/assistant/ShowcasePanel';
@@ -32,6 +31,7 @@ import {
   apiCancelRequest,
   apiCreateConversation,
   apiDeleteConversation,
+  apiGetProviderStatus,
   apiListConversations,
   apiListMessages,
   apiSendMessage,
@@ -194,6 +194,15 @@ export function AssistantPage(): JSX.Element {
     enabled: inviteModalOpen,
     staleTime: 60_000,
   });
+
+  // AI Provider 状态（在线/离线）
+  const { data: providerStatusData } = useQuery({
+    queryKey: ['assistant-provider-status'],
+    queryFn: () => apiGetProviderStatus(),
+    retry: false,
+    staleTime: 30_000,
+  });
+  const aiOnline = (providerStatusData?.provider_mode ?? 'offline') !== 'offline';
 
   // 判断当前用户是否为选中对话的 owner
   // irip-ai-collab: 优先从 participant 记录判断，兼容旧对话（无 participant 记录时按创建者判断）
@@ -715,35 +724,41 @@ export function AssistantPage(): JSX.Element {
             overflow: 'hidden',
           },
         }}
-        title={
-          <Space>
-            <Title level={5} style={{ margin: 0 }}>
-              小艾
-            </Title>
-            {selectedConvId && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {conversationList.find((c) => c.id === selectedConvId)?.title ?? ''}
-              </Text>
-            )}
-          </Space>
-        }
-        extra={<ProviderStatus />}
       >
         {/* irip-ai-collab: 参与者工具栏 */}
         {selectedConvId && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #f0f0f0' }}>
             <Space size="small">
-              <Avatar.Group size="small" maxCount={5}>
-                {(participantsData ?? []).map((p) => (
-                  <Avatar key={p.user_id} src={p.avatar_url} size={24} style={{ backgroundColor: p.role === 'owner' ? '#faad14' : '#1686AE', fontSize: 11 }}>
-                    {p.display_name.charAt(0)}
-                  </Avatar>
-                ))}
-              </Avatar.Group>
-              {(participantsData ?? []).length > 0 && (
-                <Button size="small" type="text" icon={<TeamOutlined />} onClick={() => setParticipantDrawerOpen(true)}>
-                  {(participantsData ?? []).length}人
-                </Button>
+              {/* AI 助手状态指示 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginRight: 4 }}>
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: aiOnline ? '#52c41a' : '#bfbfbf',
+                    boxShadow: aiOnline ? '0 0 4px rgba(82,196,26,0.5)' : 'none',
+                    flexShrink: 0,
+                  }}
+                />
+                <Text style={{ fontSize: 13, color: aiOnline ? 'inherit' : 'var(--ocean-text-muted, #999)' }}>
+                  中材小艾
+                </Text>
+              </div>
+              {(participantsData ?? []).length > 1 && (
+                <>
+                  <span style={{ color: '#d9d9d9', fontSize: 12 }}>|</span>
+                  <Avatar.Group size="small" maxCount={5}>
+                    {(participantsData ?? []).map((p) => (
+                      <Avatar key={p.user_id} src={p.avatar_url} size={24} style={{ backgroundColor: p.role === 'owner' ? '#faad14' : '#1686AE', fontSize: 11 }}>
+                        {p.display_name.charAt(0)}
+                      </Avatar>
+                    ))}
+                  </Avatar.Group>
+                  <Button size="small" type="text" icon={<TeamOutlined />} onClick={() => setParticipantDrawerOpen(true)}>
+                    {(participantsData ?? []).length}人
+                  </Button>
+                </>
               )}
             </Space>
             {isOwner && (
