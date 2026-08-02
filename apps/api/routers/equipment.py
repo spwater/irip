@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.common.errors import AppError
 from packages.equipment.service import EquipmentService
 
@@ -150,40 +149,25 @@ def _to_response(equip: object) -> EquipmentResponse:
 async def _check_ownership(
     current_user: CurrentUser,
     equipment_department_id: UUID | None,
+    equipment_owner_user_id: UUID | None,
     service: EquipmentServiceDep,
 ) -> None:
-    """检查当前用户是否可以编辑/删除设备（含后代继承）。
+    """检查当前用户是否可以编辑/删除设备（所有者+上级模型）。
 
-    上级单位自动拥有下级单位的编辑权限。
-    可见单位（visible_departments）的用户只能看不能改。
-    平台管理员不受限制。
+    权限规则：
+    - 数据所有者可管理自己的数据；
+    - 上级部门可管理下级部门的数据（单向向下，不含本部门）；
+    - 同部门非所有者不可管理他人的数据；
+    - 平台管理员不受限制。
     """
-    if not should_filter_by_department(current_user):
-        return  # 平台管理员/监督员不受限制
-    if equipment_department_id is None:
-        return  # 设备无所属单位，允许操作
-    if current_user.department_id is None:
-        raise AppError(
-            code="forbidden",
-            message="只有所属单位的成员才能编辑/删除设备",
-            retryable=False,
-            fields={},
-        )  # noqa: E501
+    from apps.api.dependencies.dept_scope import check_management_permission
 
-    # 管理权限：只能编辑自己部门及后代部门的设备（单向向下，不含祖先和兄弟）
-    from packages.common.database import session_scope
-    from packages.equipment.repository import _get_descendant_dept_ids
-
-    factory = service._factory  # type: ignore[attr-defined]
-    async with session_scope(factory) as session:
-        manage_ids = await _get_descendant_dept_ids(session, current_user.department_id)
-    if equipment_department_id not in manage_ids:
-        raise AppError(
-            code="forbidden",
-            message="只有所属单位（或上级单位）的成员才能编辑/删除设备",
-            retryable=False,
-            fields={},
-        )
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=equipment_department_id,
+        entity_owner_user_id=equipment_owner_user_id,
+        session_factory=service._factory,  # type: ignore[attr-defined]
+    )
 
 
 # ---- 端点 ----
@@ -321,16 +305,16 @@ async def update_equipment(
         AppError: code="not_found"，当设备不存在时。
         AppError: code="conflict"，当 lock_version 不匹配时。
     """
-    # 若未提供 department_id，需先查询当前值
+    # 先查询当前设备以获取 department_id 和 owner_user_id
+    existing = await service.get(equipment_id)
     department_id: UUID
     if body.department_id is not None:
         department_id = UUID(body.department_id)
     else:
-        equipment = await service.get(equipment_id)
-        department_id = equipment.department_id
+        department_id = existing.department_id
 
-    # 归属检查：只有所属单位的成员才能编辑
-    await _check_ownership(current_user, department_id, service)
+    # 归属检查：所有者+上级模型
+    await _check_ownership(current_user, department_id, existing.owner_user_id, service)
 
     sort_order = body.sort_order if body.sort_order is not None else 0
 
@@ -368,9 +352,9 @@ async def update_equipment_status(
         AppError: code="not_found"，当设备不存在时。
         AppError: code="conflict"，当 lock_version 不匹配时。
     """
-    # 归属检查：只有所属单位的成员才能操作
+    # 归属检查：所有者+上级模型
     equip = await service.get(equipment_id)
-    await _check_ownership(current_user, equip.department_id, service)
+    await _check_ownership(current_user, equip.department_id, equip.owner_user_id, service)
 
     equipment = await service.set_status(
         equipment_id=equipment_id,
@@ -396,8 +380,8 @@ async def delete_equipment(
     Raises:
         AppError: code="not_found"，当设备不存在时。
     """
-    # 归属检查：只有所属单位的成员才能删除
+    # 归属检查：所有者+上级模型
     equip = await service.get(equipment_id)
-    await _check_ownership(current_user, equip.department_id, service)
+    await _check_ownership(current_user, equip.department_id, equip.owner_user_id, service)
 
     await service.delete(equipment_id)

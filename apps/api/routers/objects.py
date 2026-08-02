@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.dependencies.dept_scope import should_filter_by_department
 from packages.common.errors import AppError
 from packages.standards.object_graph import ObjectGraphService
 
@@ -51,38 +50,25 @@ ObjectGraphServiceDep = Annotated[ObjectGraphService, Depends(get_object_graph_s
 async def _check_object_ownership(
     current_user: CurrentUser,
     obj_department_id: UUID | None,
+    obj_owner_user_id: UUID | None,
     service: ObjectGraphServiceDep,
 ) -> None:
-    """检查当前用户是否可以编辑/删除对象（含后代继承）。
+    """检查当前用户是否可以编辑/删除对象（所有者+上级模型）。
 
-    上级单位自动拥有下级单位的编辑权限。
-    可见单位的用户只能看不能改。平台管理员不受限制。
+    权限规则：
+    - 数据所有者可管理自己的数据；
+    - 上级部门可管理下级部门的数据（单向向下，不含本部门）；
+    - 同部门非所有者不可管理他人的数据；
+    - 平台管理员不受限制。
     """
-    if not should_filter_by_department(current_user):
-        return
-    if obj_department_id is None:
-        return
-    if current_user.department_id is None:
-        raise AppError(
-            code="forbidden",
-            message="只有所属单位的成员才能编辑/删除对象",
-            retryable=False,
-            fields={},
-        )  # noqa: E501
+    from apps.api.dependencies.dept_scope import check_management_permission
 
-    # 管理权限：只能编辑自己部门及后代部门的对象（单向向下，不含祖先和兄弟）
-    from packages.common.database import session_scope
-    from packages.equipment.repository import _get_descendant_dept_ids
-
-    async with session_scope(service._factory) as session:  # type: ignore[attr-defined]
-        manage_ids = await _get_descendant_dept_ids(session, current_user.department_id)
-    if obj_department_id not in manage_ids:
-        raise AppError(
-            code="forbidden",
-            message="只有所属单位（或上级单位）的成员才能编辑/删除对象",
-            retryable=False,
-            fields={},
-        )
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=obj_department_id,
+        entity_owner_user_id=obj_owner_user_id,
+        session_factory=service._factory,  # type: ignore[attr-defined]
+    )
 
 
 # ---- 请求模型 ----
@@ -297,9 +283,9 @@ async def update_object(
     Raises:
         AppError: code="not_found"，当对象不存在时。
     """
-    # 归属检查：只有所属单位的成员才能编辑
+    # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, service)
+    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
 
     obj = await service.update_object(
         object_id=object_id,
@@ -331,9 +317,9 @@ async def update_object_status(
     Returns:
         ObjectResponse: 更新后的对象。
     """
-    # 归属检查：只有所属单位的成员才能操作
+    # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, service)
+    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
 
     obj = await service.set_object_status(
         object_id=object_id,
@@ -356,9 +342,9 @@ async def delete_object(
         AppError: code="not_found"，当对象不存在时。
         AppError: code="conflict"，当存在活跃关系或子对象时。
     """
-    # 归属检查：只有所属单位的成员才能删除
+    # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, service)
+    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
 
     await service.delete_object(object_id)
 

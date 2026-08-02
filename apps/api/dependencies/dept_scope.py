@@ -155,6 +155,74 @@ async def can_reparent_department(
         return code not in ("root", "system")
 
 
+async def check_management_permission(
+    current_user: CurrentUser,
+    entity_department_id: UUID | None,
+    entity_owner_user_id: UUID | None,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """检查管理权限：所有者或上级部门可管理，同部门非所有者不可管理。
+
+    权限规则（管理权单向向下 + 所有者）：
+    1. root 成员 / 平台管理员 → 允许（不受限制）
+    2. 数据无所属部门 → 允许
+    3. 当前用户是数据所有者 → 允许
+    4. 数据所属部门是当前用户部门的严格后代（不含本部门）→ 允许（上级管下级）
+    5. 其他 → 拒绝
+
+    设计原则：可见性是双向对称的（信息权），管理权是单向向下的（仅自己+后代），
+    同部门非所有者只有信息权没有管理权。
+
+    Args:
+        current_user: 当前认证用户。
+        entity_department_id: 数据所属部门 ID。
+        entity_owner_user_id: 数据所有者用户 ID。
+        session_factory: 数据库会话工厂。
+
+    Raises:
+        AppError: code="forbidden"，当无管理权限时。
+    """
+    from packages.common.errors import AppError
+
+    # 1. root / 平台管理员不受限制
+    if not should_filter_by_department(current_user):
+        return
+
+    # 2. 数据无所属部门 → 允许
+    if entity_department_id is None:
+        return
+
+    # 3. 所有者 → 允许
+    if entity_owner_user_id is not None and current_user.user_id == entity_owner_user_id:
+        return
+
+    # 4. 上级部门管理下级 → 需要严格后代（不含本部门）
+    if current_user.department_id is None:
+        raise AppError(
+            code="forbidden",
+            message="无管理权限：仅数据所有者或上级部门可操作",
+            retryable=False,
+            fields={},
+        )
+
+    from packages.common.database import session_scope
+    from packages.equipment.repository import _get_descendant_dept_ids
+
+    async with session_scope(session_factory) as session:
+        descendants = await _get_descendant_dept_ids(session, current_user.department_id)
+
+    # 排除本部门（严格后代）——同部门非所有者无管理权
+    descendants.discard(current_user.department_id)
+
+    if entity_department_id not in descendants:
+        raise AppError(
+            code="forbidden",
+            message="无管理权限：仅数据所有者或上级部门可操作",
+            retryable=False,
+            fields={},
+        )
+
+
 async def check_is_root_member(
     department_id: UUID | None,
     session_factory: async_sessionmaker[AsyncSession],

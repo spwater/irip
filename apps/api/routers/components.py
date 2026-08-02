@@ -494,5 +494,16 @@ async def delete_component(
         dict: {"status": "deleted"}
     """
     comp, _ = await service.get_version_by_id(component_id)
+
+    # 归属检查：所有者+上级模型
+    from apps.api.dependencies.dept_scope import check_management_permission
+
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=comp.department_id,
+        entity_owner_user_id=comp.owner_user_id,
+        session_factory=service.session_factory,  # type: ignore[attr-defined]
+    )
+
     await service.delete_component(comp.id)
     return {"status": "deleted"}

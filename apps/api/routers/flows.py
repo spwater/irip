@@ -517,6 +517,34 @@ async def delete_flow(
     service: FlowServiceDep,
 ) -> None:
     """删除流程定义及其所有版本和运行记录。"""
+    # 归属检查：所有者+上级模型
+    import sqlalchemy as sa
+
+    from packages.common.database import session_scope
+    from packages.common.dept_visibility import compute_visible_dept_ids
+    from packages.common.errors import AppError
+    from packages.components.flow_runtime import FlowDefinition
+
+    async with session_scope(service.session_factory) as session:
+        visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
+        stmt = sa.select(FlowDefinition).where(
+            FlowDefinition.id == flow_id,
+            FlowDefinition.department_id.in_(visible_ids),
+        )
+        result = await session.execute(stmt)
+        definition = result.scalar_one_or_none()
+        if definition is None:
+            raise AppError(code="not_found", message="流程定义不存在")
+
+    from apps.api.dependencies.dept_scope import check_management_permission
+
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=definition.department_id,
+        entity_owner_user_id=definition.owner_user_id,
+        session_factory=service.session_factory,
+    )
+
     await service.delete_flow(flow_id)
 
 
@@ -551,6 +579,25 @@ async def update_flow(
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
             FlowDefinition.department_id.in_(visible_ids),
+        )
+        result = await session.execute(stmt)
+        definition = result.scalar_one_or_none()
+        if definition is None:
+            raise AppError(code="not_found", message="流程定义不存在")
+
+    # 归属检查：所有者+上级模型
+    from apps.api.dependencies.dept_scope import check_management_permission
+
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=definition.department_id,
+        entity_owner_user_id=definition.owner_user_id,
+        session_factory=service.session_factory,
+    )
+
+    async with session_scope(service.session_factory) as session:
+        stmt = sa.select(FlowDefinition).where(
+            FlowDefinition.id == flow_id,
         )
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()

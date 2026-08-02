@@ -1040,12 +1040,28 @@ async def delete_fact(
     from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
-    # 先查出关联的 source_artifact_id，用于删 MinIO 文件
+    # 先查出关联的 source_artifact_id + 归属信息，用于权限检查和删 MinIO 文件
     async with service.session_factory() as session:
         art_result = await session.execute(
-            sa.select(Fact.source_artifact_id).where(Fact.id == fact_id)
+            sa.select(Fact.source_artifact_id, Fact.department_id, Fact.owner_user_id).where(Fact.id == fact_id)
         )
-        source_artifact_id = art_result.scalar_one_or_none()
+        row = art_result.first()
+        if row is None:
+            from packages.common.errors import AppError
+            raise AppError(code="not_found", message="事实不存在", retryable=False, fields={"fact_id": str(fact_id)})
+        source_artifact_id = row[0]
+        fact_dept_id = row[1]
+        fact_owner_id = row[2]
+
+    # 归属检查：所有者+上级模型
+    from apps.api.dependencies.dept_scope import check_management_permission
+
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=fact_dept_id,
+        entity_owner_user_id=fact_owner_id,
+        session_factory=service.session_factory,
+    )
 
     # 删 MinIO 中的 artifact 文件
     if source_artifact_id is not None:
