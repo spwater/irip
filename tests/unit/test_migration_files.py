@@ -251,7 +251,7 @@ class TestMigration0048ForceRls:
         assert "tenant_isolation" in content
 
     def test_uses_organization_id_column(self) -> None:
-        """0048 基于 organization_id 列过滤。"""
+        """0048 引用 organization_id 标识需要 FORCE RLS 的表（历史迁移，不可修改）。"""
         content = self._read_file_text()
         assert "organization_id" in content
 

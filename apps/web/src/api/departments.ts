@@ -12,7 +12,7 @@ import { http } from './client';
 /** 实验室详情 */
 export type Department = {
   id: string;
-  organization_id: string;
+  department_id: string;
   code: string;
   display_name: string;
   description: string | null;
@@ -37,6 +37,25 @@ export type DepartmentListItem = {
   children_count: number;
   equipment_count: number;
 };
+
+/** re-parent 影响预览响应（阶段2新增） */
+export type ReparentImpactResponse = {
+  department_id: string;
+  department_name: string;
+  new_parent_id: string | null;
+  subtree_count: number;
+  equipment_count: number;
+};
+
+/** 哨兵部门 code 判断 */
+export function isSentinelDept(code: string): boolean {
+  return code === 'root' || code === 'system';
+}
+
+/** root 哨兵判断 */
+export function isRootDept(code: string): boolean {
+  return code === 'root';
+}
 
 /** 实验室分页列表响应 */
 export type DepartmentListResponse = {
@@ -125,6 +144,22 @@ export async function apiUpdateDepartmentStatus(
 
 export async function apiDeleteDepartment(id: string): Promise<void> {
   await http.delete(`/departments/${id}`);
+}
+
+/**
+ * 获取 re-parent 影响预览（阶段2新增）。
+ *
+ * 返回受影响的子树部门数、关联设备数等，供前端二次确认展示。
+ */
+export async function apiGetReparentImpact(
+  departmentId: string,
+  newParentId?: string | null,
+): Promise<ReparentImpactResponse> {
+  const res = await http.get<ReparentImpactResponse>(
+    `/departments/${departmentId}/reparent-impact`,
+    { params: { new_parent_id: newParentId } },
+  );
+  return res.data;
 }
 
 export async function apiGetDepartmentUsers(

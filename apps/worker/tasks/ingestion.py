@@ -27,7 +27,7 @@ async def _process_ingestion_async(
         payload: 作业载荷，包含：
             - file_paths: 文件路径列表（批量）或 file_path（单文件）
             - object_id: 工业对象 ID
-            - organization_id: 组织 ID
+            - department_id: 组织 ID
             - actor_id: 操作人 ID（可选）
 
     Returns:
@@ -51,7 +51,7 @@ async def _process_ingestion_async(
     factory = build_session_factory(async_url)
 
     # 从 payload 提取参数
-    organization_id = UUID(str(payload["organization_id"]))
+    department_id = UUID(str(payload["department_id"]))
     actor_id_str = payload.get("actor_id")
     actor_id = UUID(str(actor_id_str)) if actor_id_str else None
     object_id = UUID(str(payload["object_id"]))
@@ -59,7 +59,7 @@ async def _process_ingestion_async(
     # 构建服务
     fact_service = FactService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         actor_id=actor_id,
     )
     quality_engine = QualityEngine()
@@ -67,7 +67,7 @@ async def _process_ingestion_async(
         session_factory=factory,
         fact_service=fact_service,
         quality_engine=quality_engine,
-        organization_id=organization_id,
+        department_id=department_id,
         actor_id=actor_id,
     )
 

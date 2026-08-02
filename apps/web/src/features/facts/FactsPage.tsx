@@ -23,6 +23,7 @@ import {
 } from '@/api/facts-provenance';
 import { apiListDepartments } from '@/api/departments';
 import type { FactSummary } from '@/api/types';
+import { PrivateBadge } from '@/shared/PrivateBadge';
 import { DataTableShell, FeedbackState } from '@/shared/ui';
 
 const { Text } = Typography;
@@ -42,6 +43,7 @@ type TreeNode = {
   operator?: string | null;
   run_operator?: string | null;
   equipment_name?: string | null;
+  visibility_scope?: string | null;
   children?: TreeNode[];
 };
 
@@ -70,6 +72,7 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
           task_code: null,
           task_name: null,
           isGroup: false,
+          visibility_scope: f.visibility_scope,
         });
       }
     } else {
@@ -87,6 +90,7 @@ function groupByTask(facts: FactSummary[], groupCounts: Record<string, number>):
         run_operator: f.run_operator,
         equipment_name: f.equipment_name,
         isGroup: false,
+        visibility_scope: f.visibility_scope,
       }));
       tree.push({
         key: `task-${taskCode}`,
@@ -222,7 +226,14 @@ export function FactsPage(): JSX.Element {
             </Space>
           );
         }
-        return <span style={{ fontFamily: 'var(--ocean-font-mono)', fontSize: 13 }}>{record.subject_id}</span>;
+        return (
+          <Space size={4}>
+            <span style={{ fontFamily: 'var(--ocean-font-mono)', fontSize: 13 }}>{record.subject_id}</span>
+            {(record as Record<string, unknown>).visibility_scope === 'private' && (
+              <PrivateBadge visibility_scope="private" />
+            )}
+          </Space>
+        );
       },
     },
     {

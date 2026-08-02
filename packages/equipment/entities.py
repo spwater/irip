@@ -38,14 +38,13 @@ class EquipmentStatus(StrEnum):
 class Equipment(Base):
     """设备仪器实体（对应 equipment 表）。
 
-    code 在组织内唯一（UNIQUE 约束 (organization_id, code)）。
+    code 在部门内唯一（UNIQUE 约束 (department_id, code)）。
     department_id 关联 department 表（CASCADE 删除）。
     code 创建后锁定不可修改（服务层 UPDATE 语句不写 code 列）。
 
     Attributes:
         id: 设备 UUID。
-        organization_id: 所属顶层组织 ID。
-        code: 设备编码（组织内唯一，创建后锁定）。
+        code: 设备编码（部门内唯一，创建后锁定）。
         display_name: 中文显示名。
         description: 描述（可选）。
         department_id: 所属部门 ID（FK→department.id）。
@@ -60,13 +59,12 @@ class Equipment(Base):
     __tablename__ = "equipment"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     department_id: Mapped[UUID] = mapped_column(
         GUID,
-        sa.ForeignKey("department.id", ondelete="CASCADE"),
+        sa.ForeignKey("department.id"),
         nullable=False,
     )
     visible_departments: Mapped[list[str]] = mapped_column(
@@ -74,6 +72,19 @@ class Equipment(Base):
         nullable=False,
         default=list,
         server_default=sa.text("'[]'::jsonb"),
+    )
+    # ---- 阶段1 多租户隔离键升级：A 类其余两列（department_id + visible_departments 已有） ----
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
     )
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     sort_order: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("0"))
@@ -87,7 +98,7 @@ class Equipment(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
 
-    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_equipment_org_code"),)
+    __table_args__ = (sa.UniqueConstraint("department_id", "code", name="uq_equipment_dept_code"),)
 
     def __repr__(self) -> str:
         return (

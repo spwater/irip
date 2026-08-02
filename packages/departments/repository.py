@@ -6,7 +6,7 @@
 关键操作（docs/arch-department.md §3.9 类图）：
 - insert: INSERT department；
 - select_by_id: SELECT department by id；
-- select_by_org_and_code: SELECT department by (organization_id, code) — 编码唯一性校验；
+- select_by_org_and_code: SELECT department by (department_id, code) — 编码唯一性校验；
 - select_list: 分页列表 + member_count 聚合（LEFT JOIN + GROUP BY + COUNT）；
 - update: UPDATE with lock_version（乐观锁，不含 code 列）；
 - update_status: UPDATE status with lock_version（乐观锁，软禁用）。
@@ -46,14 +46,12 @@ class DepartmentRepository:
     async def select_by_id(
         session: AsyncSession,
         department_id: UUID,
-        organization_id: UUID,
     ) -> Department | None:
         """按 ID 查询实验室（含租户隔离条件）。
 
         Args:
             session: 异步会话。
             department_id: 实验室 UUID。
-            organization_id: 组织 ID（租户隔离）。
 
         Returns:
             Department | None: 实验室实体，不存在返回 None。
@@ -61,7 +59,6 @@ class DepartmentRepository:
         result = await session.execute(
             sa.select(Department).where(
                 Department.id == department_id,
-                Department.organization_id == organization_id,
             )
         )
         return result.scalar_one_or_none()
@@ -69,14 +66,14 @@ class DepartmentRepository:
     @staticmethod
     async def select_by_org_and_code(
         session: AsyncSession,
-        organization_id: UUID,
+        department_id: UUID,
         code: str,
     ) -> Department | None:
-        """按组织 ID 和编码查询实验室（编码唯一性校验）。
+        """按部门 ID 和编码查询实验室（编码唯一性校验）。
 
         Args:
             session: 异步会话。
-            organization_id: 组织 ID。
+            department_id: 部门 ID。
             code: 实验室编码。
 
         Returns:
@@ -84,7 +81,7 @@ class DepartmentRepository:
         """
         result = await session.execute(
             sa.select(Department).where(
-                Department.organization_id == organization_id,
+                Department.id == department_id,
                 Department.code == code,
             )
         )
@@ -93,7 +90,6 @@ class DepartmentRepository:
     @staticmethod
     async def select_list(
         session: AsyncSession,
-        organization_id: UUID,
         status: str | None = None,
         cursor_sort_order: int | None = None,
         cursor_created_at: datetime | None = None,
@@ -113,7 +109,7 @@ class DepartmentRepository:
 
         Args:
             session: 异步会话。
-            organization_id: 组织 ID（过滤条件）。
+            department_id: 部门 ID（过滤条件）。
             status: 状态筛选（None = 不过滤，"active" / "disabled"）。
             cursor_sort_order: 游标 sort_order（None = 第一页）。
             cursor_created_at: 游标 created_at（None = 第一页）。
@@ -142,7 +138,6 @@ class DepartmentRepository:
         query = (
             sa.select(Department, children_count)
             .select_from(Department)
-            .where(Department.organization_id == organization_id)
             .order_by(
                 Department.sort_order.asc(),
                 Department.created_at.asc(),
@@ -216,14 +211,13 @@ class DepartmentRepository:
         description: str | None,
         sort_order: int,
         lock_version: int,
-        organization_id: UUID,
         parent_id: UUID | None = None,
     ) -> Department | None:
         """UPDATE 实验室（乐观锁，不含 code 列）。
 
         UPDATE department SET display_name=?, description=?, sort_order=?,
         parent_id=?, updated_at=now(), lock_version=lock_version+1
-        WHERE id=? AND organization_id=? AND lock_version=?
+        WHERE id=? AND department_id=? AND lock_version=?
 
         Args:
             session: 异步会话。
@@ -232,7 +226,7 @@ class DepartmentRepository:
             description: 新描述。
             sort_order: 新排序权重。
             lock_version: 客户端持有的乐观锁版本号。
-            organization_id: 组织 ID（租户隔离）。
+            department_id: 部门 ID（租户隔离）。
             parent_id: 上级部门 ID（None 表示顶级部门）。
 
         Returns:
@@ -250,7 +244,6 @@ class DepartmentRepository:
             )
             .where(
                 Department.id == department_id,
-                Department.organization_id == organization_id,
                 Department.lock_version == lock_version,
             )
             .returning(Department)
@@ -263,19 +256,18 @@ class DepartmentRepository:
         department_id: UUID,
         status: str,
         lock_version: int,
-        organization_id: UUID,
     ) -> Department | None:
         """UPDATE 实验室状态（乐观锁，软禁用/启用）。
 
         UPDATE department SET status=?, updated_at=now(), lock_version=lock_version+1
-        WHERE id=? AND organization_id=? AND lock_version=?
+        WHERE id=? AND department_id=? AND lock_version=?
 
         Args:
             session: 异步会话。
             department_id: 实验室 UUID。
             status: 新状态（"active" / "disabled"）。
             lock_version: 客户端持有的乐观锁版本号。
-            organization_id: 组织 ID（租户隔离）。
+            department_id: 部门 ID（租户隔离）。
 
         Returns:
             Department | None: 更新后的实体；None 表示 lock_version 不匹配或不存在。
@@ -289,7 +281,6 @@ class DepartmentRepository:
             )
             .where(
                 Department.id == department_id,
-                Department.organization_id == organization_id,
                 Department.lock_version == lock_version,
             )
             .returning(Department)
@@ -313,14 +304,12 @@ class DepartmentRepository:
     async def delete_by_id(
         session: AsyncSession,
         department_id: UUID,
-        organization_id: UUID,
     ) -> bool:
         """DELETE 实验室记录（物理删除，含租户隔离）。
 
         Args:
             session: 异步会话。
             department_id: 实验室 UUID。
-            organization_id: 组织 ID（租户隔离）。
 
         Returns:
             bool: 是否删除成功（影响行数 > 0）。
@@ -328,7 +317,6 @@ class DepartmentRepository:
         result = await session.execute(
             sa.delete(Department).where(
                 Department.id == department_id,
-                Department.organization_id == organization_id,
             )
         )
         return result.rowcount > 0

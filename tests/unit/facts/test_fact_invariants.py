@@ -42,7 +42,7 @@ def _make_command(
     """
     return CreateFactCommand(
         fact_type=fact_type,  # type: ignore[arg-type]
-        organization_id=setup["organization_id"],
+        department_id=setup["department_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),

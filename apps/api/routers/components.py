@@ -51,7 +51,7 @@ def get_component_registry_service() -> ComponentRegistryService:
     """获取 ComponentRegistryService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError(
         "get_component_registry_service must be overridden via dependency_overrides"
@@ -253,7 +253,7 @@ async def publish_component(
             obj = await sess.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.code == exp_code,
-                    IndustrialObject.organization_id == service.organization_id,
+                    IndustrialObject.department_id == service.department_id,
                 )
             )
             if obj is None:

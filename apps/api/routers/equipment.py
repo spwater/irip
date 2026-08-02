@@ -43,7 +43,7 @@ def get_equipment_service() -> EquipmentService:
     """获取 EquipmentService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError("get_equipment_service must be overridden via dependency_overrides")
 
@@ -92,7 +92,7 @@ class EquipmentResponse(BaseModel):
     """设备详情响应。"""
 
     id: str
-    organization_id: str
+    department_id: str
     code: str
     display_name: str
     description: str | None
@@ -134,11 +134,10 @@ def _to_response(equip: object) -> EquipmentResponse:
     """将 Equipment ORM 实体转换为响应模型。"""
     return EquipmentResponse(
         id=str(equip.id),  # type: ignore[attr-defined]
-        organization_id=str(equip.organization_id),  # type: ignore[attr-defined]
+        department_id=str(equip.department_id),  # type: ignore[attr-defined]
         code=equip.code,  # type: ignore[attr-defined]
         display_name=equip.display_name,  # type: ignore[attr-defined]
         description=equip.description,  # type: ignore[attr-defined]
-        department_id=str(equip.department_id),  # type: ignore[attr-defined]
         visible_departments=list(getattr(equip, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=equip.status,  # type: ignore[attr-defined]
         sort_order=equip.sort_order,  # type: ignore[attr-defined]

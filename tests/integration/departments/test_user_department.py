@@ -32,7 +32,7 @@ async def _create_test_user(
             await session.execute(
                 sa.text(
                     "INSERT INTO app_user "
-                    "(id, organization_id, email, display_name, "
+                    "(id, department_id, email, display_name, "
                     "password_hash, status, lock_version) "
                     "VALUES (:id, :org, :email, :name, :hash, 'active', 0)"
                 ),
@@ -68,14 +68,14 @@ async def _cleanup_departments(session_factory: object, org_id: object, codes: l
             await session.execute(
                 sa.text(
                     "DELETE FROM app_user_department WHERE department_id IN ("
-                    "SELECT id FROM department WHERE organization_id = :org "
+                    "SELECT id FROM department WHERE department_id = :org "
                     "AND code = ANY(:codes))"
                 ),
                 {"org": org_id, "codes": codes},
             )
             await session.execute(
                 sa.text(
-                    "DELETE FROM department WHERE organization_id = :org AND code = ANY(:codes)"
+                    "DELETE FROM department WHERE department_id = :org AND code = ANY(:codes)"
                 ),
                 {"org": org_id, "codes": codes},
             )
@@ -89,18 +89,18 @@ async def test_set_and_get_user_departments(
     """设置用户实验室关联后查询。"""
     dept_service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     ud_service = UserDepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
 
     dept1 = await dept_service.create("ud_lab_01", "实验室1", None, 0)
     dept2 = await dept_service.create("ud_lab_02", "实验室2", None, 1)
 
     user_id = await _create_test_user(
-        async_session_factory, "ud_member@irip.local", test_user.organization_id
+        async_session_factory, "ud_member@irip.local", test_user.department_id
     )
 
     try:
@@ -122,7 +122,7 @@ async def test_set_and_get_user_departments(
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
             async_session_factory,
-            test_user.organization_id,
+            test_user.department_id,
             ["ud_lab_01", "ud_lab_02"],
         )
 
@@ -135,19 +135,19 @@ async def test_get_department_users(
     """查询实验室下用户列表。"""
     dept_service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     ud_service = UserDepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
 
     dept = await dept_service.create("ud_users_lab", "用户列表实验室", None, 0)
     user1 = await _create_test_user(
-        async_session_factory, "ud_user1@irip.local", test_user.organization_id
+        async_session_factory, "ud_user1@irip.local", test_user.department_id
     )
     user2 = await _create_test_user(
-        async_session_factory, "ud_user2@irip.local", test_user.organization_id
+        async_session_factory, "ud_user2@irip.local", test_user.department_id
     )
 
     try:
@@ -174,7 +174,7 @@ async def test_get_department_users(
         await _cleanup_test_user(async_session_factory, user1)
         await _cleanup_test_user(async_session_factory, user2)
         await _cleanup_departments(
-            async_session_factory, test_user.organization_id, ["ud_users_lab"]
+            async_session_factory, test_user.department_id, ["ud_users_lab"]
         )
 
 
@@ -186,17 +186,17 @@ async def test_is_primary_uniqueness(
     """is_primary 唯一性：同一 user 仅一条 is_primary=true。"""
     dept_service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     ud_service = UserDepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
 
     dept1 = await dept_service.create("ud_primary_01", "主要测试1", None, 0)
     dept2 = await dept_service.create("ud_primary_02", "主要测试2", None, 1)
     user_id = await _create_test_user(
-        async_session_factory, "ud_primary@irip.local", test_user.organization_id
+        async_session_factory, "ud_primary@irip.local", test_user.department_id
     )
 
     try:
@@ -227,7 +227,7 @@ async def test_is_primary_uniqueness(
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
             async_session_factory,
-            test_user.organization_id,
+            test_user.department_id,
             ["ud_primary_01", "ud_primary_02"],
         )
 
@@ -240,17 +240,17 @@ async def test_remove_department_association(
     """移除关联：从用户实验室列表中移除一个实验室。"""
     dept_service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     ud_service = UserDepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
 
     dept1 = await dept_service.create("ud_remove_01", "保留实验室", None, 0)
     dept2 = await dept_service.create("ud_remove_02", "移除实验室", None, 1)
     user_id = await _create_test_user(
-        async_session_factory, "ud_remove@irip.local", test_user.organization_id
+        async_session_factory, "ud_remove@irip.local", test_user.department_id
     )
 
     try:
@@ -278,7 +278,7 @@ async def test_remove_department_association(
         await _cleanup_test_user(async_session_factory, user_id)
         await _cleanup_departments(
             async_session_factory,
-            test_user.organization_id,
+            test_user.department_id,
             ["ud_remove_01", "ud_remove_02"],
         )
 
@@ -291,19 +291,19 @@ async def test_member_count_aggregation(
     """member_count 聚合：列表正确返回成员数。"""
     dept_service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     ud_service = UserDepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
 
     dept = await dept_service.create("ud_count_lab", "计数实验室", None, 0)
     user1 = await _create_test_user(
-        async_session_factory, "ud_count1@irip.local", test_user.organization_id
+        async_session_factory, "ud_count1@irip.local", test_user.department_id
     )
     user2 = await _create_test_user(
-        async_session_factory, "ud_count2@irip.local", test_user.organization_id
+        async_session_factory, "ud_count2@irip.local", test_user.department_id
     )
 
     try:
@@ -330,5 +330,5 @@ async def test_member_count_aggregation(
         await _cleanup_test_user(async_session_factory, user1)
         await _cleanup_test_user(async_session_factory, user2)
         await _cleanup_departments(
-            async_session_factory, test_user.organization_id, ["ud_count_lab"]
+            async_session_factory, test_user.department_id, ["ud_count_lab"]
         )

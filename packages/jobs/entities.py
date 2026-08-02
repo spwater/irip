@@ -62,11 +62,11 @@ class Job(Base):
 
     Attributes:
         id: 作业 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         kind: 作业类型（如 ``echo``、``parse_excel``）。
         status: 作业状态（JobStatus 枚举值）。
         payload: 输入快照（JSONB）。
-        idempotency_key: 幂等键（与 organization_id 组成 UNIQUE）。
+        idempotency_key: 幂等键（与 department_id 组成 UNIQUE）。
         attempt: 当前尝试次数。
         max_attempts: 最大重试次数。
         run_after: 重试退避时间（到该时间后才可被获取）。
@@ -83,7 +83,13 @@ class Job(Base):
     __tablename__ = "job"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    # ---- 多租户隔离键升级：B 类一列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（提交者部门快照）",
+    )
     kind: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False)
     payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

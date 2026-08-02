@@ -7,7 +7,7 @@
 - EquipmentRepository:
   - insert: INSERT equipment；
   - select_by_id: SELECT equipment by id；
-  - select_by_org_and_code: SELECT equipment by (organization_id, code) — 编码唯一性校验；
+  - select_by_org_and_code: SELECT equipment by (department_id, code) — 编码唯一性校验；
   - select_list: 分页列表 + department_name JOIN；
   - update: UPDATE with lock_version（乐观锁，不含 code 列）；
   - update_status: UPDATE status with lock_version（乐观锁）。
@@ -60,13 +60,11 @@ class EquipmentRepository:
     async def select_by_id(
         session: AsyncSession,
         equipment_id: UUID,
-        organization_id: UUID,
     ) -> Equipment | None:
-        """按 ID 查询设备（含租户隔离条件）。"""
+        """按 ID 查询设备（RLS 处理租户隔离）。"""
         result = await session.execute(
             sa.select(Equipment).where(
                 Equipment.id == equipment_id,
-                Equipment.organization_id == organization_id,
             )
         )
         return result.scalar_one_or_none()
@@ -74,13 +72,13 @@ class EquipmentRepository:
     @staticmethod
     async def select_by_org_and_code(
         session: AsyncSession,
-        organization_id: UUID,
+        department_id: UUID,
         code: str,
     ) -> Equipment | None:
-        """按组织 ID 和编码查询设备（编码唯一性校验）。"""
+        """按部门 ID 和编码查询设备（编码唯一性校验）。"""
         result = await session.execute(
             sa.select(Equipment).where(
-                Equipment.organization_id == organization_id,
+                Equipment.department_id == department_id,
                 Equipment.code == code,
             )
         )
@@ -89,8 +87,7 @@ class EquipmentRepository:
     @staticmethod
     async def select_list(
         session: AsyncSession,
-        organization_id: UUID,
-        department_id: UUID | None = None,
+        department_id: UUID,
         visible_dept_id: UUID | None = None,
         status: str | None = None,
         cursor_sort_order: int | None = None,
@@ -105,8 +102,7 @@ class EquipmentRepository:
 
         Args:
             session: 异步会话。
-            organization_id: 组织 ID。
-            department_id: 部门 ID 筛选（含后代部门），None 表示不按部门过滤。
+            department_id: 部门 ID。
             visible_dept_id: 可见性部门 ID，用于 OR visible_departments @> [dept_id] 过滤。
                 当 department_id 和 visible_dept_id 同时存在时，取两者的 OR。
             status: 状态筛选。
@@ -125,7 +121,6 @@ class EquipmentRepository:
                 Department,
                 Department.id == Equipment.department_id,
             )
-            .where(Equipment.organization_id == organization_id)
             .order_by(
                 Equipment.sort_order.asc(),
                 Equipment.created_at.asc(),
@@ -135,7 +130,10 @@ class EquipmentRepository:
         )
 
         # 部门过滤 + 可见性过滤
-        # 可见性规则：department_id（含后代） OR visible_departments 包含 visible_dept_id
+        # RLS 已处理可见性，这里只做应用层筛选
+        if department_id is not None:
+            query = query.where(Equipment.department_id == department_id)
+
         if department_id is not None and visible_dept_id is not None:
             dept_ids = await _get_descendant_dept_ids(session, department_id)
             dept_condition = (
@@ -190,7 +188,6 @@ class EquipmentRepository:
         department_id: UUID,
         sort_order: int,
         lock_version: int,
-        organization_id: UUID,
         visible_departments: list[str] | None = None,
     ) -> Equipment | None:
         """UPDATE 设备（乐观锁，不含 code 列，含租户隔离）。"""
@@ -209,7 +206,6 @@ class EquipmentRepository:
             .values(**values)
             .where(
                 Equipment.id == equipment_id,
-                Equipment.organization_id == organization_id,
                 Equipment.lock_version == lock_version,
             )
             .returning(Equipment)
@@ -222,7 +218,7 @@ class EquipmentRepository:
         equipment_id: UUID,
         status: str,
         lock_version: int,
-        organization_id: UUID,
+        department_id: UUID,
     ) -> Equipment | None:
         """UPDATE 设备状态（乐观锁，软禁用/启用，含租户隔离）。"""
         result = await session.execute(
@@ -234,7 +230,7 @@ class EquipmentRepository:
             )
             .where(
                 Equipment.id == equipment_id,
-                Equipment.organization_id == organization_id,
+                Equipment.department_id == department_id,
                 Equipment.lock_version == lock_version,
             )
             .returning(Equipment)

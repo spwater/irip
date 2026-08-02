@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.components import get_component_registry_service
 from apps.api.routers.flows import get_flow_service
@@ -35,10 +35,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_component_registry_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ComponentRegistryService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return ComponentRegistryService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
         )
 
     ctx.app.dependency_overrides[get_component_registry_service] = (
@@ -49,28 +49,28 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> FlowRuntimeService:
         global _flow_runner
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         registry = ComponentRegistryService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
         )
         if _flow_runner is None:
             _flow_runner = PythonComponentRunner()
             register_builtin_components(_flow_runner)
         job_svc = JobService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             created_by=current_user.user_id,
         )
         art_svc = ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
         return FlowRuntimeService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             registry=registry,
             runner=_flow_runner,
             job_service=job_svc,

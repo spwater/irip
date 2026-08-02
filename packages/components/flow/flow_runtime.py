@@ -85,12 +85,12 @@ PROTECTED_PARAMS: frozenset[str] = frozenset(
 class FlowDefinition(Base):
     """流程定义主表 ORM 模型（对应 flow_definition 表）。
 
-    组织内按 code 唯一，一个定义可包含多个版本。
+    部门内按 code 唯一，一个定义可包含多个版本。
 
     Attributes:
         id: 流程定义 UUID。
-        organization_id: 所属组织 ID。
-        code: 流程编码（组织内唯一）。
+        department_id: 所属部门 ID。
+        code: 流程编码（部门内唯一）。
         display_name: 显示名称。
         status: 生命周期状态（draft/published/deprecated）。
         lock_version: 乐观锁版本号。
@@ -101,11 +101,30 @@ class FlowDefinition(Base):
     __tablename__ = "flow_definition"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
-    department_id: Mapped[UUID | None] = mapped_column(
+    department_id: Mapped[UUID] = mapped_column(
         GUID,
-        sa.ForeignKey("department.id", ondelete="SET NULL"),
-        nullable=True,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
+    # ---- 阶段1 多租户隔离键升级：A 类其余三列（department_id 已有，阶段2改为 NOT NULL） ----
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
     )
     project_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     operator: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -200,7 +219,7 @@ class FlowRun(Base):
 
     Attributes:
         id: 执行记录 UUID。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         flow_version_id: 流程版本 ID（FK）。
         status: 执行状态（pending/running/succeeded/failed/cancelled）。
         job_id: 关联作业 ID（FK→job.id）。
@@ -214,7 +233,13 @@ class FlowRun(Base):
     __tablename__ = "flow_run"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    # ---- 多租户隔离键升级：B 类一列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（流程定义部门快照）",
+    )
     flow_version_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey(
@@ -494,7 +519,7 @@ def _serialize_input_summary(
 class FlowRuntimeService:
     """流程运行时服务：定义管理 + 执行编排。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     registry（组件注册表）、runner（组件运行器）、job_service（作业服务）。
 
     核心操作：
@@ -504,7 +529,7 @@ class FlowRuntimeService:
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _registry: 组件注册表服务。
         _runner: 组件运行器。
         _job_service: 作业服务（创建异步作业）。
@@ -516,7 +541,7 @@ class FlowRuntimeService:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         registry: ComponentRegistryService,
         runner: ComponentRunner,
         job_service: Any,
@@ -528,7 +553,7 @@ class FlowRuntimeService:
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             registry: 组件注册表服务。
             runner: 组件运行器（PythonComponentRunner 或 CLIComponentRunner）。
             job_service: 作业服务（创建异步作业触发执行）。
@@ -538,7 +563,7 @@ class FlowRuntimeService:
                 消除 packages→apps 反向依赖 T3-3）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._registry = registry
         self._runner = runner
         self._job_service = job_service
@@ -550,9 +575,9 @@ class FlowRuntimeService:
     # ---- 公开只读属性（替代路由直接访问私有属性） ----
 
     @property
-    def organization_id(self) -> UUID:
-        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
-        return self._org_id
+    def department_id(self) -> UUID:
+        """当前部门 ID（公开只读访问）。"""
+        return self._dept_id
 
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -603,7 +628,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             existing: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.code == code,
                 )
             )
@@ -616,7 +641,6 @@ class FlowRuntimeService:
                 )
 
             definition = FlowDefinition(
-                organization_id=self._org_id,
                 code=code,
                 display_name=display_name,
                 department_id=department_id,
@@ -725,7 +749,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.id == flow_definition_id,
                 )
             )
@@ -779,7 +803,7 @@ class FlowRuntimeService:
                 定义 + 最新版本（无版本时为 None），按 code 排序。
         """
         async with session_scope(self._factory) as session:
-            query = sa.select(FlowDefinition).where(FlowDefinition.organization_id == self._org_id)
+            query = sa.select(FlowDefinition).where(FlowDefinition.department_id == self._dept_id)
             if status is not None:
                 query = query.where(FlowDefinition.status == status)
             query = query.order_by(FlowDefinition.code)
@@ -815,7 +839,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -851,7 +875,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -884,7 +908,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -925,7 +949,7 @@ class FlowRuntimeService:
                         FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
-                        FlowDefinition.organization_id == self._org_id,
+                        FlowDefinition.department_id == self._dept_id,
                         FlowDefinitionVersionORM.id == version_id,
                     )
                 )
@@ -998,7 +1022,7 @@ class FlowRuntimeService:
             payload={
                 "run_id": str(run_id),
                 "flow_version_id": str(flow_version_id),
-                "organization_id": str(self._org_id),
+                "department_id": str(self._dept_id),
             },
             idempotency_key=f"flow-run-{run_id}",
         )
@@ -1006,7 +1030,6 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run = FlowRun(
                 id=run_id,
-                organization_id=self._org_id,
                 flow_version_id=flow_version_id,
                 status="pending",
                 job_id=job_ref.job_id,
@@ -1044,7 +1067,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1204,7 +1227,7 @@ class FlowRuntimeService:
 
             # 构建 ComponentContext
             context: ComponentContext = ComponentContext(
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 user_id=UUID(str(job_id)) if job_id else new_id(),
                 clock=self._clock,
                 artifact_service=self._artifact_service,
@@ -1293,7 +1316,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1468,7 +1491,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1507,7 +1530,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1687,7 +1710,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1722,7 +1745,7 @@ class FlowRuntimeService:
             # 先查出关联的 job_id
             run = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1735,7 +1758,7 @@ class FlowRuntimeService:
             # 删除执行记录
             await session.execute(
                 sa.delete(FlowRun).where(
-                    FlowRun.organization_id == self._org_id,
+                    FlowRun.department_id == self._dept_id,
                     FlowRun.id == run_id,
                 )
             )
@@ -1797,7 +1820,7 @@ class FlowRuntimeService:
             # 5. 删除流程定义本身
             await session.execute(
                 sa.delete(FlowDefinition).where(
-                    FlowDefinition.organization_id == self._org_id,
+                    FlowDefinition.department_id == self._dept_id,
                     FlowDefinition.id == flow_id,
                 )
             )

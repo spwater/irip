@@ -50,7 +50,7 @@ class SecSeededUser:
     user_id: UUID
     email: str
     password: str
-    organization_id: UUID
+    department_id: UUID
 
 
 def _insert_user_sync(engine: Engine, user_id: UUID, email: str) -> None:
@@ -154,7 +154,7 @@ def sec_seeded_user(
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, organization_id, email, display_name, "
+                "(id, department_id, email, display_name, "
                 "password_hash, status, lock_version, roles) "
                 "VALUES (:id, :org, :email, :name, :hash, 'active', 0, "
                 "'[\"platform_administrator\"]'::jsonb)"
@@ -173,7 +173,7 @@ def sec_seeded_user(
         user_id=user_id,
         email=email,
         password="Correct-Horse-2026!",
-        organization_id=org_id,
+        department_id=org_id,
     )
 
     with sync_engine.connect() as conn:

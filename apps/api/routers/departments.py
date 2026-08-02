@@ -27,7 +27,8 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.departments import get_department_service
-from apps.api.dependencies.dept_scope import should_filter_by_department
+from apps.api.dependencies.dept_scope import can_reparent_department, should_filter_by_department
+from packages.common.errors import AppError
 from packages.departments.service import DepartmentService
 
 #: 路由实例。
@@ -61,7 +62,7 @@ class UpdateDepartmentRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
-    sort_order: int = Field(0, ge=0)
+    sort_order: int = Field(0)
     lock_version: int = Field(..., ge=0)
     parent_id: str | None = Field(None, description="上级部门ID，顶级部门为null")
 
@@ -80,7 +81,6 @@ class DepartmentResponse(BaseModel):
     """实验室详情响应。"""
 
     id: str
-    organization_id: str
     code: str
     display_name: str
     description: str | None
@@ -133,7 +133,6 @@ def _to_response(dept: object) -> DepartmentResponse:
     parent_id_val = getattr(dept, "parent_id", None)
     return DepartmentResponse(
         id=str(dept.id),  # type: ignore[attr-defined]
-        organization_id=str(dept.organization_id),  # type: ignore[attr-defined]
         code=dept.code,  # type: ignore[attr-defined]
         display_name=dept.display_name,  # type: ignore[attr-defined]
         description=dept.description,  # type: ignore[attr-defined]
@@ -204,30 +203,35 @@ async def list_departments(
     """
     result = await service.list(status=status, cursor=cursor, limit=limit)
 
-    # 实验室级数据隔离：非管理员只返回自己所在的实验室（及其子实验室）
+    # 实验室级数据隔离：非管理员只返回可见部门（primary + 额外 + 子孙 + 祖先）
     if should_filter_by_department(current_user):
         if current_user.department_id is None:
             return DepartmentListResponse(items=[], next_cursor=None, has_more=False)
 
-        # 查询用户实验室及其所有子实验室 ID（递归遍历 parent_id 层次）
+        # 使用 current_visible_dept_ids() 获取用户所有可见部门（含多部门并集）
         import sqlalchemy as sa
 
-        from packages.departments.entities import Department
+        from packages.common.database import session_scope
+        from packages.common.principal import Principal
 
-        allowed_ids: set[UUID] = {current_user.department_id}
-        pending_ids: list[UUID] = [current_user.department_id]
-        async with service._factory() as session:  # noqa: SLF001
-            while pending_ids:
-                children_stmt = sa.select(Department.id).where(
-                    Department.parent_id.in_(pending_ids)
-                )
-                children_result = await session.execute(children_stmt)
-                children_ids = {row[0] for row in children_result}
-                new_ids = children_ids - allowed_ids
-                allowed_ids.update(new_ids)
-                pending_ids = list(new_ids)
+        async with session_scope(
+            service._factory,  # noqa: SLF001
+            principal=Principal(
+                user_id=current_user.user_id,
+                department_id=current_user.department_id,
+                email=current_user.email,
+                roles=current_user.roles,
+                scope=None,
+                token_version=0,
+                is_active=True,
+            ),
+        ) as session:
+            visible_result = await session.execute(
+                sa.text("SELECT * FROM current_visible_dept_ids()")
+            )
+            allowed_ids: set[UUID] = {row[0] for row in visible_result}
 
-        # 过滤结果：只保留用户实验室及其子实验室
+        # 过滤结果：只保留可见部门
         filtered_items = [
             (dept, member_count, children_count, equipment_count)
             for dept, member_count, children_count, equipment_count in result.items
@@ -270,7 +274,7 @@ async def get_department_name_map(
     display_name 两个字段，不含成员数、描述等敏感信息。
 
     安全约定：
-    - 按当前用户 organization_id 过滤，不跨组织返回数据；
+    - 按当前用户 department_id 过滤，不跨组织返回数据；
     - 非管理员（lab_director/lab_member/lab_viewer）额外只返回
       用户所属实验室及后代实验室的名称。
 
@@ -286,9 +290,11 @@ async def get_department_name_map(
     from packages.departments.entities import Department
 
     async with service._factory() as session:  # noqa: SLF001
-        stmt = sa.select(Department.id, Department.display_name).where(
-            Department.organization_id == service._org_id  # type: ignore[attr-defined]
-        ).order_by(Department.sort_order, Department.display_name)
+        # 阶段2: department 表是结构数据，RLS 按 current_visible_dept_ids() 过滤
+        # 无需手动加 department_id 条件
+        stmt = sa.select(Department.id, Department.display_name).order_by(
+            Department.sort_order, Department.display_name
+        )
 
         # 非管理员只返回自己实验室及后代实验室的名称
         if should_filter_by_department(current_user):
@@ -337,6 +343,8 @@ async def update_department(
 ) -> DepartmentResponse:
     """编辑实验室（code 不可修改）。
 
+    阶段2：增加哨兵保护检查（root / system 部门不可修改）。
+
     Args:
         department_id: 实验室 UUID。
         body: 编辑请求体（不含 code）。
@@ -349,16 +357,65 @@ async def update_department(
     Raises:
         AppError: code="not_found"，当实验室不存在时。
         AppError: code="conflict"，当 lock_version 不匹配时。
+        AppError: code="forbidden"，当修改哨兵部门时。
     """
+    # 阶段2: re-parent 二次确认 — 检查是否可以调整父子关系
+    new_parent_id = UUID(body.parent_id) if body.parent_id else None
+    if new_parent_id is not None:
+        can_reparent = await can_reparent_department(department_id, service._factory)  # noqa: SLF001
+        if not can_reparent:
+            raise AppError(
+                code="forbidden",
+                message="禁止调整哨兵部门的父子关系",
+                retryable=False,
+                fields={"department_id": str(department_id)},
+            )
+
     dept = await service.update(
         department_id=department_id,
         display_name=body.display_name,
         description=body.description,
         sort_order=body.sort_order,
         lock_version=body.lock_version,
-        parent_id=UUID(body.parent_id) if body.parent_id else None,
+        parent_id=new_parent_id,
     )
     return _to_response(dept)
+
+
+class ReparentImpactResponse(BaseModel):
+    """re-parent 影响预览响应（阶段2新增）。"""
+
+    department_id: str
+    department_name: str
+    new_parent_id: str | None
+    subtree_count: int
+    equipment_count: int
+
+
+@departments_router.get("/{department_id}/reparent-impact", response_model=ReparentImpactResponse)
+async def get_reparent_impact(
+    department_id: UUID,
+    current_user: ManageUserDep,
+    service: DepartmentServiceDep,
+    new_parent_id: str | None = Query(None, description="新父部门ID"),
+) -> ReparentImpactResponse:
+    """预览 re-parent 操作的影响（阶段2新增）。
+
+    返回受影响的子树部门数、关联设备数等，
+    供前端二次确认展示。
+
+    Args:
+        department_id: 要调整的部门 ID。
+        current_user: 当前认证用户（需 department:manage 权限）。
+        service: 实验室服务。
+        new_parent_id: 新的父部门 ID。
+
+    Returns:
+        ReparentImpactResponse: 影响预览数据。
+    """
+    parent_uuid = UUID(new_parent_id) if new_parent_id else None
+    impact = await service.reparent_impact_preview(department_id, parent_uuid)
+    return ReparentImpactResponse(**impact)
 
 
 @departments_router.patch("/{department_id}/status", response_model=DepartmentResponse)

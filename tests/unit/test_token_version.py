@@ -14,7 +14,7 @@ get_current_user 中的 session_factory 通过 AsyncMock 替身。
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -50,15 +50,22 @@ def _make_mock_user(
     user_id: Any | None = None,
     status: str = "active",
     token_version: int = 0,
-    department_id: Any | None = None,
+    department_id: Any | None = "default",
 ) -> MagicMock:
-    """构造 mock AppUser 对象。"""
+    """构造 mock AppUser 对象。
+
+    department_id='default' 时自动生成一个 UUID（避免 fail-closed）。
+    显式传 None 时保持 None（用于测试 fail-closed 行为）。
+    """
     user = MagicMock()
     user.id = user_id or uuid4()
     user.email = "user@irip.local"
     user.status = status
     user.token_version = token_version
-    user.department_id = department_id
+    if department_id == "default":
+        user.department_id = uuid4()
+    else:
+        user.department_id = department_id
     user.roles = ["standard_owner"]
     return user
 
@@ -67,9 +74,14 @@ def _make_session_factory(user: MagicMock | None) -> Any:
     """构造 mock session_factory（async context manager）。
 
     session.scalar() 返回指定的 user（或 None）。
+    session.execute() 返回 mock 结果（用于 check_is_root_member 查询）。
     """
     session = AsyncMock()
     session.scalar = AsyncMock(return_value=user)
+    # check_is_root_member 调 execute().first() → 返回 None（非 root 成员）
+    mock_result = MagicMock()
+    mock_result.first = MagicMock(return_value=None)
+    session.execute = AsyncMock(return_value=mock_result)
 
     mock_ctx = MagicMock()
     mock_ctx.__aenter__ = AsyncMock(return_value=session)
@@ -326,7 +338,8 @@ class TestEdgeCases:
         )
         assert isinstance(result, CurrentUser)
         assert result.user_id == user_id
-        assert result.department_id is None  # 无 DB 查询时 department_id 为 None
+        # 无 DB 查询时 department_id 为默认值 UUID(int=0)
+        assert result.department_id == UUID(int=0)
 
 
 # ---- department_id 填充 ----
@@ -355,21 +368,23 @@ class TestDepartmentIdPopulation:
         )
         assert result.department_id == dept_id
 
-    async def test_department_id_none_when_not_assigned(self) -> None:
-        """用户未分配实验室时 department_id 为 None。"""
+    async def test_department_id_none_rejected_fail_closed(self) -> None:
+        """阶段2: department_id 为空时认证被拒绝（fail-closed）。"""
         user_id = uuid4()
         token = _make_token(token_version=0, user_id=user_id)
         user = _make_mock_user(
             user_id=user_id,
             status="active",
             token_version=0,
-            department_id=None,
+            department_id=None,  # 显式设 None
         )
 
         factory = _make_session_factory(user)
-        result = await get_current_user(
-            authorization=f"Bearer {token}",
-            token_secret=SECRET,
-            session_factory=factory,
-        )
-        assert result.department_id is None
+        with pytest.raises(AppError) as exc_info:
+            await get_current_user(
+                authorization=f"Bearer {token}",
+                token_secret=SECRET,
+                session_factory=factory,
+            )
+        assert exc_info.value.code == "forbidden"
+        assert "department_id" in exc_info.value.message

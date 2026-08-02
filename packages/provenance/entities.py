@@ -42,7 +42,7 @@ class EvidenceSet(Base):
 
     Attributes:
         id: 证据集 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         name: 证据集名称。
         status: 状态（draft / frozen）。
         lock_version: 乐观锁版本号。
@@ -54,7 +54,6 @@ class EvidenceSet(Base):
     __tablename__ = "evidence_set"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
         sa.Text,
@@ -73,6 +72,31 @@ class EvidenceSet(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     created_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    # ---- 阶段1 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
+    )
 
     def __repr__(self) -> str:
         return f"EvidenceSet(id={self.id!r}, name={self.name!r}, status={self.status!r})"
@@ -146,8 +170,8 @@ class TransformationRecipe(Base):
 
     Attributes:
         id: 配方 UUID（PK）。
-        organization_id: 所属组织 ID。
-        code: 配方代码（组织内唯一）。
+        department_id: 所属部门 ID。
+        code: 配方代码（部门内唯一）。
         display_name: 显示名称。
         status: 状态（draft / published / deprecated）。
         lock_version: 乐观锁版本号。
@@ -158,7 +182,6 @@ class TransformationRecipe(Base):
     __tablename__ = "transformation_recipe"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -177,12 +200,37 @@ class TransformationRecipe(Base):
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
+    # ---- 阶段1 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
+    )
 
     __table_args__ = (
         sa.UniqueConstraint(
-            "organization_id",
+            "department_id",
             "code",
-            name="uq_transformation_recipe_org_code",
+            name="uq_transformation_recipe_dept_code",
         ),
     )
 
@@ -261,7 +309,7 @@ class DerivationRun(Base):
 
     Attributes:
         id: 运行 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         evidence_set_version_id: 证据集版本 ID（FK→evidence_set_version）。
         recipe_version_id: 配方版本 ID（FK→transformation_recipe_version）。
         job_id: 关联作业 ID（可选，FK→job）。
@@ -277,7 +325,6 @@ class DerivationRun(Base):
     __tablename__ = "derivation_run"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     evidence_set_version_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("evidence_set_version.id"),
@@ -306,6 +353,13 @@ class DerivationRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
+    # ---- 阶段1 多租户隔离键升级：B 类一列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（执行者部门快照）",
+    )
 
     def __repr__(self) -> str:
         return (
@@ -322,7 +376,7 @@ class ProvenanceEdge(Base):
 
     Attributes:
         id: 边 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         derivation_run_id: 推导运行 ID（FK→derivation_run）。
         source_type: 源节点类型（fact /
             intermediate_artifact / derivation_run）。
@@ -339,7 +393,6 @@ class ProvenanceEdge(Base):
     __tablename__ = "provenance_edge"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     derivation_run_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("derivation_run.id", ondelete="CASCADE"),

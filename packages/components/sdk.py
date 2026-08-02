@@ -48,7 +48,7 @@ class ComponentContext:
     """组件执行上下文（由管线编排器构造并注入）。
 
     封装组件执行所需的全部外部依赖与运行时信号：
-    - organization_id / user_id: 租户与操作人隔离；
+    - department_id / user_id: 租户与操作人隔离；
     - clock: 注入时钟（生产 SystemClock，测试 FixedClock）；
     - artifact_service: 工件服务（上传/下载中间结果）；
     - job_id: 关联作业 ID（用于溯源）；
@@ -59,7 +59,7 @@ class ComponentContext:
       消除 packages→apps 反向依赖（T3-3）。
 
     Attributes:
-        organization_id: 当前组织 ID。
+        department_id: 当前部门 ID。
         user_id: 当前操作人 ID。
         clock: 时钟（依赖注入）。
         artifact_service: 工件服务实例（Any 类型避免循环导入）。
@@ -70,7 +70,7 @@ class ComponentContext:
         ai_config_provider: AI 配置异步提供函数（可选）。
     """
 
-    organization_id: UUID
+    department_id: UUID
     user_id: UUID
     clock: Clock
     artifact_service: Any

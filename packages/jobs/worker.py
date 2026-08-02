@@ -18,7 +18,8 @@
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any
 from uuid import UUID
@@ -29,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import session_scope
 from packages.common.errors import AppError
+from packages.common.tenant_guc import set_dept_guc, set_user_guc
 from packages.jobs.entities import (
     TERMINAL_STATUSES,
     Job,
@@ -47,6 +49,32 @@ HEARTBEAT_INTERVAL_SECONDS: int = 10
 
 #: 作业处理器类型：async (Job) -> dict[str, Any]
 JobHandler = Callable[[Job], Awaitable[dict[str, Any]]]
+
+
+@asynccontextmanager
+async def _session_scope_with_dept(
+    factory: async_sessionmaker[AsyncSession],
+    dept_id: UUID | None = None,
+    user_id: UUID | None = None,
+) -> AsyncIterator[AsyncSession]:
+    """带 GUC 的 session_scope（阶段2 worker 专用）。
+
+    Worker 不持有 Principal，但需要为 RLS 设置 dept GUC。
+    从 job 记录中读取 department_id / created_by 后传入。
+
+    Args:
+        factory: 异步会话工厂。
+        dept_id: 作业所属部门 ID（None 时 fail-closed）。
+        user_id: 作业创建者 ID（可选）。
+
+    Yields:
+        AsyncSession: 已设置 GUC 的异步会话。
+    """
+    async with factory() as session:
+        async with session.begin():
+            await set_dept_guc(session, dept_id)
+            await set_user_guc(session, user_id)
+            yield session
 
 
 class WorkerLeaseManager:
@@ -277,7 +305,7 @@ class JobExecutor:
         )
 
         try:
-            # Step 3: 读取作业
+            # Step 3: 读取作业（无 GUC，worker 直接查询）
             async with session_scope(self._factory) as session:
                 job: Job | None = await JobRepository.get(session, job_id)
                 if job is None:
@@ -297,6 +325,9 @@ class JobExecutor:
                 kind: str = job.kind
                 attempt: int = job.attempt
                 max_attempts: int = job.max_attempts
+                # 阶段2: 从作业记录读取 department_id 和 created_by 用于 GUC
+                dept_id: UUID | None = job.department_id
+                job_user_id: UUID | None = job.created_by
 
             # Step 4: 执行处理器
             handler = self._handlers.get(kind)
@@ -308,7 +339,7 @@ class JobExecutor:
                     retryable=False,
                     fields={"kind": kind},
                 )
-                await self._commit_failure(job_id, lock_version, error, attempt, max_attempts)
+                await self._commit_failure(job_id, lock_version, error, attempt, max_attempts, dept_id, job_user_id)
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -319,7 +350,7 @@ class JobExecutor:
                 result_data = await handler(job)
             except AppError as exc:
                 # 不可重试的错误
-                await self._commit_failure(job_id, lock_version, exc, attempt, max_attempts)
+                await self._commit_failure(job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id)
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -329,7 +360,7 @@ class JobExecutor:
                 # 可重试的错误
                 should_retry = attempt + 1 < max_attempts
                 if should_retry:
-                    await self._commit_retry(job_id, lock_version, exc, attempt, max_attempts)
+                    await self._commit_retry(job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id)
                     return JobResult(
                         job_id=job_id,
                         status=JobStatus.RETRY_WAIT,
@@ -349,6 +380,8 @@ class JobExecutor:
                         ),
                         attempt,
                         max_attempts,
+                        dept_id,
+                        job_user_id,
                     )
                     return JobResult(
                         job_id=job_id,
@@ -360,7 +393,7 @@ class JobExecutor:
                     )
 
             # Step 5: 乐观锁提交结果（使用 fencing token）
-            committed = await self._commit_success(job_id, lock_version, result_data)
+            committed = await self._commit_success(job_id, lock_version, result_data, dept_id, job_user_id)
 
             if committed:
                 return JobResult(
@@ -370,7 +403,7 @@ class JobExecutor:
                 )
             else:
                 # lock_version 不匹配 -> 重复提交，读取当前结果
-                async with session_scope(self._factory) as session:
+                async with _session_scope_with_dept(self._factory, dept_id, job_user_id) as session:
                     existing: Job | None = await JobRepository.get(session, job_id)
                     if existing is not None:
                         return JobResult(
@@ -395,6 +428,8 @@ class JobExecutor:
         job_id: UUID,
         lock_version: int,
         result: dict[str, Any],
+        dept_id: UUID | None = None,
+        user_id: UUID | None = None,
     ) -> bool:
         """乐观锁提交成功结果。
 
@@ -402,11 +437,13 @@ class JobExecutor:
             job_id: 作业 UUID。
             lock_version: 期望的锁版本。
             result: 结果数据。
+            dept_id: 作业所属部门 ID（用于设置 GUC）。
+            user_id: 作业创建者 ID（用于设置 GUC）。
 
         Returns:
             bool: 提交成功返回 True，lock_version 不匹配返回 False。
         """
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(self._factory, dept_id, user_id) as session:
             committed = await JobRepository.update_status(
                 session,
                 job_id,
@@ -423,6 +460,8 @@ class JobExecutor:
         error: AppError,
         attempt: int,
         max_attempts: int,
+        dept_id: UUID | None = None,
+        user_id: UUID | None = None,
     ) -> None:
         """提交失败结果（不可重试）。
 
@@ -432,8 +471,10 @@ class JobExecutor:
             error: 应用错误。
             attempt: 当前尝试次数。
             max_attempts: 最大尝试次数。
+            dept_id: 作业所属部门 ID（用于设置 GUC）。
+            user_id: 作业创建者 ID（用于设置 GUC）。
         """
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(self._factory, dept_id, user_id) as session:
             await JobRepository.update_status(
                 session,
                 job_id,
@@ -449,6 +490,8 @@ class JobExecutor:
         error: Exception,
         attempt: int,
         max_attempts: int,
+        dept_id: UUID | None = None,
+        user_id: UUID | None = None,
     ) -> None:
         """提交重试状态（H-03: 同事务创建 outbox 事件重新投递）。
 
@@ -458,11 +501,13 @@ class JobExecutor:
             error: 异常。
             attempt: 当前尝试次数。
             max_attempts: 最大尝试次数。
+            dept_id: 作业所属部门 ID（用于设置 GUC）。
+            user_id: 作业创建者 ID（用于设置 GUC）。
         """
         clock = SystemClock()
         backoff = timedelta(seconds=2**attempt)
 
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(self._factory, dept_id, user_id) as session:
             await session.execute(
                 sa.update(Job)
                 .values(

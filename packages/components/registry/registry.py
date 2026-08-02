@@ -1,7 +1,7 @@
 """IRIP 组件注册表：ORM 实体 + 发布/查询/废弃服务。
 
 提供：
-- Component: 组件主表 ORM（组织内按 name 唯一）；
+- Component: 组件主表 ORM（部门内按 name 唯一）；
 - ComponentVersion: 组件版本表 ORM
   （按 component_id + version 唯一，已发布不可变）；
 - ComponentRegistryService: 发布、查询、列表、废弃的领域服务。
@@ -11,7 +11,7 @@
 - manifest_yaml 与 manifest_sha256 持久化，支持内容寻址校验；
 - port_schemas 存储输入/输出端口规格的 JSONB 序列化；
 - 乐观锁 lock_version 防止并发修改组件主记录；
-- 服务依赖注入 session_factory、organization_id、clock。
+- 服务依赖注入 session_factory、department_id、clock。
 """
 
 from __future__ import annotations
@@ -36,12 +36,12 @@ from packages.components.manifest import ComponentManifest
 class Component(Base):
     """组件主表 ORM 模型（对应 component 表）。
 
-    组织内按 name 唯一，一个组件可包含多个版本。
+    部门内按 name 唯一，一个组件可包含多个版本。
 
     Attributes:
         id: 组件 UUID。
-        organization_id: 所属组织 ID。
-        name: 组件名称（组织内唯一）。
+        department_id: 所属部门 ID。
+        name: 组件名称（部门内唯一）。
         kind: 组件类别
             （ingestion/transform/quality/statistics/output/model）。
         status: 生命周期状态（draft/published/deprecated）。
@@ -53,7 +53,6 @@ class Component(Base):
     __tablename__ = "component"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     kind: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -82,6 +81,31 @@ class Component(Base):
         UTCDateTime,
         server_default=sa.func.now(),
         nullable=False,
+    )
+    # ---- 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（内置组件归 root）",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
     )
 
     def __repr__(self) -> str:
@@ -180,7 +204,7 @@ def _serialize_port_schemas(
 class ComponentRegistryService:
     """组件注册表领域服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     clock（时间源）。
 
     核心操作：
@@ -192,33 +216,33 @@ class ComponentRegistryService:
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _clock: 时钟实例。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         clock: Clock | None = None,
     ) -> None:
         """初始化组件注册表服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             clock: 时钟（可选，默认使用 SystemClock）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._clock: Clock = clock if clock is not None else SystemClock()
 
     # ---- 公开只读属性（替代路由直接访问私有属性） ----
 
     @property
-    def organization_id(self) -> UUID:
-        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
-        return self._org_id
+    def department_id(self) -> UUID:
+        """当前部门 ID（公开只读访问，替代 ``service._dept_id``）。"""
+        return self._dept_id
 
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -234,7 +258,7 @@ class ComponentRegistryService:
         """发布组件版本。
 
         流程：
-        1. 查找/创建组件主记录（按 organization_id + name）；
+        1. 查找/创建组件主记录（按 department_id + name）；
         2. kind 一致性校验（同名组件 kind 不可变）；
         3. 版本唯一性检查（同组件同版本不可重复发布）；
         4. 插入 ComponentVersion（status=published, published_at=now）；
@@ -263,14 +287,14 @@ class ComponentRegistryService:
                 # 非占位值：按 name 查已有组件（发新版本）
                 component = await session.scalar(
                     sa.select(Component).where(
-                        Component.organization_id == self._org_id,
+                        Component.department_id == self._dept_id,
                         Component.name == manifest.name,
                     )
                 )
             if component is None:
                 # 新建接口：用自动生成的编码
                 component = Component(
-                    organization_id=self._org_id,
+                    department_id=self._dept_id,
                     name=gen_code("iface"),
                     kind=manifest.kind,
                     status="draft",
@@ -375,7 +399,7 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                     Component.name == name,
                 )
             )
@@ -421,7 +445,7 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                     Component.name == name,
                 )
             )
@@ -485,7 +509,7 @@ class ComponentRegistryService:
                         ComponentVersion.component_id == Component.id,
                     )
                     .where(
-                        Component.organization_id == self._org_id,
+                        Component.department_id == self._dept_id,
                         ComponentVersion.id == version_id,
                     )
                 )
@@ -551,7 +575,7 @@ class ComponentRegistryService:
                         result.append((comp, fallback))
 
             # 过滤 kind 和 status
-            filtered = [(c, v) for c, v in result if c.organization_id == self._org_id]
+            filtered = [(c, v) for c, v in result if c.department_id == self._dept_id]
             if kind is not None:
                 filtered = [(c, v) for c, v in filtered if c.kind == kind]
             if status is not None:
@@ -594,7 +618,7 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                     Component.name == name,
                 )
             )
@@ -626,7 +650,7 @@ class ComponentRegistryService:
         async with session_scope(self._factory) as session:
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                     Component.name == name,
                 )
             )
@@ -664,13 +688,13 @@ class ComponentRegistryService:
         """
         now: datetime = self._clock.now()
         async with session_scope(self._factory) as session:
-            # C-03 IDOR 修复：通过 JOIN Component 确保版本属于当前组织
+            # C-03 IDOR 修复：通过 JOIN Component 确保版本属于当前部门
             version: ComponentVersion | None = await session.scalar(
                 sa.select(ComponentVersion)
                 .join(Component, ComponentVersion.component_id == Component.id)
                 .where(
                     ComponentVersion.id == version_id,
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                 )
             )
             if version is None:
@@ -682,11 +706,11 @@ class ComponentRegistryService:
 
             # 查询组件主记录，修改 active_version_id 指针
             # 不修改 version 的 created_at（不可变表，不允许 UPDATE）
-            # C-03 IDOR 修复：加 organization_id 条件
+            # C-03 IDOR 修复：RLS 已处理租户隔离
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == version.component_id,
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                 )
             )
             if component is not None:
@@ -704,14 +728,14 @@ class ComponentRegistryService:
             component_id: 组件主记录 UUID。
 
         Raises:
-            AppError: code="not_found"，当组件不存在或不属于当前组织时。
+            AppError: code="not_found"，当组件不存在或不属于当前部门时。
         """
         async with session_scope(self._factory) as session:
-            # C-03 IDOR 修复：先校验组件属于当前组织
+            # C-03 IDOR 修复：先校验组件属于当前部门
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == component_id,
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                 )
             )
             if component is None:
@@ -736,7 +760,7 @@ class ComponentRegistryService:
             await session.execute(
                 sa.delete(Component).where(
                     Component.id == component_id,
-                    Component.organization_id == self._org_id,
+                    Component.department_id == self._dept_id,
                 )
             )
             await session.flush()

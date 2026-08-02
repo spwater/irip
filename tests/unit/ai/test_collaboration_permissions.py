@@ -128,7 +128,7 @@ class TestRequirePermissionHardcodedPassthrough:
             user_id=uuid4(),
             email="test@irip.local",
             roles=roles,
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
     def test_account_profile_passthrough_for_lab_viewer(self) -> None:

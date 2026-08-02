@@ -87,7 +87,7 @@ class MeResponse(BaseModel):
     permissions: list[str]
     # irip-ai-collab: 头像 URL + 组织 ID
     avatar_url: str | None = None
-    organization_id: str | None = None
+    department_id: str | None = None
 
 
 # ---- 依赖占位（由应用启动或测试覆盖）----
@@ -269,5 +269,5 @@ async def me(
         roles=roles,
         permissions=permissions,
         avatar_url=user.avatar_url if user is not None else None,
-        organization_id=str(user.organization_id) if user is not None and user.organization_id is not None else None,
+        department_id=str(user.department_id) if user is not None and user.department_id is not None else None,
     )

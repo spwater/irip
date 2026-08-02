@@ -17,6 +17,7 @@ from datetime import datetime
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 # 导入被引用的 ORM 模型所在模块，确保 FK 目标表注册到 Base.metadata。
@@ -37,7 +38,7 @@ class Fact(Base):
 
     Attributes:
         id: 事实 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         fact_type: 事实类型（experiment_run / simulation_run /
             document_record / model_execution）。
         object_id: 工业对象 ID（FK→industrial_object）。
@@ -64,7 +65,6 @@ class Fact(Base):
     __tablename__ = "fact"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     fact_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     object_id: Mapped[UUID] = mapped_column(
         GUID,
@@ -116,12 +116,37 @@ class Fact(Base):
         ),
         nullable=False,
     )
+    # ---- 阶段1 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（阶段1双写，阶段3 RLS 锚定此列）",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree（本子树）/ explicit（仅 visible_departments）/ all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID（权限移交基准）",
+    )
 
     __table_args__ = (
         sa.UniqueConstraint(
-            "organization_id",
+            "department_id",
             "idempotency_key",
-            name="uq_fact_org_idempotency",
+            name="uq_fact_dept_idempotency",
         ),
     )
 

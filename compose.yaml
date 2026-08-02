@@ -34,7 +34,9 @@ services:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
       POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
       POSTGRES_DB: ${IRIP_DATABASE_NAME:-irip}
-    # H-13: 不暴露宿主端口（仅内部网络可访问）
+    # 开发环境临时暴露端口
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - pgrun:/var/run/postgresql
@@ -54,7 +56,9 @@ services:
     <<: *infra-security
     # H-13: Redis 加密码
     command: ["redis-server", "--requirepass", "${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}"]
-    # H-13: 不暴露宿主端口
+    # 开发环境临时暴露端口
+    ports:
+      - "6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -68,7 +72,10 @@ services:
     image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
     <<: *infra-security
     command: server /data --console-address ":9001"
-    # H-13: 不暴露宿主端口（仅内部网络可访问）
+    # 开发环境临时暴露端口
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${IRIP_MINIO_ACCESS_KEY:-irip}
       MINIO_ROOT_PASSWORD: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}

@@ -1,7 +1,7 @@
 """AI 协作服务方法集成测试（irip-ai-collab）。
 
 覆盖 P0 功能需求：
-- P0-01 对话参与者管理（创建自动 owner / 邀请 / 移除 / 退出 / 跨 org 拒绝）；
+- P0-01 对话参与者管理（创建自动 owner / 邀请 / 移除 / 退出 / 跨部门 拒绝）；
 - P0-02/09 对话三栏查询（private / same_org / cross_org 返回空）；
 - P0-03 @人提及（list_mentionable_users 同 org active）。
 
@@ -48,7 +48,7 @@ def _insert_user(sync_engine, email: str, org_id=None, display_name="用户", ro
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, organization_id, email, display_name, "
+                "(id, department_id, email, display_name, "
                 "password_hash, status, roles, lock_version, token_version) "
                 "VALUES (:id, :org, :email, :name, :hash, :status, :roles, 0, 0)"
             ),
@@ -100,7 +100,7 @@ class TestCreateConversationAutoOwner:
         try:
             ref = await ai_service.create_conversation(
                 user_id=user_id,
-                organization_id=org_id,
+                department_id=org_id,
                 title="协作测试对话",
             )
             # 校验 conversation_participant 表有 owner 记录
@@ -119,7 +119,7 @@ class TestCreateConversationAutoOwner:
 
 
 class TestAddParticipant:
-    """P0-01: 邀请同 org 成员 / 跨 org 拒绝 / 重复邀请冲突。"""
+    """P0-01: 邀请同 org 成员 / 跨部门 拒绝 / 重复邀请冲突。"""
 
     async def test_invite_same_org_member(self, ai_service, sync_engine):
         owner_id, org_id = _insert_user(
@@ -133,7 +133,7 @@ class TestAddParticipant:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="邀请测试"
+                user_id=owner_id, department_id=org_id, title="邀请测试"
             )
             ref = await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -157,7 +157,7 @@ class TestAddParticipant:
         assert org_a != org_b
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_a, title="跨org测试"
+                user_id=owner_id, department_id=org_a, title="跨org测试"
             )
             with pytest.raises(AppError) as exc_info:
                 await ai_service.add_participant(
@@ -181,7 +181,7 @@ class TestAddParticipant:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="重复邀请测试"
+                user_id=owner_id, department_id=org_id, title="重复邀请测试"
             )
             await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -211,7 +211,7 @@ class TestAddParticipant:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="非owner邀请测试"
+                user_id=owner_id, department_id=org_id, title="非owner邀请测试"
             )
             # member 先被邀请加入
             await ai_service.add_participant(
@@ -260,7 +260,7 @@ class TestRemoveParticipant:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="移除测试"
+                user_id=owner_id, department_id=org_id, title="移除测试"
             )
             await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -295,7 +295,7 @@ class TestRemoveParticipant:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="非owner移除测试"
+                user_id=owner_id, department_id=org_id, title="非owner移除测试"
             )
             await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -326,7 +326,7 @@ class TestLeaveConversation:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="退出测试"
+                user_id=owner_id, department_id=org_id, title="退出测试"
             )
             await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -355,7 +355,7 @@ class TestLeaveConversation:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="owner不能退出"
+                user_id=owner_id, department_id=org_id, title="owner不能退出"
             )
             with pytest.raises(AppError) as exc_info:
                 await ai_service.leave_conversation(
@@ -374,7 +374,7 @@ class TestLeaveConversation:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="非参与者退出"
+                user_id=owner_id, department_id=org_id, title="非参与者退出"
             )
             with pytest.raises(AppError) as exc_info:
                 await ai_service.leave_conversation(
@@ -400,7 +400,7 @@ class TestListParticipants:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="列表测试"
+                user_id=owner_id, department_id=org_id, title="列表测试"
             )
             await ai_service.add_participant(
                 conversation_id=conv.id,
@@ -432,7 +432,7 @@ class TestListParticipants:
         )
         try:
             conv = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="外部访问测试"
+                user_id=owner_id, department_id=org_id, title="外部访问测试"
             )
             with pytest.raises(AppError) as exc_info:
                 await ai_service.list_participants(
@@ -453,7 +453,7 @@ class TestListConversationsWithTab:
         )
         try:
             result = await ai_service.list_conversations_with_tab(
-                user_id=user_id, organization_id=org_id, tab="cross_org"
+                user_id=user_id, department_id=org_id, tab="cross_org"
             )
             assert result == []
         finally:
@@ -468,10 +468,10 @@ class TestListConversationsWithTab:
         )
         try:
             solo = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="私有对话"
+                user_id=owner_id, department_id=org_id, title="私有对话"
             )
             shared = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="协作对话"
+                user_id=owner_id, department_id=org_id, title="协作对话"
             )
             await ai_service.add_participant(
                 conversation_id=shared.id,
@@ -479,7 +479,7 @@ class TestListConversationsWithTab:
                 target_user_id=member_id,
             )
             result = await ai_service.list_conversations_with_tab(
-                user_id=owner_id, organization_id=org_id, tab="private"
+                user_id=owner_id, department_id=org_id, tab="private"
             )
             ids = [r.id for r in result]
             assert solo.id in ids
@@ -499,10 +499,10 @@ class TestListConversationsWithTab:
         )
         try:
             solo = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="我的私有"
+                user_id=owner_id, department_id=org_id, title="我的私有"
             )
             shared = await ai_service.create_conversation(
-                user_id=owner_id, organization_id=org_id, title="协作"
+                user_id=owner_id, department_id=org_id, title="协作"
             )
             await ai_service.add_participant(
                 conversation_id=shared.id,
@@ -511,14 +511,14 @@ class TestListConversationsWithTab:
             )
             # owner 视角：same_org 包含 solo 和 shared
             result = await ai_service.list_conversations_with_tab(
-                user_id=owner_id, organization_id=org_id, tab="same_org"
+                user_id=owner_id, department_id=org_id, tab="same_org"
             )
             ids = {r.id for r in result}
             assert solo.id in ids
             assert shared.id in ids
             # member 视角：same_org 仅包含 shared（参与者）
             result_member = await ai_service.list_conversations_with_tab(
-                user_id=member_id, organization_id=org_id, tab="same_org"
+                user_id=member_id, department_id=org_id, tab="same_org"
             )
             member_ids = {r.id for r in result_member}
             assert shared.id in member_ids
@@ -543,8 +543,8 @@ class TestListMentionableUsers:
         colleague_id, _ = _insert_user(
             sync_engine, f"col-{uuid4().hex[:8]}@irip.local", org_id=org_id, display_name="同事", roles=["lab_director"]
         )
-        # 跨 org 用户不应出现
-        other_org_id, _ = _insert_user(
+        # 跨部门 用户不应出现
+        other_dept_id, _ = _insert_user(
             sync_engine, f"other-{uuid4().hex[:8]}@irip.local", display_name="外人", roles=["lab_member"]
         )
         # 禁用用户不应出现
@@ -553,12 +553,12 @@ class TestListMentionableUsers:
         )
         try:
             refs = await ai_service.list_mentionable_users(
-                user_id=me_id, organization_id=org_id
+                user_id=me_id, department_id=org_id
             )
             ids = {r.id for r in refs}
             assert colleague_id in ids
             assert me_id not in ids  # 排除自己
-            assert other_org_id not in ids  # 跨 org 不出现
+            assert other_dept_id not in ids  # 跨部门 不出现
             assert disabled_id not in ids  # 禁用不出现
             # 校验 colleague 信息
             colleague = next(r for r in refs if r.id == colleague_id)
@@ -567,5 +567,5 @@ class TestListMentionableUsers:
         finally:
             _cleanup_user(sync_engine, me_id)
             _cleanup_user(sync_engine, colleague_id)
-            _cleanup_user(sync_engine, other_org_id)
+            _cleanup_user(sync_engine, other_dept_id)
             _cleanup_user(sync_engine, disabled_id)

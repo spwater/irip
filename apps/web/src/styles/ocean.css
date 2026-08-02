@@ -402,10 +402,11 @@
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 3px;
-  height: 60%;
+  width: 5px;
+  height: 70%;
   border-radius: 999px;
   background: linear-gradient(180deg, #0e5b84 0%, #17b8ce 100%);
+  box-shadow: 0 0 8px rgba(23, 184, 206, 0.6);
 }
 
 .ocean-sider-menu.ant-menu .ant-menu-item-selected .ocean-nav-item__num,

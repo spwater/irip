@@ -8,7 +8,7 @@
 1. 通用 POST /jobs 接口只允许 allow_general_submit=True 的 kind；
 2. 特权 kind（backup/restore/audit_export）必须通过专用 API 提交；
 3. Worker 执行前必须二次校验 kind、权限快照和 fencing token；
-4. 服务端生成 organization_id、actor、backup_id，不接受客户端覆盖；
+4. 服务端生成 department_id、actor、backup_id，不接受客户端覆盖；
 5. 未知 kind 直接 failed，禁止 echo fallback。
 """
 

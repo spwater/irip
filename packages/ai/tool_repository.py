@@ -7,7 +7,7 @@
 设计约定（架构设计文档 §3.2 / §7.3）：
 - 乐观锁：``update`` / ``set_enabled`` 校验 ``lock_version``，冲突返回 409；
 - 不支持删除（D-5）：仓库无 delete 方法；
-- 全局表（D-6）：无 ``organization_id`` 列；
+- 全局表（D-6）：无 ``department_id`` 列；
 - 返回 ``AIToolRow``（frozen dataclass），解耦 ORM 与调用方。
 """
 
@@ -28,7 +28,7 @@ from packages.common.ids import new_id
 
 
 class AITool(Base):
-    """``ai_tool`` 表 ORM 模型（全局表，无 organization_id）。
+    """``ai_tool`` 表 ORM 模型（全局表，无 department_id）。
 
     Attributes:
         id: 工具 UUID（PK）。

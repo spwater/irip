@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   Drawer,
   Form,
@@ -12,10 +13,11 @@ import {
   Table,
   Tag,
   Tooltip,
+  TreeSelect,
   Typography,
   message,
 } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, LockOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,10 +25,13 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateDepartment,
   apiDeleteDepartment,
+  apiGetReparentImpact,
   apiListDepartments,
   apiUpdateDepartment,
   apiUpdateDepartmentStatus,
+  isSentinelDept,
   type DepartmentListItem,
+  type ReparentImpactResponse,
 } from '@/api/departments';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { MemberDrawer } from '@/features/governance/MemberDrawer';
@@ -111,6 +116,18 @@ export function DepartmentManagement(): JSX.Element {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.roles?.includes('platform_administrator') ?? false;
+  const isLabDirector = user?.roles?.includes('lab_director') ?? false;
+  const userDeptId = user?.departmentId;
+
+  /** lab_director 只能管理主部门及子部门；platform_administrator 可管全部 */
+  const canManageDept = (deptId: string): boolean => {
+    if (isAdmin) return true;
+    if (!isLabDirector || !userDeptId) return false;
+    // 主部门自身
+    if (deptId === userDeptId) return true;
+    // 主部门的子部门
+    return getDescendantIds(items, userDeptId).has(deptId);
+  };
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   // 仪器抽屉：就地新建设备仪器，不跳转页面
   const [equipDrawerOpen, setEquipDrawerOpen] = useState(false);
@@ -118,6 +135,11 @@ export function DepartmentManagement(): JSX.Element {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingDept, setEditingDept] = useState<DepartmentListItem | null>(null);
   const [memberDrawerDept, setMemberDrawerDept] = useState<DepartmentListItem | null>(null);
+  const [reparentTarget, setReparentTarget] = useState<DepartmentListItem | null>(null);
+  const [reparentNewParent, setReparentNewParent] = useState<string | null>(null);
+  const [reparentImpact, setReparentImpact] = useState<ReparentImpactResponse | null>(null);
+  const [reparentConfirmOpen, setReparentConfirmOpen] = useState(false);
+  const [reparentLoading, setReparentLoading] = useState(false);
   const [form] = Form.useForm();
 
   // ---- 数据查询 ----
@@ -212,7 +234,7 @@ export function DepartmentManagement(): JSX.Element {
     ? getDescendantIds(items, editingDept.id)
     : new Set<string>();
   const parentOptions = items
-    .filter((item) => !excludeIds.has(item.id))
+    .filter((item) => !excludeIds.has(item.id) && item.code !== 'system')
     .map((item) => ({
       value: item.id,
       label: item.display_name,
@@ -293,16 +315,76 @@ export function DepartmentManagement(): JSX.Element {
     deleteMutation.mutate(editingDept.id);
   };
 
+  // ---- re-parent 移动操作 ----
+  const handleReparentClick = (record: DepartmentListItem): void => {
+    if (isSentinelDept(record.code)) return; // 哨兵部门不可移动
+    setReparentTarget(record);
+    setReparentNewParent(null);
+    setReparentImpact(null);
+    setReparentConfirmOpen(true);
+  };
+
+  const handleReparentFetchImpact = async (): Promise<void> => {
+    if (!reparentTarget) return;
+    setReparentLoading(true);
+    try {
+      const impact = await apiGetReparentImpact(reparentTarget.id, reparentNewParent);
+      setReparentImpact(impact);
+    } catch (err: unknown) {
+      message.error(_extractErrorMessage(err));
+    } finally {
+      setReparentLoading(false);
+    }
+  };
+
+  const handleReparentConfirm = async (): Promise<void> => {
+    if (!reparentTarget || !reparentNewParent) return;
+    try {
+      const { apiGetDepartment } = await import('@/api/departments');
+      const detail = await apiGetDepartment(reparentTarget.id);
+      updateMutation.mutate({
+        id: reparentTarget.id,
+        body: {
+          display_name: reparentTarget.display_name,
+          description: detail.description,
+          sort_order: reparentTarget.sort_order,
+          lock_version: detail.lock_version,
+          parent_id: reparentNewParent,
+        },
+      });
+      setReparentConfirmOpen(false);
+      setReparentTarget(null);
+      setReparentNewParent(null);
+      setReparentImpact(null);
+    } catch (err: unknown) {
+      message.error(_extractErrorMessage(err));
+    }
+  };
+
+  // ---- re-parent 选项（排除自身及子孙防成环） ----
+  const reparentExcludeIds = reparentTarget
+    ? getDescendantIds(items, reparentTarget.id)
+    : new Set<string>();
+  const reparentTreeData = items
+    .filter((item) => !reparentExcludeIds.has(item.id) && !isSentinelDept(item.code))
+    .map((item) => ({
+      value: item.id,
+      title: item.display_name,
+    }));
+
   // ---- 表格列定义 ----
   const columns: ColumnsType<DepartmentTreeNode> = [
     {
       title: '名称',
       dataIndex: 'display_name',
       key: 'display_name',
-      width: 180,
+      width: 280,
       render: (name: string, record: DepartmentTreeNode) => (
         <Tooltip title={record.description || undefined} placement="topLeft">
           <Space>
+            {isSentinelDept(record.code) && (
+              <LockOutlined style={{ color: '#999', fontSize: 12 }} />
+            )}
             <Text strong>{name}</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>{record.code}</Text>
           </Space>
@@ -359,7 +441,7 @@ export function DepartmentManagement(): JSX.Element {
             type="link"
             size="small"
             onClick={() => handleEdit(record)}
-            disabled={!isAdmin}
+            disabled={!canManageDept(record.id) || isSentinelDept(record.code)}
           >
             编辑
           </Button>
@@ -370,7 +452,7 @@ export function DepartmentManagement(): JSX.Element {
               setEquipDrawerDeptId(record.id);
               setEquipDrawerOpen(true);
             }}
-            disabled={!isAdmin}
+            disabled={!canManageDept(record.id)}
           >
             +仪器
           </Button>
@@ -574,6 +656,81 @@ export function DepartmentManagement(): JSX.Element {
           onPresetDeptIdConsumed={() => setEquipDrawerDeptId(undefined)}
         />
       </Drawer>
+
+      {/* re-parent 移动确认对话框（阶段2新增） */}
+      <Modal
+        title="移动部门"
+        open={reparentConfirmOpen}
+        onCancel={() => {
+          setReparentConfirmOpen(false);
+          setReparentTarget(null);
+          setReparentNewParent(null);
+          setReparentImpact(null);
+        }}
+        footer={
+          <Space>
+            <Button onClick={() => {
+              setReparentConfirmOpen(false);
+              setReparentTarget(null);
+              setReparentNewParent(null);
+              setReparentImpact(null);
+            }}>
+              取消
+            </Button>
+            <Button
+              onClick={handleReparentFetchImpact}
+              disabled={!reparentNewParent}
+              loading={reparentLoading}
+            >
+              预览影响
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleReparentConfirm}
+              disabled={!reparentNewParent || !reparentImpact}
+              loading={updateMutation.isPending}
+            >
+              确认移动
+            </Button>
+          </Space>
+        }
+      >
+        {reparentTarget && (
+          <div style={{ marginBottom: 16 }}>
+            <Text>将「{reparentTarget.display_name}」移动到：</Text>
+          </div>
+        )}
+        <TreeSelect
+          value={reparentNewParent ?? undefined}
+          onChange={(val: string | null) => {
+            setReparentNewParent(val);
+            setReparentImpact(null);
+          }}
+          placeholder="选择目标父部门"
+          style={{ width: '100%', marginBottom: 16 }}
+          treeData={reparentTreeData.map((item) => ({
+            ...item,
+            selectable: true,
+          }))}
+          treeDefaultExpandAll
+          showSearch
+          treeNodeFilterProp="title"
+          allowClear
+        />
+        {reparentImpact && (
+          <Alert
+            type="info"
+            showIcon
+            message="影响预览"
+            description={
+              <div>
+                <div>子树部门数（含自身）：{reparentImpact.subtree_count}</div>
+                <div>关联设备数：{reparentImpact.equipment_count}</div>
+              </div>
+            }
+          />
+        )}
+      </Modal>
     </div>
   );
 }

@@ -39,12 +39,12 @@ def _build_session_factory() -> Any:
     return build_session_factory(async_url)
 
 
-def _build_artifact_service(factory: Any, organization_id: UUID, user_id: UUID) -> Any:
+def _build_artifact_service(factory: Any, department_id: UUID, user_id: UUID) -> Any:
     """构建工件服务实例。
 
     Args:
         factory: 异步会话工厂。
-        organization_id: 组织 ID。
+        department_id: 组织 ID。
         user_id: 操作人 ID。
 
     Returns:
@@ -66,19 +66,19 @@ def _build_artifact_service(factory: Any, organization_id: UUID, user_id: UUID) 
     return ArtifactService(
         s3_repo=s3_repo,
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         uploaded_by=user_id,
     )
 
 
-def _build_model_service(factory: Any, organization_id: UUID, user_id: UUID) -> Any:
+def _build_model_service(factory: Any, department_id: UUID, user_id: UUID) -> Any:
     """构建模型服务实例。
 
     注入 FactService 使模型预测结果写入溯源事实链（F-11）。
 
     Args:
         factory: 异步会话工厂。
-        organization_id: 组织 ID。
+        department_id: 组织 ID。
         user_id: 操作人 ID。
 
     Returns:
@@ -87,15 +87,15 @@ def _build_model_service(factory: Any, organization_id: UUID, user_id: UUID) -> 
     from packages.facts.service import FactService
     from packages.models.service import ModelService
 
-    artifact_service = _build_artifact_service(factory, organization_id, user_id)
+    artifact_service = _build_artifact_service(factory, department_id, user_id)
     fact_service = FactService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         actor_id=user_id,
     )
     return ModelService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         artifact_service=artifact_service,
         fact_service=fact_service,
     )
@@ -109,7 +109,7 @@ async def _train_model_async(payload: dict) -> dict:
 
     Args:
         payload: 任务载荷，包含：
-            - organization_id: 组织 ID
+            - department_id: 组织 ID
             - user_id: 操作人 ID
             - code: 模型代码
             - display_name: 模型显示名称
@@ -119,14 +119,14 @@ async def _train_model_async(payload: dict) -> dict:
         dict: 训练结果摘要。
     """
 
-    organization_id = UUID(str(payload["organization_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["organization_id"])))
+    department_id = UUID(str(payload["department_id"]))
+    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
     code: str = str(payload["code"])
     display_name: str = str(payload["display_name"])
     version_id = UUID(str(payload["version_id"]))
 
     factory = _build_session_factory()
-    service = _build_model_service(factory, organization_id, user_id)
+    service = _build_model_service(factory, department_id, user_id)
 
     # 创建模型（若已存在则复用）
     try:
@@ -157,7 +157,7 @@ async def _predict_model_async(payload: dict) -> dict:
 
     Args:
         payload: 任务载荷，包含：
-            - organization_id: 组织 ID
+            - department_id: 组织 ID
             - user_id: 操作人 ID
             - model_id: 模型 ID
             - inputs: 输入参数字典
@@ -165,13 +165,13 @@ async def _predict_model_async(payload: dict) -> dict:
     Returns:
         dict: 预测结果摘要。
     """
-    organization_id = UUID(str(payload["organization_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["organization_id"])))
+    department_id = UUID(str(payload["department_id"]))
+    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
     model_id = UUID(str(payload["model_id"]))
     inputs: dict[str, Any] = dict(payload.get("inputs", {}))
 
     factory = _build_session_factory()
-    service = _build_model_service(factory, organization_id, user_id)
+    service = _build_model_service(factory, department_id, user_id)
 
     result = await service.predict(model_id, inputs)
 
@@ -188,18 +188,18 @@ async def _publish_model_async(payload: dict) -> dict:
     """异步发布模型版本。
 
     Args:
-        payload: 任务载荷，包含 organization_id, user_id, model_id, version_id。
+        payload: 任务载荷，包含 department_id, user_id, model_id, version_id。
 
     Returns:
         dict: 发布结果摘要。
     """
-    organization_id = UUID(str(payload["organization_id"]))
-    user_id = UUID(str(payload.get("user_id", payload["organization_id"])))
+    department_id = UUID(str(payload["department_id"]))
+    user_id = UUID(str(payload.get("user_id", payload["department_id"])))
     model_id = UUID(str(payload["model_id"]))
     version_id = UUID(str(payload["version_id"]))
 
     factory = _build_session_factory()
-    service = _build_model_service(factory, organization_id, user_id)
+    service = _build_model_service(factory, department_id, user_id)
 
     model = await service.publish(model_id, version_id)
 

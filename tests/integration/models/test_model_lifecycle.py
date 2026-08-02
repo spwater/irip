@@ -174,7 +174,7 @@ async def model_service(
     fact_service = _FakeFactService()
     service = ModelService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         artifact_service=artifact_service,
         fact_service=fact_service,
     )

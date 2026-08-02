@@ -28,19 +28,22 @@ from packages.common.errors import AppError
 class CurrentUser:
     """当前认证用户（从 JWT 解析 + 数据库补充）。
 
+    department_id 作为主要租户标识（NOT NULL）。
+    is_root_member 标识 root 部门成员（不受数据隔离限制）。
+
     Attributes:
         user_id: 用户 UUID。
         email: 用户邮箱。
         roles: 用户角色列表。
-        department_id: 所属实验室 ID（NULL 表示未分配实验室）。
-        organization_id: 所属组织 ID（M-01: 审计事件应使用此字段而非 user_id）。
+        department_id: 所属部门 UUID（NOT NULL，租户隔离基础）。
+        is_root_member: 是否为 root 部门成员（不受数据隔离限制）。
     """
 
     user_id: UUID
     email: str
     roles: list[str]
-    department_id: UUID | None = None
-    organization_id: UUID | None = None
+    department_id: UUID = UUID(int=0)
+    is_root_member: bool = False
 
 
 def get_token_secret() -> str:
@@ -117,7 +120,7 @@ async def get_current_user(
 
     # H-06: 每次认证复核 is_active 和 token_version
     department_id: UUID | None = None
-    organization_id: UUID | None = None
+    is_root_member: bool = False
     if session_factory is not None:
         async with session_factory() as session:
             user: AppUser | None = await session.scalar(
@@ -125,7 +128,6 @@ async def get_current_user(
             )
             if user is not None:
                 department_id = user.department_id
-                organization_id = user.organization_id
                 # H-06: 复核账户状态（disabled 用户拒绝）
                 if user.status == "disabled":
                     raise AppError(
@@ -142,6 +144,18 @@ async def get_current_user(
                         retryable=False,
                         fields={},
                     )
+                # department_id 不可为空（fail-closed）
+                if department_id is None:
+                    raise AppError(
+                        code="forbidden",
+                        message="用户未分配部门（department_id 为空）",
+                        retryable=False,
+                        fields={"user_id": str(user_id)},
+                    )
+                # 查询是否 root 部门成员
+                from apps.api.dependencies.dept_scope import check_is_root_member
+
+                is_root_member = await check_is_root_member(department_id, session_factory)
             else:
                 # 用户不存在，拒绝
                 raise AppError(
@@ -155,6 +169,6 @@ async def get_current_user(
         user_id=user_id,
         email=str(payload.get("email", "")),
         roles=roles,
-        department_id=department_id,
-        organization_id=organization_id,
+        department_id=department_id or UUID(int=0),
+        is_root_member=is_root_member,
     )

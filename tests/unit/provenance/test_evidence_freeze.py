@@ -30,12 +30,12 @@ async def evidence_service(
     sync_engine,
 ) -> "EvidenceService":
     """证据集服务（使用 test_user 的 org_id），测试后清理。"""
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     service = EvidenceService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     yield service
@@ -44,22 +44,22 @@ async def evidence_service(
     with sync_engine.connect() as conn:
         conn.execute(sa.text("SET LOCAL session_replication_role = replica"))
         conn.execute(
-            sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
+            sa.text("DELETE FROM provenance_edge WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM derivation_run WHERE organization_id = :oid"),
+            sa.text("DELETE FROM derivation_run WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
             sa.text(
                 "DELETE FROM evidence_set_version WHERE evidence_set_id IN ("
-                "SELECT id FROM evidence_set WHERE organization_id = :oid)"
+                "SELECT id FROM evidence_set WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM evidence_set WHERE organization_id = :oid"),
+            sa.text("DELETE FROM evidence_set WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -72,12 +72,12 @@ async def recipe_service(
     sync_engine,
 ) -> "RecipeService":
     """推导配方服务（使用 test_user 的 org_id），测试后清理。"""
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     service = RecipeService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     yield service
@@ -88,12 +88,12 @@ async def recipe_service(
             sa.text(
                 "DELETE FROM transformation_recipe_version WHERE recipe_id IN ("
                 "SELECT id FROM transformation_recipe "
-                "WHERE organization_id = :oid)"
+                "WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
+            sa.text("DELETE FROM transformation_recipe WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -108,7 +108,7 @@ def _make_fact_command(
     """构建创建事实命令的辅助函数。"""
     return CreateFactCommand(
         fact_type="experiment_run",
-        organization_id=setup["organization_id"],
+        department_id=setup["department_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -289,11 +289,11 @@ class TestComponentUnavailable:
         )
 
         # 3. 创建推导运行 → AppError
-        org_id = fact_setup["organization_id"]
+        org_id = fact_setup["department_id"]
         actor_id = fact_setup["actor_id"]
         derivation_service = DerivationService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 

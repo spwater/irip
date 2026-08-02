@@ -48,7 +48,7 @@ class TestParameterCandidate:
         2. 创建参数；
         3. 从推导运行创建候选 → 成功，状态为 pending_review。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
 
         chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
@@ -56,7 +56,7 @@ class TestParameterCandidate:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -94,7 +94,7 @@ class TestParameterCandidate:
         4. 验证 parameter_version 创建（status=published）；
         5. 验证 parameter.status = published。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()  # 不同的审核人
 
@@ -103,7 +103,7 @@ class TestParameterCandidate:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -170,7 +170,7 @@ class TestParameterCandidate:
         2. 创建参数与候选（提交人 = actor）；
         3. 用同一用户审批 → self_approval_forbidden。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
 
         chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=3)
@@ -178,7 +178,7 @@ class TestParameterCandidate:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -219,7 +219,7 @@ class TestParameterCandidate:
         2. 手动创建一个失败的推导运行；
         3. 从失败的运行创建候选 → derivation_not_succeeded。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
         new_id()
 
@@ -234,7 +234,7 @@ class TestParameterCandidate:
         async with session_scope(async_session_factory) as session:
             failed_run = DerivationRun(
                 id=failed_run_id,
-                organization_id=org_id,
+                department_id=org_id,
                 evidence_set_version_id=ev_ref.version_id,
                 recipe_version_id=recipe_version.id,
                 job_id=None,
@@ -250,7 +250,7 @@ class TestParameterCandidate:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -285,7 +285,7 @@ class TestParameterCandidate:
         3. 用不同审核人拒绝；
         4. 验证候选状态为 rejected，参数状态为 rejected。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
@@ -294,7 +294,7 @@ class TestParameterCandidate:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -355,7 +355,7 @@ class TestHistoricalVersions:
         4. 创建候选 2、审批 → v2；
         5. 获取 v1 → 仍可读，值为 v1 的值。
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
@@ -371,7 +371,7 @@ class TestHistoricalVersions:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 

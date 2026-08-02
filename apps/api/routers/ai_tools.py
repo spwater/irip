@@ -207,8 +207,8 @@ async def _record_audit(
 ) -> None:
     """记录审计事件（ai_tool.* action）。
 
-    使用 actor.organization_id 作为 organization 字段（M-01 整改）。
-    当 organization_id 为空时回退到 user_id 以保持兼容性。
+    使用 actor.department_id 作为 organization 字段（M-01 整改）。
+    当 department_id 为空时回退到 user_id 以保持兼容性。
 
     Args:
         session: 异步会话（与业务写操作同事务）。
@@ -218,8 +218,8 @@ async def _record_audit(
         payload: 审计载荷（before/after/diff 等）。
     """
     event = AuditEventData(
-        organization_id=actor.organization_id
-        if actor.organization_id is not None
+        department_id=actor.department_id
+        if actor.department_id is not None
         else actor.user_id,
         action=action,
         actor_user_id=actor.user_id,

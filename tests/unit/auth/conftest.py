@@ -113,7 +113,7 @@ class DbHelper:
         """同步按组织 ID 清理 scope_grant。"""
         with self.sync_engine.connect() as conn:
             conn.execute(
-                sa.text("DELETE FROM scope_grant WHERE organization_id = :oid"),
+                sa.text("DELETE FROM scope_grant WHERE department_id = :oid"),
                 {"oid": org_id},
             )
             conn.commit()
@@ -187,7 +187,7 @@ def kiln(org_id: UUID) -> KilnResource:
     child_id = new_id()
     return KilnResource(
         child_measurement_point=ResourceRef(
-            organization_id=org_id,
+            department_id=org_id,
             object_id=child_id,
             resource_type="fact",
         ),
@@ -199,7 +199,7 @@ def kiln(org_id: UUID) -> KilnResource:
 def cooler(org_id: UUID) -> ResourceRef:
     """冷却器资源（兄弟对象，无授权）。"""
     return ResourceRef(
-        organization_id=org_id,
+        department_id=org_id,
         object_id=new_id(),
         resource_type="fact",
     )
@@ -225,7 +225,7 @@ async def authz(
             id=new_id(),
             user_id=None,
             role_id=role_id,
-            organization_id=org_id,
+            department_id=org_id,
             object_root_id=kiln.object_root_id,
             resource_type="fact",
             action="fact:read",

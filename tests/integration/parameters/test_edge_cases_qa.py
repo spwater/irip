@@ -31,7 +31,7 @@ class TestQAEdgeCases:
         3. Approve with different reviewer → success;
         4. Try to approve the same candidate again → candidate_not_pending.
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
         reviewer_id = new_id()
 
@@ -40,7 +40,7 @@ class TestQAEdgeCases:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 
@@ -84,7 +84,7 @@ class TestQAEdgeCases:
 
         Separation of duty applies to reject as well.
         """
-        org_id = param_setup["organization_id"]
+        org_id = param_setup["department_id"]
         actor_id = param_setup["actor_id"]
 
         chain = await _create_derivation_chain(param_setup, async_session_factory, num_facts=2)
@@ -92,7 +92,7 @@ class TestQAEdgeCases:
 
         param_service = ParameterService(
             session_factory=async_session_factory,
-            organization_id=org_id,
+            department_id=org_id,
             actor_id=actor_id,
         )
 

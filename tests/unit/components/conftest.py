@@ -31,7 +31,7 @@ def make_test_context(
         ComponentContext: 测试上下文。
     """
     return ComponentContext(
-        organization_id=uuid4(),
+        department_id=uuid4(),
         user_id=uuid4(),
         clock=FixedClock(
             __import__("datetime").datetime(2026, 1, 1, tzinfo=__import__("datetime").UTC)

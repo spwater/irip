@@ -24,7 +24,7 @@ async def test_create_department(
     """创建实验室：返回正确字段。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     dept = await service.create(
         code="lab_test_01",
@@ -49,7 +49,7 @@ async def test_create_duplicate_code_conflict(
     """编码唯一性：重复编码抛 AppError(conflict)。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     await service.create(
         code="lab_dup",
@@ -74,7 +74,7 @@ async def test_list_departments_with_member_count(
     """列表：返回实验室列表 + member_count。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     await service.create("lab_list_a", "实验室A", None, 0)
     await service.create("lab_list_b", "实验室B", None, 1)
@@ -98,7 +98,7 @@ async def test_get_department(
     """详情：查询实验室返回正确字段。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_get", "查询测试", "描述", 5)
 
@@ -120,7 +120,7 @@ async def test_get_nonexistent_not_found(
 
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     with pytest.raises(AppError, match="实验室不存在"):
         await service.get(new_id())
@@ -134,7 +134,7 @@ async def test_update_department(
     """编辑：更新 display_name / description / sort_order，lock_version 递增。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_edit", "原名称", "原描述", 0)
 
@@ -161,7 +161,7 @@ async def test_update_optimistic_lock_conflict(
     """乐观锁：lock_version 不匹配抛 AppError(conflict)。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_lock", "锁测试", None, 0)
 
@@ -185,7 +185,7 @@ async def test_update_nonexistent_not_found(
 
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     with pytest.raises(AppError, match="实验室不存在"):
         await service.update(
@@ -205,7 +205,7 @@ async def test_set_status_disable(
     """状态切换：禁用实验室 → status=disabled，lock_version 递增。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_disable", "禁用测试", None, 0)
 
@@ -226,7 +226,7 @@ async def test_set_status_reenable(
     """状态切换：禁用后重新启用 → status=active。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_reenable", "重新启用测试", None, 0)
 
@@ -246,7 +246,7 @@ async def test_set_status_optimistic_lock_conflict(
     """状态切换乐观锁：lock_version 不匹配抛 AppError(conflict)。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     created = await service.create("lab_status_lock", "状态锁测试", None, 0)
 
@@ -266,7 +266,7 @@ async def test_disabled_not_in_active_list(
     """禁用后不出现在 active 列表，但出现在全量列表。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     await service.create("lab_active_filter", "活跃实验室", None, 0)
     to_disable = await service.create("lab_disabled_filter", "禁用实验室", None, 1)
@@ -291,7 +291,7 @@ async def test_list_pagination(
     """分页：cursor 分页正确返回 has_more 和 next_cursor。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     for i in range(5):
         await service.create(f"lab_page_{i:02d}", f"分页实验室{i}", None, i)
@@ -322,7 +322,7 @@ async def test_list_invalid_cursor(
     """无效游标：抛 AppError(invalid_cursor)。"""
     service = DepartmentService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
     )
     with pytest.raises(AppError, match="分页游标无效"):
         await service.list(cursor="invalid-base64!!")

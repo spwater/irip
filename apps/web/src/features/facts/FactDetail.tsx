@@ -4,8 +4,10 @@ import {
   Card,
   Col,
   Descriptions,
+  Modal,
   Radio,
   Row,
+  Space,
   Table,
   Tabs,
   Tag,
@@ -13,10 +15,11 @@ import {
   message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from '@tanstack/react-router';
 import { apiGetFact, apiGetFactData } from '@/api/facts-provenance';
 import { apiGetArtifactDownloadUrl } from '@/api/models-ai';
+import { PrivateBadge } from '@/shared/PrivateBadge';
 import { PageIntro, DetailSection, FeedbackState } from '@/shared/ui';
 
 const { Text } = Typography;
@@ -36,12 +39,32 @@ export function FactDetail(): JSX.Element {
   const params = useParams({ strict: false });
   const factId = String((params as Record<string, unknown>).factId ?? '');
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
+  const [publishOpen, setPublishOpen] = useState(false);
 
   const { data: fact, isLoading: factLoading } = useQuery({
     queryKey: ['fact', factId],
     queryFn: () => apiGetFact(factId),
     enabled: !!factId,
+  });
+
+  // 阶段2：公开私有数据 mutation
+  const publishMutation = useMutation({
+    mutationFn: async () => {
+      // PATCH 将 visibility_scope 改为 'tree'
+      const { http } = await import('@/api/client');
+      await http.patch(`/facts/${factId}`, { visibility_scope: 'tree' });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['fact', factId] });
+      void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
+      message.success('数据已公开，现在部门内所有成员可见');
+      setPublishOpen(false);
+    },
+    onError: (err: unknown) => {
+      message.error(String(err));
+    },
   });
 
   const { data: factData } = useQuery({
@@ -88,13 +111,33 @@ export function FactDetail(): JSX.Element {
         title="事实详情"
         subtitle="实验数据的来源信息与详细内容。"
         actions={
-          <Button
-            onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
-          >
-            返回列表
-          </Button>
+          <Space>
+            {fact.visibility_scope === 'private' && (
+              <Button
+                danger
+                onClick={() => setPublishOpen(true)}
+              >
+                公开
+              </Button>
+            )}
+            <Button
+              onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
+            >
+              返回列表
+            </Button>
+          </Space>
         }
       />
+
+      {/* 私有数据标签 */}
+      {fact.visibility_scope === 'private' && (
+        <div style={{ marginBottom: 12 }}>
+          <PrivateBadge visibility_scope="private" />
+          <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+            此数据仅您本人可见，其他任何人都不可见。
+          </Text>
+        </div>
+      )}
 
       <Row gutter={16}>
         {/* 左侧：导入数据来源 */}
@@ -309,9 +352,34 @@ export function FactDetail(): JSX.Element {
                 {JSON.stringify({ metadata: factData?.metadata ?? {}, points: allPoints, series: seriesList }, null, 2)}
               </pre>
             )}
-          </DetailSection>
-        </Col>
+        </DetailSection>
+      </Col>
       </Row>
+
+      {/* 公开确认对话框 */}
+      <Modal
+        title="确认公开此数据？"
+        open={publishOpen}
+        onCancel={() => setPublishOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setPublishOpen(false)}>取消</Button>
+            <Button
+              type="primary"
+              danger
+              loading={publishMutation.isPending}
+              onClick={() => publishMutation.mutate()}
+            >
+              确认公开
+            </Button>
+          </Space>
+        }
+      >
+        <Text>
+          此操作【不可逆】。公开后，该数据将变为部门可见（visibility_scope = tree），
+          部门内所有成员均可查看。您无法再次将其设为私有。
+        </Text>
+      </Modal>
     </div>
   );
 }

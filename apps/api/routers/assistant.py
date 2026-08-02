@@ -63,12 +63,12 @@ def get_ai_service() -> AIService:
 AIServiceDep = Annotated[AIService, Depends(get_ai_service)]
 
 
-async def _resolve_org_id(current_user: CurrentUser) -> UUID:
-    """从数据库查询用户的 organization_id，回退到 IRIP-DEMO 组织。"""
+async def _resolve_dept_id(current_user: CurrentUser) -> UUID:
+    """从数据库查询用户的 department_id。"""
     from packages.common.ids import new_id
 
     user_id = current_user.user_id
-    org_id = getattr(current_user, "organization_id", None)
+    org_id = getattr(current_user, "department_id", None)
     if org_id is not None:
         return UUID(str(org_id))
 
@@ -77,8 +77,8 @@ async def _resolve_org_id(current_user: CurrentUser) -> UUID:
 
         async with _ai_session_scope(_get_ai_factory()) as session:
             user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-            if user is not None and user.organization_id is not None:
-                return user.organization_id
+            if user is not None and user.department_id is not None:
+                return user.department_id
     except Exception:
         pass
 
@@ -242,11 +242,11 @@ async def create_conversation(
     Returns:
         ConversationResponse: 新对话（201 Created）。
     """
-    org_id = await _resolve_org_id(current_user)
+    org_id = await _resolve_dept_id(current_user)
 
     ref = await service.create_conversation(
         user_id=current_user.user_id,
-        organization_id=org_id,
+        department_id=org_id,
         title=body.title,
         provider_mode=body.provider_mode,
     )
@@ -291,13 +291,13 @@ async def list_conversations(
     Returns:
         ConversationListResponse: 对话列表。
     """
-    org_id = await _resolve_org_id(current_user)
+    org_id = await _resolve_dept_id(current_user)
 
     # irip-ai-collab: tab 参数走协作筛选逻辑
     if tab is not None and tab in ("private", "same_org", "cross_org"):
         refs = await service.list_conversations_with_tab(
             user_id=current_user.user_id,
-            organization_id=org_id,
+            department_id=org_id,
             tab=tab,
             limit=limit,
             include_archived=include_archived,
@@ -307,7 +307,7 @@ async def list_conversations(
     elif keyword and keyword.strip():
         refs = await service.search_conversations(
             user_id=current_user.user_id,
-            organization_id=org_id,
+            department_id=org_id,
             keyword=keyword.strip(),
             include_archived=include_archived,
             archived_only=archived_only,
@@ -316,7 +316,7 @@ async def list_conversations(
     else:
         refs = await service.list_conversations(
             user_id=current_user.user_id,
-            organization_id=org_id,
+            department_id=org_id,
             limit=limit,
             include_archived=include_archived,
             archived_only=archived_only,
@@ -357,7 +357,7 @@ async def toggle_pin(
     # 重新查询返回完整信息
     refs = await service.list_conversations(
         user_id=current_user.user_id,
-        organization_id=await _resolve_org_id(current_user),
+        department_id=await _resolve_dept_id(current_user),
         limit=200,
         include_archived=True,
     )
@@ -392,7 +392,7 @@ async def toggle_archive(
     )
     refs = await service.list_conversations(
         user_id=current_user.user_id,
-        organization_id=await _resolve_org_id(current_user),
+        department_id=await _resolve_dept_id(current_user),
         limit=200,
         include_archived=True,
     )

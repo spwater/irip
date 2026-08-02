@@ -226,7 +226,7 @@ class IngestionPipeline:
         _factory: 异步会话工厂。
         _fact_service: 事实服务。
         _quality_engine: 质量评估引擎。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID。
     """
 
@@ -235,7 +235,7 @@ class IngestionPipeline:
         session_factory: async_sessionmaker[AsyncSession],
         fact_service: FactService,
         quality_engine: QualityEngine,
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化摄入管线。
@@ -244,13 +244,13 @@ class IngestionPipeline:
             session_factory: 异步会话工厂。
             fact_service: 事实服务（用于创建事实）。
             quality_engine: 质量评估引擎。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选）。
         """
         self._factory = session_factory
         self._fact_service = fact_service
         self._quality_engine = quality_engine
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     async def ingest_file(
@@ -287,7 +287,7 @@ class IngestionPipeline:
 
             async with self._factory() as session:
                 existing_fact = await FactRepository.find_by_idempotency_key(
-                    session, self._org_id, idempotency_key
+                    session, self._dept_id, idempotency_key
                 )
 
             if existing_fact is not None:
@@ -312,13 +312,13 @@ class IngestionPipeline:
             # 4. persist_fact: 创建事实
             command = CreateFactCommand(
                 fact_type="experiment_run",
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 object_id=object_id,
                 subject_id=subject_id,
                 started_at=None,
                 ended_at=None,
                 idempotency_key=idempotency_key,
-                created_by=self._actor_id or self._org_id,
+                created_by=self._actor_id or self._dept_id,
             )
 
             ref = await self._fact_service.create(command)

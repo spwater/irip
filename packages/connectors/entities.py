@@ -42,7 +42,7 @@ class Secret(Base):
 
     Attributes:
         id: 密钥 UUID。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         kind: 密钥种类（postgres_dsn / rest_token）。
         value: 凭据明文（MVP，TODO 加密）。
         created_at: 创建时间。
@@ -51,7 +51,13 @@ class Secret(Base):
     __tablename__ = "secret"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    # ---- 多租户隔离键升级：B 类一列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（密钥归 system 哨兵部门）",
+    )
     kind: Mapped[str] = mapped_column(sa.Text, nullable=False)
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

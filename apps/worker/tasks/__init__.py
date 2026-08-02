@@ -16,7 +16,7 @@ H-03 改动：
 - owner 从环境变量获取而非硬编码。
 
 H-09 改动：
-- backup handler 使用 job.organization_id（服务端生成，不从 payload 取）。
+- backup handler 使用 job.department_id（服务端生成，不从 payload 取）。
 """
 
 import asyncio
@@ -209,7 +209,7 @@ async def _backup_handler(job: object) -> dict:
     from packages.backups.service import BackupRecordService
 
     # H-09: org_id 从 job 取，不从 payload 取（服务端生成，不可被客户端覆盖）
-    org_id = getattr(job, "organization_id", None)
+    org_id = getattr(job, "department_id", None)
     payload: dict = getattr(job, "payload", None) or {}
     backup_record_id_str: str = payload.get("backup_record_id", "")
     backup_type: str = payload.get("type", "daily")
@@ -267,7 +267,7 @@ async def _backup_handler(job: object) -> dict:
         "backup_id": manifest.backup_id,
         "database_sha256": manifest.database_sha256,
         "object_count": manifest.object_count,
-        "organization_id": str(org_id) if org_id else None,
+        "department_id": str(org_id) if org_id else None,
         "backup_type": backup_type,
     }
 
@@ -306,7 +306,7 @@ async def _restore_handler(job: object) -> dict:
     payload: dict = getattr(job, "payload", None) or {}
     backup_id: str = payload.get("backup_id", "")
     pre_restore_created: bool = payload.get("pre_restore_created", False)
-    org_id = getattr(job, "organization_id", None)
+    org_id = getattr(job, "department_id", None)
 
     if not backup_id:
         raise AppError(
@@ -344,7 +344,7 @@ async def _restore_handler(job: object) -> dict:
                 created_by=None,
                 created_at=now,
                 expires_at=now + timedelta(days=7),
-                organization_id=org_id if org_id is not None else new_id(),
+                department_id=org_id if org_id is not None else new_id(),
             )
             async with session_scope(factory) as session:
                 session.add(record)
@@ -505,7 +505,7 @@ async def _audit_export_handler(job: object) -> dict:
     from packages.common.database import build_session_factory, session_scope
 
     payload: dict = getattr(job, "payload", None) or {}
-    org_id_str: str = payload.get("organization_id", "")
+    org_id_str: str = payload.get("department_id", "")
     start_date_str: str = payload.get("start_date", "")
     end_date_str: str = payload.get("end_date", "")
 
@@ -531,7 +531,7 @@ async def _audit_export_handler(job: object) -> dict:
         # 动态查询 audit_event 表（使用原始 SQL 避免硬依赖 ORM 模型）
         conditions = []
         if org_id is not None:
-            conditions.append(sa.text("organization_id = :org_id"))
+            conditions.append(sa.text("department_id = :org_id"))
         if start_date_str:
             conditions.append(sa.text("created_at >= :start_date"))
         if end_date_str:
@@ -552,7 +552,7 @@ async def _audit_export_handler(job: object) -> dict:
 
     return {
         "exported_count": count,
-        "organization_id": org_id_str,
+        "department_id": org_id_str,
         "status": "completed",
     }
 
@@ -577,3 +577,90 @@ from apps.worker.tasks.models import (  # noqa: E402, F401
     publish_model_job,
     train_model_job,
 )
+
+
+# ---- Beat 定时任务辅助函数（阶段2 多租户隔离键升级）----
+# 原 tasks.py 被 tasks/ 包目录遮蔽，Beat 函数合并到此处避免死代码。
+
+import logging as _logging
+
+_beat_logger = _logging.getLogger(__name__)
+
+#: Root 哨兵部门 ID 环境变量名（Beat 公共档产出挂 root）。
+ROOT_DEPT_ENV: str = "IRIP_ROOT_DEPT_ID"
+
+#: System 哨兵部门 ID 环境变量名（Beat 敏感档产出挂 system）。
+SYSTEM_DEPT_ENV: str = "IRIP_SYSTEM_DEPT_ID"
+
+
+def get_root_dept_id() -> str:
+    """获取 root 哨兵部门 ID（从环境变量读取）。
+
+    Returns:
+        str: root 部门 UUID 字符串。
+    """
+    return os.getenv(ROOT_DEPT_ENV, "")
+
+
+def get_system_dept_id() -> str:
+    """获取 system 哨兵部门 ID（从环境变量读取）。
+
+    Returns:
+        str: system 部门 UUID 字符串。
+    """
+    return os.getenv(SYSTEM_DEPT_ENV, "")
+
+
+async def _execute_beat_task_async(
+    task_name: str,
+    department_id: str,
+    handler: object,
+) -> str:
+    """执行 Beat 定时任务（无用户上下文）。
+
+    阶段2：Beat 定时任务没有用户 Principal，按产出物敏感度挂 root（公共档）
+    或 system（敏感档）。通过传入的 department_id 设置 GUC。
+
+    Args:
+        task_name: 任务名称（用于日志）。
+        department_id: 挂载部门 ID（root 或 system 哨兵）。
+        handler: 异步处理函数 (AsyncSession) -> Any。
+
+    Returns:
+        str: 任务名称。
+    """
+    from uuid import UUID as _UUID
+
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+    factory = build_session_factory(_async_db_url())
+    dept_uuid: _UUID | None = _UUID(department_id) if department_id else None
+
+    async with factory() as session:
+        async with session.begin():
+            # Beat 无用户 → user GUC 设空串（fail-closed for private RLS）
+            await set_dept_guc(session, dept_uuid)
+            await set_user_guc(session, None)
+            _beat_logger.info("Beat task %s: dept GUC set to %s", task_name, department_id)
+            if callable(handler):
+                await handler(session)
+
+    return task_name
+
+
+def _do_execute_beat_task(
+    task_name: str,
+    department_id: str,
+    handler: object,
+) -> str:
+    """同步入口：在事件循环中执行 Beat 定时任务。
+
+    Args:
+        task_name: 任务名称。
+        department_id: 挂载部门 ID（root 或 system）。
+        handler: 异步处理函数。
+
+    Returns:
+        str: 任务名称。
+    """
+    return asyncio.run(_execute_beat_task_async(task_name, department_id, handler))

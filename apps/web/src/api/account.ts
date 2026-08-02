@@ -20,7 +20,7 @@ export type Profile = {
   display_name: string;
   avatar_url: string | null;
   roles: string[];
-  organization_id: string | null;
+  department_id: string | null;
 };
 
 // ============================================================
@@ -33,7 +33,7 @@ type ProfileApiResponse = {
   display_name: string;
   avatar_url: string | null;
   roles: string[];
-  organization_id: string | null;
+  department_id: string | null;
 };
 
 type AvatarUploadApiResponse = { avatar_url: string };
@@ -51,7 +51,7 @@ export async function apiGetProfile(): Promise<Profile> {
     display_name: res.data.display_name,
     avatar_url: res.data.avatar_url,
     roles: res.data.roles ?? [],
-    organization_id: res.data.organization_id,
+    department_id: res.data.department_id,
   };
 }
 
@@ -67,7 +67,7 @@ export async function apiUpdateProfile(params: {
     display_name: res.data.display_name,
     avatar_url: res.data.avatar_url,
     roles: res.data.roles ?? [],
-    organization_id: res.data.organization_id,
+    department_id: res.data.department_id,
   };
 }
 

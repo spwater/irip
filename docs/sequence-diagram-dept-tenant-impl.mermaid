@@ -1,0 +1,54 @@
+%% IRIP 多租户隔离键升级 — 时序图
+%% 架构师：高见远 | 基线：ADR docs/arch-department-tenant.md
+
+%% ===== 4.1 请求级：API 请求 → RLS 过滤 =====
+
+sequenceDiagram
+    participant C as Client
+    participant API as FastAPI Router
+    participant Auth as auth.py
+    participant DB as Database
+    participant RLS as RLS Policy
+
+    C->>API: GET /api/v1/facts (Bearer JWT)
+    API->>Auth: get_current_user(authorization)
+    Auth->>DB: SELECT department_id, token_version FROM app_user WHERE id = user_id
+    DB-->>Auth: department_id, token_version
+    Auth-->>API: CurrentUser(department_id, user_id, roles)
+    API->>Auth: Principal.from_current_user(user, dept_id, scope)
+    API->>DB: session_scope(factory, principal)
+    DB->>DB: SET LOCAL app.current_dept_id = '{dept_id}'
+    DB->>DB: SET LOCAL app.current_user_id = '{user_id}'
+    API->>DB: SELECT * FROM fact (RLS 自动过滤)
+    RLS->>RLS: current_visible_dept_ids() 计算 {down ∪ up}
+    RLS->>RLS: (visibility_scope='private' AND owner_user_id=current_user_id)
+    RLS->>RLS: OR (visibility_scope='tree' AND (dept_id IN visible_set OR visible_departments @> [current_dept_id]))
+    DB-->>API: 仅可见行
+    API-->>C: 200 OK + facts[]
+
+%% ===== 4.2 Worker 级：Job 提交 → Worker 写入 =====
+
+sequenceDiagram
+    participant API as API Server
+    participant Q as JobService
+    participant DB as Database
+    participant Celery as Celery
+    participant Worker as Worker
+    participant RLS as RLS Policy
+
+    API->>Q: JobService.accept(kind, payload, idempotency_key)
+    Q->>DB: INSERT job (department_id=principal.dept_id, payload含dept_id)
+    Q->>DB: INSERT outbox_event
+    DB-->>Q: JobRef
+    Q-->>API: JobRef
+
+    Celery->>Worker: execute_job(job_id)
+    Worker->>DB: SELECT department_id FROM job WHERE id = job_id
+    DB-->>Worker: department_id
+    Worker->>DB: session_scope(factory, principal=None)
+    Worker->>DB: SET LOCAL app.current_dept_id = '{dept_id}'
+    Worker->>DB: SET LOCAL app.current_user_id = '' (worker 无用户)
+    Worker->>DB: 执行 handler → INSERT/UPDATE 产出物
+    RLS->>RLS: department_id IN current_visible_dept_ids() (worker 用 job 的 dept_id)
+    DB-->>Worker: 成功
+    Worker->>DB: UPDATE job SET status=succeeded

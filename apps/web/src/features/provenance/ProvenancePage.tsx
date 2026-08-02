@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   Button,
   Card,
   Form,
@@ -353,23 +354,57 @@ export function ProvenancePage(): JSX.Element {
   ];
 
   const nodeColumns: ColumnsType<ProvenanceNode> = [
-    { title: '标签', dataIndex: 'label', key: 'label' },
+    {
+      title: '标签',
+      dataIndex: 'label',
+      key: 'label',
+      render: (label: string, record: ProvenanceNode) => {
+        if (record.accessible === false) {
+          return (
+            <Text type="secondary" style={{ color: '#999' }}>
+              🔒 无权限节点
+              {record.department_name ? `（${record.department_name}）` : ''}
+            </Text>
+          );
+        }
+        return label;
+      },
+    },
     {
       title: '类型',
       dataIndex: 'node_type',
       key: 'node_type',
       width: 120,
-      render: (t: string) => NODE_TYPE_LABEL[t] ?? t,
+      render: (t: string, record: ProvenanceNode) => {
+        if (record.accessible === false) {
+          return <Text type="secondary">—</Text>;
+        }
+        return NODE_TYPE_LABEL[t] ?? t;
+      },
     },
-    { title: '版本', dataIndex: 'version', key: 'version', width: 100 },
+    {
+      title: '版本',
+      dataIndex: 'version',
+      key: 'version',
+      width: 100,
+      render: (v: string, record: ProvenanceNode) => {
+        if (record.accessible === false) return <Text type="secondary">—</Text>;
+        return v;
+      },
+    },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 100,
-      render: (s: string) => (
-        <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
-      ),
+      render: (s: string, record: ProvenanceNode) => {
+        if (record.accessible === false) {
+          return <Tag color="default">无权限</Tag>;
+        }
+        return (
+          <Tag color={STATUS_COLOR[s] ?? 'default'}>{STATUS_LABEL[s] ?? s}</Tag>
+        );
+      },
     },
   ];
 
@@ -486,6 +521,12 @@ export function ProvenancePage(): JSX.Element {
                 />
                 {graph && (
                   <>
+                    <Alert
+                      type="info"
+                      showIcon
+                      style={{ marginBottom: 12 }}
+                      message="谱系图展示完整拓扑结构，无权限节点以 🔒 标记显示，不泄露业务内容"
+                    />
                     <Title level={5}>节点</Title>
                     <Table<ProvenanceNode>
                       columns={nodeColumns}

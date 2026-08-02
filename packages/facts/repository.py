@@ -117,7 +117,7 @@ class FactRepository:
     async def insert_fact(
         session: AsyncSession,
         *,
-        organization_id: UUID,
+        department_id: UUID,
         fact_type: str,
         object_id: UUID,
         status: str = "active",
@@ -139,7 +139,7 @@ class FactRepository:
 
         Args:
             session: 异步会话。
-            organization_id: 组织 ID。
+            department_id: 部门 ID。
             fact_type: 事实类型。
             object_id: 工业对象 ID。
             status: 状态（默认 active）。
@@ -162,7 +162,7 @@ class FactRepository:
         """
         fact = Fact(
             id=new_id(),
-            organization_id=organization_id,
+            department_id=department_id,
             fact_type=fact_type,
             object_id=object_id,
             status=status,
@@ -196,7 +196,7 @@ class FactRepository:
         Args:
             session: 异步会话。
             fact_id: 事实 ID。
-            org_id: 组织 ID（用于校验归属）。
+            org_id: 部门 ID（用于校验归属）。
 
         Returns:
             Fact: 事实 ORM 实体。
@@ -206,7 +206,7 @@ class FactRepository:
         """
         result = await session.execute(sa.select(Fact).where(Fact.id == fact_id))
         fact = result.scalar_one_or_none()
-        if fact is None or fact.organization_id != org_id:
+        if fact is None or fact.department_id != org_id:
             raise AppError(
                 code="not_found",
                 message="事实不存在",
@@ -231,7 +231,7 @@ class FactRepository:
         Args:
             session: 异步会话。
             query: 搜索查询字符串。
-            org_id: 组织 ID。
+            org_id: 部门 ID。
             filters: 过滤条件字典（fact_type, object_id, status）。
             cursor: 分页游标。
             page_size: 每页数量。
@@ -257,7 +257,7 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
             )
             .where(
-                Fact.organization_id == org_id,
+                Fact.department_id == org_id,
                 Fact.search_vector.op("@@")(tsquery),
             )
             .order_by(
@@ -320,7 +320,7 @@ class FactRepository:
 
         Args:
             session: 异步会话。
-            org_id: 组织 ID。
+            org_id: 部门 ID。
             filters: 过滤条件字典。
             cursor: 分页游标。
             page_size: 每页数量。
@@ -342,7 +342,7 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
                 Fact.id.label("fact_uuid"),
             )
-            .where(Fact.organization_id == org_id)
+            .where(Fact.department_id == org_id)
             .order_by(Fact.created_at.asc(), Fact.id.asc())
             .limit(fetch_limit)
         )
@@ -396,7 +396,7 @@ class FactRepository:
 
         Args:
             session: 异步会话。
-            org_id: 组织 ID。
+            org_id: 部门 ID。
             key: 幂等键。
 
         Returns:
@@ -404,7 +404,7 @@ class FactRepository:
         """
         result = await session.execute(
             sa.select(Fact).where(
-                Fact.organization_id == org_id,
+                Fact.department_id == org_id,
                 Fact.idempotency_key == key,
             )
         )

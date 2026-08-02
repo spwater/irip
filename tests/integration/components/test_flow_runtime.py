@@ -155,7 +155,7 @@ async def registry_service(
     """组件注册表服务。"""
     return ComponentRegistryService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,  # type: ignore[attr-defined]
+        department_id=test_user.department_id,  # type: ignore[attr-defined]
         clock=fixed_clock,
     )
 
@@ -201,7 +201,7 @@ async def flow_service(
     """流程运行时服务。"""
     return FlowRuntimeService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,  # type: ignore[attr-defined]
+        department_id=test_user.department_id,  # type: ignore[attr-defined]
         registry=registry_service,
         runner=runner,
         job_service=job_service,

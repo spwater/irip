@@ -24,11 +24,11 @@ export async function apiDeleteUser(userId: string): Promise<void> { await http.
 // Audit API
 // ============================================================
 
-export type AuditEventItem = { id: string; occurred_at: string; actor_user_id: string | null; organization_id: string; action: string; resource_type: string | null; resource_id: string | null; payload: Record<string, unknown> | null; ip: string | null; user_agent: string | null; };
+export type AuditEventItem = { id: string; occurred_at: string; actor_user_id: string | null; department_id: string; action: string; resource_type: string | null; resource_id: string | null; payload: Record<string, unknown> | null; ip: string | null; user_agent: string | null; };
 export type AuditEventListResponse = { items: AuditEventItem[]; next_cursor: string | null; has_more: boolean; };
 export type AuditExportResponse = { job_id: string; status: string; kind: string; };
 
-type AuditEventListApiResponse = { items: Array<{ id: string; occurred_at: string; actor_user_id: string | null; organization_id: string; action: string; resource_type: string | null; resource_id: string | null; payload: Record<string, unknown> | null; ip: string | null; user_agent: string | null; }>; next_cursor: string | null; has_more: boolean; };
+type AuditEventListApiResponse = { items: Array<{ id: string; occurred_at: string; actor_user_id: string | null; department_id: string; action: string; resource_type: string | null; resource_id: string | null; payload: Record<string, unknown> | null; ip: string | null; user_agent: string | null; }>; next_cursor: string | null; has_more: boolean; };
 
 export async function apiListAuditEvents(params: { object_type?: string; object_id?: string; user_id?: string; action?: string; start_date?: string; end_date?: string; cursor?: string; limit?: number; }): Promise<AuditEventListResponse> { const res = await http.get<AuditEventListApiResponse>('/audit-events/', { params }); return { items: res.data.items.map((e) => ({ ...e })), next_cursor: res.data.next_cursor, has_more: res.data.has_more }; }
 export async function apiCreateAuditExport(body: { object_type: string | null; object_id: string | null; user_id: string | null; action: string | null; start_date: string | null; end_date: string | null; format: string; }): Promise<AuditExportResponse> { const res = await http.post<AuditExportResponse>('/audit-events/export', body); return res.data; }
@@ -48,6 +48,39 @@ type JobRetryApiResponse = { job_id: string; status: string; kind: string; };
 export async function apiListJobs(params?: { status?: string; kind?: string; cursor?: string; limit?: number; }): Promise<JobListResponse> { const res = await http.get<JobListApiResponse>('/jobs', { params }); return { items: res.data.items.map((j) => ({ id: j.id, kind: j.kind, status: j.status, stage: j.stage ?? '', progress: j.progress ?? 0, retryable: j.retryable ?? false, created_at: j.created_at, attempt: j.attempt ?? 0, max_attempts: j.max_attempts ?? 3, flow_name: j.flow_name ?? '', dept_name: j.dept_name ?? '' })), next_cursor: res.data.next_cursor, has_more: res.data.has_more }; }
 export async function apiGetJobDetail(id: string): Promise<JobDetail> { const res = await http.get<JobDetailApiResponse>(`/jobs/${id}/detail`); return { ...res.data, stage: res.data.stage ?? '', progress: res.data.progress ?? 0, retryable: res.data.retryable ?? false, attempt: res.data.attempt ?? 0, max_attempts: res.data.max_attempts ?? 3 }; }
 export async function apiRetryJob(id: string): Promise<{ id: string; status: string; kind: string }> { const res = await http.post<JobRetryApiResponse>(`/jobs/${id}/retry`); return { id: res.data.job_id, status: res.data.status, kind: res.data.kind }; }
+
+// ============================================================
+// Data Transfer + Root Data Stats API (P1-T1-03/T1-05)
+// ============================================================
+
+export type DataTransferResponse = {
+  table: string;
+  from_dept_id: string;
+  to_dept_id: string;
+  dry_run: boolean;
+  affected_rows: number;
+};
+
+export type RootDataStatsResponse = {
+  root_department_id: string;
+  root_department_name: string;
+  stats: Array<{ table: string; display_name: string; count: number }>;
+};
+
+export async function apiDataTransfer(body: {
+  table: string;
+  from_dept_id: string;
+  to_dept_id: string;
+  dry_run: boolean;
+}): Promise<DataTransferResponse> {
+  const res = await http.post<DataTransferResponse>('/governance/data-transfer', body);
+  return res.data;
+}
+
+export async function apiGetRootDataStats(): Promise<RootDataStatsResponse> {
+  const res = await http.get<RootDataStatsResponse>('/governance/root-data-stats');
+  return res.data;
+}
 
 // ============================================================
 // Health API

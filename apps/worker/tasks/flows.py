@@ -28,7 +28,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         run_id: 流程执行记录 UUID 字符串。
         payload: 作业载荷，包含：
             - flow_version_id: 流程版本 ID
-            - organization_id: 组织 ID
+            - department_id: 组织 ID
 
     Returns:
         dict: 执行结果摘要。
@@ -67,19 +67,19 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     set_ai_config_session_factory(factory)
 
-    organization_id = UUID(str(payload["organization_id"]))
+    department_id = UUID(str(payload["department_id"]))
 
     registry = ComponentRegistryService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
     register_builtin_components(runner)
     job_service = JobService(
         session_factory=factory,
-        organization_id=organization_id,
-        created_by=organization_id,
+        department_id=department_id,
+        created_by=department_id,
     )
 
     # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
@@ -96,13 +96,13 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     art_svc = ArtifactService(
         s3_repo=s3_repo,
         session_factory=factory,
-        organization_id=organization_id,
-        uploaded_by=organization_id,
+        department_id=department_id,
+        uploaded_by=department_id,
     )
 
     service = FlowRuntimeService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         registry=registry,
         runner=runner,
         job_service=job_service,
@@ -145,7 +145,7 @@ def execute_flow_job(job_id: str, payload: dict) -> dict:
 
     Args:
         job_id: 作业 UUID 字符串。
-        payload: 作业载荷字典，包含 run_id 和 organization_id。
+        payload: 作业载荷字典，包含 run_id 和 department_id。
 
     Returns:
         dict: 执行结果摘要。
@@ -206,7 +206,7 @@ def resume_flow_job(job_id: str, payload: dict) -> dict:
 
     Args:
         job_id: 作业 UUID 字符串。
-        payload: 作业载荷字典，包含 run_id 和 organization_id。
+        payload: 作业载荷字典，包含 run_id 和 department_id。
 
     Returns:
         dict: 恢复结果摘要。
@@ -269,19 +269,19 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
 
     set_ai_config_session_factory(factory)
 
-    organization_id = UUID(str(payload["organization_id"]))
+    department_id = UUID(str(payload["department_id"]))
 
     registry = ComponentRegistryService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
     )
     runner = PythonComponentRunner()
     # 注册内置组件，使 worker 能找到已发布的组件实现
     register_builtin_components(runner)
     job_service = JobService(
         session_factory=factory,
-        organization_id=organization_id,
-        created_by=organization_id,
+        department_id=department_id,
+        created_by=department_id,
     )
 
     # 构造 ArtifactService，使组件能从 MinIO 下载上传的文件
@@ -298,13 +298,13 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     art_svc = ArtifactService(
         s3_repo=s3_repo,
         session_factory=factory,
-        organization_id=organization_id,
-        uploaded_by=organization_id,
+        department_id=department_id,
+        uploaded_by=department_id,
     )
 
     service = FlowRuntimeService(
         session_factory=factory,
-        organization_id=organization_id,
+        department_id=department_id,
         registry=registry,
         runner=runner,
         job_service=job_service,

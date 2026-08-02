@@ -28,7 +28,7 @@ class AuditEventData:
     frozen dataclass，确保事件创建后不可变。
 
     Attributes:
-        organization_id: 组织 ID（NOT NULL）。
+        department_id: 部门 ID（NOT NULL）。
         action: 动作字符串（如 ``"auth.login"``、``"artifact.upload"``）。
         actor_user_id: 操作者用户 ID（系统事件可为 None）。
         resource_type: 资源类型（如 ``"fact"``、``"artifact"``）。
@@ -38,7 +38,7 @@ class AuditEventData:
         user_agent: User-Agent。
     """
 
-    organization_id: UUID
+    department_id: UUID
     action: str
     actor_user_id: UUID | None = None
     resource_type: str | None = None
@@ -58,7 +58,7 @@ class AuditEvent(Base):
         id: 事件 UUID（PK）。
         occurred_at: 发生时间（UTC，默认 now()）。
         actor_user_id: 操作者用户 ID（系统事件可为 NULL）。
-        organization_id: 组织 ID。
+        department_id: 部门 ID。
         action: 动作字符串。
         resource_type: 资源类型。
         resource_id: 资源 ID。
@@ -74,7 +74,13 @@ class AuditEvent(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     actor_user_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    # ---- 多租户隔离键升级：B 类一列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（actor 部门；系统事件 → system 哨兵）",
+    )
     action: Mapped[str] = mapped_column(sa.Text, nullable=False)
     resource_type: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     resource_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)

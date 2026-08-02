@@ -34,12 +34,12 @@ async def fact_service(
 
     cleanup：删除该组织下的全部 fact_data_index / fact 记录。
     """
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     service = FactService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     yield service
@@ -48,11 +48,11 @@ async def fact_service(
     with sync_engine.connect() as conn:
         conn.execute(
             sa.text("DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE organization_id = :oid)"),
+                "SELECT id FROM fact WHERE department_id = :oid)"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM fact WHERE organization_id = :oid"),
+            sa.text("DELETE FROM fact WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -69,13 +69,13 @@ async def fact_setup(
     返回字典：
         {
             "object_id": UUID,
-            "organization_id": UUID,
+            "department_id": UUID,
             "actor_id": UUID,
         }
 
     测试后自动清理工业对象与事实数据。
     """
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     from packages.common.database import session_scope
@@ -88,7 +88,7 @@ async def fact_setup(
         # 插入工业对象
         obj = IndustrialObject(
             id=object_id,
-            organization_id=org_id,
+            department_id=org_id,
             object_type="lab",
             code=f"test_obj_{object_id.hex[:8]}",
             display_name="测试对象",
@@ -102,7 +102,7 @@ async def fact_setup(
 
     yield {
         "object_id": object_id,
-        "organization_id": org_id,
+        "department_id": org_id,
         "actor_id": actor_id,
     }
 
@@ -110,15 +110,15 @@ async def fact_setup(
     with sync_engine.connect() as conn:
         conn.execute(
             sa.text("DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE organization_id = :oid)"),
+                "SELECT id FROM fact WHERE department_id = :oid)"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM fact WHERE organization_id = :oid"),
+            sa.text("DELETE FROM fact WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM industrial_object WHERE organization_id = :oid"),
+            sa.text("DELETE FROM industrial_object WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()

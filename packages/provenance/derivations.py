@@ -7,7 +7,7 @@ DerivationService 提供推导运行的创建、回放、查询与列表。
 2. replay_equality: 回放产生的运行与原运行具有相同 output_digest，但不同 id。
 3. provenance_edges: 每次推导运行创建溯源边，连接到所用的事实。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 actor_id（操作人）。
 """
 
@@ -111,30 +111,30 @@ def _output_from_dict(d: dict) -> ParameterCandidateOutput:
 class DerivationService:
     """推导运行业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     actor_id（操作人）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化推导运行服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     async def create_run(
@@ -273,7 +273,7 @@ class DerivationService:
             now: datetime = datetime.now(UTC)
             run = DerivationRun(
                 id=run_id,
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 evidence_set_version_id=evidence_set_version_id,
                 recipe_version_id=recipe_version_id,
                 job_id=None,
@@ -290,7 +290,7 @@ class DerivationService:
             for f_id in fact_ids:
                 edge = ProvenanceEdge(
                     id=new_id(),
-                    organization_id=self._org_id,
+                    department_id=self._dept_id,
                     derivation_run_id=run_id,
                     source_type="derivation_run",
                     source_id=run_id,
@@ -381,7 +381,7 @@ class DerivationService:
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == run_id,
-                    DerivationRun.organization_id == self._org_id,
+                    DerivationRun.department_id == self._dept_id,
                 )
             )
             if run is None:
@@ -421,7 +421,7 @@ class DerivationService:
         async with self._factory() as session:
             stmt = (
                 sa.select(DerivationRun)
-                .where(DerivationRun.organization_id == self._org_id)
+                .where(DerivationRun.department_id == self._dept_id)
                 .order_by(DerivationRun.created_at, DerivationRun.id)
                 .limit(page_size + 1)
             )

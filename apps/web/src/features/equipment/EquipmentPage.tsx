@@ -33,6 +33,7 @@ import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
 import { ExperimentalObjectPage } from '@/features/standards/ExperimentalObjectPage';
 import { extractApiError } from '@/api/types';
 import { DataTableShell } from '@/shared/ui';
+import { DepartmentSelector } from '@/shared/DepartmentSelector';
 
 /**
  * 设备仪器管理页面
@@ -134,9 +135,9 @@ export function EquipmentPage({
       };
     }) => apiUpdateEquipment(params.id, params.body),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['equipment'] });
-      void queryClient.invalidateQueries({ queryKey: ['departments'] });
-      void queryClient.invalidateQueries({ queryKey: ['equipment-for-object-link'] });
+      void queryClient.refetchQueries({ queryKey: ['equipment'] });
+      void queryClient.refetchQueries({ queryKey: ['departments'] });
+      void queryClient.refetchQueries({ queryKey: ['equipment-for-object-link'] });
       setModalOpen(false);
       setEditingItem(null);
       form.resetFields();
@@ -483,11 +484,9 @@ export function EquipmentPage({
             label="所属机构"
             rules={[{ required: true, message: '请选择所属机构' }]}
           >
-            <Select
+            <DepartmentSelector
               placeholder="选择所属机构"
-              options={deptOptions}
-              showSearch
-              optionFilterProp="label"
+              allowRoot={true}
             />
           </Form.Item>
           <Form.Item

@@ -20,7 +20,7 @@ let currentStorageKey: string = 'irip:jobs';
 
 /**
  * H-15: 设置当前作业 store 的存储范围
- * 在用户登录/refresh 成功后调用，传入 organization_id 和 user_id
+ * 在用户登录/refresh 成功后调用，传入 department_id 和 user_id
  */
 export function setJobStoreScope(tenant: string, user: string): void {
   currentStorageKey = `irip:${tenant}:${user}:jobs`;

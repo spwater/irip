@@ -72,7 +72,7 @@ def get_flow_service() -> FlowRuntimeService:
     """获取 FlowRuntimeService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError("get_flow_service must be overridden via dependency_overrides")
 
@@ -558,7 +558,7 @@ async def update_flow(
     async with session_scope(service.session_factory) as session:
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
-            FlowDefinition.organization_id == service.organization_id,
+            FlowDefinition.department_id == service.department_id,
         )
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()
@@ -980,7 +980,7 @@ async def persist_run_as_fact(
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
             session_factory=service.session_factory,
-            organization_id=service.organization_id,
+            department_id=service.department_id,
             uploaded_by=current_user.user_id,
         )
 
@@ -1101,7 +1101,7 @@ async def persist_run_as_fact(
     # 7. 创建事实
     fact_service = FactService(
         session_factory=service.session_factory,
-        organization_id=service.organization_id,
+        department_id=service.department_id,
         actor_id=current_user.user_id,
     )
 
@@ -1112,7 +1112,7 @@ async def persist_run_as_fact(
 
     command = CreateFactCommand(
         fact_type="experiment_run",
-        organization_id=service.organization_id,
+        department_id=service.department_id,
         object_id=body.object_id,
         subject_id=subject_id,
         started_at=run.started_at or run.created_at,

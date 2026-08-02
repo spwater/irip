@@ -6,7 +6,7 @@ EvidenceService 提供证据集的创建、冻结、查询与成员管理。
 1. frozen_immutable: 冻结后的证据集版本不可修改，保证可复现推导。
 2. exact_facts: 冻结时记录每个成员的精确事实 ID。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 actor_id（操作人）。
 """
 
@@ -88,30 +88,30 @@ class EvidenceSetRef:
 class EvidenceService:
     """证据集业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     actor_id（操作人）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID（用于 created_by）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化证据集服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选，用于 created_by）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     async def create_set(self, name: str) -> dict:
@@ -137,7 +137,7 @@ class EvidenceService:
         async with session_scope(self._factory) as session:
             evidence_set = EvidenceSet(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 name=name.strip(),
                 status="draft",
                 lock_version=0,
@@ -160,7 +160,7 @@ class EvidenceService:
 
         流程：
         1. 加载证据集（必须存在且为 draft 状态）；
-        2. 查询当前组织下的活跃事实；
+        2. 查询当前部门下的活跃事实；
         3. 为每个事实创建 EvidenceMember（decision="included"）；
         4. 创建 evidence_set_version（不可变，members JSONB）；
         5. 更新 evidence_set status 为 frozen；
@@ -182,7 +182,7 @@ class EvidenceService:
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.organization_id == self._org_id,
+                    EvidenceSet.department_id == self._dept_id,
                 )
             )
             if evidence_set is None:
@@ -201,11 +201,11 @@ class EvidenceService:
                     fields={"set_id": str(set_id)},
                 )
 
-            # 2. 查询当前组织下活跃事实
+            # 2. 查询当前部门下活跃事实
             stmt = (
                 sa.select(Fact)
                 .where(
-                    Fact.organization_id == self._org_id,
+                    Fact.department_id == self._dept_id,
                     Fact.status == "active",
                 )
                 .order_by(Fact.created_at)
@@ -275,7 +275,7 @@ class EvidenceService:
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.organization_id == self._org_id,
+                    EvidenceSet.department_id == self._dept_id,
                 )
             )
             if evidence_set is None:
@@ -325,7 +325,7 @@ class EvidenceService:
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.organization_id == self._org_id,
+                    EvidenceSet.department_id == self._dept_id,
                 )
             )
             if evidence_set is None:

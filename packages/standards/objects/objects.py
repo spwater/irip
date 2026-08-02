@@ -87,9 +87,8 @@ class IndustrialObject(Base):
 
     Attributes:
         id: 对象 UUID。
-        organization_id: 所属组织 ID。
         object_type: 对象类型（lab / production_line / ...）。
-        code: 对象编码（组织内 + 类型内唯一）。
+        code: 对象编码（部门内 + 类型内唯一）。
         display_name: 中文显示名。
         description: 描述（可选）。
         department_id: 所属部门 ID（nullable，跨实验室可见性基准）。
@@ -103,18 +102,35 @@ class IndustrialObject(Base):
     __tablename__ = "industrial_object"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     object_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（阶段1 NOT NULL）",
+    )
     visible_departments: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,
         default=list,
         server_default=sa.text("'[]'::jsonb"),
+    )
+    # ---- 阶段1 多租户隔离键升级：A 类其余两列（department_id + visible_departments 已有） ----
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
     )
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     created_at: Mapped[datetime] = mapped_column(
@@ -129,10 +145,10 @@ class IndustrialObject(Base):
 
     __table_args__ = (
         sa.UniqueConstraint(
-            "organization_id",
+            "department_id",
             "object_type",
             "code",
-            name="uq_industrial_object_org_type_code",
+            name="uq_industrial_object_dept_type_code",
         ),
     )
 

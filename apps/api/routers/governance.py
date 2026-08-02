@@ -21,7 +21,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from apps.api.composition import lookup_org_id
+from apps.api.composition import lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.audit.events import AuditEventData
@@ -244,8 +244,8 @@ async def _record_audit(
     """
     redacted = redact(payload) if payload is not None else None
     event = AuditEventData(
-        organization_id=actor.organization_id
-        if actor.organization_id is not None
+        department_id=actor.department_id
+        if actor.department_id is not None
         else actor.user_id,
         action=action,
         actor_user_id=actor.user_id,
@@ -289,10 +289,10 @@ async def list_users(
 
         # irip-ai-collab: lab_director 只能查看同 org 用户
         if is_lab_director_only:
-            if current_user.organization_id is None:
+            if current_user.department_id is None:
                 # 无 org 的 lab_director 返回空
                 return UserListResponse(items=[], next_cursor=None, has_more=False)
-            stmt = stmt.where(AppUser.organization_id == current_user.organization_id)
+            stmt = stmt.where(AppUser.department_id == current_user.department_id)
 
         if status is not None:
             stmt = stmt.where(AppUser.status == status)
@@ -385,17 +385,17 @@ async def create_user(
                 fields={"email": body.email},
             )
 
-        # 确定 organization_id：优先从所选实验室获取，未选实验室则查当前管理员的
-        admin_org_id = await lookup_org_id(session_factory, current_user.user_id)
-        org_id = admin_org_id
+        # 确定 department_id：优先从所选实验室获取，未选实验室则查当前管理员的
+        admin_dept_id = await lookup_dept_id(session_factory, current_user.user_id)
+        dept_id = admin_dept_id
         if department_uuid is not None:
             dept = await session.execute(
-                sa.text("SELECT organization_id FROM department WHERE id = :dept_id"),
+                sa.text("SELECT id FROM department WHERE id = :dept_id"),
                 {"dept_id": str(department_uuid)},
             )
             dept_row = dept.fetchone()
             if dept_row is not None and dept_row[0] is not None:
-                org_id = UUID(str(dept_row[0]))
+                dept_id = UUID(str(dept_row[0]))
 
         # 创建用户
         user = AppUser(
@@ -404,8 +404,7 @@ async def create_user(
             password_hash=hash_password(body.password),
             status="active",
             roles=list(body.roles),
-            organization_id=org_id,
-            department_id=department_uuid,
+            department_id=dept_id,
         )
         session.add(user)
         await session.flush()
@@ -480,7 +479,7 @@ async def update_user(
 
         # irip-ai-collab: lab_director 只能操作同 org 用户
         if not _is_platform_admin(current_user):
-            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+            if current_user.department_id is None or user.department_id != current_user.department_id:
                 raise AppError(
                     code="forbidden",
                     message="只能管理本组织用户",
@@ -560,7 +559,7 @@ async def assign_roles(
 
         # irip-ai-collab: lab_director 只能操作同 org 用户
         if not _is_platform_admin(current_user):
-            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+            if current_user.department_id is None or user.department_id != current_user.department_id:
                 raise AppError(
                     code="forbidden",
                     message="只能管理本组织用户",
@@ -638,7 +637,7 @@ async def remove_role(
 
         # irip-ai-collab: lab_director 只能操作同 org 用户
         if not _is_platform_admin(current_user):
-            if current_user.organization_id is None or user.organization_id != current_user.organization_id:
+            if current_user.department_id is None or user.department_id != current_user.department_id:
                 raise AppError(
                     code="forbidden",
                     message="只能管理本组织用户",
@@ -790,3 +789,222 @@ async def delete_user(
         )
 
         await session.delete(user)
+
+
+# ============================================================
+# P1-T1-03: 数据移交工具
+# ============================================================
+
+#: 允许移交的表白名单（均含 department_id 列）。
+_TRANSFERABLE_TABLES: dict[str, str] = {
+    "fact": "实验事实",
+    "parameter": "参数",
+    "model": "模型",
+    "flow_definition": "流程定义",
+    "flow_run": "流程运行",
+    "equipment": "设备仪器",
+}
+
+
+class DataTransferRequest(BaseModel):
+    """数据移交请求体。
+
+    Attributes:
+        table: 目标表名（必须在白名单中）。
+        from_dept_id: 源部门 UUID。
+        to_dept_id: 目标部门 UUID。
+        dry_run: True 时只返回影响行数，不执行 UPDATE。
+    """
+
+    table: str = Field(..., description="目标表名（fact/parameter/model/flow_definition/flow_run/equipment）")
+    from_dept_id: str = Field(..., description="源部门 UUID")
+    to_dept_id: str = Field(..., description="目标部门 UUID")
+    dry_run: bool = Field(False, description="True 时只返回影响行数，不执行")
+
+
+class DataTransferResponse(BaseModel):
+    """数据移交响应体。"""
+
+    table: str
+    from_dept_id: str
+    to_dept_id: str
+    dry_run: bool
+    affected_rows: int
+
+
+@governance_router.post("/data-transfer", response_model=DataTransferResponse)
+async def data_transfer(
+    body: DataTransferRequest,
+    current_user: ManageUserDep,
+    session_factory: GovernanceSessionFactoryDep,
+) -> DataTransferResponse:
+    """批量移交数据归属部门（仅 platform_administrator）。
+
+    将指定表中 department_id = from_dept_id 的所有行更新为 to_dept_id。
+    dry_run=True 时只返回影响行数，不执行 UPDATE。
+
+    Args:
+        body: 数据移交请求体。
+        current_user: 当前认证用户（需 user:manage 权限）。
+        session_factory: 数据库会话工厂。
+
+    Returns:
+        DataTransferResponse: 移交结果（含影响行数）。
+
+    Raises:
+        AppError: code="validation_failed"，当表名不在白名单或部门 ID 无效时。
+    """
+    # 验证表名
+    if body.table not in _TRANSFERABLE_TABLES:
+        raise AppError(
+            code="validation_failed",
+            message=f"不支持的数据表: {body.table}（允许: {', '.join(_TRANSFERABLE_TABLES.keys())}）",
+            retryable=False,
+            fields={"table": body.table},
+        )
+
+    # 验证 UUID
+    try:
+        from_uuid = UUID(body.from_dept_id)
+        to_uuid = UUID(body.to_dept_id)
+    except ValueError as exc:
+        raise AppError(
+            code="validation_failed",
+            message="无效的部门 ID（需 UUID 格式）",
+            retryable=False,
+            fields={"from_dept_id": body.from_dept_id, "to_dept_id": body.to_dept_id},
+        ) from exc
+
+    # 不允许源和目标相同
+    if from_uuid == to_uuid:
+        raise AppError(
+            code="validation_failed",
+            message="源部门和目标部门不能相同",
+            retryable=False,
+            fields={},
+        )
+
+    async with session_scope(session_factory) as session:
+        # 统计影响行数
+        count_stmt = sa.text(
+            f"SELECT COUNT(*) FROM {body.table} WHERE department_id = :from_dept_id"
+        )
+        count_result = await session.execute(count_stmt, {"from_dept_id": str(from_uuid)})
+        affected_rows: int = count_result.scalar() or 0
+
+        if not body.dry_run and affected_rows > 0:
+            # 执行 UPDATE
+            update_stmt = sa.text(
+                f"UPDATE {body.table} SET department_id = :to_dept_id "
+                f"WHERE department_id = :from_dept_id"
+            )
+            await session.execute(
+                update_stmt,
+                {"to_dept_id": str(to_uuid), "from_dept_id": str(from_uuid)},
+            )
+
+            # 记录审计日志
+            await _record_audit(
+                session,
+                current_user,
+                action="governance.data_transfer",
+                resource_type=body.table,
+                resource_id=None,
+                payload={
+                    "table": body.table,
+                    "from_dept_id": str(from_uuid),
+                    "to_dept_id": str(to_uuid),
+                    "affected_rows": affected_rows,
+                },
+            )
+
+    return DataTransferResponse(
+        table=body.table,
+        from_dept_id=str(from_uuid),
+        to_dept_id=str(to_uuid),
+        dry_run=body.dry_run,
+        affected_rows=affected_rows,
+    )
+
+
+# ============================================================
+# P1-T1-05: root 部门数据量监控
+# ============================================================
+
+#: 需统计 root 归属的表列表（表名 → 中文显示名）。
+_ROOT_STATS_TABLES: dict[str, str] = {
+    "fact": "实验事实",
+    "parameter": "参数",
+    "model": "模型",
+    "flow_definition": "流程定义",
+    "flow_run": "流程运行",
+    "equipment": "设备仪器",
+}
+
+
+class RootDataStatsResponse(BaseModel):
+    """root 部门数据量统计响应体。"""
+
+    root_department_id: str
+    root_department_name: str
+    stats: list[dict[str, Any]]
+
+
+@governance_router.get("/root-data-stats", response_model=RootDataStatsResponse)
+async def get_root_data_stats(
+    current_user: ManageUserDep,
+    session_factory: GovernanceSessionFactoryDep,
+) -> RootDataStatsResponse:
+    """统计 root 部门归属的各表数据量（仅 platform_administrator）。
+
+    返回 fact/parameter/model/flow_definition/flow_run/equipment 各表中
+    department_id = root 部门 ID 的行数。
+
+    Args:
+        current_user: 当前认证用户（需 user:manage 权限）。
+        session_factory: 数据库会话工厂。
+
+    Returns:
+        RootDataStatsResponse: 各表 root 归属行数统计。
+
+    Raises:
+        AppError: code="not_found"，当 root 部门不存在时。
+    """
+    from packages.departments.entities import Department
+
+    async with session_scope(session_factory) as session:
+        # 查找 root 部门
+        dept_result = await session.execute(
+            sa.select(Department).where(Department.code == "root")
+        )
+        root_dept = dept_result.scalar_one_or_none()
+        if root_dept is None:
+            raise AppError(
+                code="not_found",
+                message="root 部门不存在",
+                retryable=False,
+                fields={},
+            )
+
+        root_id = str(root_dept.id)
+        root_name = root_dept.display_name
+
+        # 统计各表行数
+        stats: list[dict[str, Any]] = []
+        for table_name, display_name in _ROOT_STATS_TABLES.items():
+            count_stmt = sa.text(
+                f"SELECT COUNT(*) FROM {table_name} WHERE department_id = :root_id"
+            )
+            count_result = await session.execute(count_stmt, {"root_id": root_id})
+            count = count_result.scalar() or 0
+            stats.append({
+                "table": table_name,
+                "display_name": display_name,
+                "count": count,
+            })
+
+    return RootDataStatsResponse(
+        root_department_id=root_id,
+        root_department_name=root_name,
+        stats=stats,
+    )

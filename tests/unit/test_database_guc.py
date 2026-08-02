@@ -1,8 +1,8 @@
 """session_scope GUC 设置单元测试。
 
-覆盖 T01 修改的 ``packages/common/database.py``：
+覆盖 T02 修改的 ``packages/common/database.py``：
 - ``session_scope(factory, *, principal=None)`` 增加可选 principal 参数；
-- 提供 principal 时执行 ``SET LOCAL app.current_org_id = :org_id``；
+- 提供 principal 时执行 ``SET LOCAL app.current_dept_id`` + ``SET LOCAL app.current_user_id``；
 - 不提供 principal 时不执行 GUC 设置（RLS fail-closed）。
 
 由于 ``session_scope`` 依赖真实数据库连接（异步引擎 + SET LOCAL），
@@ -27,18 +27,18 @@ def _get_test_db_url() -> str | None:
 
 
 @pytest.fixture
-def org_id() -> UUID:
-    """测试用组织 ID。"""
+def dept_id() -> UUID:
+    """测试用部门 ID。"""
     return uuid4()
 
 
 @pytest.fixture
-def principal(org_id: UUID) -> Principal:
+def principal(dept_id: UUID) -> Principal:
     """构造测试用 Principal。"""
-    scope = QueryScope(organization_id=org_id)
+    scope = QueryScope(department_id=dept_id)
     return Principal(
         user_id=uuid4(),
-        organization_id=org_id,
+        department_id=dept_id,
         email="test@irip.local",
         roles=["lab_member"],
         scope=scope,
@@ -50,7 +50,7 @@ class TestSessionScopeWithPrincipal:
     """提供 principal 时设置 GUC。"""
 
     async def test_guc_set_when_principal_provided(self, principal: Principal) -> None:
-        """提供 principal 时执行 SET LOCAL app.current_org_id。"""
+        """提供 principal 时执行 SET LOCAL app.current_dept_id。"""
         db_url = _get_test_db_url()
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
@@ -61,12 +61,12 @@ class TestSessionScopeWithPrincipal:
 
         factory = build_session_factory(async_url)
         async with session_scope(factory, principal=principal) as session:
-            result = await session.execute(sa.text("SHOW app.current_org_id"))
+            result = await session.execute(sa.text("SHOW app.current_dept_id"))
             current_guc = result.scalar()
-            assert current_guc == str(principal.organization_id)
+            assert current_guc == str(principal.department_id)
 
-    async def test_guc_matches_principal_org_id(self, principal: Principal) -> None:
-        """GUC 值与 principal.organization_id 一致。"""
+    async def test_guc_matches_principal_dept_id(self, principal: Principal) -> None:
+        """GUC 值与 principal.department_id 一致。"""
         db_url = _get_test_db_url()
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
@@ -77,15 +77,30 @@ class TestSessionScopeWithPrincipal:
 
         factory = build_session_factory(async_url)
         async with session_scope(factory, principal=principal) as session:
-            result = await session.execute(sa.text("SHOW app.current_org_id"))
-            assert result.scalar() == str(principal.organization_id)
+            result = await session.execute(sa.text("SHOW app.current_dept_id"))
+            assert result.scalar() == str(principal.department_id)
+
+    async def test_guc_user_id_set_when_principal_provided(self, principal: Principal) -> None:
+        """提供 principal 时执行 SET LOCAL app.current_user_id。"""
+        db_url = _get_test_db_url()
+        if not db_url:
+            pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
+
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+        if not async_url.startswith("postgresql+psycopg_async://"):
+            async_url = async_url.replace("postgresql://", "postgresql+psycopg_async://", 1)
+
+        factory = build_session_factory(async_url)
+        async with session_scope(factory, principal=principal) as session:
+            result = await session.execute(sa.text("SHOW app.current_user_id"))
+            assert result.scalar() == str(principal.user_id)
 
 
 class TestSessionScopeWithoutPrincipal:
     """不提供 principal 时不设置 GUC。"""
 
     async def test_guc_not_set_without_principal(self) -> None:
-        """不提供 principal 时不设置 GUC（保持连接级默认值）。"""
+        """不提供 principal 时 GUC 保持连接级默认值（空串）。"""
         db_url = _get_test_db_url()
         if not db_url:
             pytest.skip("IRIP_TEST_DATABASE_URL not set; skipping GUC test")
@@ -96,7 +111,7 @@ class TestSessionScopeWithoutPrincipal:
 
         factory = build_session_factory(async_url)
         async with session_scope(factory) as session:
-            result = await session.execute(sa.text("SHOW app.current_org_id"))
+            result = await session.execute(sa.text("SHOW app.current_dept_id"))
             current_guc = result.scalar()
             # 连接级默认值为空字符串（build_session_factory 中设置）
             assert current_guc == ""

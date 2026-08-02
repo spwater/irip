@@ -9,13 +9,15 @@
 原 StandardService / TemplateService / PackageService 依赖的表
 （variable / fact_template / standard_package）已在 migration 0057 中
 DROP，对应服务与 DI 注册一并删除。
+
+阶段2 多租户升级：lookup_dept_id, department_id。
 """
 
 from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.dependencies.departments import (
     get_department_service,
@@ -40,10 +42,9 @@ def register(ctx: CompositionContext) -> None:
     async def _get_object_graph_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ObjectGraphService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
         return ObjectGraphService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=current_user.department_id,
             actor_id=current_user.user_id,
         )
 
@@ -53,10 +54,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_department_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> DepartmentService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        # 阶段2: 直接从 CurrentUser 拿 department_id（get_current_user 已查 DB）
         return DepartmentService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=current_user.department_id,
         )
 
     ctx.app.dependency_overrides[get_department_service] = _get_department_service_dep
@@ -65,10 +66,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_equipment_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> EquipmentService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
         return EquipmentService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=current_user.department_id,
+            actor_id=current_user.user_id,
         )
 
     ctx.app.dependency_overrides[get_equipment_service] = _get_equipment_service_dep
@@ -77,10 +78,9 @@ def register(ctx: CompositionContext) -> None:
     async def _get_user_department_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> UserDepartmentService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
         return UserDepartmentService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=current_user.department_id,
         )
 
     ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep

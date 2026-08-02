@@ -37,26 +37,27 @@ class CompositionContext:
     token_secret: str
 
 
-async def lookup_org_id(
+async def lookup_dept_id(
     session_factory: async_sessionmaker[AsyncSession],
     user_id: UUID,
 ) -> UUID:
-    """从数据库查询用户的 organization_id（fail-closed）。
+    """从数据库查询用户的 department_id（fail-closed）。
 
-    安全约定（技术设计文档 F-02/F-08）：
-    - 查不到用户或 organization_id 时 raise AppError(code="forbidden")；
-    - **禁止**回退到 IRIP-DEMO 组织或生成随机 UUID；
-    - fail-closed 确保未分配组织的用户无法访问任何资源。
+    阶段2：department_id 为主要租户标识，不可为空。
+
+    安全约定：
+    - 查不到用户或 department_id 时 raise AppError(code="forbidden")；
+    - fail-closed 确保未分配部门的用户无法访问任何资源。
 
     Args:
         session_factory: 异步会话工厂。
         user_id: 当前用户 UUID。
 
     Returns:
-        UUID: 用户的 organization_id。
+        UUID: 用户的 department_id。
 
     Raises:
-        AppError: code="forbidden"，当用户不存在或无 organization_id 时。
+        AppError: code="forbidden"，当用户不存在或无 department_id 时。
     """
     import sqlalchemy as sa
 
@@ -67,18 +68,18 @@ async def lookup_org_id(
         if user is None:
             raise AppError(
                 code="forbidden",
-                message=f"用户不存在或未分配组织: {user_id}",
+                message=f"用户不存在或未分配部门: {user_id}",
                 retryable=False,
                 fields={"user_id": str(user_id)},
             )
-        if user.organization_id is None:
+        if user.department_id is None:
             raise AppError(
                 code="forbidden",
-                message=f"用户未分配组织（organization_id 为空）: {user_id}",
+                message=f"用户未分配部门（department_id 为空）: {user_id}",
                 retryable=False,
                 fields={"user_id": str(user_id)},
             )
-        return user.organization_id
+        return user.department_id
 
 
 def register_all(ctx: CompositionContext) -> None:

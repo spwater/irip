@@ -71,7 +71,7 @@ class ProfileResponse(BaseModel):
     display_name: str
     avatar_url: str | None = None
     roles: list[str] = Field(default_factory=list)
-    organization_id: str | None = None
+    department_id: str | None = None
 
 
 class UpdateProfileRequest(BaseModel):
@@ -132,7 +132,7 @@ async def get_profile(
             display_name=user.display_name,
             avatar_url=user.avatar_url,
             roles=list(user.roles) if user.roles else [],
-            organization_id=str(user.organization_id) if user.organization_id else None,
+            department_id=str(user.department_id) if user.department_id else None,
         )
 
 
@@ -180,7 +180,7 @@ async def update_profile(
             display_name=user.display_name,
             avatar_url=user.avatar_url,
             roles=list(user.roles) if user.roles else [],
-            organization_id=str(user.organization_id) if user.organization_id else None,
+            department_id=str(user.department_id) if user.department_id else None,
         )
 
 

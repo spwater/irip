@@ -36,22 +36,22 @@ class SecretStore:
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID（隔离过滤）。
+        _dept_id: 当前部门 ID（隔离过滤）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
     ) -> None:
         """初始化密钥存储。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
 
     async def get(self, secret_id: UUID) -> str:
         """按 ID 解析密钥值（读取时解密）。
@@ -65,13 +65,13 @@ class SecretStore:
             str: 凭据明文。
 
         Raises:
-            AppError: code="secret_not_found"，当密钥不存在或不属于当前组织时。
+            AppError: code="secret_not_found"，当密钥不存在或不属于当前部门时。
         """
         async with self._factory() as session:
             result = await session.execute(
                 sa.select(Secret).where(
                     Secret.id == secret_id,
-                    Secret.organization_id == self._org_id,
+                    Secret.department_id == self._dept_id,
                 )
             )
             secret = result.scalar_one_or_none()
@@ -100,25 +100,25 @@ class IngestionService:
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _artifact_service: 可选的工件服务，用于 file kind 的 artifact 流读取。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         artifact_service: object | None = None,
     ) -> None:
         """初始化预览服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             artifact_service: 工件服务实例（C-01: file kind 需要）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._artifact_service = artifact_service
 
     async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
@@ -134,7 +134,7 @@ class IngestionService:
         # 延迟导入以避免与 packages.connectors.__init__ 的循环依赖。
         from packages.connectors import build_connector
 
-        secret_store = SecretStore(self._factory, self._org_id)
+        secret_store = SecretStore(self._factory, self._dept_id)
         connector = build_connector(
             source,
             secret_store=secret_store,

@@ -4,7 +4,7 @@
 - 改密码：旧密码验证 + 新密码 hash + token_version+1；
 - 旧密码错误返回 invalid_credentials；
 - 改头像/显示名（update_profile）；
-- get_profile 返回 avatar_url / organization_id / roles。
+- get_profile 返回 avatar_url / department_id / roles。
 
 使用 FastAPI TestClient + dependency_overrides 注入测试 session_factory。
 依赖测试数据库（IRIP_TEST_DATABASE_URL）。
@@ -37,7 +37,7 @@ def _insert_user(sync_engine, email: str, org_id=None, display_name="用户", ro
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, organization_id, email, display_name, "
+                "(id, department_id, email, display_name, "
                 "password_hash, status, roles, lock_version, token_version) "
                 "VALUES (:id, :org, :email, :name, :hash, :status, :roles, 0, 0)"
             ),
@@ -109,7 +109,7 @@ class TestGetProfile:
                 user_id=user_id,
                 email=f"prof-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)
@@ -120,7 +120,7 @@ class TestGetProfile:
             assert data["display_name"] == "研究员甲"
             assert data["avatar_url"] == "http://example.com/a.png"
             assert data["roles"] == ["lab_member"]
-            assert data["organization_id"] == str(org_id)
+            assert data["department_id"] == str(org_id)
         finally:
             _cleanup_user(sync_engine, user_id)
 
@@ -137,7 +137,7 @@ class TestUpdateProfile:
                 user_id=user_id,
                 email=f"upd-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)
@@ -166,7 +166,7 @@ class TestUpdateProfile:
                 user_id=user_id,
                 email=f"ava-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)
@@ -194,7 +194,7 @@ class TestChangePassword:
                 user_id=user_id,
                 email=f"pwd-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)
@@ -229,7 +229,7 @@ class TestChangePassword:
                 user_id=user_id,
                 email=f"badpwd-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)
@@ -262,7 +262,7 @@ class TestChangePassword:
                 user_id=user_id,
                 email=f"shortpwd-{user_id}@irip.local",
                 roles=["lab_member"],
-                organization_id=org_id,
+                department_id=org_id,
             )
             app = _build_app(async_session_factory, current_user)
             client = TestClient(app)

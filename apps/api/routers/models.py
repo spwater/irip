@@ -44,7 +44,7 @@ def get_model_service() -> Any:
     """获取 ModelService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError("get_model_service must be overridden via dependency_overrides")
 

@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.models import get_model_service
 
@@ -26,22 +26,22 @@ def register(ctx: CompositionContext) -> None:
     async def _get_model_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ModelService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         art_svc = ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
         # 注入 FactService，使模型预测结果写入溯源事实链
         fact_svc = FactService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
         return ModelService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             artifact_service=art_svc,
             fact_service=fact_svc,
         )

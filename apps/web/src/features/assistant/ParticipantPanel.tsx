@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Alert,
   Avatar,
   Button,
   Drawer,
@@ -241,6 +242,13 @@ export function ParticipantPanel({
         okText="邀请"
         cancelText="取消"
       >
+        <Alert
+          type="warning"
+          showIcon
+          message="副本语义提示"
+          description="会话内的数据副本将随之暴露给新参与者，此操作不可撤销。"
+          style={{ marginBottom: 12 }}
+        />
         <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
           仅可邀请同组织内的活跃用户
         </Text>

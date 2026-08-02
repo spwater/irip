@@ -22,6 +22,7 @@ from datetime import datetime
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -121,7 +122,7 @@ class Artifact(Base):
 
     Attributes:
         id: 工件 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         sha256: 关联 blob 的 SHA-256（FK→artifact_blob.sha256）。
         filename: 原始文件名。
         media_type: MIME 类型。
@@ -133,7 +134,31 @@ class Artifact(Base):
     __tablename__ = "artifact"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    # ---- 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
+    )
     sha256: Mapped[str] = mapped_column(
         sa.Text,
         sa.ForeignKey("artifact_blob.sha256", name="fk_artifact_sha256"),
@@ -159,7 +184,7 @@ class ArtifactService:
     """内容寻址工件服务。
 
     依赖注入 S3Repository（对象存储）、session_factory（数据库事务）、
-    organization_id（当前组织）、uploaded_by（当前用户）。
+    department_id（当前部门）、uploaded_by（当前用户）。
 
     核心流程：
     - put_bytes: 计算 SHA-256 → 查 blob 去重 → 上传 S3（如需）→ INSERT blob + artifact
@@ -171,7 +196,7 @@ class ArtifactService:
         self,
         s3_repo: S3Repository,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         uploaded_by: UUID,
     ) -> None:
         """初始化工件服务。
@@ -179,12 +204,12 @@ class ArtifactService:
         Args:
             s3_repo: S3 对象存储客户端封装。
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             uploaded_by: 当前上传者用户 ID。
         """
         self._s3 = s3_repo
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._uploaded_by = uploaded_by
 
     async def put_bytes(
@@ -252,7 +277,6 @@ class ArtifactService:
                     await asyncio.to_thread(self._s3.put_object, object_key, data, media_type)
 
             artifact = Artifact(
-                organization_id=self._org_id,
                 sha256=sha256,
                 filename=filename,
                 media_type=media_type,
@@ -275,7 +299,7 @@ class ArtifactService:
 
         下载对象内容并重算 SHA-256，与 artifact_blob.sha256 比对。
 
-        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+        安全约定（F-09）：RLS 已处理租户隔离。
 
         Args:
             artifact_id: 工件 UUID。
@@ -290,7 +314,7 @@ class ArtifactService:
             artifact: Artifact | None = await session.scalar(
                 sa.select(Artifact).where(
                     Artifact.id == artifact_id,
-                    Artifact.organization_id == self._org_id,
+                    Artifact.department_id == self._dept_id,
                 )
             )
             if artifact is None:
@@ -313,7 +337,7 @@ class ArtifactService:
     async def get_artifact(self, artifact_id: UUID) -> ArtifactRef:
         """获取工件引用（只读）。
 
-        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+        安全约定（F-09）：RLS 已处理租户隔离。
 
         Args:
             artifact_id: 工件 UUID。
@@ -329,7 +353,7 @@ class ArtifactService:
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.organization_id == self._org_id,
+                        Artifact.department_id == self._dept_id,
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -357,7 +381,7 @@ class ArtifactService:
         通过 artifact_id 查找关联的 blob，从 S3 下载内容。
         供模型服务下载模型工件等场景使用。
 
-        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+        安全约定（F-09）：RLS 已处理租户隔离。
 
         Args:
             artifact_id: 工件 UUID。
@@ -373,7 +397,7 @@ class ArtifactService:
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.organization_id == self._org_id,
+                        Artifact.department_id == self._dept_id,
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -404,7 +428,7 @@ class ArtifactService:
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.organization_id == self._org_id,
+                        Artifact.department_id == self._dept_id,
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -589,7 +613,7 @@ class ArtifactService:
     ) -> str:
         """异步生成预签名下载 URL。
 
-        安全约定（F-09）：查询加 organization_id 条件，防止跨租户 IDOR。
+        安全约定（F-09）：RLS 已处理租户隔离。
 
         Args:
             artifact_id: 工件 UUID。
@@ -612,7 +636,7 @@ class ArtifactService:
                     )
                     .where(
                         Artifact.id == artifact_id,
-                        Artifact.organization_id == self._org_id,
+                        Artifact.department_id == self._dept_id,
                     )
                 )
             ).first()
@@ -651,7 +675,7 @@ class ArtifactService:
                     )
                     .where(
                         Artifact.id == artifact_id,
-                        Artifact.organization_id == self._org_id,
+                        Artifact.department_id == self._dept_id,
                     )
                 )
             ).first()

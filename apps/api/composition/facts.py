@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.facts import get_fact_service
 from apps.api.routers.provenance import (
@@ -39,10 +39,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_fact_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> FactService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return FactService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
 
@@ -52,10 +52,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_evidence_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> EvidenceService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return EvidenceService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
 
@@ -65,10 +65,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_recipe_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> RecipeService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return RecipeService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
 
@@ -78,10 +78,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_derivation_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> DerivationService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return DerivationService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
 
@@ -91,10 +91,10 @@ def register(ctx: CompositionContext) -> None:
     async def _get_provenance_graph_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ProvenanceGraphService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return ProvenanceGraphService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
         )
 
     ctx.app.dependency_overrides[get_provenance_graph_service] = _get_provenance_graph_service_dep

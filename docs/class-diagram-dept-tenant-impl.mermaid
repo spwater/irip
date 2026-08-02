@@ -1,0 +1,128 @@
+%% IRIP 多租户隔离键升级 — 类图
+%% 架构师：高见远 | 基线：ADR docs/arch-department-tenant.md
+
+classDiagram
+    class Principal {
+        +UUID user_id
+        +UUID department_id
+        +str email
+        +list~str~ roles
+        +QueryScope scope
+        +int token_version
+        +bool is_active
+        +has_permission(perm: str) bool
+        +from_current_user(user: UserLike, dept_id: UUID, scope: QueryScope) Principal
+        +tenant_id() DeptTenantId
+    }
+
+    class DeptTenantId {
+        +UUID value
+        +from_principal(principal: Principal) DeptTenantId
+    }
+
+    class QueryScope {
+        +UUID department_id
+        +UUID|None object_root_id
+        +apply(query: Select, entity_cls: type) Select
+    }
+
+    class UserLike {
+        <<protocol>>
+        +UUID user_id
+        +str email
+        +list~str~ roles
+    }
+
+    class CurrentUser {
+        +UUID user_id
+        +str email
+        +list~str~ roles
+        +UUID|None department_id
+        +int token_version
+    }
+
+    class DatabaseSession {
+        +build_session_factory(url: str) async_sessionmaker
+        +session_scope(factory, principal: Principal|None) AsyncIterator~AsyncSession~
+    }
+
+    class DeptScopeHelper {
+        +should_filter_by_department(user: CurrentUser) bool
+        +get_visible_department_ids(user: CurrentUser, factory) list~UUID~
+        +can_edit_department(user: CurrentUser, target_dept_id: UUID|None) bool
+        +can_reparent_department(dept_id: UUID, factory) bool
+    }
+
+    class JobService {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        -UUID _created_by
+        +accept(kind: str, payload: dict, idempotency_key: str) JobRef
+        +request_cancel(job_id: UUID, actor_id: UUID) JobRef
+        +get(job_id: UUID) JobRef
+        +list(status, kind, cursor, limit) tuple
+    }
+
+    class Job {
+        +UUID id
+        +UUID department_id
+        +UUID organization_id
+        +str kind
+        +str status
+        +dict payload
+        +str idempotency_key
+    }
+
+    class Fact {
+        +UUID id
+        +UUID department_id
+        +UUID organization_id
+        +str fact_type
+        +UUID object_id
+        +str status
+        +JSONB visible_departments
+        +str visibility_scope
+        +UUID owner_user_id
+    }
+
+    class Department {
+        +UUID id
+        +UUID organization_id
+        +str code
+        +str display_name
+        +str status
+        +UUID|None parent_id
+        +int sort_order
+    }
+
+    class BackupRecord {
+        +UUID id
+        +UUID department_id
+        +UUID organization_id
+        +str backup_type
+        +str status
+    }
+
+    class ConversationParticipant {
+        +UUID conversation_id
+        +UUID user_id
+        +str role
+        +datetime joined_at
+    }
+
+    class AIConversation {
+        +UUID id
+        +UUID owner_user_id
+        +str title
+        +str visibility_scope
+    }
+
+    Principal --> QueryScope : scope
+    Principal --> DeptTenantId : tenant_id()
+    CurrentUser ..|> UserLike : implements
+    DeptScopeHelper --> CurrentUser : uses
+    JobService --> Job : manages
+    Job ..> Department : department_id FK
+    Fact ..> Department : department_id FK
+    BackupRecord ..> Department : department_id FK
+    ConversationParticipant --> AIConversation : conversation_id FK

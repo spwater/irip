@@ -36,7 +36,7 @@ async def param_setup(
     返回所有创建实体的 ID，供参数测试使用。
     测试后自动清理。
     """
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     object_id = new_id()
@@ -47,7 +47,7 @@ async def param_setup(
         # L1: 工业对象
         obj = IndustrialObject(
             id=object_id,
-            organization_id=org_id,
+            department_id=org_id,
             object_type="lab",
             code=f"param_obj_{object_id.hex[:8]}",
             display_name="参数测试对象",
@@ -64,7 +64,7 @@ async def param_setup(
     yield {
         "object_id": object_id,
         "variable_code": f"param_var_{object_id.hex[:8]}",
-        "organization_id": org_id,
+        "department_id": org_id,
         "actor_id": actor_id,
     }
 
@@ -74,40 +74,40 @@ async def param_setup(
         conn.execute(
             sa.text(
                 "DELETE FROM parameter_candidate WHERE parameter_id IN ("
-                "SELECT id FROM parameter WHERE organization_id = :oid)"
+                "SELECT id FROM parameter WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
             sa.text(
                 "DELETE FROM parameter_version WHERE parameter_id IN ("
-                "SELECT id FROM parameter WHERE organization_id = :oid)"
+                "SELECT id FROM parameter WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM parameter WHERE organization_id = :oid"),
+            sa.text("DELETE FROM parameter WHERE department_id = :oid"),
             {"oid": org_id},
         )
         # L2.5: 溯源与推导
         conn.execute(
-            sa.text("DELETE FROM provenance_edge WHERE organization_id = :oid"),
+            sa.text("DELETE FROM provenance_edge WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM derivation_run WHERE organization_id = :oid"),
+            sa.text("DELETE FROM derivation_run WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.execute(
             sa.text(
                 "DELETE FROM transformation_recipe_version WHERE recipe_id IN ("
                 "SELECT id FROM transformation_recipe "
-                "WHERE organization_id = :oid)"
+                "WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM transformation_recipe WHERE organization_id = :oid"),
+            sa.text("DELETE FROM transformation_recipe WHERE department_id = :oid"),
             {"oid": org_id},
         )
         # evidence_set_version 有 F-03 不可变触发器，用 TRUNCATE CASCADE 绕过
@@ -118,17 +118,17 @@ async def param_setup(
         conn.execute(
             sa.text(
                 "DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE organization_id = :oid)"
+                "SELECT id FROM fact WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM fact WHERE organization_id = :oid"),
+            sa.text("DELETE FROM fact WHERE department_id = :oid"),
             {"oid": org_id},
         )
         # L1
         conn.execute(
-            sa.text("DELETE FROM industrial_object WHERE organization_id = :oid"),
+            sa.text("DELETE FROM industrial_object WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -142,7 +142,7 @@ def _make_fact_command(
     """构建创建事实命令。"""
     return CreateFactCommand(
         fact_type="experiment_run",
-        organization_id=setup["organization_id"],
+        department_id=setup["department_id"],
         object_id=setup["object_id"],
         subject_id=subject_id,
         started_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -163,27 +163,27 @@ async def _create_derivation_chain(
 
     返回包含 run_ref 和 fact_refs 的字典。
     """
-    org_id = setup["organization_id"]
+    org_id = setup["department_id"]
     actor_id = setup["actor_id"]
 
     fact_service = FactService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     evidence_service = EvidenceService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     recipe_service = RecipeService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
     derivation_service = DerivationService(
         session_factory=async_session_factory,
-        organization_id=org_id,
+        department_id=org_id,
         actor_id=actor_id,
     )
 

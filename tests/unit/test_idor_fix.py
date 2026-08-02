@@ -1,15 +1,15 @@
 """C-03 跨租户 IDOR 修复单元测试。
 
-覆盖 T03 中为防止跨租户访问（IDOR）而增加的 organization_id 过滤：
+覆盖 T03 中为防止跨租户访问（IDOR）而增加的 department_id 过滤：
 - ``packages/departments/repository.py`` — select_by_id / update / update_status /
-  delete_by_id 增加 organization_id 条件；
+  delete_by_id 增加 department_id 条件；
 - ``packages/equipment/repository.py`` — select_by_id / update / update_status
-  增加 organization_id 条件；
+  增加 department_id 条件；
 - ``packages/components/registry.py`` — delete_component / activate_version
-  增加 organization_id 过滤。
+  增加 department_id 过滤。
 
 测试策略：使用 AsyncMock 模拟数据库会话，验证生成的 SQL 语句 WHERE
-子句中包含 ``organization_id`` 过滤条件，确保跨租户查询不会命中其他
+子句中包含 ``department_id`` 过滤条件，确保跨租户查询不会命中其他
 租户的数据。
 """
 
@@ -26,7 +26,7 @@ from packages.departments.repository import DepartmentRepository
 from packages.equipment.repository import EquipmentRepository
 
 # ---------------------------------------------------------------------------
-# 辅助：编译语句并检查 WHERE 子句中是否包含 organization_id
+# 辅助：编译语句并检查 WHERE 子句中是否包含 department_id
 # ---------------------------------------------------------------------------
 
 
@@ -35,9 +35,9 @@ def _compiled_sql(stmt: sa.sql.Select | sa.sql.Update | sa.sql.Delete) -> str:
     return str(stmt.compile(compile_kwargs={"literal_binds": False}))
 
 
-def _has_organization_filter(stmt: object) -> bool:
-    """检查编译后的 SQL 是否包含 organization_id 过滤条件。"""
-    return "organization_id" in _compiled_sql(stmt)
+def _has_department_filter(stmt: object) -> bool:
+    """检查编译后的 SQL 是否包含 department_id 过滤条件。"""
+    return "department_id" in _compiled_sql(stmt)
 
 
 # ---------------------------------------------------------------------------
@@ -46,10 +46,16 @@ def _has_organization_filter(stmt: object) -> bool:
 
 
 class TestDepartmentRepositoryIdorFix:
-    """DepartmentRepository 的 organization_id 租户隔离测试。"""
+    """DepartmentRepository 的 department_id 租户隔离测试。
 
+    阶段3退役后：department 表是结构数据（C 类），RLS 已禁用，
+    不再需要 department_id 过滤条件。这些测试标记跳过。
+    """
+
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_select_by_id_includes_org_filter(self) -> None:
-        """select_by_id 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """select_by_id 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -64,10 +70,11 @@ class TestDepartmentRepositoryIdorFix:
         assert result is None
         session.execute.assert_called_once()
 
-        # 验证 WHERE 子句包含 organization_id
+        # 验证 WHERE 子句包含 department_id
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_select_by_id_wrong_org_returns_none(self) -> None:
         """带错误 org_id 查询时，模拟数据库返回 None。"""
         session = AsyncMock()
@@ -82,8 +89,9 @@ class TestDepartmentRepositoryIdorFix:
 
         assert result is None
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_update_includes_org_filter(self) -> None:
-        """update 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """update 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -99,7 +107,6 @@ class TestDepartmentRepositoryIdorFix:
             description=None,
             sort_order=0,
             lock_version=0,
-            organization_id=org_id,
         )
 
         # 模拟跨租户更新不命中（返回 None）
@@ -107,8 +114,9 @@ class TestDepartmentRepositoryIdorFix:
         session.execute.assert_called_once()
 
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_update_wrong_org_returns_none(self) -> None:
         """带错误 org_id 更新时，模拟数据库不命中。"""
         session = AsyncMock()
@@ -123,13 +131,13 @@ class TestDepartmentRepositoryIdorFix:
             description=None,
             sort_order=0,
             lock_version=0,
-            organization_id=uuid4(),
         )
 
         assert result is None
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_update_status_includes_org_filter(self) -> None:
-        """update_status 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """update_status 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -140,15 +148,15 @@ class TestDepartmentRepositoryIdorFix:
             department_id=uuid4(),
             status="disabled",
             lock_version=0,
-            organization_id=uuid4(),
         )
 
         assert result is None
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_delete_by_id_includes_org_filter(self) -> None:
-        """delete_by_id 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """delete_by_id 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.rowcount = 0
@@ -159,21 +167,23 @@ class TestDepartmentRepositoryIdorFix:
         # 模拟跨租户删除不命中
         assert result is False
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_select_by_id_signature_has_org_param(self) -> None:
-        """select_by_id 方法签名包含 organization_id 参数。"""
+        """select_by_id 方法签名包含 department_id 参数。"""
         import inspect
 
         sig = inspect.signature(DepartmentRepository.select_by_id)
-        assert "organization_id" in sig.parameters
+        assert "department_id" in sig.parameters
 
+    @pytest.mark.skip(reason="阶段3: department 表是结构数据，不再按 department_id 过滤")
     async def test_update_signature_has_org_param(self) -> None:
-        """update 方法签名包含 organization_id 参数。"""
+        """update 方法签名包含 department_id 参数。"""
         import inspect
 
         sig = inspect.signature(DepartmentRepository.update)
-        assert "organization_id" in sig.parameters
+        assert "department_id" in sig.parameters
 
 
 # ---------------------------------------------------------------------------
@@ -182,10 +192,10 @@ class TestDepartmentRepositoryIdorFix:
 
 
 class TestEquipmentRepositoryIdorFix:
-    """EquipmentRepository 的 organization_id 租户隔离测试。"""
+    """EquipmentRepository 的 department_id 租户隔离测试。"""
 
     async def test_select_by_id_includes_org_filter(self) -> None:
-        """select_by_id 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """select_by_id 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -196,7 +206,7 @@ class TestEquipmentRepositoryIdorFix:
         assert result is None
         session.execute.assert_called_once()
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
     async def test_select_by_id_wrong_org_returns_none(self) -> None:
         """带错误 org_id 查询时返回 None。"""
@@ -209,7 +219,7 @@ class TestEquipmentRepositoryIdorFix:
         assert result is None
 
     async def test_update_includes_org_filter(self) -> None:
-        """update 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """update 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -223,12 +233,11 @@ class TestEquipmentRepositoryIdorFix:
             department_id=uuid4(),
             sort_order=0,
             lock_version=0,
-            organization_id=uuid4(),
         )
 
         assert result is None
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
     async def test_update_wrong_org_returns_none(self) -> None:
         """带错误 org_id 更新时返回 None。"""
@@ -245,12 +254,11 @@ class TestEquipmentRepositoryIdorFix:
             department_id=uuid4(),
             sort_order=0,
             lock_version=0,
-            organization_id=uuid4(),
         )
         assert result is None
 
     async def test_update_status_includes_org_filter(self) -> None:
-        """update_status 生成的 SQL 包含 organization_id WHERE 条件。"""
+        """update_status 生成的 SQL 包含 department_id WHERE 条件。"""
         session = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None
@@ -261,26 +269,26 @@ class TestEquipmentRepositoryIdorFix:
             equipment_id=uuid4(),
             status="disabled",
             lock_version=0,
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
         assert result is None
         stmt = session.execute.call_args[0][0]
-        assert _has_organization_filter(stmt)
+        assert _has_department_filter(stmt)
 
     async def test_select_by_id_signature_has_org_param(self) -> None:
-        """select_by_id 方法签名包含 organization_id 参数。"""
+        """select_by_id 方法签名包含 department_id 参数。"""
         import inspect
 
         sig = inspect.signature(EquipmentRepository.select_by_id)
-        assert "organization_id" in sig.parameters
+        assert "department_id" in sig.parameters
 
     async def test_update_signature_has_org_param(self) -> None:
-        """update 方法签名包含 organization_id 参数。"""
+        """update 方法签名包含 department_id 参数。"""
         import inspect
 
         sig = inspect.signature(EquipmentRepository.update)
-        assert "organization_id" in sig.parameters
+        assert "department_id" in sig.parameters
 
 
 # ---------------------------------------------------------------------------
@@ -299,7 +307,7 @@ def _make_mock_session_scope(session: AsyncMock):
 
 
 class TestComponentRegistryIdorFix:
-    """ComponentRegistryService 的 organization_id 租户隔离测试。"""
+    """ComponentRegistryService 的 department_id 租户隔离测试。"""
 
     async def test_delete_component_wrong_org_raises_not_found(self) -> None:
         """delete_component 带错误 org_id（组件不存在于当前组织）抛 not_found。"""
@@ -309,7 +317,7 @@ class TestComponentRegistryIdorFix:
 
         service = ComponentRegistryService(
             session_factory=MagicMock(),
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
         with patch(
@@ -329,7 +337,7 @@ class TestComponentRegistryIdorFix:
         # 模拟组件存在
         fake_component = Component(
             id=uuid4(),
-            organization_id=uuid4(),
+            department_id=uuid4(),
             name="comp",
             kind="ingestion",
             status="published",
@@ -339,7 +347,7 @@ class TestComponentRegistryIdorFix:
 
         service = ComponentRegistryService(
             session_factory=MagicMock(),
-            organization_id=fake_component.organization_id,
+            department_id=fake_component.department_id,
         )
 
         with patch(
@@ -357,7 +365,7 @@ class TestComponentRegistryIdorFix:
 
         service = ComponentRegistryService(
             session_factory=MagicMock(),
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
         with patch(
@@ -370,13 +378,13 @@ class TestComponentRegistryIdorFix:
         assert exc_info.value.code == "not_found"
 
     async def test_activate_version_query_includes_org_join(self) -> None:
-        """activate_version 的查询通过 JOIN Component 确保 organization_id 过滤。"""
+        """activate_version 的查询通过 JOIN Component 确保 department_id 过滤。"""
         mock_session = AsyncMock()
         mock_session.scalar.return_value = None
 
         service = ComponentRegistryService(
             session_factory=MagicMock(),
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
         with patch(
@@ -386,20 +394,20 @@ class TestComponentRegistryIdorFix:
             with pytest.raises(AppError):
                 await service.activate_version(uuid4())
 
-        # 验证 scalar 被调用，且传入的语句编译后包含 organization_id
+        # 验证 scalar 被调用，且传入的语句编译后包含 department_id
         mock_session.scalar.assert_called_once()
         stmt = mock_session.scalar.call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
-        assert "organization_id" in compiled
+        assert "department_id" in compiled
 
     async def test_delete_component_query_includes_org_filter(self) -> None:
-        """delete_component 的 SELECT 查询包含 organization_id WHERE 条件。"""
+        """delete_component 的 SELECT 查询包含 department_id WHERE 条件。"""
         mock_session = AsyncMock()
         mock_session.scalar.return_value = None
 
         service = ComponentRegistryService(
             session_factory=MagicMock(),
-            organization_id=uuid4(),
+            department_id=uuid4(),
         )
 
         with patch(
@@ -412,4 +420,4 @@ class TestComponentRegistryIdorFix:
         mock_session.scalar.assert_called_once()
         stmt = mock_session.scalar.call_args[0][0]
         compiled = str(stmt.compile(compile_kwargs={"literal_binds": False}))
-        assert "organization_id" in compiled
+        assert "department_id" in compiled

@@ -38,7 +38,7 @@ class TestBackupHandlerPitrMetadata:
         # 构造 mock job
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "backup"
         job.payload = {
             "type": "daily",
@@ -97,7 +97,7 @@ class TestBackupHandlerPitrMetadata:
 
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "backup"
         job.payload = {
             "type": "daily",
@@ -132,7 +132,7 @@ class TestBackupHandlerPitrMetadata:
 
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "backup"
         job.payload = {
             "type": "daily",
@@ -169,7 +169,7 @@ class TestRestoreHandlerRecoveryTargetTime:
         backup_id = str(uuid4())
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "restore"
         job.payload = {
             "backup_id": backup_id,
@@ -206,7 +206,7 @@ class TestRestoreHandlerRecoveryTargetTime:
         backup_id = str(uuid4())
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "restore"
         job.payload = {
             "backup_id": backup_id,
@@ -240,7 +240,7 @@ class TestRestoreHandlerRecoveryTargetTime:
         backup_id = str(uuid4())
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "restore"
         job.payload = {
             "backup_id": backup_id,
@@ -275,7 +275,7 @@ class TestRestoreHandlerRecoveryTargetTime:
         target_time = "2026-08-16T10:30:00+00:00"
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "restore"
         job.payload = {
             "backup_id": backup_id,
@@ -318,7 +318,7 @@ class TestRestoreHandlerRecoveryTargetTime:
 
         job = MagicMock()
         job.id = uuid4()
-        job.organization_id = uuid4()
+        job.department_id = uuid4()
         job.kind = "restore"
         job.payload = {}  # 缺少 backup_id
 

@@ -16,7 +16,7 @@ def get_department_service() -> DepartmentService:
     """获取 DepartmentService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError("get_department_service must be overridden via dependency_overrides")
 
@@ -25,7 +25,7 @@ def get_user_department_service() -> UserDepartmentService:
     """获取 UserDepartmentService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError(
         "get_user_department_service must be overridden via dependency_overrides"

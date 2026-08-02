@@ -306,7 +306,7 @@ class CLIComponentRunner:
             input_payload: dict[str, Any] = {
                 "params": params,
                 "context": {
-                    "organization_id": str(context.organization_id),
+                    "department_id": str(context.department_id),
                     "user_id": str(context.user_id),
                     "job_id": str(context.job_id),
                 },

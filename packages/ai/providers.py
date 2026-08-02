@@ -23,7 +23,7 @@ class AIRequest:
     Attributes:
         messages: 对话消息元组，每条消息为 ``{"role": str, "content": str}`` 字典。
         tools: 允许调用的工具名称元组（来自 ToolRegistry 白名单）。
-        user_context: 用户上下文字典（organization_id、user_id、roles 等），
+        user_context: 用户上下文字典（department_id、user_id、roles 等），
             供 Provider 进行权限感知的回答（但不传递凭据）。
         provider_mode: Provider 模式标识（如 ``"offline"``、``"openai_compatible"``）。
     """

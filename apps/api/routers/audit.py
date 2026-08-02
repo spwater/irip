@@ -69,7 +69,7 @@ class AuditEventResponse(BaseModel):
     id: str
     occurred_at: datetime
     actor_user_id: str | None
-    organization_id: str
+    department_id: str
     action: str
     resource_type: str | None
     resource_id: str | None
@@ -115,7 +115,7 @@ def _to_event_response(event: AuditEvent) -> AuditEventResponse:
         id=str(event.id),
         occurred_at=event.occurred_at,
         actor_user_id=str(event.actor_user_id) if event.actor_user_id is not None else None,
-        organization_id=str(event.organization_id),
+        department_id=str(event.department_id),
         action=event.action,
         resource_type=event.resource_type,
         resource_id=str(event.resource_id) if event.resource_id is not None else None,
@@ -320,8 +320,8 @@ async def create_audit_export(
     async with session_scope(session_factory) as session:
         job = Job(
             id=job_id,
-            organization_id=current_user.organization_id
-            if current_user.organization_id is not None
+            department_id=current_user.department_id
+            if current_user.department_id is not None
             else current_user.user_id,
             kind="audit_export",
             status=JobStatus.ACCEPTED.value,

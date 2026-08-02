@@ -1,7 +1,7 @@
 """IRIP 模型 ORM 实体（V2-T04）。
 
 提供两张表：
-- model: 模型主表，组织内按 (organization_id, code) 唯一，
+- model: 模型主表，部门内按 (department_id, code) 唯一，
   含 status / current_version_id（发布指针）/ lock_version；
 - model_version: 模型版本表，按 (model_id, version) 唯一，
   含 contract_json / metrics_json / applicability_domain_json /
@@ -44,13 +44,13 @@ MODEL_STATUSES: tuple[str, ...] = (
 class Model(Base):
     """模型主表 ORM 模型（对应 model 表）。
 
-    组织内按 (organization_id, code) 唯一。一个模型可包含多个版本，
+    部门内按 (department_id, code) 唯一。一个模型可包含多个版本，
     current_version_id 指向当前已发布版本（可空，表示未发布）。
 
     Attributes:
         id: 模型 UUID。
-        organization_id: 所属组织 ID。
-        code: 模型代码（组织内唯一）。
+        department_id: 所属部门 ID。
+        code: 模型代码（部门内唯一）。
         display_name: 模型显示名称。
         status: 生命周期状态
             （draft/pending_validation/validated/published/deprecated）。
@@ -63,7 +63,6 @@ class Model(Base):
     __tablename__ = "model"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -89,8 +88,33 @@ class Model(Base):
         server_default=sa.func.now(),
         nullable=False,
     )
+    # ---- 阶段1 多租户隔离键升级：A 类四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
+    )
 
-    __table_args__ = (sa.UniqueConstraint("organization_id", "code", name="uq_model_org_code"),)
+    __table_args__ = (sa.UniqueConstraint("department_id", "code", name="uq_model_dept_code"),)
 
     def __repr__(self) -> str:
         return (

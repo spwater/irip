@@ -48,6 +48,8 @@ import { apiUploadFile, apiListIngestionTools } from '@/api/models-ai';
 import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { extractApiError, type IndustrialObject } from '@/api/types';
+import { PrivateBadge } from '@/shared/PrivateBadge';
+import { DepartmentSelector } from '@/shared/DepartmentSelector';
 import { FactModal } from './FactModal';
 import {
   fmtTime,
@@ -712,6 +714,9 @@ export function FlowDetail(): JSX.Element {
                 {deptName}
               </Tag>
             )}
+            {(record as Record<string, unknown>).visibility_scope === 'private' && (
+              <PrivateBadge visibility_scope="private" />
+            )}
           </div>
         );
       },
@@ -792,6 +797,36 @@ export function FlowDetail(): JSX.Element {
             >
               编辑
             </Button>
+            {(record as Record<string, unknown>).visibility_scope === 'private' && (
+              <Popconfirm
+                title="确认公开此流程？"
+                description="此操作【不可逆】，公开后部门内所有成员可见。"
+                onConfirm={async (e) => {
+                  e?.stopPropagation();
+                  try {
+                    await import('@/api/client').then(({ http }) =>
+                      http.patch(`/flows/${record.id}`, { visibility_scope: 'tree' })
+                    );
+                    message.success('流程已公开');
+                    void queryClient.invalidateQueries({ queryKey: ['flows'] });
+                  } catch (err) {
+                    message.error(extractApiError(err));
+                  }
+                }}
+                okText="确认公开"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  公开
+                </Button>
+              </Popconfirm>
+            )}
             <Popconfirm
               title="确定归档该流程？"
               onConfirm={(e) => {
@@ -1146,11 +1181,9 @@ export function FlowDetail(): JSX.Element {
             label="所属单位"
             rules={[{ required: true, message: '请选择所属单位' }]}
           >
-            <Select
+            <DepartmentSelector
               placeholder="请选择所属单位"
-              showSearch
-              optionFilterProp="label"
-              options={deptOptions}
+              allowRoot={true}
             />
           </Form.Item>
           <Form.Item
@@ -1212,12 +1245,9 @@ export function FlowDetail(): JSX.Element {
             <Input placeholder="请输入任务名称" maxLength={200} />
           </Form.Item>
           <Form.Item name="department_id" label="所属单位">
-            <Select
+            <DepartmentSelector
               placeholder="请选择所属单位"
-              showSearch
-              optionFilterProp="label"
-              allowClear
-              options={deptOptions}
+              allowRoot={true}
             />
           </Form.Item>
           <Form.Item name="project_name" label="项目名称">

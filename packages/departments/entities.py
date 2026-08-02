@@ -35,13 +35,11 @@ class DepartmentStatus(StrEnum):
 class Department(Base):
     """实验室/机构实体（对应 department 表）。
 
-    organization_id 不设 FK（V0 约定：organization 表由 bootstrap 创建，不在 Alembic 中）。
     code 创建后锁定不可修改（服务层 UPDATE 语句不写 code 列）。
 
     Attributes:
         id: 实验室 UUID。
-        organization_id: 所属顶层组织 ID。
-        code: 实验室编码（组织内唯一，创建后锁定）。
+        code: 实验室编码（部门内唯一，创建后锁定）。
         display_name: 中文显示名。
         description: 描述（可选）。
         status: 状态（active / disabled）。
@@ -55,7 +53,6 @@ class Department(Base):
     __tablename__ = "department"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -72,6 +69,16 @@ class Department(Base):
     )
     parent_id: Mapped[UUID | None] = mapped_column(
         GUID, sa.ForeignKey("department.id"), nullable=True
+    )
+
+    __table_args__ = (
+        # 唯一约束 (parent_id, code)
+        # parent_id 为 NULL 时（root 哨兵），PostgreSQL 视 NULL 为 distinct，保证唯一
+        sa.UniqueConstraint(
+            "parent_id",
+            "code",
+            name="uq_department_parent_code",
+        ),
     )
 
     def __repr__(self) -> str:

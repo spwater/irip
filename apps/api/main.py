@@ -239,6 +239,16 @@ def create_app() -> FastAPI:
             content={"error": exc.to_dict()},
         )
 
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        """捕获未预期异常并打印 traceback（开发环境）。"""
+        import logging
+        logging.getLogger("api").exception("Unhandled exception on %s %s", request.method, request.url.path)
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "internal_error", "message": str(exc)}},
+        )
+
     return app
 
 

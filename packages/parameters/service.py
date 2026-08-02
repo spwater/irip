@@ -8,7 +8,7 @@ ParameterService 提供参数的创建、候选管理、审批（含职责分离
 2. derivation_not_succeeded: 推导运行未成功时不能审批候选；
 3. published_version_immutable: 已发布的参数版本不可修改。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 actor_id（操作人）。所有写操作通过 session_scope 事务上下文管理。
 """
 
@@ -89,30 +89,30 @@ class ParameterVersionRef:
 class ParameterService:
     """参数业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     actor_id（操作人）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID（用于 created_by / submitted_by）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化参数服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选，用于 created_by / submitted_by）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     async def create_parameter(
@@ -145,7 +145,7 @@ class ParameterService:
             # 检查唯一性
             existing = await session.scalar(
                 sa.select(Parameter).where(
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                     Parameter.variable_code == variable_code.strip(),
                     Parameter.object_id == object_id,
                 )
@@ -163,7 +163,7 @@ class ParameterService:
 
             param = Parameter(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 variable_code=variable_code.strip(),
                 object_id=object_id,
                 status=ParameterStatus.DRAFT.value,
@@ -193,7 +193,7 @@ class ParameterService:
 
         流程：
         1. 验证推导运行状态为 succeeded；
-        2. 验证参数存在且属于当前组织；
+        2. 验证参数存在且属于当前部门；
         3. 创建 parameter_candidate 行（status=pending_review）；
         4. 返回候选信息。
 
@@ -219,7 +219,7 @@ class ParameterService:
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == derivation_run_id,
-                    DerivationRun.organization_id == self._org_id,
+                    DerivationRun.department_id == self._dept_id,
                 )
             )
             if run is None:
@@ -245,7 +245,7 @@ class ParameterService:
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                 )
             )
             if param is None:
@@ -419,7 +419,7 @@ class ParameterService:
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == candidate.derivation_run_id,
-                    DerivationRun.organization_id == self._org_id,
+                    DerivationRun.department_id == self._dept_id,
                 )
             )
             if run is None:
@@ -490,7 +490,7 @@ class ParameterService:
             # 8. 创建溯源边：parameter_version → published_as → derivation_run
             edge = ProvenanceEdge(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 derivation_run_id=candidate.derivation_run_id,
                 source_type="parameter_version",
                 source_id=version_id,
@@ -545,13 +545,13 @@ class ParameterService:
             AppError: code="self_approval_forbidden"，当审核人==提交人。
         """
         async with session_scope(self._factory) as session:
-            # C-03 IDOR 修复：通过 JOIN Parameter 确保候选属于当前组织
+            # C-03 IDOR 修复：通过 JOIN Parameter 确保候选属于当前部门
             candidate = await session.scalar(
                 sa.select(ParameterCandidate)
                 .join(Parameter, ParameterCandidate.parameter_id == Parameter.id)
                 .where(
                     ParameterCandidate.id == candidate_id,
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                 )
             )
             if candidate is None:
@@ -629,7 +629,7 @@ class ParameterService:
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                 )
             )
             if param is None:
@@ -682,7 +682,7 @@ class ParameterService:
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                 )
             )
             if param is None:
@@ -757,7 +757,7 @@ class ParameterService:
         async with self._factory() as session:
             stmt = (
                 sa.select(Parameter)
-                .where(Parameter.organization_id == self._org_id)
+                .where(Parameter.department_id == self._dept_id)
                 .order_by(Parameter.created_at, Parameter.id)
                 .limit(page_size + 1)
             )
@@ -875,7 +875,7 @@ class ParameterService:
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.organization_id == self._org_id,
+                    Parameter.department_id == self._dept_id,
                 )
             )
             if param is None:

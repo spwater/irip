@@ -14,7 +14,7 @@ request_cancel(job_id, actor_id):
 
 关键约束：
 - Job + Outbox 同事务插入（架构文档 §7.6）；
-- 幂等键 UNIQUE(organization_id, idempotency_key)。
+- 幂等键 UNIQUE(department_id, idempotency_key)。
 """
 
 from typing import Any
@@ -35,12 +35,14 @@ from packages.jobs.repository import JobRepository
 class JobService:
     """作业业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    阶段2：租户标识使用 department_id。
+
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     created_by（当前用户）、clock（时钟）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _created_by: 当前用户 ID。
         _clock: 时钟实例。
     """
@@ -48,7 +50,7 @@ class JobService:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         created_by: UUID,
         clock: Clock | None = None,
     ) -> None:
@@ -56,12 +58,12 @@ class JobService:
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             created_by: 当前用户 ID。
             clock: 时钟（默认 SystemClock）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._created_by = created_by
         self._clock = clock or SystemClock()
 
@@ -98,8 +100,8 @@ class JobService:
 
         async with session_scope(self._factory) as session:
             # 幂等检查：查询已有作业
-            existing: Job | None = await JobRepository.get_by_idempotency(
-                session, self._org_id, idempotency_key
+            existing: Job | None = await JobRepository.get_by_idempotency_dept(
+                session, self._dept_id, idempotency_key
             )
             if existing is not None:
                 return JobRef(
@@ -111,7 +113,7 @@ class JobService:
             # 创建新作业
             job = Job(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 kind=kind,
                 status=JobStatus.ACCEPTED.value,
                 payload=payload,
@@ -149,13 +151,13 @@ class JobService:
 
         流程：
         1. 查询作业 → 不存在抛 not_found；
-        2. **验证作业 organization_id == 当前组织**（租户隔离，不匹配抛 not_found）；
+        2. **验证作业 department_id == 当前部门**（租户隔离，不匹配抛 not_found）；
         3. 若已终态 → 抛 conflict；
         4. 同事务 UPDATE status=cancel_requested + INSERT outbox_event。
 
         安全约定（技术设计文档 F-02/F-09）：
-        - 跨组织作业对调用者不可见（返回 not_found，不泄露存在性）；
-        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
+        - 跨部门作业对调用者不可见（返回 not_found，不泄露存在性）；
+        - dept_id 来自服务构造时传入（fail-closed）。
 
         Args:
             job_id: 作业 UUID。
@@ -165,7 +167,7 @@ class JobService:
             JobRef: 作业引用。
 
         Raises:
-            AppError: code="not_found"，当作业不存在或不属于当前组织时。
+            AppError: code="not_found"，当作业不存在或不属于当前部门时。
             AppError: code="conflict"，当作业已终态时。
         """
         async with session_scope(self._factory) as session:
@@ -178,8 +180,8 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：跨组织作业返回 not_found
-            if job.organization_id != self._org_id:
+            # 租户隔离检查：跨部门作业返回 not_found
+            if job.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -230,8 +232,8 @@ class JobService:
         """获取作业引用。
 
         安全约定（技术设计文档 F-02/F-09）：
-        - 跨组织作业返回 not_found（不泄露存在性）；
-        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
+        - 跨部门作业返回 not_found（不泄露存在性）；
+        - dept_id 来自服务构造时传入（fail-closed）。
 
         Args:
             job_id: 作业 UUID。
@@ -240,7 +242,7 @@ class JobService:
             JobRef: 作业引用（含 stage/progress/retryable）。
 
         Raises:
-            AppError: code="not_found"，当作业不存在或不属于当前组织时。
+            AppError: code="not_found"，当作业不存在或不属于当前部门时。
         """
         async with session_scope(self._factory) as session:
             job: Job | None = await JobRepository.get(session, job_id)
@@ -252,8 +254,8 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：跨组织作业返回 not_found
-            if job.organization_id != self._org_id:
+            # 租户隔离检查：跨部门作业返回 not_found
+            if job.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -300,7 +302,7 @@ class JobService:
         """
         from datetime import datetime
 
-        conditions: list[Any] = [Job.organization_id == self._org_id]
+        conditions: list[Any] = [Job.department_id == self._dept_id]
 
         if status is not None:
             conditions.append(Job.status == status)
@@ -380,8 +382,8 @@ class JobService:
         用于作业详情页展示输入载荷、执行结果和错误日志。
 
         安全约定（技术设计文档 F-02/F-09）：
-        - 跨组织作业返回 not_found（不泄露存在性）；
-        - org_id 来自服务构造时的 _lookup_org_id（fail-closed）。
+        - 跨部门作业返回 not_found（不泄露存在性）；
+        - dept_id 来自服务构造时传入（fail-closed）。
 
         Args:
             job_id: 作业 UUID。
@@ -390,7 +392,7 @@ class JobService:
             Job: 作业 ORM 实体。
 
         Raises:
-            AppError: code="not_found"，当作业不存在或不属于当前组织时。
+            AppError: code="not_found"，当作业不存在或不属于当前部门时。
         """
         async with self._factory() as session:
             job: Job | None = await JobRepository.get(session, job_id)
@@ -402,8 +404,8 @@ class JobService:
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：跨组织作业返回 not_found
-            if job.organization_id != self._org_id:
+            # 租户隔离检查：跨部门作业返回 not_found
+            if job.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",

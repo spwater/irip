@@ -37,7 +37,7 @@ def get_object_graph_service() -> ObjectGraphService:
     """获取 ObjectGraphService 实例（由 DI 容器或测试覆盖提供）。
 
     生产环境通过 ``dependency_overrides`` 注入按请求构造的实例
-    （需当前用户上下文查询 organization_id）。
+    （需当前用户上下文查询 department_id）。
     """
     raise NotImplementedError(
         "get_object_graph_service must be overridden via dependency_overrides"
@@ -103,7 +103,7 @@ class ObjectResponse(BaseModel):
     """工业对象详情响应。"""
 
     id: str
-    organization_id: str
+    department_id: str
     object_type: str
     code: str
     display_name: str
@@ -381,13 +381,12 @@ def _object_to_response(obj: object) -> ObjectResponse:
     """将 IndustrialObject ORM 实体转为响应模型。"""
     return ObjectResponse(
         id=str(obj.id),  # type: ignore[attr-defined]
-        organization_id=str(obj.organization_id),  # type: ignore[attr-defined]
+        department_id=str(obj.department_id),  # type: ignore[attr-defined]
         object_type=obj.object_type,  # type: ignore[attr-defined]
         code=obj.code,  # type: ignore[attr-defined]
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
-        department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]
         visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
@@ -405,7 +404,6 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
-        department_id=str(obj.department_id) if getattr(obj, "department_id", None) else None,  # type: ignore[attr-defined]
         visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]

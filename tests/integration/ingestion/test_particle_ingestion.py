@@ -43,7 +43,7 @@ async def particle_ingestion_setup(
     返回所有创建实体的 ID，供测试使用。
     测试后自动清理。
     """
-    org_id = test_user.organization_id  # type: ignore[attr-defined]
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     actor_id = test_user.user_id  # type: ignore[attr-defined]
 
     object_id = new_id()
@@ -53,7 +53,7 @@ async def particle_ingestion_setup(
         # 创建工业对象
         obj = IndustrialObject(
             id=object_id,
-            organization_id=org_id,
+            department_id=org_id,
             object_type="lab",
             code=f"ps_obj_{object_id.hex[:8]}",
             display_name="粒度实验室",
@@ -67,7 +67,7 @@ async def particle_ingestion_setup(
 
     yield {
         "object_id": object_id,
-        "organization_id": org_id,
+        "department_id": org_id,
         "actor_id": actor_id,
     }
 
@@ -77,17 +77,17 @@ async def particle_ingestion_setup(
         conn.execute(
             sa.text(
                 "DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE organization_id = :oid)"
+                "SELECT id FROM fact WHERE department_id = :oid)"
             ),
             {"oid": org_id},
         )
         conn.execute(
-            sa.text("DELETE FROM fact WHERE organization_id = :oid"),
+            sa.text("DELETE FROM fact WHERE department_id = :oid"),
             {"oid": org_id},
         )
         # 清理对象
         conn.execute(
-            sa.text("DELETE FROM industrial_object WHERE organization_id = :oid"),
+            sa.text("DELETE FROM industrial_object WHERE department_id = :oid"),
             {"oid": org_id},
         )
         conn.commit()
@@ -101,7 +101,7 @@ async def particle_pipeline(
     """创建摄入管线实例。"""
     fact_service = FactService(
         session_factory=async_session_factory,
-        organization_id=particle_ingestion_setup["organization_id"],
+        department_id=particle_ingestion_setup["department_id"],
         actor_id=particle_ingestion_setup["actor_id"],
     )
     quality_engine = QualityEngine()
@@ -109,7 +109,7 @@ async def particle_pipeline(
         session_factory=async_session_factory,
         fact_service=fact_service,
         quality_engine=quality_engine,
-        organization_id=particle_ingestion_setup["organization_id"],
+        department_id=particle_ingestion_setup["department_id"],
         actor_id=particle_ingestion_setup["actor_id"],
     )
 

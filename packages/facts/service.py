@@ -5,7 +5,7 @@ FactService 提供事实的创建、查询、全文搜索与列表功能。
 核心不变量：
 1. idempotency: 幂等键匹配已有成功事实时返回已有事实（不创建重复）。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 actor_id（操作人）。所有写操作通过 session_scope 事务上下文管理。
 """
 
@@ -61,7 +61,7 @@ class CreateFactCommand:
 
     Attributes:
         fact_type: 事实类型。
-        organization_id: 组织 ID。
+        department_id: 部门 ID。
         object_id: 工业对象 ID。
         subject_id: 主体标识。
         started_at: 开始时间。
@@ -78,7 +78,7 @@ class CreateFactCommand:
     """
 
     fact_type: Literal["experiment_run", "simulation_run", "document_record", "model_execution"]
-    organization_id: UUID
+    department_id: UUID
     object_id: UUID
     subject_id: str
     started_at: datetime | None
@@ -98,38 +98,38 @@ class CreateFactCommand:
 class FactService:
     """事实业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     actor_id（操作人）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID（用于 created_by）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化事实服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选，用于 created_by）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     # ---- 公开只读属性（替代路由直接访问私有属性） ----
 
     @property
-    def organization_id(self) -> UUID:
-        """当前组织 ID（公开只读访问，替代 ``service._org_id``）。"""
-        return self._org_id
+    def department_id(self) -> UUID:
+        """当前部门 ID（公开只读访问，替代 ``service._dept_id``）。"""
+        return self._dept_id
 
     @property
     def session_factory(self) -> async_sessionmaker[AsyncSession]:
@@ -142,7 +142,7 @@ class FactService:
         流程：
         1. 校验 fact_type 合法；
         2. 幂等检查：若 idempotency_key 已存在 → 返回已有事实；
-        3. 校验 object_id 属于当前组织；
+        3. 校验 object_id 属于当前部门；
         4. 创建 fact 行（含合并字段，status=active）；
         5. 返回 FactRef。
 
@@ -154,7 +154,7 @@ class FactService:
 
         Raises:
             AppError: code="validation_failed"，当 fact_type 无效时。
-            AppError: code="not_found"，当工业对象不属于当前组织时。
+            AppError: code="not_found"，当工业对象不属于当前部门时。
         """
         # 1. 校验 fact_type
         if command.fact_type not in _VALID_FACT_TYPES:
@@ -169,7 +169,7 @@ class FactService:
         if command.idempotency_key is not None:
             async with self._factory() as session:
                 existing = await FactRepository.find_by_idempotency_key(
-                    session, command.organization_id, command.idempotency_key
+                    session, command.department_id, command.idempotency_key
                 )
             if existing is not None:
                 return FactRef(
@@ -184,13 +184,13 @@ class FactService:
             obj = await session.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.id == command.object_id,
-                    IndustrialObject.organization_id == command.organization_id,
+                    IndustrialObject.department_id == command.department_id,
                 )
             )
             if obj is None:
                 raise AppError(
                     code="not_found",
-                    message="工业对象不存在或不属于当前组织",
+                    message="工业对象不存在或不属于当前部门",
                     retryable=False,
                     fields={"object_id": str(command.object_id)},
                 )
@@ -198,7 +198,7 @@ class FactService:
             # 4. 创建 fact 行
             fact = await FactRepository.insert_fact(
                 session,
-                organization_id=command.organization_id,
+                department_id=command.department_id,
                 fact_type=command.fact_type,
                 object_id=command.object_id,
                 status="active",
@@ -238,7 +238,7 @@ class FactService:
             AppError: code="not_found"，当事实不存在时。
         """
         async with self._factory() as session:
-            fact = await FactRepository.get_fact(session, fact_id, self._org_id)
+            fact = await FactRepository.get_fact(session, fact_id, self._dept_id)
             return FactRef(
                 fact_id=fact_id,
                 fact_type=fact.fact_type,
@@ -269,7 +269,7 @@ class FactService:
             items, next_cursor = await FactRepository.search_facts(
                 session,
                 query=query,
-                org_id=self._org_id,
+                org_id=self._dept_id,
                 filters=filters,
                 cursor=cursor,
                 page_size=page_size,
@@ -305,7 +305,7 @@ class FactService:
         async with self._factory() as session:
             items, next_cursor = await FactRepository.list_facts(
                 session,
-                org_id=self._org_id,
+                org_id=self._dept_id,
                 filters=filters,
                 cursor=cursor,
                 page_size=page_size,

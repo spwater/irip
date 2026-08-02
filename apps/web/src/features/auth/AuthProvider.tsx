@@ -45,11 +45,11 @@ interface AuthState {
 
 /**
  * 根据用户信息推导租户标识。
- * 后端 /me 可能尚未返回 organization_id，此时使用 'unknown' 作为 fallback。
+ * 后端 /me 可能尚未返回 department_id，此时使用 'unknown' 作为 fallback。
  * 用户 id 始终可用，确保跨用户隔离。
  */
 function deriveTenant(user: CurrentUser): string {
-  return user.organizationId ?? 'unknown';
+  return user.departmentId ?? 'unknown';
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({

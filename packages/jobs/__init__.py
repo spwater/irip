@@ -12,7 +12,7 @@ Phase V0 T07: 可靠异步作业 + PostgreSQL Outbox + Worker 租约 + 幂等。
 核心设计（docs/arch-v0.md §4.2 时序图 + §7.6 异步与事务约定）：
 - Job + Outbox 同事务插入；
 - Worker 租约 30s TTL + 10s 心跳；
-- 幂等键 UNIQUE(organization_id, idempotency_key)。
+- 幂等键 UNIQUE(department_id, idempotency_key)。
 """
 
 from packages.jobs.entities import (

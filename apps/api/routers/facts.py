@@ -126,7 +126,7 @@ async def create_fact(
     """
     command = CreateFactCommand(
         fact_type=body.fact_type,
-        organization_id=service.organization_id,
+        department_id=service.department_id,
         object_id=body.object_id,
         subject_id=body.subject_id,
         started_at=body.started_at,
@@ -294,7 +294,7 @@ async def list_facts(
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
             session_factory=service.session_factory,
-            organization_id=service.organization_id,
+            department_id=service.department_id,
             uploaded_by=current_user.user_id,
         )
         async with service.session_factory() as session:
@@ -591,7 +591,7 @@ async def search_facts_by_data(
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
             session_factory=service.session_factory,
-            organization_id=service.organization_id,
+            department_id=service.department_id,
             uploaded_by=current_user.user_id,
         )
         for item in items:
@@ -737,7 +737,7 @@ async def get_fact_data(
         artifact_svc = ArtifactService(
             s3_repo=s3_repo,
             session_factory=service.session_factory,
-            organization_id=service.organization_id,
+            department_id=service.department_id,
             uploaded_by=current_user.user_id,
         )
         data_bytes: bytes | None = None
@@ -1033,7 +1033,7 @@ async def archive_fact(
     async with session_scope(service.session_factory) as session:
         result = await session.execute(
             sa.select(Fact).where(
-                Fact.organization_id == service.organization_id,
+                Fact.department_id == service.department_id,
                 Fact.id == fact_id,
             )
         )
@@ -1077,7 +1077,7 @@ async def delete_fact(
             artifact_svc = ArtifactService(
                 s3_repo=s3_repo,
                 session_factory=service.session_factory,
-                organization_id=service.organization_id,
+                department_id=service.department_id,
                 uploaded_by=current_user.user_id,
             )
             await artifact_svc.delete_artifact(source_artifact_id)
@@ -1122,7 +1122,7 @@ async def delete_facts_by_task(
             artifact_svc = ArtifactService(
                 s3_repo=s3_repo,
                 session_factory=service.session_factory,
-                organization_id=service.organization_id,
+                department_id=service.department_id,
                 uploaded_by=current_user.user_id,
             )
             for aid in artifact_ids:

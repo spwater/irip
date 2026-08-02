@@ -59,26 +59,26 @@ class DepartmentUserItem:
 class UserDepartmentService:
     """用户-实验室关联管理服务（P1）。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
     ) -> None:
         """初始化用户-实验室关联服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
 
     async def set_user_departments(
         self,

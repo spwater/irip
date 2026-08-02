@@ -144,7 +144,7 @@ class TestRoleSelectOnly:
                 try:
                     await conn.execute(
                         sa.text(
-                            "INSERT INTO audit_event (organization_id, action) "
+                            "INSERT INTO audit_event (department_id, action) "
                             "VALUES (:org, :action)"
                         ),
                         {"org": str(org_id), "action": "test.readonly.insert"},

@@ -27,6 +27,8 @@ export type IndustrialObject = {
   status: string;
   department_id: string | null;
   visible_departments: string[];
+  visibility_scope: 'private' | 'tree' | 'explicit' | 'all';
+  owner_user_id: string | null;
   created_at: string;
   updated_at: string;
   lock_version: number;
@@ -59,6 +61,12 @@ export type FactSummary = {
   equipment_name: string | null;
   data_summary: string | null;
   created_at: string | null;
+  /** 阶段2：可见范围 */
+  visibility_scope?: 'private' | 'tree' | 'explicit' | 'all';
+  /** 阶段2：所属部门 ID */
+  department_id?: string | null;
+  /** 阶段2：所有者用户 ID */
+  owner_user_id?: string | null;
 };
 
 export type FactDetail = {
@@ -66,6 +74,12 @@ export type FactDetail = {
   fact_type: string;
   subject_id: string;
   status: string;
+  /** 阶段2：可见范围 */
+  visibility_scope?: 'private' | 'tree' | 'explicit' | 'all';
+  /** 阶段2：所属部门 ID */
+  department_id?: string | null;
+  /** 阶段2：所有者用户 ID */
+  owner_user_id?: string | null;
 };
 
 // ---- Provenance ----
@@ -75,6 +89,10 @@ export type ProvenanceNode = {
   label: string;
   version: string;
   status: string;
+  /** 是否有权限查看节点详情（后端 RLS 决定，默认 true） */
+  accessible?: boolean;
+  /** 归属部门名称（accessible=false 时可用于提示） */
+  department_name?: string;
 };
 
 export type ProvenanceEdge = {
@@ -97,6 +115,12 @@ export type EvidenceSet = {
   version: number;
   version_id: string | null;
   member_count: number;
+  /** 阶段2：可见范围 */
+  visibility_scope?: 'private' | 'tree' | 'explicit' | 'all';
+  /** 阶段2：所属部门 ID */
+  department_id?: string | null;
+  /** 阶段2：所有者用户 ID */
+  owner_user_id?: string | null;
 };
 
 export type Recipe = {
@@ -105,6 +129,12 @@ export type Recipe = {
   display_name: string;
   status: string;
   version: number;
+  /** 阶段2：可见范围 */
+  visibility_scope?: 'private' | 'tree' | 'explicit' | 'all';
+  /** 阶段2：所属部门 ID */
+  department_id?: string | null;
+  /** 阶段2：所有者用户 ID */
+  owner_user_id?: string | null;
 };
 
 export type DerivationRun = {
@@ -130,6 +160,12 @@ export type ParameterSummary = {
   status: string;
   current_version: string | null;
   evidence_count: number;
+  /** 阶段2：可见范围 */
+  visibility_scope?: 'private' | 'tree' | 'explicit' | 'all';
+  /** 阶段2：所属部门 ID */
+  department_id?: string | null;
+  /** 阶段2：所有者用户 ID */
+  owner_user_id?: string | null;
 };
 
 export type ParameterDetail = ParameterSummary & {
@@ -171,6 +207,22 @@ export type ParameterCandidate = {
 
 export type StandardStatus = 'draft' | 'in_review' | 'published' | 'deprecated' | 'rejected';
 export type QualityLevel = 'Q0' | 'Q1' | 'Q2' | 'Q3';
+
+/** 阶段2：可见范围类型 */
+export type VisibilityScope = 'private' | 'tree' | 'explicit' | 'all';
+
+/** 阶段2：A 类表通用租户字段 */
+export type TenantFields = {
+  department_id: string;
+  visible_departments: string[];
+  visibility_scope: VisibilityScope;
+  owner_user_id: string;
+};
+
+/** 阶段2：B 类表通用租户字段 */
+export type TenantFieldsB = {
+  department_id: string;
+};
 
 export type PreviewTable = {
   columns: { name: string; data_type: string; sample_values: string[] }[];

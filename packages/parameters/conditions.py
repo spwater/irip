@@ -45,7 +45,7 @@ class ConditionOperator(StrEnum):
 #: 允许在条件中使用的字段白名单。不接受用户提供的任意字段名。
 ALLOWED_CONDITION_FIELDS: frozenset[str] = frozenset(
     {
-        "organization_id",
+        "department_id",
         "object_id",
         "material_code",
         "temperature_c",

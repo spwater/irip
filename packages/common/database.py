@@ -8,7 +8,7 @@
 约定（与 docs/arch-v0.md S7.6 对齐）：
 - 所有数据库写操作走 session_scope()；
 - session_factory 在应用启动时构建一次，通过依赖注入传递。
-- 每事务通过 SET LOCAL app.current_org_id 设置租户 GUC（C-03）。
+- 每事务通过 SET LOCAL 设置 dept + user 两个 GUC（C-03 升级）。
 """
 
 from __future__ import annotations
@@ -24,6 +24,13 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+
+from packages.common.tenant_guc import (
+    DEPT_GUC,
+    USER_GUC,
+    set_dept_guc,
+    set_user_guc,
+)
 
 if TYPE_CHECKING:
     from packages.common.principal import Principal
@@ -57,7 +64,8 @@ def build_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
         缺失时 fail closed（RLS 返回空）。
         """
         cursor = dbapi_conn.cursor()
-        cursor.execute("SET app.current_org_id = ''")
+        cursor.execute(f"SET {DEPT_GUC} = ''")
+        cursor.execute(f"SET {USER_GUC} = ''")
         cursor.close()
 
     return async_sessionmaker(engine, expire_on_commit=False)
@@ -74,9 +82,10 @@ async def session_scope(
     进入时创建会话并开启事务；正常退出时提交，异常时回滚。
     确保所有数据库写操作在同一事务内完成（含 Outbox 事件同事务插入）。
 
-    如果提供了 principal，在事务开始时执行
-    ``SET LOCAL app.current_org_id = :org_id``，
-    使 RLS 策略能基于此 GUC 过滤租户数据。
+    如果提供了 principal，在事务开始时设置 GUC：
+    - SET LOCAL app.current_dept_id = :dept_id（RLS 部门隔离）
+    - SET LOCAL app.current_user_id = :user_id（私有可见性 + AI 会话 RLS）
+
     缺失 principal 时 RLS 保护的表上 fail closed（返回空）。
 
     Args:
@@ -86,16 +95,10 @@ async def session_scope(
     Yields:
         AsyncSession: 已开启事务的异步会话。
     """
-    import sqlalchemy as sa
-
     async with factory() as session:
         async with session.begin():
             if principal is not None:
-                # SET LOCAL 不支持参数绑定，用 quote 安全拼接
-                await session.execute(
-                    sa.text(
-                        "SET LOCAL app.current_org_id = "
-                        f"'{str(principal.organization_id)}'"
-                    )
-                )
+                # 设置 dept + user GUC
+                await set_dept_guc(session, principal.department_id)
+                await set_user_guc(session, principal.user_id)
             yield session

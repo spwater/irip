@@ -6,6 +6,8 @@ import { SystemHealthPage } from '@/features/governance/SystemHealthPage';
 import { AIConfigPage } from '@/features/governance/AIConfigPage';
 import { DatabaseBackupPage } from '@/features/governance/DatabaseBackupPage';
 import { JobsPage } from '@/features/jobs/JobsPage';
+import { DataTransferPanel } from '@/features/governance/DataTransferPanel';
+import { RootDataStats } from '@/features/governance/RootDataStats';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 
@@ -35,6 +37,7 @@ export function GovernanceConsole(): JSX.Element {
     if (isAdmin) {
       items.push({ key: 'audit', label: '审计事件' });
       items.push({ key: 'jobs', label: '作业中心' });
+      items.push({ key: 'data-transfer', label: '数据移交' });
       items.push({ key: 'db-backup', label: '数据库备份' });
     }
     return items;
@@ -68,6 +71,16 @@ export function GovernanceConsole(): JSX.Element {
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'audit' && isAdmin && <AuditPage />}
       {activeTab === 'jobs' && isAdmin && <JobsPage />}
+      {activeTab === 'data-transfer' && isAdmin && (
+        <Row gutter={24}>
+          <Col xs={24} lg={14}>
+            <DataTransferPanel />
+          </Col>
+          <Col xs={24} lg={10}>
+            <RootDataStats />
+          </Col>
+        </Row>
+      )}
       {activeTab === 'db-backup' && isAdmin && <DatabaseBackupPage />}
     </div>
   );

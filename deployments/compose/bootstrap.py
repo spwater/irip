@@ -1,10 +1,13 @@
 """IRIP 平台幂等引导脚本。
 
-功能（实施计划 Task 9 第 697-706 行）：
-  1. 创建/获取组织（IRIP-DEMO）；
-  2. 确保 5 个内置角色存在（INSERT ON CONFLICT DO NOTHING）；
-  3. 创建管理员用户（admin@irip.local，密码从环境变量读）；
-  4. 确保 MinIO bucket 存在。
+阶段2 多租户隔离键升级：删除 organization 逻辑，改为幂等创建 root + system 哨兵部门。
+
+功能：
+  1. 确保 5 个内置角色存在（INSERT ON CONFLICT DO UPDATE）；
+  2. 创建 root 哨兵部门（code='root', parent_id=NULL）+ system 哨兵部门（code='system', parent_id=root.id）；
+  3. 创建管理员用户（admin@irip.local，密码从环境变量读，挂 root 部门）；
+  4. 确保 MinIO bucket 存在；
+  5. 赋予 irip 用户 REPLICATION 权限。
 
 全部操作幂等：重复运行不报错、不重复创建。
 
@@ -14,9 +17,6 @@
 用法（本机）：
   IRIP_DATABASE_URL=... IRIP_BOOTSTRAP_ADMIN_PASSWORD=... \
   python -m deployments.compose.bootstrap
-
-也可作为模块导入：
-  from deployments.compose.bootstrap import bootstrap_platform, ApplicationContainer
 """
 
 import asyncio
@@ -45,67 +45,92 @@ ADMIN_DISPLAY_NAME: str = "平台管理员"
 #: 引导管理员默认角色。
 ADMIN_ROLE_CODE: str = "platform_administrator"
 
-#: 演示组织代码。
-DEMO_ORG_CODE: str = "IRIP-DEMO"
-
-#: 演示组织名称。
-DEMO_ORG_NAME: str = "IRIP 演示组织"
-
 
 @dataclass(frozen=True)
-class Organization:
-    """组织信息。"""
+class SentinelDepartment:
+    """哨兵部门信息。"""
 
     id: UUID
     code: str
-    name: str
+    display_name: str
 
 
-class OrganizationRepository:
-    """组织数据访问（幂等）。"""
-
-    @staticmethod
-    async def ensure_table(session: AsyncSession) -> None:
-        """幂等创建 organization 表（V0 无迁移，bootstrap 自行创建）。"""
-        await session.execute(
-            sa.text(
-                "CREATE TABLE IF NOT EXISTS organization ("
-                "  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),"
-                "  code TEXT UNIQUE NOT NULL,"
-                "  name TEXT NOT NULL,"
-                "  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()"
-                ")"
-            )
-        )
+class SentinelDepartmentRepository:
+    """哨兵部门数据访问（幂等）。"""
 
     @staticmethod
-    async def get_or_create(
-        session: AsyncSession,
-        code: str,
-        name: str,
-    ) -> Organization:
-        """幂等获取或创建组织。
+    async def ensure_root_and_system(session: AsyncSession) -> tuple[SentinelDepartment, SentinelDepartment]:
+        """幂等创建 root + system 哨兵部门。
 
-        使用 INSERT ... ON CONFLICT DO NOTHING，然后 SELECT 已有行。
+        root: code='root', parent_id=NULL, display_name 读 IRIP_ROOT_DEPT_NAME 环境变量
+        system: code='system', parent_id=root.id, display_name="系统室"
+
+        唯一约束为 (parent_id, code)，root 的 parent_id 为 NULL，
+        PostgreSQL 对 NULL 的处理：ON CONFLICT (parent_id, code) 不匹配 NULL，
+        因此使用 DO $$ 块手动检查幂等。
+
+        Returns:
+            tuple[SentinelDepartment, SentinelDepartment]: (root, system) 部门信息。
         """
-        await session.execute(
-            sa.text(
-                "INSERT INTO organization (id, code, name) "
-                "VALUES (gen_random_uuid(), :code, :name) "
-                "ON CONFLICT (code) DO NOTHING"
-            ),
-            {"code": code, "name": name},
+        root_display_name = os.getenv("IRIP_ROOT_DEPT_NAME", "IRIP 研究院")
+
+        # 获取已存在的组织 ID（从任意 department 或 app_user 取）
+        org_result = await session.execute(
+            sa.text("SELECT id FROM department LIMIT 1")
         )
-        result = await session.execute(
-            sa.text(
-                "SELECT id, code, name FROM organization WHERE code = :code"
-            ),
-            {"code": code},
+        org_row = org_result.first()
+        org_id: str | None = org_row[0] if org_row else None
+
+        if org_id is None:
+            org_result = await session.execute(
+                sa.text("SELECT id FROM app_user LIMIT 1")
+            )
+            org_row = org_result.first()
+            org_id = str(org_row[0]) if org_row else "00000000-0000-0000-0000-000000000001"
+
+        # 创建或获取 root 部门
+        existing_root = await session.execute(
+            sa.text("SELECT id, display_name FROM department WHERE code = 'root' AND parent_id IS NULL LIMIT 1")
         )
-        row = result.fetchone()
-        if row is None:
-            raise RuntimeError(f"Failed to create or find organization: {code}")
-        return Organization(id=UUID(str(row[0])), code=str(row[1]), name=str(row[2]))
+        root_row = existing_root.first()
+        if root_row:
+            root_id = UUID(str(root_row[0]))
+        else:
+            root_id = new_id()
+            await session.execute(
+                sa.text(
+                    "INSERT INTO department (id, code, display_name, "
+                    "description, status, sort_order, lock_version, parent_id) "
+                    "VALUES (:id, :org, 'root', :name, "
+                    "'系统根部门（哨兵），全组织公共数据归属', 'active', -1, 0, NULL)"
+                ),
+                {"id": str(root_id), "org": org_id, "name": root_display_name},
+            )
+
+        root = SentinelDepartment(id=root_id, code="root", display_name=root_display_name)
+
+        # 创建或获取 system 部门
+        existing_system = await session.execute(
+            sa.text("SELECT id, display_name FROM department WHERE code = 'system' LIMIT 1")
+        )
+        system_row = existing_system.first()
+        if system_row:
+            system_id = UUID(str(system_row[0]))
+        else:
+            system_id = new_id()
+            await session.execute(
+                sa.text(
+                    "INSERT INTO department (id, code, display_name, "
+                    "description, status, sort_order, lock_version, parent_id) "
+                    "VALUES (:id, :org, 'system', '系统室', "
+                    "'系统级数据归属（密钥/连接器/备份等）', 'active', -2, 0, :root_id)"
+                ),
+                {"id": str(system_id), "org": org_id, "root_id": str(root_id)},
+            )
+
+        system = SentinelDepartment(id=system_id, code="system", display_name="系统室")
+
+        return root, system
 
 
 class RoleRepository:
@@ -145,30 +170,35 @@ class UserRepository:
     @staticmethod
     async def get_or_create_admin(
         session: AsyncSession,
-        organization_id: UUID,
+        department_id: UUID,
         email: str,
         password: str,
         display_name: str = ADMIN_DISPLAY_NAME,
     ) -> UUID:
-        """幂等获取或创建管理员用户。
+        """幂等获取或创建管理员用户（阶段2：挂 root 部门）。
 
-        若 admin@irip.local 不存在则创建（含 platform_administrator 角色），
-        已存在则返回其 ID。密码仅在创建时设置，已存在用户密码不更新。
+        若 admin@irip.local 不存在则创建（含 platform_administrator 角色，
+        department_id=root.id），已存在则返回其 ID。密码仅在创建时设置。
 
         幂等角色修复：若管理员已存在但 roles 为空（历史遗留），
-        补写 platform_administrator 角色，保证修复可重复执行。
+        补写 platform_administrator 角色。
+
+        幂等部门修复：若管理员已存在但 department_id 为空，
+        补写 root 部门 ID。
 
         Returns:
             UUID: 管理员用户 ID。
         """
         result = await session.execute(
-            sa.text("SELECT id, roles FROM app_user WHERE email = :email"),
+            sa.text("SELECT id, roles, department_id FROM app_user WHERE email = :email"),
             {"email": email},
         )
         existing = result.first()
         if existing is not None:
             user_id = UUID(str(existing[0]))
             existing_roles = existing[1]
+            existing_dept = existing[2]
+
             if not existing_roles:
                 await session.execute(
                     sa.text(
@@ -177,9 +207,23 @@ class UserRepository:
                     ),
                     {
                         "roles": json.dumps([ADMIN_ROLE_CODE]),
-                        "uid": user_id,
+                        "uid": str(user_id),
                     },
                 )
+
+            # 阶段2: 补写 department_id（如有历史用户无部门）
+            if existing_dept is None:
+                await session.execute(
+                    sa.text(
+                        "UPDATE app_user SET department_id = :dept_id "
+                        "WHERE id = :uid"
+                    ),
+                    {
+                        "dept_id": str(department_id),
+                        "uid": str(user_id),
+                    },
+                )
+
             return user_id
 
         user_id = new_id()
@@ -187,20 +231,34 @@ class UserRepository:
         await session.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, organization_id, email, display_name, "
+                "(id, email, display_name, department_id, "
                 "password_hash, status, lock_version, roles) "
-                "VALUES (:id, :org, :email, :name, :hash, 'active', 0, "
+                "VALUES (:id, :email, :name, :dept_id, :hash, 'active', 0, "
                 "CAST(:roles AS jsonb))"
             ),
             {
-                "id": user_id,
-                "org": organization_id,
+                "id": str(user_id),
                 "email": email,
                 "name": display_name,
+                "dept_id": str(department_id),
                 "hash": password_hash,
                 "roles": json.dumps([ADMIN_ROLE_CODE]),
             },
         )
+
+        # 同时创建 app_user_department 关联（is_primary=true）
+        await session.execute(
+            sa.text(
+                "INSERT INTO app_user_department (user_id, department_id, is_primary) "
+                "VALUES (:uid, :dept_id, true) "
+                "ON CONFLICT (user_id, department_id) DO NOTHING"
+            ),
+            {
+                "uid": str(user_id),
+                "dept_id": str(department_id),
+            },
+        )
+
         return user_id
 
     @staticmethod
@@ -227,7 +285,10 @@ class ArtifactBootstrap:
 
 
 class DepartmentSeeder:
-    """实验室种子数据引导（幂等，P1）。"""
+    """实验室种子数据引导（幂等，P1）。
+
+    使用 (parent_id, code) 唯一约束（已删除旧 org 依赖）。
+    """
 
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         """初始化实验室种子引导。
@@ -237,17 +298,17 @@ class DepartmentSeeder:
         """
         self._factory = session_factory
 
-    async def seed_departments(self, organization_id: UUID) -> None:
+    async def seed_departments(self, root_dept_id: UUID) -> None:
         """幂等创建种子实验室。
 
         读取 IRIP_SEED_DEPARTMENTS 环境变量（JSON 数组），每项格式：
-        ``{"code": "...", "display_name": "...", "description": "...", "sort_order": 0}``
+        ``{"code": "...", "display_name": "...", "description": "...", "sort_order": 0, "parent_id": "..."}``
 
-        使用 ON CONFLICT (organization_id, code) DO NOTHING 保证幂等。
-        未设置环境变量时跳过。解析失败时 warning 并跳过。
+        使用 ON CONFLICT (parent_id, code) DO NOTHING 保证幂等。
+        未设置环境变量时跳过。parent_id 未指定时默认挂 root。
 
         Args:
-            organization_id: 所属组织 ID。
+            root_dept_id: root 哨兵部门 ID（作为默认 parent_id）。
         """
         raw = os.getenv("IRIP_SEED_DEPARTMENTS", "")
         if not raw:
@@ -264,6 +325,15 @@ class DepartmentSeeder:
             logger.warning("Bootstrap: IRIP_SEED_DEPARTMENTS is not a JSON array, skipping")
             return
 
+        # 获取组织 ID
+        async with self._factory() as session:
+            org_result = await session.execute(
+                sa.text("SELECT id FROM department WHERE id = :root_id"),
+                {"root_id": str(root_dept_id)},
+            )
+            org_row = org_result.first()
+            org_id: str = str(org_row[0]) if org_row else "00000000-0000-0000-0000-000000000001"
+
         async with self._factory() as session:
             async with session.begin():
                 for dept in departments:
@@ -275,20 +345,24 @@ class DepartmentSeeder:
                         continue
                     description = dept.get("description")
                     sort_order = int(dept.get("sort_order", 0))
+                    parent_id_str = dept.get("parent_id")
+                    parent_id = str(parent_id_str) if parent_id_str else str(root_dept_id)
+
                     await session.execute(
                         sa.text(
                             "INSERT INTO department "
-                            "(organization_id, code, display_name, description, "
-                            "status, sort_order, lock_version) "
-                            "VALUES (:org, :code, :name, :desc, 'active', :sort, 0) "
-                            "ON CONFLICT (organization_id, code) DO NOTHING"
+                            "(id, code, display_name, description, "
+                            "status, sort_order, lock_version, parent_id) "
+                            "VALUES (:org, :code, :name, :desc, 'active', :sort, 0, :parent) "
+                            "ON CONFLICT (parent_id, code) DO NOTHING"
                         ),
                         {
-                            "org": organization_id,
+                            "org": org_id,
                             "code": code,
                             "name": display_name,
                             "desc": description,
                             "sort": sort_order,
+                            "parent": parent_id,
                         },
                     )
         logger.info("Bootstrap: seeded %d departments", len(departments))
@@ -297,8 +371,7 @@ class DepartmentSeeder:
 class ApplicationContainer:
     """应用 DI 容器（bootstrap 用）。
 
-    封装引导所需全部依赖：数据库会话工厂、S3 客户端。
-    提供 organizations / roles / users / artifacts 四个子仓库。
+    阶段2：删除 organization 端口，新增 sentinel 端口。
     """
 
     def __init__(
@@ -314,27 +387,24 @@ class ApplicationContainer:
         """
         self._factory = session_factory
         self._s3 = s3_repo
-        self.organizations = _OrganizationsPort(session_factory)
+        self.sentinel = _SentinelPort(session_factory)
         self.roles = _RolesPort(session_factory)
         self.users = _UsersPort(session_factory)
         self.artifacts = ArtifactBootstrap(s3_repo)
         self.departments = DepartmentSeeder(session_factory)
 
 
-class _OrganizationsPort:
-    """组织端口。"""
+class _SentinelPort:
+    """哨兵部门端口。"""
 
     def __init__(self, factory: async_sessionmaker[AsyncSession]) -> None:
         self._factory = factory
 
-    async def get_or_create(self, code: str, name: str) -> Organization:
-        """幂等获取或创建组织。"""
+    async def ensure_root_and_system(self) -> tuple[SentinelDepartment, SentinelDepartment]:
+        """幂等创建 root + system 哨兵部门。"""
         async with self._factory() as session:
             async with session.begin():
-                await OrganizationRepository.ensure_table(session)
-                return await OrganizationRepository.get_or_create(
-                    session, code, name
-                )
+                return await SentinelDepartmentRepository.ensure_root_and_system(session)
 
 
 class _RolesPort:
@@ -358,14 +428,14 @@ class _UsersPort:
 
     async def get_or_create_admin(
         self,
-        organization_id: UUID,
+        department_id: UUID,
         email: str,
         password_from_env: str,
     ) -> UUID:
-        """幂等获取或创建管理员用户。
+        """幂等获取或创建管理员用户（挂 root 部门）。
 
         Args:
-            organization_id: 所属组织 ID。
+            department_id: root 哨兵部门 ID。
             email: 管理员邮箱。
             password_from_env: 环境变量名（从中读取密码）。
 
@@ -381,19 +451,17 @@ class _UsersPort:
             async with session.begin():
                 return await UserRepository.get_or_create_admin(
                     session,
-                    organization_id=organization_id,
+                    department_id=department_id,
                     email=email,
                     password=password,
                 )
 
 
 async def bootstrap_platform(container: ApplicationContainer) -> None:
-    """幂等引导平台：组织 → 角色 → 管理员 → bucket。
+    """幂等引导平台：哨兵部门 → 角色 → 管理员 → 种子部门 → bucket。
 
-    全部操作幂等，可安全重复运行（实施计划第 697-706 行）。
-
-    F-12: 如果 IRIP_MASTER_KEY 未设置，生成随机 master key 并打印到 stderr
-    供运维人员记录到环境变量中。
+    阶段2：删除 organization 创建逻辑，改为创建 root + system 哨兵部门。
+    admin 用户挂 root 部门（department_id=root.id）。
 
     Args:
         container: 应用 DI 容器。
@@ -412,27 +480,28 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
             generated_key,
         )
 
-    logger.info("Bootstrap: ensuring organization IRIP-DEMO ...")
-    organization = await container.organizations.get_or_create(
-        code=DEMO_ORG_CODE,
-        name=DEMO_ORG_NAME,
+    logger.info("Bootstrap: ensuring sentinel departments (root + system) ...")
+    root_dept, system_dept = await container.sentinel.ensure_root_and_system()
+    logger.info(
+        "Bootstrap: sentinel departments ready (root=%s, system=%s)",
+        root_dept.id,
+        system_dept.id,
     )
-    logger.info("Bootstrap: organization ready (id=%s)", organization.id)
 
     logger.info("Bootstrap: ensuring builtin roles ...")
     await container.roles.ensure_builtin_roles()
     logger.info("Bootstrap: roles ready")
 
-    logger.info("Bootstrap: ensuring admin user %s ...", ADMIN_EMAIL)
+    logger.info("Bootstrap: ensuring admin user %s (department=root) ...", ADMIN_EMAIL)
     await container.users.get_or_create_admin(
-        organization_id=organization.id,
+        department_id=root_dept.id,
         email=ADMIN_EMAIL,
         password_from_env="IRIP_BOOTSTRAP_ADMIN_PASSWORD",
     )
     logger.info("Bootstrap: admin user ready")
 
     logger.info("Bootstrap: seeding departments ...")
-    await container.departments.seed_departments(organization.id)
+    await container.departments.seed_departments(root_dept.id)
     logger.info("Bootstrap: departments ready")
 
     logger.info("Bootstrap: ensuring MinIO bucket ...")
@@ -444,6 +513,15 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     await _grant_replication_permission(container)
     logger.info("Bootstrap: REPLICATION permission granted")
 
+    # 输出哨兵部门 ID 到环境变量提示（供 Beat worker 使用）
+    logger.info(
+        "Bootstrap: set these for Beat worker:\n"
+        "  IRIP_ROOT_DEPT_ID=%s\n"
+        "  IRIP_SYSTEM_DEPT_ID=%s",
+        root_dept.id,
+        system_dept.id,
+    )
+
     logger.info("Bootstrap complete.")
 
 
@@ -451,7 +529,6 @@ async def _grant_replication_permission(container: ApplicationContainer) -> None
     """赋予 irip 用户 REPLICATION 权限（pg_basebackup 物理备份需要）。
 
     幂等操作：ALTER USER 重复执行不会报错。
-    使用原始 SQL 执行，不依赖 ORM 模型。
 
     Args:
         container: 应用 DI 容器。

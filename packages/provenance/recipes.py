@@ -4,10 +4,10 @@ RecipeService 提供推导配方的创建、发布版本、查询与列表。
 
 核心不变量：
 1. published_immutable: 发布后的配方版本不可修改，保证确定性回放。
-2. org_unique_code: 配方代码在组织内唯一。
+2. org_unique_code: 配方代码在部门内唯一。
 3. version_increment: 配方版本号在配方范围内递增。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 actor_id（操作人）。
 """
 
@@ -61,37 +61,37 @@ class RecipeVersion:
 class RecipeService:
     """推导配方业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     actor_id（操作人）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _actor_id: 当前操作人 ID。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化推导配方服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     async def create_recipe(self, code: str, display_name: str) -> dict:
         """创建配方（draft 状态）。
 
         Args:
-            code: 配方代码（组织内唯一）。
+            code: 配方代码（部门内唯一）。
             display_name: 显示名称。
 
         Returns:
@@ -99,7 +99,7 @@ class RecipeService:
 
         Raises:
             AppError: code="validation_failed"，当 code 或 display_name 为空时。
-            AppError: code="conflict"，当 code 在组织内已存在时。
+            AppError: code="conflict"，当 code 在部门内已存在时。
         """
         if not code or not code.strip():
             raise AppError(
@@ -120,7 +120,7 @@ class RecipeService:
             # 检查 code 唯一性
             existing = await session.scalar(
                 sa.select(TransformationRecipe).where(
-                    TransformationRecipe.organization_id == self._org_id,
+                    TransformationRecipe.department_id == self._dept_id,
                     TransformationRecipe.code == code.strip(),
                 )
             )
@@ -134,7 +134,7 @@ class RecipeService:
 
             recipe = TransformationRecipe(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 code=code.strip(),
                 display_name=display_name.strip(),
                 status="draft",
@@ -202,7 +202,7 @@ class RecipeService:
             recipe = await session.scalar(
                 sa.select(TransformationRecipe).where(
                     TransformationRecipe.id == recipe_id,
-                    TransformationRecipe.organization_id == self._org_id,
+                    TransformationRecipe.department_id == self._dept_id,
                 )
             )
             if recipe is None:
@@ -278,7 +278,7 @@ class RecipeService:
             recipe = await session.scalar(
                 sa.select(TransformationRecipe).where(
                     TransformationRecipe.id == recipe_id,
-                    TransformationRecipe.organization_id == self._org_id,
+                    TransformationRecipe.department_id == self._dept_id,
                 )
             )
             if recipe is None:
@@ -331,7 +331,7 @@ class RecipeService:
         async with self._factory() as session:
             stmt = (
                 sa.select(TransformationRecipe)
-                .where(TransformationRecipe.organization_id == self._org_id)
+                .where(TransformationRecipe.department_id == self._dept_id)
                 .order_by(TransformationRecipe.created_at, TransformationRecipe.id)
                 .limit(page_size + 1)
             )

@@ -54,13 +54,28 @@ class JobRepository:
     @staticmethod
     async def get_by_idempotency(
         session: AsyncSession,
-        organization_id: UUID,
+        department_id: UUID,
         idempotency_key: str,
     ) -> Job | None:
-        """按幂等键查询作业。"""
+        """按幂等键查询作业（旧接口，按 department_id 过滤）。"""
         result = await session.execute(
             sa.select(Job).where(
-                Job.organization_id == organization_id,
+                Job.department_id == department_id,
+                Job.idempotency_key == idempotency_key,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_idempotency_dept(
+        session: AsyncSession,
+        department_id: UUID,
+        idempotency_key: str,
+    ) -> Job | None:
+        """按幂等键查询作业（阶段2，按 department_id 过滤）。"""
+        result = await session.execute(
+            sa.select(Job).where(
+                Job.department_id == department_id,
                 Job.idempotency_key == idempotency_key,
             )
         )

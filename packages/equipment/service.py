@@ -24,7 +24,7 @@ set_status(equipment_id, status, lock_version):
 - code 创建后锁定不可修改（UpdateEquipmentBody 不含 code，UPDATE 不写 code 列）；
 - 乐观锁：WHERE id=? AND lock_version=?，影响 0 行 → 409；
 - 软禁用：status='disabled'，无 DELETE；
-- 所有操作校验 organization_id。
+- 所有操作校验 department_id。
 """
 
 from __future__ import annotations
@@ -71,30 +71,33 @@ class EquipmentListResult:
 class EquipmentService:
     """设备仪器业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、clock（时钟）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、clock（时钟）。
     仓库方法为静态调用，无需注入实例。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _clock: 时钟实例。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         clock: Clock | None = None,
+        actor_id: UUID | None = None,
     ) -> None:
         """初始化设备仪器服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             clock: 时钟（默认 SystemClock）。
+            actor_id: 当前操作用户 ID（用于 owner_user_id）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
+        self._actor_id = actor_id
         self._clock = clock or SystemClock()
 
     async def create(
@@ -109,12 +112,12 @@ class EquipmentService:
         """创建设备仪器。
 
         流程：
-        1. 检查编码唯一性（organization_id + code）→ 已存在抛 AppError(conflict)；
+        1. 检查编码唯一性（department_id + code）→ 已存在抛 AppError(conflict)；
         2. 生成 UUID，INSERT equipment。
 
         Args:
             department_id: 所属部门 UUID。
-            code: 设备编码（组织内唯一，创建后锁定）。
+            code: 设备编码（部门内唯一，创建后锁定）。
             display_name: 中文显示名。
             description: 描述（可选）。
             sort_order: 排序权重。
@@ -127,7 +130,7 @@ class EquipmentService:
             AppError: code="conflict"，当编码已存在时。
         """
         async with session_scope(self._factory) as session:
-            existing = await EquipmentRepository.select_by_org_and_code(session, self._org_id, code)
+            existing = await EquipmentRepository.select_by_org_and_code(session, self._dept_id, code)
             if existing is not None:
                 raise AppError(
                     code="conflict",
@@ -139,12 +142,13 @@ class EquipmentService:
             now = self._clock.now()
             equipment = Equipment(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 code=code,
                 display_name=display_name,
                 description=description,
-                department_id=department_id,
                 visible_departments=visible_departments or [],
+                owner_user_id=self._actor_id or new_id(),  # 设备归部门不归个人，owner 填创建者
+                visibility_scope='tree',
                 status=EquipmentStatus.ACTIVE.value,
                 sort_order=sort_order,
                 created_at=now,
@@ -188,7 +192,6 @@ class EquipmentService:
         async with self._factory() as session:
             rows = await EquipmentRepository.select_list(
                 session,
-                organization_id=self._org_id,
                 department_id=department_id,
                 visible_dept_id=visible_dept_id,
                 status=status,
@@ -227,7 +230,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
         """
         async with self._factory() as session:
-            equipment = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
+            equipment = await EquipmentRepository.select_by_id(session, equipment_id)
             if equipment is None:
                 raise AppError(
                     code="not_found",
@@ -277,15 +280,14 @@ class EquipmentService:
                 department_id=department_id,
                 sort_order=sort_order,
                 lock_version=lock_version,
-                organization_id=self._org_id,
                 visible_departments=visible_departments,
             )
             if updated is not None:
                 return updated
 
             # 影响 0 行：判断是不存在还是 lock_version 不匹配
-            existing = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
-            if existing is None or existing.organization_id != self._org_id:
+            existing = await EquipmentRepository.select_by_id(session, equipment_id)
+            if existing is None or existing.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message="设备不存在",
@@ -325,13 +327,13 @@ class EquipmentService:
                 equipment_id=equipment_id,
                 status=status,
                 lock_version=lock_version,
-                organization_id=self._org_id,
+                department_id=self._dept_id,
             )
             if updated is not None:
                 return updated
 
-            existing = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
-            if existing is None or existing.organization_id != self._org_id:
+            existing = await EquipmentRepository.select_by_id(session, equipment_id)
+            if existing is None or existing.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message="设备不存在",
@@ -355,7 +357,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
         """
         async with session_scope(self._factory) as session:
-            equipment = await EquipmentRepository.select_by_id(session, equipment_id, self._org_id)
+            equipment = await EquipmentRepository.select_by_id(session, equipment_id)
             if equipment is None:
                 raise AppError(
                     code="not_found",
@@ -366,7 +368,7 @@ class EquipmentService:
             await session.execute(
                 sa.delete(Equipment).where(
                     Equipment.id == equipment_id,
-                    Equipment.organization_id == self._org_id,
+                    Equipment.department_id == self._dept_id,
                 )
             )
 

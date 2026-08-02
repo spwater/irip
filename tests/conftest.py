@@ -126,7 +126,7 @@ class TestUser:
 
     user_id: UUID
     email: str
-    organization_id: UUID
+    department_id: UUID
 
 
 def _insert_test_user(engine: Engine, email: str) -> TestUser:
@@ -140,7 +140,7 @@ def _insert_test_user(engine: Engine, email: str) -> TestUser:
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, organization_id, email, display_name, "
+                "(id, department_id, email, display_name, "
                 "password_hash, status, lock_version) "
                 "VALUES (:id, :org, :email, :name, :hash, :status, 0)"
             ),
@@ -154,7 +154,7 @@ def _insert_test_user(engine: Engine, email: str) -> TestUser:
             },
         )
         conn.commit()
-    return TestUser(user_id=user_id, email=email, organization_id=org_id)
+    return TestUser(user_id=user_id, email=email, department_id=org_id)
 
 
 def _cleanup_test_user(engine: Engine, user_id: UUID) -> None:
@@ -185,7 +185,7 @@ def _cleanup_test_user(engine: Engine, user_id: UUID) -> None:
 
 @pytest.fixture
 def test_user(sync_engine: Engine) -> Iterator[TestUser]:
-    """测试用户（含 organization_id）。"""
+    """测试用户（含 department_id）。"""
     import uuid as uuid_module
 
     email = f"test-{uuid_module.uuid4().hex[:8]}@irip.local"
@@ -223,7 +223,7 @@ def artifact_service(
     return ArtifactService(
         s3_repo=s3_repo,
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
         uploaded_by=test_user.user_id,
     )
 
@@ -424,7 +424,7 @@ async def job_harness(
 
     job_service = JobService(
         session_factory=async_session_factory,
-        organization_id=test_user.organization_id,
+        department_id=test_user.department_id,
         created_by=test_user.user_id,
     )
 

@@ -9,7 +9,7 @@ import type { CursorPage } from './types';
 // ============================================================
 
 export type Equipment = {
-  id: string; organization_id: string; code: string; display_name: string;
+  id: string; department_id: string; code: string; display_name: string;
   description: string | null; department_id: string; visible_departments: string[];
   status: string; sort_order: number; created_at: string; updated_at: string; lock_version: number;
 };

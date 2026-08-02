@@ -49,7 +49,7 @@ class AIConversation(Base):
 
     Attributes:
         id: 对话 UUID。
-        organization_id: 组织 ID。
+        department_id: 部门 ID。
         user_id: 创建用户 ID。
         title: 对话标题。
         provider_mode: Provider 模式（offline / openai_compatible）。
@@ -60,7 +60,6 @@ class AIConversation(Base):
     __tablename__ = "ai_conversation"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     user_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     title: Mapped[str] = mapped_column(sa.Text, nullable=False, default="")
     provider_mode: Mapped[str] = mapped_column(sa.Text, nullable=False, default="offline")
@@ -257,7 +256,7 @@ class AIService:
     async def create_conversation(
         self,
         user_id: UUID,
-        organization_id: UUID,
+        department_id: UUID,
         title: str = "",
         provider_mode: str = "offline",
     ) -> ConversationRef:
@@ -265,7 +264,7 @@ class AIService:
 
         Args:
             user_id: 用户 ID。
-            organization_id: 组织 ID。
+            department_id: 部门 ID。
             title: 对话标题（空时自动生成）。
             provider_mode: Provider 模式。
 
@@ -280,7 +279,7 @@ class AIService:
         async with session_scope(self._factory) as session:
             conv = AIConversation(
                 id=conv_id,
-                organization_id=organization_id,
+                department_id=department_id,
                 user_id=user_id,
                 title=title,
                 provider_mode=provider_mode,
@@ -319,7 +318,7 @@ class AIService:
     async def list_conversations(
         self,
         user_id: UUID,
-        organization_id: UUID,
+        department_id: UUID,
         limit: int = 50,
         include_archived: bool = False,
         archived_only: bool = False,
@@ -328,7 +327,7 @@ class AIService:
 
         Args:
             user_id: 用户 ID（仅返回该用户的对话）。
-            organization_id: 组织 ID。
+            department_id: 部门 ID。
             limit: 最大返回数。
             include_archived: 是否包含已归档对话（默认不含）。
             archived_only: 是否只返回已归档对话（优先于 include_archived）。
@@ -338,7 +337,7 @@ class AIService:
         """
         conditions = [
             AIConversation.user_id == user_id,
-            AIConversation.organization_id == organization_id,
+            AIConversation.department_id == department_id,
         ]
         if archived_only:
             conditions.append(AIConversation.archived == sa.true())
@@ -562,7 +561,7 @@ class AIService:
     async def search_conversations(
         self,
         user_id: UUID,
-        organization_id: UUID,
+        department_id: UUID,
         keyword: str,
         include_archived: bool = False,
         archived_only: bool = False,
@@ -575,7 +574,7 @@ class AIService:
 
         Args:
             user_id: 用户 ID（仅返回该用户的对话）。
-            organization_id: 组织 ID。
+            department_id: 部门 ID。
             keyword: 搜索关键词。
             include_archived: 是否包含已归档对话。
             archived_only: 是否只返回已归档对话。
@@ -586,7 +585,7 @@ class AIService:
         """
         conditions = [
             AIConversation.user_id == user_id,
-            AIConversation.organization_id == organization_id,
+            AIConversation.department_id == department_id,
         ]
         if archived_only:
             conditions.append(AIConversation.archived == sa.true())
@@ -639,7 +638,7 @@ class AIService:
     async def list_conversations_with_tab(
         self,
         user_id: UUID,
-        organization_id: UUID,
+        department_id: UUID,
         tab: str = "private",
         limit: int = 50,
         include_archived: bool = False,
@@ -657,7 +656,7 @@ class AIService:
 
         Args:
             user_id: 当前用户 ID。
-            organization_id: 当前用户组织 ID。
+            department_id: 当前用户部门 ID。
             tab: 筛选标签（private / same_org / cross_org）。
             limit: 最大返回数。
             include_archived: 是否包含已归档对话。
@@ -697,7 +696,7 @@ class AIService:
                 conditions.append(sa.not_(other_participant_exists))
             elif tab == "same_org":
                 # (user_id == me OR participant) AND org == my_org
-                conditions.append(AIConversation.organization_id == organization_id)
+                conditions.append(AIConversation.department_id == department_id)
                 participant_or_owner = sa.or_(
                     AIConversation.user_id == user_id,
                     sa.select(ConversationParticipant.conversation_id)
@@ -860,7 +859,7 @@ class AIService:
                     fields={},
                 )
 
-            # 校验同 org（target 用户的 organization_id 必须与对话的 organization_id 一致）
+            # 校验同部门（target 用户的 department_id 必须与对话的 department_id 一致）
             from packages.auth.entities import AppUser
 
             target_user = await session.scalar(
@@ -873,7 +872,7 @@ class AIService:
                     retryable=False,
                     fields={},
                 )
-            if target_user.organization_id != conv.organization_id:
+            if target_user.department_id != conv.department_id:
                 raise AppError(
                     code="validation_failed",
                     message="不能邀请跨组织用户加入对话",
@@ -1126,8 +1125,7 @@ class AIService:
     async def list_mentionable_users(
         self,
         user_id: UUID,
-        organization_id: UUID,
-        department_id: UUID | None = None,
+        department_id: UUID,
         roles: list[str] | None = None,
     ) -> list[MentionableUserRef]:
         """列出可 @ 的用户（irip-ai-collab 新增）。
@@ -1138,7 +1136,7 @@ class AIService:
 
         Args:
             user_id: 当前用户 ID（排除自己）。
-            organization_id: 当前用户组织 ID。
+            department_id: 当前用户部门 ID。
             department_id: 当前用户部门 ID（非管理员时按此过滤）。
             roles: 当前用户角色列表（判断是否为管理员）。
 
@@ -1156,7 +1154,7 @@ class AIService:
                 AppUser.avatar_url,
                 AppUser.roles,
             ).where(
-                AppUser.organization_id == organization_id,
+                AppUser.department_id == department_id,
                 AppUser.status == "active",
                 AppUser.id != user_id,
             )
@@ -1632,9 +1630,9 @@ class AIService:
             AppError: code="forbidden"，当用户缺少工具所需权限时。
         """
         user_id: UUID = user.user_id
-        org_id: UUID | None = getattr(user, "organization_id", None)
+        org_id: UUID | None = getattr(user, "department_id", None)
         if org_id is None:
-            # CurrentUser 可能没有 organization_id，使用默认值
+            # CurrentUser 可能没有 department_id，使用默认值
             org_id = new_id()
 
         # 热更新：每次 ask 从 DB 重新加载工具声明层（D-4）
@@ -1647,7 +1645,7 @@ class AIService:
         if conversation_id is None:
             conv_ref = await self.create_conversation(
                 user_id=user_id,
-                organization_id=org_id,
+                department_id=org_id,
                 title=question[:60],
                 provider_mode=provider_name,
             )
@@ -1703,7 +1701,7 @@ class AIService:
         # 构建 user_context（不含凭据）
         user_context: dict[str, Any] = {
             "user_id": str(user_id),
-            "organization_id": str(org_id),
+            "department_id": str(org_id),
             "roles": list(user.roles),
         }
 
@@ -2090,7 +2088,7 @@ class AIService:
                 results = await self._fact_service.search(
                     query=query,
                     fact_type=fact_type,
-                    organization_id=org_id,
+                    department_id=org_id,
                     limit=20,
                 )
                 items = []
@@ -2115,7 +2113,7 @@ class AIService:
             stmt = sa.select(
                 sa.text("f.id, f.subject_id, f.fact_type")
             ).select_from(sa.text("fact f"))
-            conditions = [sa.text("f.organization_id = :org_id")]
+            conditions = [sa.text("f.department_id = :org_id")]
             params: dict[str, Any] = {"org_id": org_id}
             if query:
                 conditions.append(sa.text("subject_id ILIKE :query"))
@@ -2149,7 +2147,7 @@ class AIService:
                 .select_from(sa.text("variable_version vv"))
                 .join(sa.text("variable v"), sa.text("v.id = vv.variable_id"))
                 .where(
-                    sa.text("v.organization_id = :org_id"),
+                    sa.text("v.department_id = :org_id"),
                     sa.text("vv.status = 'published'"),
                 )
             )
@@ -2181,7 +2179,7 @@ class AIService:
             try:
                 results = await self._parameter_service.search_by_variable(
                     variable_code=variable_code,
-                    organization_id=org_id,
+                    department_id=org_id,
                 )
                 items = [
                     {
@@ -2215,7 +2213,7 @@ class AIService:
             try:
                 chain = await self._provenance_service.explain(
                     parameter_id=parameter_id,
-                    organization_id=org_id,
+                    department_id=org_id,
                 )
                 return {
                     "summary": f"溯源链路包含 {len(chain.get('steps', []))} 个步骤",
@@ -2248,7 +2246,7 @@ class AIService:
                 for fid in fact_ids[:5]:
                     fact = await self._fact_service.get(
                         fact_id=UUID(str(fid)),
-                        organization_id=org_id,
+                        department_id=org_id,
                     )
                     if fact:
                         facts.append(fact)
@@ -2330,7 +2328,7 @@ class AIService:
                             .select_from(sa.text("fact"))
                             .where(
                                 sa.text("id = :fid"),
-                                sa.text("organization_id = :org_id"),
+                                sa.text("department_id = :org_id"),
                             ),
                             {"fid": UUID(str(fid)), "org_id": org_id},
                         )

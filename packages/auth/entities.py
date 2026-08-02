@@ -29,7 +29,6 @@ class AppUser(Base):
 
     Attributes:
         id: 用户唯一标识。
-        organization_id: 所属组织 ID（单组织模型，V0 暂无 organization 表，允许 NULL）。
         email: 登录邮箱（CITEXT，大小写不敏感，UNIQUE）。
         display_name: 中文显示名。
         password_hash: Argon2id 密码哈希字符串。
@@ -43,7 +42,6 @@ class AppUser(Base):
     __tablename__ = "app_user"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     password_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -63,8 +61,9 @@ class AppUser(Base):
         server_default=sa.text("'[]'::jsonb"),
         default=list,
     )
-    department_id: Mapped[UUID | None] = mapped_column(
-        GUID, nullable=True, comment="所属实验室 ID（FK→department.id）"
+    department_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("department.id"), nullable=False,
+        comment="所属实验室 ID（FK→department.id，阶段1 NOT NULL）"
     )
     token_version: Mapped[int] = mapped_column(
         sa.Integer,

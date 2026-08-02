@@ -31,6 +31,7 @@ import base64
 import binascii
 import json
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -69,29 +70,29 @@ class DepartmentListResult:
 class DepartmentService:
     """实验室业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、clock（时钟）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、clock（时钟）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _clock: 时钟实例。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         clock: Clock | None = None,
     ) -> None:
         """初始化实验室服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             clock: 时钟（默认 SystemClock）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._clock = clock or SystemClock()
 
     async def create(
@@ -105,7 +106,7 @@ class DepartmentService:
         """创建实验室。
 
         流程：
-        1. 检查编码唯一性（organization_id + code）→ 已存在抛 AppError(conflict)；
+        1. 检查编码唯一性（department_id + code）→ 已存在抛 AppError(conflict)；
         2. 生成 UUID，INSERT department。
 
         Args:
@@ -122,9 +123,12 @@ class DepartmentService:
             AppError: code="conflict"，当编码已存在时。
         """
         async with session_scope(self._factory) as session:
-            existing = await DepartmentRepository.select_by_org_and_code(
-                session, self._org_id, code
+            # 阶段2: 唯一约束改为 (parent_id, code)
+            stmt = sa.select(Department).where(
+                Department.code == code,
+                Department.parent_id == parent_id if parent_id else Department.parent_id.is_(None),
             )
+            existing = await session.scalar(stmt)
             if existing is not None:
                 raise AppError(
                     code="conflict",
@@ -136,7 +140,6 @@ class DepartmentService:
             now = self._clock.now()
             dept = Department(
                 id=new_id(),
-                organization_id=self._org_id,
                 code=code,
                 display_name=display_name,
                 description=description,
@@ -186,7 +189,6 @@ class DepartmentService:
         async with self._factory() as session:
             rows = await DepartmentRepository.select_list(
                 session,
-                organization_id=self._org_id,
                 status=status,
                 cursor_sort_order=cursor_sort_order,
                 cursor_created_at=cursor_created_at,
@@ -221,7 +223,7 @@ class DepartmentService:
             AppError: code="not_found"，当实验室不存在时。
         """
         async with self._factory() as session:
-            dept = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
+            dept = await DepartmentRepository.select_by_id(session, department_id)
         if dept is None:
             raise AppError(
                 code="not_found",
@@ -242,6 +244,8 @@ class DepartmentService:
     ) -> Department:
         """编辑实验室（code 不可修改，乐观锁）。
 
+        阶段2：增加哨兵保护检查（root / system 部门不可修改）。
+
         UPDATE 不写 code 列（编码锁定约定）。
         影响 0 行时：先查询是否存在 → 存在则 409（lock_version 不匹配），不存在则 404。
 
@@ -259,8 +263,25 @@ class DepartmentService:
         Raises:
             AppError: code="not_found"，当实验室不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
+            AppError: code="forbidden"，当修改哨兵部门时。
         """
         async with session_scope(self._factory) as session:
+            # 阶段2: 哨兵保护前置检查
+            # 哨兵部门仅允许修改 display_name 和 description，
+            # 禁止修改 parent_id（re-parent）和 sort_order（避免打乱树结构）
+            existing_for_check = await DepartmentRepository.select_by_id(session, department_id)
+            if (
+                existing_for_check is not None
+                and existing_for_check.code in ("root", "system")
+                and parent_id is not None
+                and parent_id != existing_for_check.parent_id
+            ):
+                raise AppError(
+                    code="forbidden",
+                    message=f"禁止调整哨兵部门的父子关系: {existing_for_check.code}",
+                    retryable=False,
+                    fields={"code": existing_for_check.code},
+                )
             updated = await DepartmentRepository.update(
                 session,
                 department_id=department_id,
@@ -268,14 +289,13 @@ class DepartmentService:
                 description=description,
                 sort_order=sort_order,
                 lock_version=lock_version,
-                organization_id=self._org_id,
                 parent_id=parent_id,
             )
             if updated is not None:
                 return updated
 
             # 影响 0 行：判断是不存在还是 lock_version 不匹配
-            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
+            existing = await DepartmentRepository.select_by_id(session, department_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
@@ -316,12 +336,11 @@ class DepartmentService:
                 department_id=department_id,
                 status=status,
                 lock_version=lock_version,
-                organization_id=self._org_id,
             )
             if updated is not None:
                 return updated
 
-            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
+            existing = await DepartmentRepository.select_by_id(session, department_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
@@ -336,8 +355,79 @@ class DepartmentService:
                 fields={"lock_version": lock_version},
             )
 
+    async def reparent_impact_preview(
+        self,
+        department_id: UUID,
+        new_parent_id: UUID | None,
+    ) -> dict[str, Any]:
+        """预览 re-parent 操作的影响（阶段2新增）。
+
+        返回受影响的子树部门数、关联设备数、关联对象数等，
+        供前端二次确认展示。
+
+        Args:
+            department_id: 要调整的部门 ID。
+            new_parent_id: 新的父部门 ID。
+
+        Returns:
+            dict: 影响预览数据 {
+                "department_id": str,
+                "department_name": str,
+                "new_parent_id": str | None,
+                "subtree_count": int,  # 子树部门数（含自身）
+                "equipment_count": int,  # 子树关联设备数
+            }
+
+        Raises:
+            AppError: code="forbidden"，当部门为哨兵时。
+            AppError: code="not_found"，当部门不存在时。
+        """
+        dept = await self.get(department_id)
+
+        # 哨兵保护
+        if dept.code in ("root", "system"):
+            raise AppError(
+                code="forbidden",
+                message=f"禁止调整哨兵部门: {dept.code}",
+                retryable=False,
+                fields={"code": dept.code},
+            )
+
+        from packages.equipment.entities import Equipment
+
+        # 递归收集子树所有部门 ID
+        subtree_ids: set[UUID] = {department_id}
+        pending: list[UUID] = [department_id]
+        async with self._factory() as session:
+            while pending:
+                children_result = await session.execute(
+                    sa.select(Department.id).where(Department.parent_id.in_(pending))
+                )
+                children_ids = {row[0] for row in children_result}
+                new_ids = children_ids - subtree_ids
+                subtree_ids.update(new_ids)
+                pending = list(new_ids)
+
+            # 统计子树关联设备数
+            equip_result = await session.execute(
+                sa.select(sa.func.count())
+                .select_from(Equipment)
+                .where(Equipment.department_id.in_(subtree_ids))
+            )
+            equipment_count = int(equip_result.scalar() or 0)
+
+        return {
+            "department_id": str(department_id),
+            "department_name": dept.display_name,
+            "new_parent_id": str(new_parent_id) if new_parent_id else None,
+            "subtree_count": len(subtree_ids),
+            "equipment_count": equipment_count,
+        }
+
     async def delete(self, department_id: UUID) -> None:
         """删除实验室（物理删除）。
+
+        阶段2：增加哨兵保护检查（root / system 部门不可删除）。
 
         前置条件：
         - 子部门数为 0（无直接子部门）；
@@ -346,18 +436,28 @@ class DepartmentService:
         Raises:
             AppError: code="not_found"，当实验室不存在时。
             AppError: code="conflict"，当存在子部门或仪器时不允许删除。
+            AppError: code="forbidden"，当删除哨兵部门时。
         """
         from packages.equipment.entities import Equipment
 
         async with session_scope(self._factory) as session:
             # 检查是否存在
-            existing = await DepartmentRepository.select_by_id(session, department_id, self._org_id)
+            existing = await DepartmentRepository.select_by_id(session, department_id)
             if existing is None:
                 raise AppError(
                     code="not_found",
                     message="实验室不存在",
                     retryable=False,
                     fields={"department_id": str(department_id)},
+                )
+
+            # 阶段2: 哨兵保护
+            if existing.code in ("root", "system"):
+                raise AppError(
+                    code="forbidden",
+                    message=f"禁止删除哨兵部门: {existing.code}",
+                    retryable=False,
+                    fields={"code": existing.code},
                 )
 
             # 检查子部门数
@@ -388,7 +488,7 @@ class DepartmentService:
                 )
 
             # 执行删除
-            deleted = await DepartmentRepository.delete_by_id(session, department_id, self._org_id)
+            deleted = await DepartmentRepository.delete_by_id(session, department_id)
             if not deleted:
                 raise AppError(
                     code="not_found",

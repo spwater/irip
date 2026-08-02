@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_org_id
+from apps.api.composition import CompositionContext, lookup_dept_id, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.assistant import get_ai_service  # noqa: F401 (re-export guard)
 from apps.api.routers.audit import get_audit_session_factory
@@ -51,12 +51,13 @@ def register(ctx: CompositionContext) -> None:
     async def _get_artifact_service(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ArtifactService:
-        """按请求构造工件服务，从 DB 查询当前用户的 organization_id。"""
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        """按请求构造工件服务，从 DB 查询当前用户的 department_id。"""
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,  # 
             uploaded_by=current_user.user_id,
         )
 
@@ -75,10 +76,11 @@ def register(ctx: CompositionContext) -> None:
     async def _get_ingestion_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> IngestionService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return IngestionService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
         )
 
     ctx.app.dependency_overrides[get_ingestion_service] = _get_ingestion_service_dep
@@ -87,10 +89,11 @@ def register(ctx: CompositionContext) -> None:
     async def _get_parameter_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ParameterService:
-        org_id = await lookup_org_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         return ParameterService(
             session_factory=ctx.session_factory,
-            organization_id=org_id,
+            department_id=dept_id,
             actor_id=current_user.user_id,
         )
 

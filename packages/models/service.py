@@ -4,7 +4,7 @@ ModelService 提供模型从创建→提交验证→验证→发布→预测→�
 的完整生命周期管理。
 
 核心不变量：
-1. 唯一性：组织内 (organization_id, code) 唯一；
+1. 唯一性：部门内 (department_id, code) 唯一；
 2. 版本不可变：已发布版本不可修改，新变更创建新版本；
 3. 发布指针：current_version_id 指向当前已发布版本，
    rollback 通过移动指针实现（不删除旧版本）；
@@ -12,7 +12,7 @@ ModelService 提供模型从创建→提交验证→验证→发布→预测→�
    draft → pending_validation → validated → published → deprecated；
 5. 适用域：预测前校验输入是否在适用域范围内。
 
-依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+依赖注入 session_factory（事务管理）、department_id（当前部门）、
 artifact_service（工件上传/下载）、fact_service（写 model_execution 事实）。
 所有写操作通过 session_scope 事务上下文管理。
 """
@@ -73,12 +73,12 @@ class PredictionResult:
 class ModelService:
     """模型生命周期业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）、
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
     artifact_service（工件上传/下载）、fact_service（写事实）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
         _artifact_service: 工件服务实例。
         _fact_service: 事实服务实例。
         _clock: 时钟（默认 SystemClock）。
@@ -88,7 +88,7 @@ class ModelService:
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         artifact_service: Any,
         fact_service: Any | None = None,
         clock: Clock | None = None,
@@ -97,13 +97,13 @@ class ModelService:
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             artifact_service: 工件服务实例（用于上传/下载模型工件）。
             fact_service: 事实服务实例（用于写 model_execution 事实）。
             clock: 时钟（默认 SystemClock）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._artifact_service = artifact_service
         self._fact_service = fact_service
         self._clock: Clock = clock if clock is not None else SystemClock()
@@ -118,10 +118,10 @@ class ModelService:
     ) -> Model:
         """创建模型（status=draft）。
 
-        在当前组织内创建模型主记录，(organization_id, code) 唯一。
+        在当前部门内创建模型主记录，(department_id, code) 唯一。
 
         Args:
-            code: 模型代码（组织内唯一）。
+            code: 模型代码（部门内唯一）。
             display_name: 模型显示名称。
 
         Returns:
@@ -134,7 +134,7 @@ class ModelService:
         async with self._factory() as session:
             existing = await session.scalar(
                 sa.select(Model).where(
-                    Model.organization_id == self._org_id,
+                    Model.department_id == self._dept_id,
                     Model.code == code,
                 )
             )
@@ -149,7 +149,7 @@ class ModelService:
         async with session_scope(self._factory) as session:
             model = Model(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 code=code,
                 display_name=display_name,
                 status="draft",
@@ -635,7 +635,7 @@ class ModelService:
             return model
 
     async def list_models(self, status: str | None = None) -> list[Model]:
-        """列出当前组织的模型。
+        """列出当前部门的模型。
 
         Args:
             status: 可选，按状态过滤。
@@ -646,7 +646,7 @@ class ModelService:
         async with self._factory() as session:
             stmt = (
                 sa.select(Model)
-                .where(Model.organization_id == self._org_id)
+                .where(Model.department_id == self._dept_id)
                 .order_by(Model.created_at)
             )
             if status is not None:
@@ -678,11 +678,11 @@ class ModelService:
         session: AsyncSession,
         model_id: UUID,
     ) -> Model | None:
-        """获取属于当前组织的模型。"""
+        """获取属于当前部门的模型。"""
         return await session.scalar(
             sa.select(Model).where(
                 Model.id == model_id,
-                Model.organization_id == self._org_id,
+                Model.department_id == self._dept_id,
             )
         )
 
@@ -737,7 +737,7 @@ class ModelService:
 
         command = CreateFactCommand(
             fact_type="model_execution",
-            organization_id=self._org_id,
+            department_id=self._dept_id,
             object_id=model_id,  # type: ignore[arg-type]
             subject_id=f"model:{model_id}:version:{version_no}",
             started_at=started_at,

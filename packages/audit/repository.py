@@ -34,7 +34,7 @@ class AuditRecorder:
         """
         audit_event = AuditEvent(
             actor_user_id=event.actor_user_id,
-            organization_id=event.organization_id,
+            department_id=event.department_id,
             action=event.action,
             resource_type=event.resource_type,
             resource_id=event.resource_id,

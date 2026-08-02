@@ -41,7 +41,7 @@ const mockProfile: Profile = {
   display_name: '研究员',
   avatar_url: 'http://example.com/a.png',
   roles: ['lab_member'],
-  organization_id: 'org-001',
+  department_id: 'org-001',
 };
 
 function renderWithClient(ui: React.ReactElement): void {

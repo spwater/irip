@@ -301,8 +301,8 @@ async def create_backup(
         )
 
     org_id: UUID = (
-        current_user.organization_id
-        if current_user.organization_id is not None
+        current_user.department_id
+        if current_user.department_id is not None
         else current_user.user_id
     )
     backup_service: BackupRecordService = BackupRecordService(session_factory)
@@ -314,7 +314,7 @@ async def create_backup(
     async with session_scope(session_factory) as session:
         job = Job(
             id=job_id,
-            organization_id=org_id,
+            department_id=org_id,
             kind=BACKUP_JOB_KIND,
             status=JobStatus.ACCEPTED.value,
             payload={
@@ -348,7 +348,7 @@ async def create_backup(
             created_by=current_user.user_id if body.type == BackupType.MILESTONE.value else None,
             created_at=now,
             expires_at=None,  # service.create 会按类型计算，此处直接构造
-            organization_id=org_id,
+            department_id=org_id,
             backup_method="pitr",
         )
         # 按类型设置过期时间
@@ -550,8 +550,8 @@ async def create_restore(
         )
 
     org_id: UUID = (
-        current_user.organization_id
-        if current_user.organization_id is not None
+        current_user.department_id
+        if current_user.department_id is not None
         else current_user.user_id
     )
     restore_job_id: UUID = new_id()
@@ -560,7 +560,7 @@ async def create_restore(
     async with session_scope(session_factory) as session:
         job = Job(
             id=restore_job_id,
-            organization_id=org_id,
+            department_id=org_id,
             kind=RESTORE_JOB_KIND,
             status=JobStatus.ACCEPTED.value,
             payload={

@@ -5,12 +5,11 @@
 1. 查 user_id 直连的 scope_grant（优先）；
 2. 查 user 的 role 对应的 scope_grant；
 3. 匹配条件：
-   - organization_id 相同；
    - resource_type 匹配或通配（``"*"``）；
    - action 精确匹配；
    - 当前时刻在 effective_from / effective_to 区间内；
 4. object_root_id：
-   - NULL = 全组织通配；
+   - NULL = 全部门通配；
    - 非 NULL = 需匹配 object_id（V0 简化：子树展开在 V1+ 实现）。
 
 AuthorizationService.require(user, action, resource) 在无权时抛出
@@ -42,14 +41,12 @@ class ResourceRef:
     """资源引用（授权检查的目标）。
 
     Attributes:
-        organization_id: 资源所属组织 ID。
-        object_id: 资源对象 ID（None 表示组织级操作，如列表查询）。
+        object_id: 资源对象 ID（None 表示部门级操作，如列表查询）。
         resource_type: 资源类型（如 ``"fact"``、``"artifact"``、``"job"``）。
-        department_id: 部门/实验室 ID（P1新增）。None = 不按部门过滤；
+        department_id: 部门/实验室 ID。None = 不按部门过滤；
             非 None = 需匹配部门（scope_grant.department_id IS NULL 或精确匹配）。
     """
 
-    organization_id: UUID
     object_id: UUID | None
     resource_type: str
     department_id: UUID | None = None
@@ -76,9 +73,8 @@ class ScopeGrant(Base):
         id: 授权 UUID。
         user_id: 用户 ID（FK→app_user.id），与 role_id 二选一。
         role_id: 角色 ID（FK→role.id），与 user_id 二选一。
-        organization_id: 组织 ID（NOT NULL）。
-        object_root_id: 对象根 ID（NULL = 全组织；非 NULL = 子树根）。
-        department_id: 部门/实验室 ID（P1新增，NULL = 全组织；非 NULL = 特定实验室）。
+        object_root_id: 对象根 ID（NULL = 全部门；非 NULL = 子树根）。
+        department_id: 部门/实验室 ID（NOT NULL；NULL 表示全部门在阶段1 已由回填补 root）。
         resource_type: 资源类型（如 ``"fact"``）或通配符 ``"*"``。
         action: 权限字符串（如 ``"fact:read"``）。
         effective_from: 生效起始时间（NULL = 无下限）。
@@ -90,9 +86,13 @@ class ScopeGrant(Base):
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
     user_id: Mapped[UUID | None] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=True)
     role_id: Mapped[UUID | None] = mapped_column(GUID, sa.ForeignKey("role.id"), nullable=True)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     object_root_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
-    department_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
     resource_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     action: Mapped[str] = mapped_column(sa.Text, nullable=False)
     effective_from: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
@@ -165,11 +165,10 @@ class AuthorizationService:
         2. role grant（基于 user.roles 中的角色代码）。
 
         匹配条件：
-        - organization_id 与 resource.organization_id 相同；
         - resource_type 与 resource.resource_type 相同或为通配符 ``"*"``；
         - action 精确匹配；
         - 当前时刻在 effective 区间内；
-        - object_root_id：NULL = 全组织；非 NULL = 需匹配 resource.object_id。
+        - object_root_id：NULL = 全部门；非 NULL = 需匹配 resource.object_id。
 
         Args:
             user: 当前用户。
@@ -193,7 +192,6 @@ class AuthorizationService:
 
         # 公共匹配条件
         common_conditions = [
-            ScopeGrant.organization_id == resource.organization_id,
             sa.or_(
                 ScopeGrant.resource_type == resource.resource_type,
                 ScopeGrant.resource_type == WILDCARD_RESOURCE_TYPE,

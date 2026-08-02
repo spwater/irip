@@ -40,7 +40,7 @@ class Parameter(Base):
 
     Attributes:
         id: 参数 UUID（PK）。
-        organization_id: 所属组织 ID。
+        department_id: 所属部门 ID。
         variable_code: 变量代码（关联标准变量）。
         object_id: 工业对象 ID。
         status: 状态（draft / pending_review / published / rejected /
@@ -54,7 +54,6 @@ class Parameter(Base):
     __tablename__ = "parameter"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    organization_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     variable_code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     object_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     status: Mapped[str] = mapped_column(
@@ -74,13 +73,38 @@ class Parameter(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     created_by: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    # ---- A 类多租户隔离键升级：department_id 四列 ----
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID（阶段1双写，阶段3 RLS 锚定此列）",
+    )
+    visible_departments: Mapped[list] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+        comment="跨实验室可见部门 ID 列表",
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        sa.String(10),
+        nullable=False,
+        server_default=sa.text("'tree'"),
+        comment="可见范围：tree / explicit / all",
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("app_user.id"),
+        nullable=False,
+        comment="所有者用户 ID",
+    )
 
     __table_args__ = (
         sa.UniqueConstraint(
-            "organization_id",
+            "department_id",
             "variable_code",
             "object_id",
-            name="uq_parameter_org_var_obj",
+            name="uq_parameter_dept_var_obj",
         ),
     )
 

@@ -3,7 +3,7 @@
 核心流程（IRIP Task 11）：
 
 add_object(object_type, code, display_name, ...):
-  1. 检查编码唯一性（组织内 + 类型内）→ 若已存在抛 AppError(conflict)；
+  1. 检查编码唯一性（部门内 + 类型内）→ 若已存在抛 AppError(conflict)；
   2. INSERT industrial_object（status=active）；
   3. 返回 IndustrialObject。
 """
@@ -27,28 +27,28 @@ from packages.standards.objects import (
 class ObjectGraphService:
     """工业对象图业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
         actor_id: UUID | None = None,
     ) -> None:
         """初始化对象图服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
             actor_id: 当前操作人 ID（可选，预留审计扩展）。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
         self._actor_id = actor_id
 
     # ---- 对象 CRUD ----
@@ -68,7 +68,7 @@ class ObjectGraphService:
 
         Args:
             object_type: 对象类型（lab / production_line / ...）。
-            code: 对象编码（组织内 + 类型内唯一）。
+            code: 对象编码（部门内 + 类型内唯一）。
             display_name: 中文显示名。
             description: 描述（可选）。
             parent_id: 父对象 ID（可选，便捷反规范化字段）。
@@ -81,13 +81,13 @@ class ObjectGraphService:
 
         Raises:
             AppError: code="conflict"，当编码已存在时。
-            AppError: code="not_found"，当 parent_id 指定的父对象不存在或不属于当前组织时。
+            AppError: code="not_found"，当 parent_id 指定的父对象不存在或不属于当前部门时。
         """
         async with session_scope(self._factory) as session:
             # 检查编码唯一性
             existing = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.organization_id == self._org_id,
+                    IndustrialObject.department_id == self._dept_id,
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -108,7 +108,7 @@ class ObjectGraphService:
                     )
                 )
                 parent_obj = parent.scalar_one_or_none()
-                if parent_obj is None or parent_obj.organization_id != self._org_id:
+                if parent_obj is None or parent_obj.department_id != self._dept_id:
                     raise AppError(
                         code="not_found",
                         message="父对象不存在",
@@ -119,14 +119,13 @@ class ObjectGraphService:
             now = datetime.now(UTC)
             obj = IndustrialObject(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 object_type=object_type,
                 code=code,
                 display_name=display_name,
                 description=description,
                 parent_id=parent_id,
                 equipment_id=equipment_id,
-                department_id=department_id,
                 visible_departments=visible_departments or [],
                 status="active",
                 created_at=now,
@@ -147,7 +146,7 @@ class ObjectGraphService:
             IndustrialObject: 对象实体。
 
         Raises:
-            AppError: code="not_found"，当对象不存在或不属于当前组织时。
+            AppError: code="not_found"，当对象不存在或不属于当前部门时。
         """
         async with self._factory() as session:
             obj = await self._get_and_check_org(session, object_id)
@@ -256,7 +255,7 @@ class ObjectGraphService:
         async with self._factory() as session:
             result = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.organization_id == self._org_id,
+                    IndustrialObject.department_id == self._dept_id,
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -294,7 +293,7 @@ class ObjectGraphService:
 
         query = (
             sa.select(IndustrialObject)
-            .where(IndustrialObject.organization_id == self._org_id)
+            .where(IndustrialObject.department_id == self._dept_id)
             .order_by(IndustrialObject.created_at.asc(), IndustrialObject.id.asc())
             .limit(fetch_limit)
         )
@@ -364,13 +363,13 @@ class ObjectGraphService:
             IndustrialObject: 对象实体。
 
         Raises:
-            AppError: code="not_found"，当对象不存在或不属于当前组织时。
+            AppError: code="not_found"，当对象不存在或不属于当前部门时。
         """
         result = await session.execute(
             sa.select(IndustrialObject).where(IndustrialObject.id == object_id)
         )
         obj = result.scalar_one_or_none()
-        if obj is None or obj.organization_id != self._org_id:
+        if obj is None or obj.department_id != self._dept_id:
             raise AppError(
                 code="not_found",
                 message="工业对象不存在",

@@ -93,26 +93,26 @@ class ProvenanceGraph:
 class ProvenanceGraphService:
     """溯源图业务编排服务。
 
-    依赖注入 session_factory（事务管理）、organization_id（当前组织）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）。
 
     Attributes:
         _factory: 异步会话工厂。
-        _org_id: 当前组织 ID。
+        _dept_id: 当前部门 ID。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        organization_id: UUID,
+        department_id: UUID,
     ) -> None:
         """初始化溯源图服务。
 
         Args:
             session_factory: 异步会话工厂。
-            organization_id: 当前组织 ID。
+            department_id: 当前部门 ID。
         """
         self._factory = session_factory
-        self._org_id = organization_id
+        self._dept_id = department_id
 
     async def get_graph(self, derivation_run_id: UUID) -> ProvenanceGraph:
         """获取推导运行的完整溯源图。
@@ -140,7 +140,7 @@ class ProvenanceGraphService:
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == derivation_run_id,
-                    DerivationRun.organization_id == self._org_id,
+                    DerivationRun.department_id == self._dept_id,
                 )
             )
             if run is None:
@@ -165,7 +165,7 @@ class ProvenanceGraphService:
             edge_result = await session.execute(
                 sa.select(ProvenanceEdge).where(
                     ProvenanceEdge.derivation_run_id == derivation_run_id,
-                    ProvenanceEdge.organization_id == self._org_id,
+                    ProvenanceEdge.department_id == self._dept_id,
                 )
             )
             provenance_edges = edge_result.scalars().all()
@@ -242,7 +242,7 @@ class ProvenanceGraphService:
                 sa.select(ProvenanceEdge).where(
                     ProvenanceEdge.target_id == parameter_version_id,
                     ProvenanceEdge.target_type == "parameter_version",
-                    ProvenanceEdge.organization_id == self._org_id,
+                    ProvenanceEdge.department_id == self._dept_id,
                 )
             )
             start_edges = edges_result.scalars().all()
@@ -309,7 +309,7 @@ class ProvenanceGraphService:
                 up_edges_result = await session.execute(
                     sa.select(ProvenanceEdge).where(
                         ProvenanceEdge.target_id == current_id,
-                        ProvenanceEdge.organization_id == self._org_id,
+                        ProvenanceEdge.department_id == self._dept_id,
                     )
                 )
                 up_edges = up_edges_result.scalars().all()
@@ -343,7 +343,7 @@ class ProvenanceGraphService:
         async with session_scope(self._factory) as session:
             edge = ProvenanceEdge(
                 id=new_id(),
-                organization_id=self._org_id,
+                department_id=self._dept_id,
                 derivation_run_id=derivation_run_id,
                 source_type=source_type,
                 source_id=source_id,

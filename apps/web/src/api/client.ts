@@ -11,7 +11,7 @@ export type CurrentUser = {
   roles: string[];
   permissions: string[];
   /** 组织/租户 ID，由后端 /me 返回；可能为空（后端未返回时） */
-  organizationId?: string;
+  departmentId?: string;
   /** irip-ai-collab: 用户头像 URL */
   avatarUrl?: string;
 };
@@ -57,7 +57,7 @@ type MeApiResponse = {
   display_name: string;
   roles: string[];
   permissions: string[];
-  organization_id?: string;
+  department_id?: string;
   /** irip-ai-collab: 头像 URL */
   avatar_url?: string;
 };
@@ -196,7 +196,7 @@ export async function apiGetMe(): Promise<CurrentUser> {
     displayName: res.data.display_name,
     roles: res.data.roles ?? [],
     permissions: res.data.permissions ?? [],
-    organizationId: res.data.organization_id,
+    departmentId: res.data.department_id,
     avatarUrl: res.data.avatar_url,
   };
 }

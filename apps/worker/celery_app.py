@@ -290,7 +290,16 @@ def daily_backup() -> str:
 
     factory = build_session_factory(async_url)
 
-    # 系统自动备份使用默认组织 ID（从环境变量读取）
+    # 阶段2：系统备份挂 system 哨兵部门（敏感档），从环境变量读取
+    from apps.worker.tasks import get_system_dept_id
+
+    dept_id_str: str = get_system_dept_id()
+    try:
+        dept_id: UUID = UUID(dept_id_str) if dept_id_str else new_id()
+    except ValueError:
+        dept_id = new_id()
+
+    # 过渡期：保留 org_id 供双写（阶段3退役后删除）
     org_id_str: str = os.getenv("IRIP_SYSTEM_ORG_ID", "")
     try:
         org_id: UUID = UUID(org_id_str) if org_id_str else new_id()
@@ -301,14 +310,19 @@ def daily_backup() -> str:
     from pathlib import Path
 
     async def _create_daily_backup() -> str:
+        from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
         job_id: UUID = new_id()
         now: datetime = datetime.now(UTC)
         backup_dir: str = str(Path(backup_output_dir) / str(job_id))
 
+        # Beat 无用户 → user GUC 设空串（fail-closed for private RLS）
         async with session_scope(factory) as session:
+            await set_dept_guc(session, dept_id)
+            await set_user_guc(session, None)
             job = Job(
                 id=job_id,
-                organization_id=org_id,
+                department_id=dept_id,  # 阶段2：挂 system 哨兵
                 kind="backup",
                 status=JobStatus.ACCEPTED.value,
                 payload={
@@ -337,7 +351,7 @@ def daily_backup() -> str:
                 created_by=None,
                 created_at=now,
                 expires_at=now + timedelta(days=14),
-                organization_id=org_id,
+                department_id=dept_id,  # 阶段2：挂 system 哨兵
                 backup_method="pitr",
             )
             session.add(record)
@@ -382,8 +396,16 @@ def retention_cleanup() -> int:
     factory = build_session_factory(async_url)
     service: BackupRecordService = BackupRecordService(factory)
 
+    # 阶段2：Beat 清理任务操作 backup_record（敏感档）→ 挂 system 哨兵
+    from apps.worker.tasks import get_system_dept_id
+
+    dept_id_str: str = get_system_dept_id()
+
     async def _cleanup() -> int:
-        return await service.delete_expired()
+        from uuid import UUID as _UUID
+
+        dept_uuid: _UUID | None = _UUID(dept_id_str) if dept_id_str else None
+        return await service.delete_expired(dept_id=dept_uuid)
 
     return asyncio.run(_cleanup())
 
