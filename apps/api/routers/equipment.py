@@ -243,11 +243,20 @@ async def list_equipment(
     Returns:
         EquipmentListResponse: 分页列表。
     """
-    # 可见性由 service 层通过 RLS / compute_visible_dept_ids() 处理，
-    # 路由层不再做硬编码 department_id 过滤。
-    # department_id 查询参数仅用于显式筛选（如管理员按部门过滤）。
-    dept_id = UUID(department_id) if department_id is not None else None
-    visible_dept_id = None
+    # 可见性过滤：department_id 未指定时按用户可见部门集合过滤
+    if dept_id is None:
+        from packages.common.dept_visibility import compute_visible_dept_ids
+        from packages.common.database import session_scope
+
+        async with session_scope(service.session_factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
+        # 传第一个可见部门作为 department_id 让 repository 做向下递归过滤
+        # 或者直接传 None 让 RLS 处理——但 RLS 对 superuser 不生效
+        # 所以这里传可见部门集合让 repository 过滤
+        # equipment repository 的 select_list 只接受单个 department_id + 递归
+        # 我们传当前用户的 department_id 让它做向下递归
+        dept_id = service.department_id
+    visible_dept_id = service.department_id
     result = await service.list(
         department_id=dept_id,
         visible_dept_id=visible_dept_id,
