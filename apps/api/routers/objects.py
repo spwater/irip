@@ -109,7 +109,6 @@ class ObjectResponse(BaseModel):
     display_name: str
     description: str | None
     equipment_id: str | None
-    department_id: str | None
     visible_departments: list[str]
     status: str
     created_at: datetime
