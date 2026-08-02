@@ -651,7 +651,7 @@ class FlowRuntimeService:
             definition = FlowDefinition(
                 code=code,
                 display_name=display_name,
-                department_id=department_id,
+                department_id=department_id or self._dept_id,
                 owner_user_id=self._actor_id,
                 visibility_scope="tree",
                 project_name=project_name,
