@@ -243,13 +243,15 @@ async def publish_component(
         import sqlalchemy as sa
 
         from packages.common.database import session_scope
+        from packages.common.dept_visibility import compute_visible_dept_ids
         from packages.standards.objects import IndustrialObject
 
         async with session_scope(service.session_factory) as sess:
+            visible_ids = await compute_visible_dept_ids(sess, service.department_id, service.actor_id)
             obj = await sess.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.code == exp_code,
-                    IndustrialObject.department_id == service.department_id,
+                    IndustrialObject.department_id.in_(visible_ids),
                 )
             )
             if obj is None:
