@@ -138,6 +138,9 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     value: d.id,
     label: d.display_name,
   }));
+  const deptNameMap = new Map<string, string>(
+    (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
+  );
   const objectCodeToDeptId = new Map<string, string | null>(
     (objectData?.items ?? []).map((o) => [o.code, o.department_id ?? null]),
   );
@@ -427,6 +430,16 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
             {obj.display_name}
           </Tag>
         );
+      },
+    },
+    {
+      title: '归属单位',
+      dataIndex: 'department_id',
+      key: 'department_id',
+      width: 150,
+      render: (deptId: string | null) => {
+        if (!deptId) return <Text type="secondary">-</Text>;
+        return deptNameMap.get(deptId) ?? <Text code>{deptId.slice(0, 8)}</Text>;
       },
     },
     {

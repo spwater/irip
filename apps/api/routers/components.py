@@ -124,6 +124,7 @@ class ComponentListItemResponse(BaseModel):
     runtime: str
     experimental_object_code: str
     equipment_id: str | None = None
+    department_id: str | None = None
     status: str
     manifest_sha256: str
     published_at: datetime | None
@@ -332,6 +333,7 @@ async def list_components(
                 experimental_object_code=ver.experimental_object_code
                 or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
                 equipment_id=getattr(ver, "equipment_id", None),
+                department_id=str(comp.department_id) if comp.department_id else None,
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
                 published_at=ver.published_at,
