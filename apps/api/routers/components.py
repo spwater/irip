@@ -27,6 +27,7 @@ from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
+from packages.components.registry.registry import Component
 
 #: JSON Schema 路径（相对项目根目录）。
 _SCHEMA_PATH: Path = (
@@ -80,6 +81,17 @@ class PublishComponentRequest(BaseModel):
         None,
         description="关联设备 UUID（独立字段）",
     )
+    department_id: str | None = Field(
+        None,
+        description="归属部门 UUID（可选，默认取当前用户部门）",
+    )
+
+
+class UpdateComponentRequest(BaseModel):
+    """编辑组件请求。"""
+
+    department_id: str | None = Field(None, description="新归属部门 UUID")
+    visible_departments: list[str] | None = Field(None, description="可见单位 UUID 列表")
 
 
 # ---- 响应模型 ----
@@ -266,6 +278,7 @@ async def publish_component(
         manifest,
         experimental_object_code=exp_code or None,
         equipment_id=body.equipment_id or None,
+        department_id=UUID(body.department_id) if body.department_id else None,
     )
 
     return ComponentVersionResponse(
@@ -477,6 +490,55 @@ async def activate_version(
     """
     await service.activate_version(component_id)
     return {"status": "activated"}
+
+
+@components_router.patch("/{component_id}")
+async def update_component(
+    component_id: UUID,
+    body: UpdateComponentRequest,
+    current_user: ManageUserDep,
+    service: ComponentRegistryServiceDep,
+) -> dict[str, str]:
+    """编辑组件归属部门和可见单位。
+
+    Args:
+        component_id: 组件版本 UUID（通过 get_version_by_id 获取主记录）。
+        body: 编辑请求。
+        current_user: 当前认证用户（需 component:manage 权限）。
+        service: 组件注册表服务。
+    """
+    import sqlalchemy as sa
+
+    from packages.common.database import session_scope
+
+    comp, _ = await service.get_version_by_id(component_id)
+
+    # 归属检查：所有者+上级模型
+    from apps.api.dependencies.dept_scope import check_management_permission
+
+    await check_management_permission(
+        current_user=current_user,
+        entity_department_id=comp.department_id,
+        entity_owner_user_id=comp.owner_user_id,
+        session_factory=service.session_factory,  # type: ignore[attr-defined]
+    )
+
+    async with session_scope(service.session_factory) as session:  # type: ignore[attr-defined]
+        if body.department_id is not None:
+            comp = await session.scalar(
+                sa.select(Component).where(Component.id == comp.id)
+            )
+            if comp is not None:
+                comp.department_id = UUID(body.department_id)
+        if body.visible_departments is not None:
+            comp = await session.scalar(
+                sa.select(Component).where(Component.id == comp.id)
+            )
+            if comp is not None:
+                comp.visible_departments = body.visible_departments
+        await session.flush()
+
+    return {"status": "updated"}
 
 
 @components_router.delete("/{component_id}")

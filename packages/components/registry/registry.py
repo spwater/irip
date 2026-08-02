@@ -263,6 +263,7 @@ class ComponentRegistryService:
         manifest: ComponentManifest,
         experimental_object_code: str | None = None,
         equipment_id: str | None = None,
+        department_id: UUID | None = None,
     ) -> ComponentVersion:
         """发布组件版本。
 
@@ -304,7 +305,7 @@ class ComponentRegistryService:
             if component is None:
                 # 新建接口：用自动生成的编码
                 component = Component(
-                    department_id=self._dept_id,
+                    department_id=department_id or self._dept_id,
                     owner_user_id=self._actor_id,
                     name=gen_code("iface"),
                     kind=manifest.kind,
