@@ -44,6 +44,7 @@ import { apiListParticipants, apiInviteParticipant, apiRemoveParticipant, apiLis
 import { apiListFacts, apiGetFactData } from '@/api/facts-provenance';
 import { extractApiError, type FactSummary } from '@/api/types';
 import { useAuthStore } from '@/features/auth/AuthProvider';
+import { compactJson } from '@/shared/json-utils';
 
 const { Title, Text } = Typography;
 
@@ -79,7 +80,7 @@ export function AssistantPage(): JSX.Element {
 
   // irip-ai-collab: 协作功能状态
   const currentUser = useAuthStore((s) => s.user);
-  const [activeTab, setActiveTab] = useState<'private' | 'same_org' | 'cross_org'>('same_org');
+  const [activeTab, setActiveTab] = useState<'private' | 'collaborative'>('private');
   const [mentions, setMentions] = useState<string[]>([]);
 
   // 查询事实列表（用于插入实验数据）
@@ -175,7 +176,7 @@ export function AssistantPage(): JSX.Element {
     queryFn: () => apiListMessages(selectedConvId!),
     enabled: !!selectedConvId,
     retry: false,
-    refetchInterval: selectedConvId ? 3_000 : false, // irip-ai-collab: 3 秒轮询新消息
+    refetchInterval: selectedConvId && !isSending ? 3_000 : false, // 发送/流式期间暂停轮询，避免重复 AI 消息
   });
 
   // irip-ai-collab: 查询参与者（判断当前用户是否为 owner）
@@ -220,7 +221,8 @@ export function AssistantPage(): JSX.Element {
     const newLocalMessages = localMessages;
 
     if (streamingAnswer !== null) {
-      // 流式输出中：数据库历史消息（去掉和本地重复的）+ 流式 AI 消息
+      // 流式输出中：显示历史消息 + 本地用户消息 + 流式 AI 消息
+      // 过滤掉 DB 中与本地消息重复的（同 id），保留所有历史 AI 消息
       const localIds = new Set(newLocalMessages.map((m) => m.id));
       const dbHistory = dbMessages.filter((m) => !localIds.has(m.id));
       const aiMsg: AssistantMessage = {
@@ -266,9 +268,9 @@ export function AssistantPage(): JSX.Element {
         const fact = (factsData?.items ?? []).find((f: FactSummary) => f.fact_id === factId);
         const label = fact?.subject_id ?? factId;
         labels.push(label);
-        // 传完整的 metadata + points + series
+        // 传完整的 metadata + points + series（紧凑序列化，去掉多余空格减少 token 消耗）
         const compact = { metadata: data.metadata, points: data.points, series: data.series };
-        allData.push(`### 样品: ${label}\n\`\`\`json\n${JSON.stringify(compact)}\n\`\`\``);
+        allData.push(`### 样品: ${label}\n\`\`\`json\n${compactJson(compact)}\n\`\`\``);
       }
       const context = `以下是实验数据，请基于此数据回答用户的问题：\n\n${allData.join('\n\n')}`;
       setFactContext(context);
@@ -365,6 +367,8 @@ export function AssistantPage(): JSX.Element {
 
     // 协作对话中仅 @人（不 @AI）模式：仅保存用户消息，不显示 AI 流式回复
     if (isMentionOnly) {
+      // 不等待后端返回，立即解锁输入框（用户消息已通过 localMessages 显示）
+      setIsSending(false);
       try {
         await apiSendMessage(convId, {
           question: trimmed,
@@ -372,17 +376,13 @@ export function AssistantPage(): JSX.Element {
           system_context: factContext ?? undefined,
           mentions: currentMentions,
         });
-        // 直接刷新数据库消息（后端仅保存用户消息，无 AI 回复）
-        void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
-        void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-        setLocalMessages([]);
-        setIsSending(false);
       } catch (err) {
-        setStreamingAnswer(null);
         message.error(extractApiError(err));
-        setIsSending(false);
-        void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
       }
+      // 刷新数据库消息（无论成功失败都刷新，确保消息持久化）
+      void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
+      void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+      setLocalMessages([]);
       return;
     }
 
@@ -413,10 +413,14 @@ export function AssistantPage(): JSX.Element {
           setStreamingAnswer(fullAnswer);
           // 流式结束后，刷新数据库消息（不清空 localMessages，等 DB 数据到达后由 useEffect 清）
           setTimeout(() => {
-            setStreamingAnswer(null);
+            // 先 invalidate 拉取 DB 消息，等数据到达后再清 streamingAnswer
             void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
             void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-            setIsSending(false);
+            // 延迟 100ms 让 DB 消息先到达，再清 streamingAnswer，避免中间空白闪烁
+            setTimeout(() => {
+              setStreamingAnswer(null);
+              setIsSending(false);
+            }, 100);
           }, 300);
         } else {
           setStreamingAnswer(fullAnswer.slice(0, charIndex));
@@ -477,8 +481,31 @@ export function AssistantPage(): JSX.Element {
     }
   }, [messagesData, isSending, streamingAnswer]);
 
+  // 动态计算可用高度：100vh - header - content padding - contentframe padding
+  // 避免硬编码 180px 在 header 高度变化时不准
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerHeight, setContainerHeight] = useState('calc(100vh - 180px)');
+  useEffect(() => {
+    const updateHeight = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      // 找到最近的 scrollable 祖先（Content 区域）
+      const rect = el.getBoundingClientRect();
+      const available = window.innerHeight - rect.top - 24; // 24px = ContentFrame padding-bottom
+      setContainerHeight(`${available}px`);
+    };
+    updateHeight();
+    window.addEventListener('resize', updateHeight);
+    // 延迟一次，等 header 渲染完成
+    const timer = setTimeout(updateHeight, 200);
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      clearTimeout(timer);
+    };
+  }, []);
+
   return (
-    <div style={{ display: 'flex', gap: 16, height: 'calc(100vh - 180px)', overflow: 'hidden' }}>
+    <div ref={containerRef} style={{ display: 'flex', gap: 16, height: containerHeight, overflow: 'hidden' }}>
       <style>{`
         .ant-list-item:hover .conv-actions {
           opacity: 1 !important;
@@ -646,6 +673,11 @@ export function AssistantPage(): JSX.Element {
                         void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
                         if (selectedConvId === conv.id) {
                           setSelectedConvId(null);
+                          setLocalMessages([]);
+                          setStreamingAnswer(null);
+                          void queryClient.removeQueries({ queryKey: ['assistant-messages', conv.id] });
+                          void queryClient.removeQueries({ queryKey: ['participants', conv.id] });
+                          void queryClient.removeQueries({ queryKey: ['showcase-items', conv.id] });
                         }
                         message.success('对话已删除');
                       }).catch((err) => message.error(extractApiError(err)));

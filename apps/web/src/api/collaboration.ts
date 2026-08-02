@@ -31,8 +31,8 @@ export type MentionableUser = {
   roles: string[];
 };
 
-/** 对话三栏筛选标签 */
-export type ConversationTab = 'private' | 'same_org' | 'cross_org';
+/** 对话筛选标签 */
+export type ConversationTab = 'private' | 'collaborative';
 
 // ============================================================
 // API 响应类型

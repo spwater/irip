@@ -272,7 +272,7 @@ async def list_conversations(
     include_archived: bool = Query(False, description="是否包含已归档对话"),
     archived_only: bool = Query(False, description="是否只返回已归档对话"),
     keyword: str | None = Query(None, description="搜索关键词（标题 + 消息内容）"),
-    tab: str | None = Query(None, description="筛选标签（private / same_org / cross_org）"),
+    tab: str | None = Query(None, description="筛选标签（private / collaborative）"),
 ) -> ConversationListResponse:
     """列出当前用户的对话（支持关键词搜索 + 三栏筛选）。
 
@@ -286,15 +286,15 @@ async def list_conversations(
         include_archived: 是否包含已归档对话。
         archived_only: 是否只返回已归档对话。
         keyword: 搜索关键词（可选）。
-        tab: 筛选标签（可选，private / same_org / cross_org）。
+        tab: 筛选标签（可选，private / collaborative）。
 
     Returns:
         ConversationListResponse: 对话列表。
     """
     org_id = await _resolve_dept_id(current_user)
 
-    # irip-ai-collab: tab 参数走协作筛选逻辑
-    if tab is not None and tab in ("private", "same_org", "cross_org"):
+    # tab 参数走协作筛选逻辑
+    if tab is not None and tab in ("private", "collaborative", "same_org", "cross_org"):
         refs = await service.list_conversations_with_tab(
             user_id=current_user.user_id,
             department_id=org_id,

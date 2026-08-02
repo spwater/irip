@@ -122,8 +122,8 @@ export async function apiListConversations(params?: {
   includeArchived?: boolean;
   archivedOnly?: boolean;
   keyword?: string;
-  /** irip-ai-collab: 三栏筛选标签 */
-  tab?: 'private' | 'same_org' | 'cross_org';
+  /** 筛选标签：private（私有）/ collaborative（协同） */
+  tab?: 'private' | 'collaborative';
 }): Promise<ConversationSummary[]> {
   const res = await http.get<ConversationListApiResponse>('/assistant/conversations', {
     params: {

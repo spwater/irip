@@ -9,6 +9,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import { BlockWrapper } from '@/features/assistant/BlockWrapper';
 import { PlotlyBlock } from '@/features/assistant/PlotlyBlock';
+import { ChartRefBlock } from '@/features/assistant/ChartRefBlock';
 
 const { Text, Paragraph } = Typography;
 
@@ -406,13 +407,8 @@ function BlockifiedMarkdown({
     return preprocessMath(normalized);
   }, [content]);
 
-  // 块计数器
-  const blockCounterRef = useRef(0);
-  blockCounterRef.current = 0;
-  const getNextIndex = (): number => blockCounterRef.current++;
-  // 表格独立计数器（blockCounter 对所有块类型统一递增，tableSnapshots 只含表格）
-  const tableCounterRef = useRef(0);
-  tableCounterRef.current = 0;
+  // 块计数器：每次 content 变化时通过 useMemo 重建重置（见 components useMemo 内部）
+  // 表格独立计数器同理
 
   // 预提取标题 sections 和表格原文（在 preprocessMath 之前，用 normalizeLatexMath 的输出）
   const normalizedContent = useMemo(() => normalizeLatexMath(content), [content]);
@@ -471,6 +467,11 @@ function BlockifiedMarkdown({
 
   // 自定义组件
   const components = useMemo(() => {
+    // 每次组件重新创建时重置计数器（依赖 content 变化触发重建）
+    let blockCounter = 0;
+    let tableCounter = 0;
+    const getNextIndex = (): number => blockCounter++;
+    const getNextTableIndex = (): number => tableCounter++;
     const replacePlaceholders = (text: string): ReactNode => {
       if (!text.includes('MATH')) return text;
       const parts: ReactNode[] = [];
@@ -540,6 +541,16 @@ function BlockifiedMarkdown({
         const lang = className?.replace('language-', '') || '';
         const codeStr = text.replace(/\n$/, '');
 
+        // chart-ref 代码块：从已加载的实验数据引用画图（轻量指令，不含数据点）
+        if (lang === 'chart-ref') {
+          const idx = getNextIndex();
+          return (
+            <BlockWrapper messageId={messageId} blockIndex={idx} blockType="echarts"
+              conversationId={conversationId} systemContext={systemContext} contentSnapshot={codeStr}>
+              <ChartRefBlock specStr={codeStr} systemContext={systemContext} />
+            </BlockWrapper>
+          );
+        }
         // ECharts 代码块
         if (lang === 'echarts') {
           const idx = getNextIndex();
@@ -569,7 +580,7 @@ function BlockifiedMarkdown({
       table: ({ children }: { children?: ReactNode }) => {
         const idx = getNextIndex();
         // 用独立计数器索引 tableSnapshots（因为 blockCounter 对所有块类型统一递增）
-        const tableIdx = tableCounterRef.current++;
+        const tableIdx = getNextTableIndex();
         let tableSnapshot = tableSnapshots[tableIdx];
         if (!tableSnapshot) {
           // 回退：从 React table 子节点重建 Markdown 表格文本

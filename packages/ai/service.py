@@ -279,7 +279,6 @@ class AIService:
         async with session_scope(self._factory) as session:
             conv = AIConversation(
                 id=conv_id,
-                department_id=department_id,
                 user_id=user_id,
                 title=title,
                 provider_mode=provider_mode,
@@ -337,7 +336,6 @@ class AIService:
         """
         conditions = [
             AIConversation.user_id == user_id,
-            AIConversation.department_id == department_id,
         ]
         if archived_only:
             conditions.append(AIConversation.archived == sa.true())
@@ -585,7 +583,6 @@ class AIService:
         """
         conditions = [
             AIConversation.user_id == user_id,
-            AIConversation.department_id == department_id,
         ]
         if archived_only:
             conditions.append(AIConversation.archived == sa.true())
@@ -666,7 +663,7 @@ class AIService:
         Returns:
             list[ConversationRef]: 对话引用列表（含参与者摘要）。
         """
-        # cross_org 一期返回空列表
+        # cross_org 已废弃，不再使用
         if tab == "cross_org":
             return []
 
@@ -694,9 +691,16 @@ class AIService:
                     .exists()
                 )
                 conditions.append(sa.not_(other_participant_exists))
-            elif tab == "same_org":
-                # (user_id == me OR participant) AND org == my_org
-                conditions.append(AIConversation.department_id == department_id)
+            elif tab == "collaborative":
+                # 我参与的 + 有其他参与者的对话
+                other_participant_exists = (
+                    sa.select(ConversationParticipant.conversation_id)
+                    .where(
+                        ConversationParticipant.conversation_id == AIConversation.id,
+                        ConversationParticipant.user_id != user_id,
+                    )
+                    .exists()
+                )
                 participant_or_owner = sa.or_(
                     AIConversation.user_id == user_id,
                     sa.select(ConversationParticipant.conversation_id)
@@ -707,6 +711,28 @@ class AIService:
                     .exists(),
                 )
                 conditions.append(participant_or_owner)
+                conditions.append(other_participant_exists)
+            elif tab == "same_org":
+                # 兼容旧 tab：等同于 collaborative
+                other_participant_exists = (
+                    sa.select(ConversationParticipant.conversation_id)
+                    .where(
+                        ConversationParticipant.conversation_id == AIConversation.id,
+                        ConversationParticipant.user_id != user_id,
+                    )
+                    .exists()
+                )
+                participant_or_owner = sa.or_(
+                    AIConversation.user_id == user_id,
+                    sa.select(ConversationParticipant.conversation_id)
+                    .where(
+                        ConversationParticipant.conversation_id == AIConversation.id,
+                        ConversationParticipant.user_id == user_id,
+                    )
+                    .exists(),
+                )
+                conditions.append(participant_or_owner)
+                conditions.append(other_participant_exists)
 
             # 关键词搜索
             if keyword and keyword.strip():
@@ -859,7 +885,7 @@ class AIService:
                     fields={},
                 )
 
-            # 校验同部门（target 用户的 department_id 必须与对话的 department_id 一致）
+            # 权限校验：管理员角色可邀请任意人，其余只能邀请本部门
             from packages.auth.entities import AppUser
 
             target_user = await session.scalar(
@@ -872,13 +898,23 @@ class AIService:
                     retryable=False,
                     fields={},
                 )
-            if target_user.department_id != conv.department_id:
-                raise AppError(
-                    code="validation_failed",
-                    message="不能邀请跨组织用户加入对话",
-                    retryable=False,
-                    fields={},
-                )
+            # 查邀请者的角色和部门
+            inviter_user = await session.scalar(
+                sa.select(AppUser).where(AppUser.id == inviter_user_id)
+            )
+            inviter_roles = list(inviter_user.roles) if inviter_user and inviter_user.roles else []
+            admin_roles = {"platform_administrator", "platform_auditor", "lab_director"}
+            is_inviter_admin = len(admin_roles & set(inviter_roles)) > 0
+            if not is_inviter_admin:
+                # 非管理员：校验目标用户与邀请者属于同一部门
+                inviter_dept = inviter_user.department_id if inviter_user else None
+                if inviter_dept is not None and target_user.department_id != inviter_dept:
+                    raise AppError(
+                        code="validation_failed",
+                        message="不能邀请跨部门用户加入对话",
+                        retryable=False,
+                        fields={},
+                    )
 
             participant = ConversationParticipant(
                 conversation_id=conversation_id,
@@ -1145,7 +1181,10 @@ class AIService:
         """
         from packages.auth.entities import AppUser
 
-        is_admin = roles is not None and "platform_administrator" in roles
+        # 管理员角色可邀请任意人 → 列出全部 active 用户
+        # 其余角色只能邀请本部门 → 只返回同 department 的用户
+        admin_roles = {"platform_administrator", "platform_auditor", "lab_director"}
+        is_admin = roles is not None and len(admin_roles & set(roles)) > 0
 
         async with self._factory() as session:
             stmt = sa.select(
@@ -1154,12 +1193,11 @@ class AIService:
                 AppUser.avatar_url,
                 AppUser.roles,
             ).where(
-                AppUser.department_id == department_id,
                 AppUser.status == "active",
                 AppUser.id != user_id,
             )
 
-            # 非平台管理员：只返回同 department 的用户
+            # 非管理员：只返回同 department 的用户
             if not is_admin and department_id is not None:
                 stmt = stmt.where(AppUser.department_id == department_id)
 
@@ -1177,6 +1215,40 @@ class AIService:
             ]
 
     # ---- 橱窗卡片管理 ----
+
+    async def _check_conversation_access(
+        self,
+        session: AsyncSession,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> bool:
+        """校验用户是否有权访问对话（创建者或参与者）。
+
+        Args:
+            session: 异步会话。
+            conversation_id: 对话 ID。
+            user_id: 用户 ID。
+
+        Returns:
+            bool: True 如果有权访问。
+        """
+        # 创建者
+        conv = await session.scalar(
+            sa.select(AIConversation).where(
+                AIConversation.id == conversation_id,
+                AIConversation.user_id == user_id,
+            )
+        )
+        if conv is not None:
+            return True
+        # 参与者
+        participant = await session.scalar(
+            sa.select(ConversationParticipant).where(
+                ConversationParticipant.conversation_id == conversation_id,
+                ConversationParticipant.user_id == user_id,
+            )
+        )
+        return participant is not None
 
     async def add_showcase_item(
         self,
@@ -1212,14 +1284,9 @@ class AIService:
         """
         now = self._clock.now()
         async with session_scope(self._factory) as session:
-            # 校验对话归属
-            conv = await session.scalar(
-                sa.select(AIConversation).where(
-                    AIConversation.id == conversation_id,
-                    AIConversation.user_id == user_id,
-                )
-            )
-            if conv is None:
+            # 校验对话归属（创建者或参与者均可）
+            has_access = await self._check_conversation_access(session, conversation_id, user_id)
+            if not has_access:
                 raise AppError(
                     code="not_found",
                     message="对话不存在或无权操作",
@@ -1310,14 +1377,9 @@ class AIService:
             AppError: code="not_found"，对话不存在或无权操作。
         """
         async with self._factory() as session:
-            # 校验对话归属
-            conv = await session.scalar(
-                sa.select(AIConversation).where(
-                    AIConversation.id == conversation_id,
-                    AIConversation.user_id == user_id,
-                )
-            )
-            if conv is None:
+            # 校验对话归属（创建者或参与者均可）
+            has_access = await self._check_conversation_access(session, conversation_id, user_id)
+            if not has_access:
                 raise AppError(
                     code="not_found",
                     message="对话不存在或无权操作",
@@ -1370,12 +1432,18 @@ class AIService:
         now = self._clock.now()
         async with session_scope(self._factory) as session:
             item = await session.scalar(
-                sa.select(ShowcaseItem).where(
-                    ShowcaseItem.id == item_id,
-                    ShowcaseItem.user_id == user_id,
-                )
+                sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id)
             )
             if item is None:
+                raise AppError(
+                    code="not_found",
+                    message="橱窗卡片不存在或无权操作",
+                    retryable=False,
+                    fields={},
+                )
+            # 校验对话归属（创建者或参与者均可）
+            has_access = await self._check_conversation_access(session, item.conversation_id, user_id)
+            if not has_access:
                 raise AppError(
                     code="not_found",
                     message="橱窗卡片不存在或无权操作",
@@ -1415,12 +1483,18 @@ class AIService:
         """
         async with session_scope(self._factory) as session:
             item = await session.scalar(
-                sa.select(ShowcaseItem).where(
-                    ShowcaseItem.id == item_id,
-                    ShowcaseItem.user_id == user_id,
-                )
+                sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id)
             )
             if item is None:
+                raise AppError(
+                    code="not_found",
+                    message="橱窗卡片不存在或无权操作",
+                    retryable=False,
+                    fields={},
+                )
+            # 校验对话归属（创建者或参与者均可）
+            has_access = await self._check_conversation_access(session, item.conversation_id, user_id)
+            if not has_access:
                 raise AppError(
                     code="not_found",
                     message="橱窗卡片不存在或无权操作",
@@ -1449,14 +1523,9 @@ class AIService:
         """
         now = self._clock.now()
         async with session_scope(self._factory) as session:
-            # 校验对话归属
-            conv = await session.scalar(
-                sa.select(AIConversation).where(
-                    AIConversation.id == conversation_id,
-                    AIConversation.user_id == user_id,
-                )
-            )
-            if conv is None:
+            # 校验对话归属（创建者或参与者均可）
+            has_access = await self._check_conversation_access(session, conversation_id, user_id)
+            if not has_access:
                 raise AppError(
                     code="not_found",
                     message="对话不存在或无权操作",
@@ -1807,7 +1876,7 @@ class AIService:
                         "role": "tool",
                         "tool_call_id": tool_call_id,
                         "content": json.dumps(
-                            {"error": f"未知工具: {tool_name}"}, ensure_ascii=False
+                            {"error": f"未知工具: {tool_name}"}, ensure_ascii=False, separators=(",", ":")
                         ),
                     }
                 )
@@ -1830,7 +1899,7 @@ class AIService:
                         "tool_call_id": tool_call_id,
                         "content": json.dumps(
                             {"error": f"权限不足: 需要 {spec.required_permission}"},
-                            ensure_ascii=False,
+                            ensure_ascii=False, separators=(",", ":"),
                         ),
                     }
                 )
@@ -1857,6 +1926,7 @@ class AIService:
                             tool_result.get("data", tool_result),
                             ensure_ascii=False,
                             default=str,
+                            separators=(",", ":"),
                         ),
                     }
                 )
@@ -1882,7 +1952,7 @@ class AIService:
                     {
                         "role": "tool",
                         "tool_call_id": tool_call_id,
-                        "content": json.dumps({"error": error_msg}, ensure_ascii=False),
+                        "content": json.dumps({"error": error_msg}, ensure_ascii=False, separators=(",", ":")),
                     }
                 )
 
@@ -1901,7 +1971,7 @@ class AIService:
                         "type": "function",
                         "function": {
                             "name": str(tc.get("tool", "")),
-                            "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False),
+                            "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
                         },
                     }
                 )
