@@ -1048,6 +1048,7 @@ class FlowRuntimeService:
         async with session_scope(self._factory) as session:
             run = FlowRun(
                 id=run_id,
+                department_id=self._dept_id,
                 flow_version_id=flow_version_id,
                 status="pending",
                 job_id=job_ref.job_id,
