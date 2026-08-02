@@ -124,23 +124,28 @@ def parse_raman(file_path: str) -> dict[str, Any]:
         skipped_lines,
     )
 
-    # metadata: 文件名
+    # metadata: 文件级标头信息
     metadata: dict[str, Any] = {
         "filename": os.path.basename(file_path),
+        "data_points": len(data_points),
+        "x_min": data_points[0][0] if data_points else None,
+        "x_max": data_points[-1][0] if data_points else None,
+        "x_unit": "cm⁻¹",
+        "y_description": "光谱强度",
     }
 
     # points: 无独立单值结果
     points: list[dict[str, Any]] = []
 
     # series: 全部两列数据作为一组连续拉曼光谱序列
+    # 格式与 xrd_converter 一致：{name, columns, rows}
+    col_x = "拉曼位移 (cm⁻¹)"
+    col_y = "光谱强度"
     series: list[dict[str, Any]] = [
         {
-            "series_name": "拉曼光谱",
-            "x_name": "拉曼位移",
-            "x_unit": "cm⁻¹",
-            "y_name": "光谱强度",
-            "y_unit": None,
-            "data": [{"x": x, "y": y} for x, y in data_points],
+            "name": "拉曼光谱",
+            "columns": [col_x, col_y],
+            "rows": [[x, y] for x, y in data_points],
         }
     ]
 
@@ -161,7 +166,7 @@ def convert_raman_file_to_json(file_path: str) -> dict[str, Any]:
         len(result["metadata"]),
         len(result["points"]),
         len(result["series"]),
-        len(result["series"][0]["data"]) if result["series"] else 0,
+        len(result["series"][0]["rows"]) if result["series"] else 0,
     )
     return result
 

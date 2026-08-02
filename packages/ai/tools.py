@@ -277,6 +277,25 @@ PLUGIN_TOOLS: tuple[ToolSpec, ...] = (
         category="ingestion",
     ),
     ToolSpec(
+        name="tga_converter",
+        display_name="同步热分析解析器",
+        description="解析 NETZSCH STA 同步热分析仪导出文件（PrnDat TXT），"
+        "提取温度/时间/DSC/TG/DTG/灵敏度六列数据为结构化 JSON（metadata/points/series）。"
+        "支持 UTF-16LE 编码的 NETZSCH 导出格式。",
+        required_permission="",
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "NETZSCH STA 导出文件路径（artifact: 前缀或本地路径）",
+                },
+            },
+            "required": ["file_path"],
+        },
+        category="ingestion",
+    ),
+    ToolSpec(
         name="llm_converter",
         display_name="大模型解析器",
         description="用于大模型对数据的解析。",

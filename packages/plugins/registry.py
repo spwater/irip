@@ -49,10 +49,12 @@ def _auto_register() -> None:
     """注册全部内置解析器插件。"""
     from packages.plugins.converters.llm_converter.converter import LlmConverter
     from packages.plugins.converters.raman_converter.converter import RamanConverter
+    from packages.plugins.converters.tga_converter.converter import TgaConverter
     from packages.plugins.converters.xrd_converter.converter import XrdConverter
 
     register("xrd_converter", XrdConverter())
     register("raman_converter", RamanConverter())
+    register("tga_converter", TgaConverter())
     register("llm_converter", LlmConverter())
 
 
