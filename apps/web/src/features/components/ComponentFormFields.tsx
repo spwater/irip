@@ -198,32 +198,34 @@ export function ComponentFormFields({
         </Space>
       </Form.Item>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-        <Text>{watchedToolType === 'xrd_converter' ? 'LLM 提示词（XRD 工具无需填写）' : 'LLM 提示词'}</Text>
+        <Text>{watchedToolType === 'llm_converter' ? 'LLM 提示词' : ''}</Text>
         <Space>
-          <Button
-            type="link"
-            size="small"
-            disabled={!uploadedFile || watchedToolType === 'xrd_converter'}
-            loading={recommending}
-            onClick={async () => {
-              if (!uploadedFile) return;
-              setRecommending(true);
-              try {
-                const res = await apiRecommendPrompt({
-                  artifact_id: uploadedFile.artifactId,
-                  filename: uploadedFile.name,
-                });
-                formInstance.setFieldsValue({ prompt: res.prompt });
-                message.success('提示词已生成');
-              } catch (err: unknown) {
-                message.error(extractApiError(err));
-              } finally {
-                setRecommending(false);
-              }
-            }}
-          >
-            提示词推荐
-          </Button>
+          {watchedToolType === 'llm_converter' && (
+            <Button
+              type="link"
+              size="small"
+              disabled={!uploadedFile}
+              loading={recommending}
+              onClick={async () => {
+                if (!uploadedFile) return;
+                setRecommending(true);
+                try {
+                  const res = await apiRecommendPrompt({
+                    artifact_id: uploadedFile.artifactId,
+                    filename: uploadedFile.name,
+                  });
+                  formInstance.setFieldsValue({ prompt: res.prompt });
+                  message.success('提示词已生成');
+                } catch (err: unknown) {
+                  message.error(extractApiError(err));
+                } finally {
+                  setRecommending(false);
+                }
+              }}
+            >
+              提示词推荐
+            </Button>
+          )}
           <Button
             type="link"
             size="small"
@@ -255,14 +257,16 @@ export function ComponentFormFields({
           </Button>
         </Space>
       </div>
-      <Form.Item
-        name="prompt"
-        labelCol={{ span: 0 }}
-        wrapperCol={{ span: 24 }}
-        rules={[{ required: false, message: '请输入 LLM 提示词' }]}
-      >
-        <Input.TextArea rows={6} placeholder={watchedToolType === 'xrd_converter' ? 'XRD 工具不需要提示词' : '请输入 LLM 提示词，支持多行'} />
-      </Form.Item>
+      {watchedToolType === 'llm_converter' && (
+        <Form.Item
+          name="prompt"
+          labelCol={{ span: 0 }}
+          wrapperCol={{ span: 24 }}
+          rules={[{ required: false, message: '请输入 LLM 提示词' }]}
+        >
+          <Input.TextArea rows={6} placeholder="请输入 LLM 提示词，支持多行" />
+        </Form.Item>
+      )}
       <Modal
         title="数据抽取预览"
         open={previewOpen}

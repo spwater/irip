@@ -7,8 +7,12 @@
 
 import {
   Button,
+  Card,
+  Descriptions,
   Input,
+  Modal,
   Space,
+  Table,
   Typography,
   message,
 } from 'antd';
@@ -71,7 +75,7 @@ export function FactModal({
     enabled: open && !!runId,
   });
 
-  const succeededNode = runDetail?.nodes.find(
+  const succeededNode = (runDetail?.nodes ?? []).find(
     (n) => n.status === 'succeeded' && n.output_summary,
   );
   const meta = (succeededNode?.output_summary?._metadata ?? {}) as Record<string, unknown>;
@@ -83,10 +87,11 @@ export function FactModal({
   const [headerText, setHeaderText] = useState('');
   const [dataText, setDataText] = useState('');
   const [initialized, setInitialized] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // 数据加载后初始化编辑框（仅首次加载时，不覆盖用户编辑）
   useEffect(() => {
-    if (open && runDetail && (points.length > 0 || series.length > 0) && !initialized) {
+    if (open && runDetail && (Object.keys(header).length > 0 || points.length > 0 || series.length > 0) && !initialized) {
       setHeaderText(JSON.stringify(header, null, 2));
       setDataText(JSON.stringify({ points, series }, null, 2));
       setInitialized(true);
@@ -180,20 +185,28 @@ export function FactModal({
       {/* 全部数据区域 */}
       <Space style={{ marginBottom: 4, width: '100%', justifyContent: 'space-between' }}>
         <Text strong>数据（points + series，可编辑）</Text>
-        <Button
-          size="small"
-          onClick={() => {
-            const blob = new Blob([dataText], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `run-${runId?.slice(0, 8)}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-        >
-          导出 JSON
-        </Button>
+        <Space>
+          <Button
+            size="small"
+            onClick={() => setPreviewOpen(true)}
+          >
+            预览数据
+          </Button>
+          <Button
+            size="small"
+            onClick={() => {
+              const blob = new Blob([dataText], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `run-${runId?.slice(0, 8)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+          >
+            导出 JSON
+          </Button>
+        </Space>
       </Space>
       <Input.TextArea
         value={dataText}
@@ -217,6 +230,130 @@ export function FactModal({
           写入事实
         </Button>
       </Space>
+
+      {/* 数据预览 Modal */}
+      <PreviewModal
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        headerText={headerText}
+        dataText={dataText}
+      />
     </FocusModal>
+  );
+}
+
+/** 数据预览 Modal — 解析编辑框中的 JSON，格式化展示 metadata/points/series */
+function PreviewModal({
+  open,
+  onClose,
+  headerText,
+  dataText,
+}: {
+  open: boolean;
+  onClose: () => void;
+  headerText: string;
+  dataText: string;
+}): JSX.Element | null {
+  if (!open) return null;
+
+  // 解析当前编辑框内容
+  let parsedMeta: Record<string, unknown> = {};
+  let parsedPoints: { name: string; value: unknown; unit: string | null }[] = [];
+  let parsedSeries: { name: string; columns: string[]; rows: unknown[][] }[] = [];
+  let parseError: string | null = null;
+
+  try {
+    parsedMeta = headerText ? JSON.parse(headerText) : {};
+  } catch {
+    parseError = 'Metadata JSON 格式错误';
+  }
+  try {
+    const parsedData = dataText ? JSON.parse(dataText) : {};
+    parsedPoints = (parsedData.points ?? []) as typeof parsedPoints;
+    parsedSeries = (parsedData.series ?? []) as typeof parsedSeries;
+  } catch {
+    parseError = parseError ? `${parseError}；数据 JSON 也格式错误` : '数据 JSON 格式错误';
+  }
+
+  return (
+    <Modal
+      title="数据预览"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={800}
+    >
+      {parseError ? (
+        <div style={{ padding: 24, textAlign: 'center' }}>
+          <Text type="danger" style={{ fontSize: 14 }}>{parseError}</Text>
+          <div style={{ marginTop: 8 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              请修正编辑框中的 JSON 格式后再预览
+            </Text>
+          </div>
+        </div>
+      ) : (
+        <div style={{ maxHeight: 600, overflow: 'auto' }}>
+          {/* Metadata */}
+          <Text strong>元数据（Metadata）</Text>
+          <Descriptions
+            bordered
+            column={1}
+            size="small"
+            style={{ marginTop: 8, marginBottom: 16 }}
+          >
+            {Object.keys(parsedMeta).length > 0 ? (
+              Object.entries(parsedMeta).map(([k, v]) => (
+                <Descriptions.Item key={k} label={k}>{String(v)}</Descriptions.Item>
+              ))
+            ) : (
+              <Descriptions.Item label="（空）">无元数据</Descriptions.Item>
+            )}
+          </Descriptions>
+
+          {/* Points */}
+          <Text strong>单点数据（Points，{parsedPoints.length} 项）</Text>
+          <Table
+            size="small"
+            style={{ marginTop: 8, marginBottom: 16 }}
+            pagination={false}
+            rowKey={(_, idx) => String(idx)}
+            dataSource={parsedPoints}
+            columns={[
+              { title: '名称', dataIndex: 'name', key: 'name' },
+              { title: '值', dataIndex: 'value', key: 'value' },
+              { title: '单位', dataIndex: 'unit', key: 'unit' },
+            ]}
+          />
+
+          {/* Series */}
+          <Text strong>序列数据（Series，{parsedSeries.length} 组）</Text>
+          {parsedSeries.length > 0 ? (
+            parsedSeries.map((s, i) => (
+              <Card key={i} size="small" title={s.name ?? `序列 ${i + 1}`} style={{ marginTop: 8, marginBottom: 8 }}>
+                <Table
+                  size="small"
+                  pagination={false}
+                  rowKey={(_, idx) => String(idx)}
+                  dataSource={s.rows.map((r, ri) => {
+                    const obj: Record<string, unknown> = { _key: ri };
+                    (s.columns ?? []).forEach((c, ci) => { obj[c] = r[ci]; });
+                    return obj;
+                  })}
+                  columns={(s.columns ?? []).map((c) => ({
+                    title: c,
+                    dataIndex: c,
+                    key: c,
+                    ellipsis: true,
+                  }))}
+                />
+              </Card>
+            ))
+          ) : (
+            <Text type="secondary">无序列数据</Text>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }

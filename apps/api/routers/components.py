@@ -152,6 +152,7 @@ class ComponentDetailResponse(BaseModel):
     active_version_id: str | None = None
     experimental_object_code: str | None = None
     equipment_id: str | None = None
+    department_id: str | None = None
     manifest_sha256: str
     manifest_yaml: str
     published_at: datetime | None
@@ -378,6 +379,7 @@ async def get_component(
         experimental_object_code=ver.experimental_object_code
         or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
         equipment_id=getattr(ver, "equipment_id", None),
+        department_id=str(comp.department_id) if comp.department_id else None,
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,
         published_at=ver.published_at,

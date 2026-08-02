@@ -287,8 +287,8 @@ export function FlowDetail(): JSX.Element {
     const params = (runNode.params as Record<string, unknown>) ?? {};
     const runCompName = runNode?.component_name;
     const runCompObj = runCompName ? compMap.get(runCompName) : undefined;
-    const isRunXrd = runCompObj?.tool_type === 'xrd_converter';
-    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type' && !(key === 'prompt' && isRunXrd));
+    const isRunLlm = runCompObj?.tool_type === 'llm_converter';
+    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type' && !(key === 'prompt' && !isRunLlm));
     const orderedKeys = ['path', 'file_engine', 'prompt'];
     return entries.sort((a, b) => {
       const ai = orderedKeys.indexOf(a[0]);
@@ -1345,10 +1345,10 @@ export function FlowDetail(): JSX.Element {
                     const parsed = parseManifest(detail.manifest_yaml);
                     const initialValues: Record<string, unknown> = {};
                     const paramEntries: [string, unknown][] = [];
-                    const isXrdConverter = comp.summary.tool_type === 'xrd_converter';
+                    const isLlmConverter = comp.summary.tool_type === 'llm_converter';
                     for (const p of parsed.params) {
                       if (p.name === 'experimental_object_code' || p.name === 'tool_type') continue;
-                      if (p.name === 'prompt' && isXrdConverter) continue;
+                      if (p.name === 'prompt' && !isLlmConverter) continue;
                       const formKey = `n1__${p.name}`;
                       if (p.name === 'prompt' && comp.summary.prompt) {
                         initialValues[formKey] = comp.summary.prompt;
@@ -1632,12 +1632,11 @@ export function FlowDetail(): JSX.Element {
             </div>
             {batchSelectedComp && (() => {
               const batchComp = batchSelectedComp ? compMap.get(batchSelectedComp) : undefined;
-              const isBatchXrd = batchComp?.tool_type === 'xrd_converter';
-              if (isBatchXrd || !batchComp?.prompt) return null;
+              if (batchComp?.tool_type !== 'llm_converter') return null;
               return (
                 <Form.Item label="大模型提示词">
                   <Input.TextArea
-                    value={batchPrompt || batchComp.prompt || ''}
+                    value={batchPrompt || batchComp?.prompt || ''}
                     onChange={(e) => setBatchPrompt(e.target.value)}
                     rows={6}
                     placeholder="大模型提示词"

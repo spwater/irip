@@ -57,7 +57,7 @@ export function PublishPrivateToggle({
           showIcon
           style={{ marginTop: 8, marginBottom: 0 }}
           message="私有数据可见性说明"
-          description="勾选后，此数据仅您本人可见，包括管理员在内的其他任何人都不可见。后续可一键"公开"转为部门可见，但此操作不可逆。"
+          description={'勾选后，此数据仅您本人可见，包括管理员在内的其他任何人都不可见。后续可一键"公开"转为部门可见，但此操作不可逆。'}
         />
       )}
     </div>
