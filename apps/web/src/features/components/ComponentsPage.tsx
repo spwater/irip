@@ -43,6 +43,7 @@ import { apiListDepartments } from '@/api/departments';
 import { apiListIngestionTools } from '@/api/models-ai';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 import {
   buildManifestYaml,
   compareVersions,
@@ -59,6 +60,7 @@ const { Text } = Typography;
 
 export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObject?: string; editId?: string; hideList?: boolean }): JSX.Element {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
@@ -244,6 +246,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
 
   const handleOpenModal = (): void => {
     form.resetFields();
+    form.setFieldsValue({ department_id: currentUser?.departmentId ?? undefined });
     setAdvancedMode(false);
     setModalOpen(true);
   };
@@ -327,6 +330,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
       equipment_id: compDetail.equipment_id,
       tool_type: parsed.tool_type ?? 'llm_converter',
+      department_id: (compDetail as Record<string, unknown>).department_id as string | undefined ?? currentUser?.departmentId,
     });
     setEditAdvancedMode(false);
     setEditModalOpen(true);
@@ -362,10 +366,10 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const handleEditPublish = async (): Promise<void> => {
     try {
       if (editAdvancedMode) {
-        const values = await editForm.validateFields(['manifest_yaml']);
-        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string });
+        const values = await editForm.validateFields(['manifest_yaml', 'department_id']);
+        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string, department_id: (values.department_id as string) ?? null });
       } else {
-        const values = await editForm.validateFields([...FORM_FIELD_NAMES]);
+        const values = await editForm.validateFields([...FORM_FIELD_NAMES, 'department_id']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
@@ -377,6 +381,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           manifest_yaml: yaml,
           experimental_object_code: (values.experimental_object_code as string) ?? null,
           equipment_id: (values.equipment_id as string) ?? null,
+          department_id: (values.department_id as string) ?? null,
         });
       }
     } catch {
@@ -673,6 +678,9 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           </Space>
         </div>
         <Form form={editForm} layout="vertical">
+          <Form.Item name="department_id" label="归属部门">
+            <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+          </Form.Item>
           {editAdvancedMode ? (
             <>
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
