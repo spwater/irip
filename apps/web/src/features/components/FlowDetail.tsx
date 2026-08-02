@@ -80,7 +80,7 @@ interface BatchItemResult {
 /** H-16: 批量轮询单项的最大尝试次数（120 * 2s = 240s = 4min） */
 const BATCH_POLL_MAX_ATTEMPTS = 120;
 /** H-16: 批量轮询间隔（毫秒） */
-const BATCH_POLL_INTERVAL = 2000;
+const BATCH_POLL_INTERVAL = 500;
 /** H-16: 流程运行终态 */
 const FLOW_RUN_TERMINAL_STATUSES = ['succeeded', 'failed', 'cancelled'];
 
