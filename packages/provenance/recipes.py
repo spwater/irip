@@ -23,6 +23,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.provenance.entities import (
@@ -117,10 +118,11 @@ class RecipeService:
             )
 
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查 code 唯一性
             existing = await session.scalar(
                 sa.select(TransformationRecipe).where(
-                    TransformationRecipe.department_id == self._dept_id,
+                    TransformationRecipe.department_id.in_(visible_ids),
                     TransformationRecipe.code == code.strip(),
                 )
             )
@@ -200,11 +202,12 @@ class RecipeService:
             )
 
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 加载配方
             recipe = await session.scalar(
                 sa.select(TransformationRecipe).where(
                     TransformationRecipe.id == recipe_id,
-                    TransformationRecipe.department_id == self._dept_id,
+                    TransformationRecipe.department_id.in_(visible_ids),
                 )
             )
             if recipe is None:
@@ -277,10 +280,11 @@ class RecipeService:
             AppError: code="not_found"，当配方不存在时。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             recipe = await session.scalar(
                 sa.select(TransformationRecipe).where(
                     TransformationRecipe.id == recipe_id,
-                    TransformationRecipe.department_id == self._dept_id,
+                    TransformationRecipe.department_id.in_(visible_ids),
                 )
             )
             if recipe is None:
@@ -331,9 +335,10 @@ class RecipeService:
             tuple[list[dict], str | None]: (配方列表, 下一页游标)。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(TransformationRecipe)
-                .where(TransformationRecipe.department_id == self._dept_id)
+                .where(TransformationRecipe.department_id.in_(visible_ids))
                 .order_by(TransformationRecipe.created_at, TransformationRecipe.id)
                 .limit(page_size + 1)
             )

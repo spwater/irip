@@ -21,6 +21,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.facts.entities import Fact
@@ -180,11 +181,12 @@ class EvidenceService:
             AppError: code="evidence_not_frozen"，当证据集已冻结时。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 加载证据集
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.department_id == self._dept_id,
+                    EvidenceSet.department_id.in_(visible_ids),
                 )
             )
             if evidence_set is None:
@@ -207,7 +209,7 @@ class EvidenceService:
             stmt = (
                 sa.select(Fact)
                 .where(
-                    Fact.department_id == self._dept_id,
+                    Fact.department_id.in_(visible_ids),
                     Fact.status == "active",
                 )
                 .order_by(Fact.created_at)
@@ -274,10 +276,11 @@ class EvidenceService:
             AppError: code="not_found"，当证据集不存在时。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.department_id == self._dept_id,
+                    EvidenceSet.department_id.in_(visible_ids),
                 )
             )
             if evidence_set is None:
@@ -323,11 +326,12 @@ class EvidenceService:
             AppError: code="not_found"，当证据集或版本不存在时。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 校验证据集存在
             evidence_set = await session.scalar(
                 sa.select(EvidenceSet).where(
                     EvidenceSet.id == set_id,
-                    EvidenceSet.department_id == self._dept_id,
+                    EvidenceSet.department_id.in_(visible_ids),
                 )
             )
             if evidence_set is None:

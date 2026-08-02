@@ -20,6 +20,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.connectors.contracts import (
     ConnectorSource,
@@ -68,10 +69,11 @@ class SecretStore:
             AppError: code="secret_not_found"，当密钥不存在或不属于当前部门时。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id)
             result = await session.execute(
                 sa.select(Secret).where(
                     Secret.id == secret_id,
-                    Secret.department_id == self._dept_id,
+                    Secret.department_id.in_(visible_ids),
                 )
             )
             secret = result.scalar_one_or_none()

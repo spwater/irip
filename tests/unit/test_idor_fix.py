@@ -324,6 +324,9 @@ class TestComponentRegistryIdorFix:
         with patch(
             "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
+        ), patch(
+            "packages.components.registry.registry.compute_visible_dept_ids",
+            AsyncMock(return_value=[service.department_id]),
         ):
             with pytest.raises(AppError) as exc_info:
                 await service.delete_component(uuid4())
@@ -374,6 +377,9 @@ class TestComponentRegistryIdorFix:
         with patch(
             "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
+        ), patch(
+            "packages.components.registry.registry.compute_visible_dept_ids",
+            AsyncMock(return_value=[service.department_id]),
         ):
             with pytest.raises(AppError) as exc_info:
                 await service.activate_version(uuid4())
@@ -394,6 +400,9 @@ class TestComponentRegistryIdorFix:
         with patch(
             "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
+        ), patch(
+            "packages.components.registry.registry.compute_visible_dept_ids",
+            AsyncMock(return_value=[service.department_id]),
         ):
             with pytest.raises(AppError):
                 await service.activate_version(uuid4())
@@ -418,6 +427,9 @@ class TestComponentRegistryIdorFix:
         with patch(
             "packages.components.registry.registry.session_scope",
             _make_mock_session_scope(mock_session),
+        ), patch(
+            "packages.components.registry.registry.compute_visible_dept_ids",
+            AsyncMock(return_value=[service.department_id]),
         ):
             with pytest.raises(AppError):
                 await service.delete_component(uuid4())

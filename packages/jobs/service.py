@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import session_scope
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.jobs.entities import TERMINAL_STATUSES, Job, JobRef, JobStatus
@@ -302,7 +303,7 @@ class JobService:
         """
         from datetime import datetime
 
-        conditions: list[Any] = [Job.department_id == self._dept_id]
+        conditions: list[Any] = []
 
         if status is not None:
             conditions.append(Job.status == status)
@@ -323,6 +324,8 @@ class JobService:
             conditions.append(Job.created_at < cursor_dt)
 
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
+            conditions.append(Job.department_id.in_(visible_ids))
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
             from packages.components.flow_runtime import (
                 FlowDefinition as FlowDefORM,

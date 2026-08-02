@@ -28,6 +28,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import Base, session_scope
 from packages.common.db_types import GUID, UTCDateTime
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.components.manifest import ComponentManifest
@@ -285,6 +286,7 @@ class ComponentRegistryService:
         now: datetime = self._clock.now()
 
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 自动生成编码，查找/创建组件主记录
             from packages.common.ids import gen_code
 
@@ -295,7 +297,7 @@ class ComponentRegistryService:
                 # 非占位值：按 name 查已有组件（发新版本）
                 component = await session.scalar(
                     sa.select(Component).where(
-                        Component.department_id == self._dept_id,
+                        Component.department_id.in_(visible_ids),
                         Component.name == manifest.name,
                     )
                 )
@@ -406,9 +408,10 @@ class ComponentRegistryService:
             AppError: code="not_found"，当组件或版本不存在。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                     Component.name == name,
                 )
             )
@@ -452,9 +455,10 @@ class ComponentRegistryService:
             AppError: code="not_found"，当组件不存在或无已发布版本。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                     Component.name == name,
                 )
             )
@@ -510,6 +514,7 @@ class ComponentRegistryService:
             AppError: code="not_found"，当版本不存在。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             row = (
                 await session.execute(
                     sa.select(Component, ComponentVersion)
@@ -518,7 +523,7 @@ class ComponentRegistryService:
                         ComponentVersion.component_id == Component.id,
                     )
                     .where(
-                        Component.department_id == self._dept_id,
+                        Component.department_id.in_(visible_ids),
                         ComponentVersion.id == version_id,
                     )
                 )
@@ -554,6 +559,7 @@ class ComponentRegistryService:
                 组件 + 最新版本记录列表。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 优先用 active_version_id 关联，没有才取 created_at 最新的版本
             query = sa.select(Component, ComponentVersion).outerjoin(
                 ComponentVersion,
@@ -584,7 +590,7 @@ class ComponentRegistryService:
                         result.append((comp, fallback))
 
             # 过滤 kind 和 status
-            filtered = [(c, v) for c, v in result if c.department_id == self._dept_id]
+            filtered = [(c, v) for c, v in result if c.department_id in visible_ids]
             if kind is not None:
                 filtered = [(c, v) for c, v in filtered if c.kind == kind]
             if status is not None:
@@ -625,9 +631,10 @@ class ComponentRegistryService:
         """
         now: datetime = self._clock.now()
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                     Component.name == name,
                 )
             )
@@ -657,9 +664,10 @@ class ComponentRegistryService:
         """
         now: datetime = self._clock.now()
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                     Component.name == name,
                 )
             )
@@ -697,13 +705,14 @@ class ComponentRegistryService:
         """
         now: datetime = self._clock.now()
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # C-03 IDOR 修复：通过 JOIN Component 确保版本属于当前部门
             version: ComponentVersion | None = await session.scalar(
                 sa.select(ComponentVersion)
                 .join(Component, ComponentVersion.component_id == Component.id)
                 .where(
                     ComponentVersion.id == version_id,
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                 )
             )
             if version is None:
@@ -719,7 +728,7 @@ class ComponentRegistryService:
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == version.component_id,
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                 )
             )
             if component is not None:
@@ -740,11 +749,12 @@ class ComponentRegistryService:
             AppError: code="not_found"，当组件不存在或不属于当前部门时。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # C-03 IDOR 修复：先校验组件属于当前部门
             component: Component | None = await session.scalar(
                 sa.select(Component).where(
                     Component.id == component_id,
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                 )
             )
             if component is None:
@@ -771,7 +781,7 @@ class ComponentRegistryService:
             await session.execute(
                 sa.delete(Component).where(
                     Component.id == component_id,
-                    Component.department_id == self._dept_id,
+                    Component.department_id.in_(visible_ids),
                 )
             )
             await session.flush()

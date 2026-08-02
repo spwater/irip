@@ -15,6 +15,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import session_scope
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import MAX_PAGE_SIZE
@@ -84,10 +85,11 @@ class ObjectGraphService:
             AppError: code="not_found"，当 parent_id 指定的父对象不存在或不属于当前部门时。
         """
         async with session_scope(self._factory) as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查编码唯一性
             existing = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.department_id == self._dept_id,
+                    IndustrialObject.department_id.in_(visible_ids),
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -254,9 +256,10 @@ class ObjectGraphService:
             IndustrialObject | None: 对象实体，不存在返回 None。
         """
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             result = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.department_id == self._dept_id,
+                    IndustrialObject.department_id.in_(visible_ids),
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -294,7 +297,6 @@ class ObjectGraphService:
 
         query = (
             sa.select(IndustrialObject)
-            .where(IndustrialObject.department_id == self._dept_id)
             .order_by(IndustrialObject.created_at.asc(), IndustrialObject.id.asc())
             .limit(fetch_limit)
         )
@@ -334,6 +336,8 @@ class ObjectGraphService:
             )
 
         async with self._factory() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
+            query = query.where(IndustrialObject.department_id.in_(visible_ids))
             result = await session.execute(query)
             objects = list(result.scalars().all())
 
