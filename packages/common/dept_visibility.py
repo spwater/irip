@@ -86,8 +86,19 @@ async def compute_visible_dept_ids(
     if dept_id is not None:
         visible.add(dept_id)
 
-    if actor_id is not None:
-        # 与 RLS 同源：设置 user GUC 后调用 current_visible_dept_ids()
+    if actor_id is not None and dept_id is not None:
+        # 两条路径取并集，兼容 worker 场景（actor=系统用户, dept=任务部门）：
+        # 1. 按 actor_id 走 DB 函数（含多部门并集，与 RLS 同源）
+        await set_user_guc(session, actor_id)
+        result = await session.execute(sa.text("SELECT current_visible_dept_ids()"))
+        for row in result.fetchall():
+            visible.add(_coerce_uuid(row[0]))
+        # 2. 按 dept_id 走递归 SQL（保证目标部门的向下+向上祖先链都在结果里）
+        result2 = await session.execute(_DEPT_SCOPE_SQL, {"dept_id": str(dept_id)})
+        for row in result2.fetchall():
+            visible.add(_coerce_uuid(row[0]))
+    elif actor_id is not None:
+        # 只有 actor_id，无 dept_id：纯按用户可见集
         await set_user_guc(session, actor_id)
         result = await session.execute(sa.text("SELECT current_visible_dept_ids()"))
         for row in result.fetchall():
