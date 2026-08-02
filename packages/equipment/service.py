@@ -100,6 +100,21 @@ class EquipmentService:
         self._actor_id = actor_id
         self._clock = clock or SystemClock()
 
+    @property
+    def department_id(self) -> UUID:
+        """当前部门 ID（公开只读访问）。"""
+        return self._dept_id
+
+    @property
+    def actor_id(self) -> UUID | None:
+        """当前操作者用户 ID（公开只读访问）。"""
+        return self._actor_id
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问）。"""
+        return self._factory
+
     async def create(
         self,
         department_id: UUID,
