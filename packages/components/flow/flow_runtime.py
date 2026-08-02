@@ -35,6 +35,7 @@ from packages.common.clock import Clock, SystemClock
 from packages.common.database import Base, session_scope
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.dept_visibility import compute_visible_dept_ids
+from packages.departments.entities import Department  # noqa: F401 — ensure FK target registered in metadata
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.components.flow.flow_validation import (
