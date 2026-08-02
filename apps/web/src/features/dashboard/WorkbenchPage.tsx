@@ -314,7 +314,7 @@ export function WorkbenchPage(): JSX.Element {
   const { data: factsData } = useQuery({
     queryKey: ['workbench', 'facts'],
     queryFn: () => apiListFacts({ page_size: 100 }),
-    refetchInterval: 30000,
+    refetchInterval: 10000,
   });
   const factsItems = factsData?.items ?? [];
   const factsCount = factsItems.length;
