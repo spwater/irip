@@ -399,6 +399,7 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
     """将 IndustrialObject ORM 实体转为列表项。"""
     return ObjectListItem(
         id=str(obj.id),  # type: ignore[attr-defined]
+        department_id=str(obj.department_id) if obj.department_id else None,  # type: ignore[attr-defined]
         object_type=obj.object_type,  # type: ignore[attr-defined]
         code=obj.code,  # type: ignore[attr-defined]
         display_name=obj.display_name,  # type: ignore[attr-defined]
