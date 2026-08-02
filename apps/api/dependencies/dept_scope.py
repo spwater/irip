@@ -163,15 +163,16 @@ async def check_management_permission(
 ) -> None:
     """检查管理权限：所有者或上级部门可管理，同部门非所有者不可管理。
 
-    权限规则（管理权单向向下 + 所有者）：
+    权限规则（管理权单向向下 + 所有者 + 负责人特权）：
     1. root 成员 / 平台管理员 → 允许（不受限制）
     2. 数据无所属部门 → 允许
     3. 当前用户是数据所有者 → 允许
     4. 数据所属部门是当前用户部门的严格后代（不含本部门）→ 允许（上级管下级）
-    5. 其他 → 拒绝
+    5. 实验室负责人（lab_director）管本部门成员的数据 → 允许
+    6. 其他 → 拒绝
 
     设计原则：可见性是双向对称的（信息权），管理权是单向向下的（仅自己+后代），
-    同部门非所有者只有信息权没有管理权。
+    同部门非所有者只有信息权没有管理权。但实验室负责人可管理本部门所有成员的数据。
 
     Args:
         current_user: 当前认证用户。
@@ -215,6 +216,9 @@ async def check_management_permission(
     descendants.discard(current_user.department_id)
 
     if entity_department_id not in descendants:
+        # 5. 实验室负责人可管本部门成员的数据
+        if entity_department_id == current_user.department_id and "lab_director" in current_user.roles:
+            return
         raise AppError(
             code="forbidden",
             message="无管理权限：仅数据所有者或上级部门可操作",
