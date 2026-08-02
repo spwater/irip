@@ -20,6 +20,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.facts.entities import Fact
@@ -263,7 +264,7 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
             )
             .where(
-                Fact.department_id == org_id,
+                Fact.department_id.in_(await compute_visible_dept_ids(session, org_id)),
                 Fact.search_vector.op("@@")(tsquery),
             )
             .order_by(
@@ -348,7 +349,7 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
                 Fact.id.label("fact_uuid"),
             )
-            .where(Fact.department_id == org_id)
+            .where(Fact.department_id.in_(await compute_visible_dept_ids(session, org_id)))
             .order_by(Fact.created_at.asc(), Fact.id.asc())
             .limit(fetch_limit)
         )
