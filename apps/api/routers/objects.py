@@ -70,10 +70,13 @@ async def _check_object_ownership(
             fields={},
         )  # noqa: E501
 
-    from apps.api.dependencies.dept_scope import get_visible_department_ids
+    # 管理权限：只能编辑自己部门及后代部门的对象（单向向下，不含祖先和兄弟）
+    from packages.common.database import session_scope
+    from packages.equipment.repository import _get_descendant_dept_ids
 
-    visible_ids = await get_visible_department_ids(current_user, service._factory)  # type: ignore[attr-defined]
-    if obj_department_id not in visible_ids:
+    async with session_scope(service._factory) as session:  # type: ignore[attr-defined]
+        manage_ids = await _get_descendant_dept_ids(session, current_user.department_id)
+    if obj_department_id not in manage_ids:
         raise AppError(
             code="forbidden",
             message="只有所属单位（或上级单位）的成员才能编辑/删除对象",
