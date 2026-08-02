@@ -48,6 +48,7 @@ import { apiUploadFile, apiListIngestionTools } from '@/api/models-ai';
 import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { extractApiError, type IndustrialObject } from '@/api/types';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 import { PrivateBadge } from '@/shared/PrivateBadge';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
 import { FactModal } from './FactModal';
@@ -85,6 +86,7 @@ const FLOW_RUN_TERMINAL_STATUSES = ['succeeded', 'failed', 'cancelled'];
 
 export function FlowDetail(): JSX.Element {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [runModalOpen, setRunModalOpen] = useState(false);
@@ -113,6 +115,18 @@ export function FlowDetail(): JSX.Element {
   const [batchOperator, setBatchOperator] = useState<string>('');
   const [batchPrompt, setBatchPrompt] = useState<string>('');
   const [runParams, setRunParams] = useState<[string, unknown][]>([]);
+
+  /** 管理权限检查：所有者 + 上级向下（不含同部门非所有者） */
+  const canManage = (flow: FlowSummary | undefined | null): boolean => {
+    if (!flow || !currentUser) return false;
+    // root 成员 / 平台管理员不受限
+    if (currentUser.isRootMember) return true;
+    // 数据所有者可管理
+    if (flow.owner_user_id && currentUser.id === flow.owner_user_id) return true;
+    // 非同部门 → 需要后端判断是否是上级，前端保守返回 false
+    // （同部门非所有者无管理权，跨部门需后端验证）
+    return false;
+  };
 
   /** 比较版本号 */
   const cmpVer = (a: string, b: string): number => {
@@ -765,6 +779,7 @@ export function FlowDetail(): JSX.Element {
               okText="删除"
               cancelText="取消"
               okButtonProps={{ danger: true }}
+              disabled={!canManage(record)}
             >
               <Button
                 type="link"
@@ -782,6 +797,7 @@ export function FlowDetail(): JSX.Element {
             <Button
               type="link"
               size="small"
+              disabled={!canManage(record)}
               onClick={(e) => {
                 e.stopPropagation();
                 setEditFlowId(record.id);
@@ -835,6 +851,7 @@ export function FlowDetail(): JSX.Element {
               }}
               okText="归档"
               cancelText="取消"
+              disabled={!canManage(record)}
             >
               <Button
                 type="link"
@@ -1063,7 +1080,9 @@ export function FlowDetail(): JSX.Element {
                   <Space size="small">
                     {record.status === 'succeeded' && (
                       <Button type="link" size="small"
+                        disabled={!canManage(flow)}
                         onClick={() => {
+                          if (!canManage(flow)) return;
                           setDataRunId(record.id);
                           setFactModalOpen(true);
                         }}

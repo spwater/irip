@@ -14,6 +14,8 @@ export type CurrentUser = {
   departmentId?: string;
   /** irip-ai-collab: 用户头像 URL */
   avatarUrl?: string;
+  /** root 部门成员，管理权限不受部门限制 */
+  isRootMember?: boolean;
 };
 
 export type JobStatus =
@@ -60,6 +62,8 @@ type MeApiResponse = {
   department_id?: string;
   /** irip-ai-collab: 头像 URL */
   avatar_url?: string;
+  /** root 部门成员标记 */
+  is_root_member?: boolean;
 };
 
 /**
@@ -198,6 +202,7 @@ export async function apiGetMe(): Promise<CurrentUser> {
     permissions: res.data.permissions ?? [],
     departmentId: res.data.department_id,
     avatarUrl: res.data.avatar_url,
+    isRootMember: res.data.is_root_member ?? false,
   };
 }
 

@@ -88,6 +88,8 @@ class MeResponse(BaseModel):
     # irip-ai-collab: 头像 URL + 组织 ID
     avatar_url: str | None = None
     department_id: str | None = None
+    # 管理权限：root 成员不受部门隔离限制
+    is_root_member: bool = False
 
 
 # ---- 依赖占位（由应用启动或测试覆盖）----
@@ -270,4 +272,5 @@ async def me(
         permissions=permissions,
         avatar_url=user.avatar_url if user is not None else None,
         department_id=str(user.department_id) if user is not None and user.department_id is not None else None,
+        is_root_member=getattr(current_user, "is_root_member", False),
     )

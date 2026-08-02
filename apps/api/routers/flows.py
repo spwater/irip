@@ -149,6 +149,7 @@ class FlowDefinitionResponse(BaseModel):
     status: str
     lock_version: int
     department_id: str | None = None
+    owner_user_id: str | None = None
     project_name: str | None = None
     operator: str | None = None
     experimental_object_code: str | None = None
@@ -264,6 +265,7 @@ def _definition_to_response(
         status=definition.status,
         lock_version=definition.lock_version,
         department_id=str(definition.department_id) if definition.department_id else None,
+        owner_user_id=str(definition.owner_user_id) if definition.owner_user_id else None,
         project_name=definition.project_name,
         operator=definition.operator,
         experimental_object_code=definition.experimental_object_code,
