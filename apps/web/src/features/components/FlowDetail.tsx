@@ -156,7 +156,7 @@ export function FlowDetail(): JSX.Element {
       }
     }
     return Array.from(latestByName.values())
-      .filter((c) => c.status !== 'deprecated' && c.experimental_object_code)
+      .filter((c) => c.status !== 'deprecated')
       .map((c) => ({
         value: c.name,
         label: c.display_name ? `${c.display_name} (${c.name})` : c.name,
@@ -313,10 +313,9 @@ export function FlowDetail(): JSX.Element {
     return undefined;
   })();
 
-  // 按当前任务的实验对象筛选接口选项
-  const filteredCompOptions = currentExpCode
-    ? componentOptions.filter((c) => c.summary.experimental_object_code === currentExpCode)
-    : componentOptions;
+  // 接口选项按当前账户可见性过滤（后端已通过 compute_visible_dept_ids 处理，
+  // 上下互见 + 同部门可见 + 横向白名单），前端不再按实验对象筛选
+  const filteredCompOptions = componentOptions;
 
   // ---- 选中流程的运行列表查询 ----
   const { data: runsList, isLoading: runsLoading } = useQuery({
