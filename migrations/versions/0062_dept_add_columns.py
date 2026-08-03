@@ -14,7 +14,7 @@ visible_departments / visibility_scope / owner_user_id。
   department 自身
 
 Revision ID: 0062
-Revises: 0061
+Revises: 0001
 Create Date: 2026-08-20
 """
 
@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0062"
-down_revision = "0061"
+down_revision = "0001"
 branch_labels = None
 depends_on = None
 

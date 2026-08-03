@@ -1,7 +1,7 @@
 {
   "name": "@irip/web",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "IRIP React 控制台（Phase V0：外壳/登录/作业抽屉）",
   "scripts": {

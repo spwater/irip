@@ -7,12 +7,23 @@
 - 0049 迁移操作：DROP 错误触发器 + CREATE 正确触发器。
 
 通过 importlib 动态加载迁移文件模块进行检查，无需真实数据库。
+
+注意：迁移 0033-0061 已被压缩为 0001_squashed_baseline.py（squashing），
+本文件中引用旧迁移 revision（0033/0034/0047/0048/0049/0050）的测试全部 skip。
+这些测试验证的行为已由 squashed baseline（0001）覆盖。
 """
 
 import importlib
 from pathlib import Path
 
 import pytest
+
+# 迁移 0033-0061 已被压缩为 0001_squashed_baseline.py，
+# 以下测试类引用的旧迁移文件均已删除，全部 skip。
+pytestmark = pytest.mark.skip(
+    reason="迁移 0033-0061 已 squashed 为 0001_squashed_baseline.py，"
+    "旧迁移文件已删除（M-13 squashing）"
+)
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "migrations" / "versions"
 

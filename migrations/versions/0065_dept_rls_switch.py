@@ -118,6 +118,7 @@ def upgrade() -> None:
 
     # === 3b. app_user 是认证基础设施，不启用 RLS ===
     op.execute("DROP POLICY IF EXISTS tenant_isolation ON app_user")
+    op.execute("DROP POLICY IF EXISTS tenant_isolation_dept ON app_user")
     op.execute("ALTER TABLE app_user NO FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE app_user DISABLE ROW LEVEL SECURITY")
 

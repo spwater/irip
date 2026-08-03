@@ -9,8 +9,8 @@
 
 | # | 事项 | 说明 | 状态 |
 |---|------|------|------|
-| 1 | 迁移 squashing | 68 个迁移文件压缩到 3-5 个，空库重建速度快 10 倍。在空库上 squash，保留最近增量 | TODO |
-| 2 | Worker 健康检查 + 自动恢复 | Docker healthcheck + restart policy + 启动脚本封装（不能手动拼环境变量）。当前 Worker 挂一次全站不可用 | TODO |
+| 1 | 迁移 squashing | 68 个迁移文件压缩到 8 个（1 基线 + 7 增量），空库重建速度快 10 倍。在空库上 squash，保留最近增量 | ✅ DONE |
+| 2 | Worker 健康检查 + 自动恢复 | Docker healthcheck + restart policy + 启动脚本封装（不能手动拼环境变量）。当前 Worker 挂一次全站不可用 | ✅ DONE |
 | 3 | 副本语义 UX 完善 | 数据层已落地（system_context 是静态快照），差的是：① 协作对话中加载私有数据时的警告弹窗；② 清除 system_context 后对话记录未同步清空的边界 case | TODO |
 | 4 | 迁移后数据校验脚本 | 防止 department_id 挂 root 导致全员可见的问题。校验所有 fact/parameter/job 的 department_id 是否在合法部门树内 | TODO |
 | 5 | 多租户端到端验证 | 代码已实现但未端到端跑过。需验证：不同角色用户的可见性、管理权、AI 会话隔离、橱窗共享全链路 | TODO |
@@ -36,7 +36,7 @@
 | 15 | 前端 null safety 统一 | `?.` 链下游的 `.find()`/`.map()` 系统性加 `(?? [])` 兜底。FactModal 的 `nodes.find` 崩溃是典型案例 | TODO |
 | 16 | 对话标题自动生成 | 首条消息截取 30 字符做标题，目前可能是空标题 | TODO |
 | 17 | 备份系统 11 个失败单测 | DB 连接问题导致 backup_no_plaintext 失败，与代码无关但要修掉 | TODO |
-| 18 | 启动脚本封装 | `start_services.sh` 应包含 API + Worker + Beat 全量环境变量加载，避免手动 `source .env` | TODO |
+| 18 | 启动脚本封装 | `start_services.sh` 应包含 API + Worker + Beat 全量环境变量加载，避免手动 `source .env` | ✅ DONE |
 
 ## P3 — 远期
 
@@ -53,6 +53,9 @@
 
 | # | 事项 | 完成时间 |
 |---|------|---------|
+| 1 | 迁移 squashing（68→8 文件） | 2026-08-03 |
+| 2 | Worker 健康检查 + 自动恢复 | 2026-08-03 |
+| 18 | 启动脚本封装（start_worker.sh + start_beat.sh + start_services.sh 改进） | 2026-08-03 |
 | - | 多租户迁移 cleanup（parent_id / owner_user_id / visibility_scope） | 2026-08-02 |
 | - | 管理权模型（owner + 上级向下） | 2026-08-02 |
 | - | 66 站点部门可见性修复 | 2026-08-02 |

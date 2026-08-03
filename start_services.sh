@@ -97,23 +97,66 @@ else
   fi
 
   echo "[3] 启动 Worker (venv)..."
-  if pgrep -f "celery.*apps.worker" >/dev/null 2>&1; then
+  if pgrep -f "celery.*apps.worker.*worker" >/dev/null 2>&1; then
     echo "  Worker 已在运行"
   else
     load_env
     nohup .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2 > /tmp/irip-worker.log 2>&1 &
-    disown $! 2>/dev/null
+    WORKER_PID=$!
+    disown $WORKER_PID 2>/dev/null
     sleep 6
-    if pgrep -f "celery.*apps.worker" >/dev/null 2>&1; then
-      echo "  Worker 启动成功"
+    if pgrep -f "celery.*apps.worker.*worker" >/dev/null 2>&1; then
+      echo "  Worker 进程启动成功 (PID: $WORKER_PID)"
     else
-      echo "  Worker 启动失败，查看 /tmp/irip-worker.log"
-      tail -20 /tmp/irip-worker.log
+      echo "  ❌ Worker 启动失败，查看 /tmp/irip-worker.log"
+      echo "  --- 最后 30 行日志 ---"
+      tail -30 /tmp/irip-worker.log
+      echo "  --- 常见原因 ---"
+      echo "  1. Redis 未启动或连接失败"
+      echo "  2. 数据库连接失败"
+      echo "  3. Python 依赖缺失（运行: uv sync）"
+      echo "  4. .env 配置错误"
       exit 1
     fi
   fi
 
-  echo "[4] 检查前端..."
+  # 检查 Worker 健康检查端点 (9100)
+  echo "  检查 Worker 健康检查端点 :9100 ..."
+  WORKER_HEALTHY=false
+  for i in $(seq 1 10); do
+    if curl -sf http://127.0.0.1:9100/health >/dev/null 2>&1; then
+      echo "  Worker 健康检查通过 ✅ (:9100/health)"
+      WORKER_HEALTHY=true
+      break
+    fi
+    echo "  等待 Worker 健康检查就绪... ($i/10)"
+    sleep 2
+  done
+  if [ "$WORKER_HEALTHY" = "false" ]; then
+    echo "  ⚠️  Worker 健康检查端点 :9100 未就绪（Worker 可能仍在初始化）"
+    echo "  这不阻塞启动，但 Docker healthcheck 会标记 worker 为 unhealthy"
+    echo "  查看 Worker 日志: tail -f /tmp/irip-worker.log"
+  fi
+
+  echo "[4] 启动 Beat 调度器 (venv)..."
+  if pgrep -f "celery.*apps.worker.*beat" >/dev/null 2>&1; then
+    echo "  Beat 调度器已在运行"
+  else
+    nohup .venv/bin/celery -A apps.worker.celery_app beat --loglevel=info > /tmp/irip-beat.log 2>&1 &
+    BEAT_PID=$!
+    disown $BEAT_PID 2>/dev/null
+    sleep 3
+    if pgrep -f "celery.*apps.worker.*beat" >/dev/null 2>&1; then
+      echo "  Beat 调度器启动成功 (PID: $BEAT_PID)"
+    else
+      echo "  ⚠️  Beat 调度器启动失败，查看 /tmp/irip-beat.log"
+      echo "  --- 最后 20 行日志 ---"
+      tail -20 /tmp/irip-beat.log
+      echo "  Beat 不可用将导致定时任务（Outbox 投递/心跳/备份）无法执行"
+    fi
+  fi
+
+  echo "[5] 检查前端..."
   if lsof -i :5173 -t >/dev/null 2>&1; then
     echo "  Vite dev server 在运行 :5173"
   else

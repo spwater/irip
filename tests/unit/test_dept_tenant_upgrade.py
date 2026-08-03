@@ -149,10 +149,10 @@ class TestMigrationChain:
     """验证 0062/0063/0064/0065 迁移链 down_revision 连续性。"""
 
     def test_migration_0062_down_revision(self):
-        """0062.down_revision == '0061'"""
+        """0062.down_revision == '0001'（squashed baseline）"""
         mod = _load_migration_module("0062_dept_add_columns")
-        assert mod.down_revision == "0061", (
-            f"0062.down_revision 应为 '0061'，实际为 {mod.down_revision!r}"
+        assert mod.down_revision == "0001", (
+            f"0062.down_revision 应为 '0001'（squashed baseline），实际为 {mod.down_revision!r}"
         )
 
     def test_migration_0063_down_revision(self):

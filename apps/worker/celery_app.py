@@ -19,6 +19,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init
 
 #: Redis URL（从环境变量读取，默认本地测试 Redis）。
 REDIS_URL: str = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
@@ -468,3 +469,25 @@ def run_worker_healthcheck_server(
     )
     thread.start()
     return server
+
+
+# ---- Worker 健康检查自动接通 ----
+
+
+@worker_process_init.connect
+def _start_healthcheck_on_worker_init(**kwargs: object) -> None:
+    """Worker 子进程启动时自动启动健康检查 HTTP 服务器。
+
+    通过 ``worker_process_init`` signal 接通 ``run_worker_healthcheck_server()``，
+    使每个 Worker 进程在 9100 端口提供 ``GET /health`` 端点，
+    供 Docker Compose / Kubernetes liveness probe 探测存活状态。
+
+    在 prefork 模式下（--concurrency>1）每个子进程都会触发此信号。
+    第一个子进程成功绑定端口；后续子进程端口冲突时静默跳过，
+    因为只需要一个进程对外提供健康检查端点即可。
+    """
+    try:
+        run_worker_healthcheck_server()
+    except OSError:
+        # 端口已被前一个子进程占用（prefork 多进程），静默跳过
+        pass
