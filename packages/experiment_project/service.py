@@ -231,27 +231,27 @@ class ExperimentProjectService(ScopedSessionMixin):
         has_more = len(rows) > effective_limit
         page_items = rows[:effective_limit]
 
-        # 统计每个项目的任务数、数据数和负责人名
-        result_items: list[tuple[ExperimentProject, str, int, str | None, int]] = []
-        async with self._scoped_session() as session:
-            for project, dept_name in page_items:
-                task_count = await ExperimentProjectRepository.count_flows_by_project(
-                    session, project.id
-                )
-                fact_count = await ExperimentProjectRepository.count_facts_by_project(
-                    session, project.id
-                )
-                # 查 owner_display_name
-                from packages.auth.entities import AppUser
+        # 批量统计每个项目的任务数、数据数和负责人名（替代 N*3 次单条查询）
+        project_ids = [p.id for p, _ in page_items]
+        owner_ids = list({p.owner_user_id for p, _ in page_items})
 
-                owner_name = await session.scalar(
-                    sa.select(AppUser.display_name).where(
-                        AppUser.id == project.owner_user_id
-                    )
-                )
-                result_items.append(
-                    (project, dept_name, task_count, owner_name, fact_count)
-                )
+        async with self._scoped_session() as session:
+            stats_map = await ExperimentProjectRepository.batch_count_flows_and_facts(
+                session, project_ids
+            )
+            from packages.auth.entities import AppUser  # noqa: F401
+
+            owner_map = await ExperimentProjectRepository.batch_owner_names(
+                session, owner_ids
+            )
+
+        result_items: list[tuple[ExperimentProject, str, int, str | None, int]] = []
+        for project, dept_name in page_items:
+            task_count, fact_count = stats_map.get(project.id, (0, 0))
+            owner_name = owner_map.get(project.owner_user_id)
+            result_items.append(
+                (project, dept_name, task_count, owner_name, fact_count)
+            )
 
         next_cursor: str | None = None
         if has_more and page_items:

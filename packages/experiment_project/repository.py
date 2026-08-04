@@ -233,6 +233,101 @@ class ExperimentProjectRepository:
         return count or 0
 
     @staticmethod
+    async def batch_count_flows_and_facts(
+        session: AsyncSession,
+        project_ids: list[UUID],
+    ) -> dict[UUID, tuple[int, int]]:
+        """批量统计多个项目的任务数和数据数。
+
+        用两条 GROUP BY 查询替代 N*2 次单条查询。
+
+        Args:
+            session: 异步会话。
+            project_ids: 项目 ID 列表。
+
+        Returns:
+            dict[project_id, (task_count, fact_count)]。
+        """
+        if not project_ids:
+            return {}
+
+        from packages.components.flow.flow_runtime import (
+            FlowDefinition,
+            FlowDefinitionVersionORM,
+            FlowRun,
+        )
+        from packages.facts.entities import Fact
+
+        # 批量查任务数
+        task_rows = (
+            await session.execute(
+                sa.select(
+                    FlowDefinition.project_id,
+                    sa.func.count(FlowDefinition.id).label("cnt"),
+                )
+                .where(FlowDefinition.project_id.in_(project_ids))
+                .group_by(FlowDefinition.project_id)
+            )
+        ).all()
+        task_map: dict[UUID, int] = {row[0]: row[1] for row in task_rows}
+
+        # 批量查数据数
+        fact_rows = (
+            await session.execute(
+                sa.select(
+                    FlowDefinition.project_id,
+                    sa.func.count(Fact.id).label("cnt"),
+                )
+                .select_from(Fact)
+                .join(FlowRun, Fact.flow_run_id == FlowRun.id)
+                .join(
+                    FlowDefinitionVersionORM,
+                    FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
+                )
+                .join(
+                    FlowDefinition,
+                    FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
+                )
+                .where(FlowDefinition.project_id.in_(project_ids))
+                .group_by(FlowDefinition.project_id)
+            )
+        ).all()
+        fact_map: dict[UUID, int] = {row[0]: row[1] for row in fact_rows}
+
+        return {
+            pid: (task_map.get(pid, 0), fact_map.get(pid, 0))
+            for pid in project_ids
+        }
+
+    @staticmethod
+    async def batch_owner_names(
+        session: AsyncSession,
+        user_ids: list[UUID],
+    ) -> dict[UUID, str | None]:
+        """批量查询用户显示名。
+
+        Args:
+            session: 异步会话。
+            user_ids: 用户 ID 列表。
+
+        Returns:
+            dict[user_id, display_name | None]。
+        """
+        if not user_ids:
+            return {}
+
+        from packages.auth.entities import AppUser
+
+        rows = (
+            await session.execute(
+                sa.select(AppUser.id, AppUser.display_name).where(
+                    AppUser.id.in_(user_ids)
+                )
+            )
+        ).all()
+        return {row[0]: row[1] for row in rows}
+
+    @staticmethod
     async def update(
         session: AsyncSession,
         project_id: UUID,
