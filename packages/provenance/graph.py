@@ -25,7 +25,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.ids import new_id
 from packages.facts.entities import Fact
@@ -91,7 +91,7 @@ class ProvenanceGraph:
     edges: tuple[ProvenanceEdgeRef, ...]
 
 
-class ProvenanceGraphService:
+class ProvenanceGraphService(ScopedSessionMixin):
     """溯源图业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）。
@@ -105,15 +105,18 @@ class ProvenanceGraphService:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
+        actor_id: UUID | None = None,
     ) -> None:
         """初始化溯源图服务。
 
         Args:
             session_factory: 异步会话工厂。
             department_id: 当前部门 ID。
+            actor_id: 当前操作者用户 ID（用于 RLS GUC 设置）。
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._actor_id = actor_id
 
     async def get_graph(self, derivation_run_id: UUID) -> ProvenanceGraph:
         """获取推导运行的完整溯源图。
@@ -136,8 +139,8 @@ class ProvenanceGraphService:
         edges: list[ProvenanceEdgeRef] = []
         visited_edges: set[tuple[UUID, UUID, str]] = set()
 
-        async with self._factory() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id)
+        async with self._scoped_session() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 加载推导运行节点
             run = await session.scalar(
                 sa.select(DerivationRun).where(
@@ -238,8 +241,8 @@ class ProvenanceGraphService:
         Returns:
             list[list[ProvenanceNode]]: 路径列表，每条路径从参数版本到事实。
         """
-        async with self._factory() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id)
+        async with self._scoped_session() as session:
+            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # BFS: 从 parameter_version 出发，沿边向上遍历
             edges_result = await session.execute(
                 sa.select(ProvenanceEdge).where(
@@ -343,7 +346,7 @@ class ProvenanceGraphService:
             edge_type: 边类型。
             metadata: 元数据（可选）。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             edge = ProvenanceEdge(
                 id=new_id(),
                 department_id=self._dept_id,

@@ -20,6 +20,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.connectors.contracts import (
@@ -29,7 +30,7 @@ from packages.connectors.contracts import (
 from packages.connectors.entities import Secret
 
 
-class SecretStore:
+class SecretStore(ScopedSessionMixin):
     """密钥存储：按 secret_id 解析凭据（组织隔离）。
 
     F-12: 使用 envelope encryption 加密存储密钥值。
@@ -68,7 +69,7 @@ class SecretStore:
         Raises:
             AppError: code="secret_not_found"，当密钥不存在或不属于当前部门时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id)
             result = await session.execute(
                 sa.select(Secret).where(

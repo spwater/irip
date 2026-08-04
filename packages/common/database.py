@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
@@ -101,4 +102,73 @@ async def session_scope(
                 # 设置 dept + user GUC
                 await set_dept_guc(session, principal.department_id)
                 await set_user_guc(session, principal.user_id)
+            yield session
+
+
+@asynccontextmanager
+async def scoped_session(
+    factory: async_sessionmaker[AsyncSession],
+    dept_id: UUID | None = None,
+    user_id: UUID | None = None,
+) -> AsyncIterator[AsyncSession]:
+    """带租户 GUC 的事务级异步会话上下文管理器。
+
+    进入时创建会话并开启事务，在事务开始时按需设置：
+    - SET LOCAL app.current_dept_id = :dept_id（RLS 部门隔离）；
+    - SET LOCAL app.current_user_id = :user_id（私有可见性 + AI 会话 RLS）。
+
+    用途：替代 Service 中手动的 ``self._factory() as session``（不设 GUC、
+    不开事务）与 ``session_scope(self._factory)``（开事务但不设 GUC）两种
+    导致 RLS fail-closed 拦截数据的写法。Service 基类 ``ScopedSessionMixin``
+    通过 ``self._scoped_session()`` 间接调用本函数；需要按方法传身份的
+    场景（如 AIService 每次调用携带不同 user_id）可直接调用本函数。
+
+    缺失 dept_id / user_id 时对应 GUC 不设置，保持连接级空串默认
+    （由 ``build_session_factory`` 的 connect 监听器设为 ``''``），
+    RLS 保护的表上 fail-closed（返回空），不会泄露跨租户数据。
+
+    Args:
+        factory: build_session_factory() 返回的会话工厂。
+        dept_id: 部门 UUID，None 时不设 GUC（保持空串 fail-closed）。
+        user_id: 用户 UUID，None 时不设 GUC（保持空串 fail-closed）。
+
+    Yields:
+        AsyncSession: 已开启事务并设置好 GUC 的异步会话。
+    """
+    async with factory() as session:
+        async with session.begin():
+            if dept_id is not None:
+                await set_dept_guc(session, dept_id)
+            if user_id is not None:
+                await set_user_guc(session, user_id)
+            yield session
+
+
+class ScopedSessionMixin:
+    """为 Service 提供统一的带租户 GUC 的 session 上下文管理器。
+
+    依赖实例属性：
+    - ``_factory``：异步会话工厂（``async_sessionmaker``）；
+    - ``_dept_id``：当前部门 ID（RLS 部门隔离锚点）；
+    - ``_actor_id``：当前操作者用户 ID（可选，私有可见性 + AI 会话 RLS）。
+
+    子类继承本 Mixin 后，所有数据库方法统一使用 ``self._scoped_session()``
+    获取已设置 GUC 的事务会话，替代手动的 ``self._factory() as session``
+    与 ``session_scope(self._factory)``，从根本上保证 RLS 上下文一致，
+    避免 fail-closed 拦截数据或逐方法手动设 GUC 的补丁式写法。
+
+    缺失 ``_dept_id`` / ``_actor_id`` 时对应 GUC 不设置（保持连接级空串
+    默认，RLS fail-closed），确保无身份上下文的调用不会泄露跨租户数据。
+    """
+
+    @asynccontextmanager
+    async def _scoped_session(self) -> AsyncIterator[AsyncSession]:
+        """带 GUC 的事务会话上下文，用 ``_dept_id`` / ``_actor_id`` 自动设 GUC。
+
+        Yields:
+            AsyncSession: 已开启事务并设置好租户 GUC 的异步会话。
+        """
+        dept_id: UUID | None = getattr(self, "_dept_id", None)
+        user_id: UUID | None = getattr(self, "_actor_id", None)
+        async with scoped_session(self._factory, dept_id, user_id) as session:
             yield session

@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import Base, session_scope
+from packages.common.database import Base, ScopedSessionMixin
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.departments.entities import Department  # noqa: F401 — ensure FK target registered in metadata
@@ -128,7 +128,12 @@ class FlowDefinition(Base):
         nullable=False,
         comment="所有者用户 ID",
     )
-    project_name: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    project_id: Mapped[UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("experiment_project.id"),
+        nullable=True,
+        comment="所属实验项目 ID",
+    )
     operator: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     experimental_object_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -518,7 +523,7 @@ def _serialize_input_summary(
 # ---- 运行时服务 ----
 
 
-class FlowRuntimeService:
+class FlowRuntimeService(ScopedSessionMixin):
     """流程运行时服务：定义管理 + 执行编排。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -603,7 +608,7 @@ class FlowRuntimeService:
         nodes: tuple[FlowNode, ...] = (),
         edges: tuple[FlowEdge, ...] = (),
         department_id: UUID | None = None,
-        project_name: str | None = None,
+        project_id: UUID | None = None,
         operator: str | None = None,
         experimental_object_code: str | None = None,
     ) -> FlowDefinition:
@@ -616,6 +621,10 @@ class FlowRuntimeService:
             display_name: 显示名称。
             nodes: 节点元组（可选，用于创建时 DAG 校验）。
             edges: 边元组（可选，用于创建时 DAG 校验）。
+            department_id: 执行实验部门 ID（可选，默认当前部门）。
+            project_id: 所属实验项目 ID（可选）。
+            operator: 执行人（可选）。
+            experimental_object_code: 关联实验对象编码（可选）。
 
         Returns:
             FlowDefinition: 新创建的流程定义。
@@ -635,7 +644,7 @@ class FlowRuntimeService:
                     fields={"errors": list(dag_result.errors)},
                 )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             existing: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
@@ -657,7 +666,7 @@ class FlowRuntimeService:
                 department_id=department_id or self._dept_id,
                 owner_user_id=self._actor_id,
                 visibility_scope="tree",
-                project_name=project_name,
+                project_id=project_id,
                 operator=operator,
                 experimental_object_code=experimental_object_code,
                 status="draft",
@@ -759,7 +768,7 @@ class FlowRuntimeService:
         digest: str = compute_flow_digest(nodes, edges, random_seed)
         now: datetime = self._clock.now()
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
@@ -806,21 +815,25 @@ class FlowRuntimeService:
     async def list_definitions(
         self,
         status: str | None = None,
+        project_id: str | None = None,
     ) -> list[tuple[FlowDefinition, FlowDefinitionVersionORM | None]]:
         """列表查询流程定义及其最新版本。
 
         Args:
             status: 可选，按状态过滤（draft/published/deprecated）。
+            project_id: 可选，按所属项目 ID 过滤（UUID 字符串）。
 
         Returns:
             list[tuple[FlowDefinition, FlowDefinitionVersionORM | None]]:
                 定义 + 最新版本（无版本时为 None），按 code 排序。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             query = sa.select(FlowDefinition).where(FlowDefinition.department_id.in_(visible_ids))
             if status is not None:
                 query = query.where(FlowDefinition.status == status)
+            if project_id is not None:
+                query = query.where(FlowDefinition.project_id == UUID(project_id))
             query = query.order_by(FlowDefinition.code)
 
             definitions: list[FlowDefinition] = list((await session.execute(query)).scalars().all())
@@ -851,7 +864,7 @@ class FlowRuntimeService:
         Raises:
             AppError: code="not_found"，当定义不存在。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
@@ -888,7 +901,7 @@ class FlowRuntimeService:
             AppError: code="not_found"，当定义不存在。
         """
         now: datetime = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
@@ -922,7 +935,7 @@ class FlowRuntimeService:
             AppError: code="not_found"，当定义不存在。
         """
         now: datetime = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
@@ -958,7 +971,7 @@ class FlowRuntimeService:
         Raises:
             AppError: code="not_found"，当版本不存在。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             row = (
                 await session.execute(
@@ -993,7 +1006,7 @@ class FlowRuntimeService:
         Returns:
             list[FlowRun]: 运行记录列表。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(FlowRun)
                 .where(
@@ -1046,7 +1059,7 @@ class FlowRuntimeService:
             idempotency_key=f"flow-run-{run_id}",
         )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             run = FlowRun(
                 id=run_id,
                 department_id=flow_def.department_id,
@@ -1084,7 +1097,7 @@ class FlowRuntimeService:
             AppError: code="not_found"，当执行记录不存在。
         """
         # 1. 加载执行记录与版本
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
@@ -1210,7 +1223,7 @@ class FlowRuntimeService:
         input_summary: dict[str, Any] = _serialize_input_summary(inputs)
 
         # 创建 FlowNodeExecution（pending）
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             execution = FlowNodeExecution(
                 flow_run_id=run_id,
                 node_id=node.node_id,
@@ -1222,7 +1235,7 @@ class FlowRuntimeService:
             execution_id: UUID = execution.id
 
         # 更新为 running
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             await session.execute(
                 sa.update(FlowNodeExecution)
                 .values(
@@ -1271,7 +1284,7 @@ class FlowRuntimeService:
             duration_ms: int = int((now_end - now_start).total_seconds() * 1000)
 
             # 更新为 succeeded
-            async with session_scope(self._factory) as session:
+            async with self._scoped_session() as session:
                 await session.execute(
                     sa.update(FlowNodeExecution)
                     .values(
@@ -1299,7 +1312,7 @@ class FlowRuntimeService:
                 "error_message": str(exc),
             }
 
-            async with session_scope(self._factory) as session:
+            async with self._scoped_session() as session:
                 await session.execute(
                     sa.update(FlowNodeExecution)
                     .values(
@@ -1334,7 +1347,7 @@ class FlowRuntimeService:
         Raises:
             AppError: code="not_found"，当执行记录不存在。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
@@ -1510,7 +1523,7 @@ class FlowRuntimeService:
             event.set()
 
         # 更新数据库状态
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
@@ -1550,7 +1563,7 @@ class FlowRuntimeService:
             AppError: code="not_found"，当执行记录或节点不存在。
             AppError: code="validation_failed"，当节点非失败状态。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
@@ -1618,7 +1631,7 @@ class FlowRuntimeService:
 
         # 构建上游输出（从已成功的节点执行记录获取）
         node_outputs: dict[str, dict[str, Any]] = {}
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             all_execs: list[FlowNodeExecution] = list(
                 (
                     await session.execute(
@@ -1654,7 +1667,7 @@ class FlowRuntimeService:
         if exec_result["status"] == "succeeded":
             # 重新检查是否所有节点都成功
             all_succeeded: bool = True
-            async with session_scope(self._factory) as session:
+            async with self._scoped_session() as session:
                 pending_or_failed: list[FlowNodeExecution] = list(
                     (
                         await session.execute(
@@ -1671,7 +1684,7 @@ class FlowRuntimeService:
 
             if all_succeeded:
                 # 重新计算摘要
-                async with session_scope(self._factory) as session:
+                async with self._scoped_session() as session:
                     all_execs2: list[FlowNodeExecution] = list(
                         (
                             await session.execute(
@@ -1700,7 +1713,7 @@ class FlowRuntimeService:
             await self._update_job_status(job_id, "failed")
 
         # 返回最新的节点执行记录
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             latest_exec: FlowNodeExecution | None = await session.scalar(
                 sa.select(FlowNodeExecution)
                 .where(
@@ -1731,7 +1744,7 @@ class FlowRuntimeService:
         Raises:
             AppError: code="not_found"，当执行记录不存在。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
@@ -1766,7 +1779,7 @@ class FlowRuntimeService:
         Args:
             run_id: 执行记录 ID。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 先查出关联的 job_id
             run = await session.scalar(
@@ -1808,7 +1821,7 @@ class FlowRuntimeService:
         Args:
             flow_id: 流程定义 ID。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 查询该流程定义的所有版本 ID
             version_ids_result = await session.execute(
@@ -1874,7 +1887,7 @@ class FlowRuntimeService:
         """
         output_digest: str | None = None
         if status == "succeeded":
-            async with session_scope(self._factory) as session:
+            async with self._scoped_session() as session:
                 run: FlowRun | None = await session.scalar(
                     sa.select(FlowRun).where(FlowRun.id == run_id)
                 )
@@ -1887,7 +1900,7 @@ class FlowRuntimeService:
                     )
 
         now: datetime = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             values: dict[str, Any] = {
                 "status": status,
                 "completed_at": now,
@@ -1915,7 +1928,7 @@ class FlowRuntimeService:
         }
         job_status: JobStatus = status_map.get(status, JobStatus.SUCCEEDED)
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             await session.execute(
                 sa.update(Job)
                 .values(

@@ -85,6 +85,10 @@ class PublishComponentRequest(BaseModel):
         None,
         description="归属部门 UUID（可选，默认取当前用户部门）",
     )
+    visible_departments: list[str] | None = Field(
+        None,
+        description="可见单位 UUID 列表（选填，默认按部门层级可见）",
+    )
 
 
 class UpdateComponentRequest(BaseModel):
@@ -153,6 +157,7 @@ class ComponentDetailResponse(BaseModel):
     experimental_object_code: str | None = None
     equipment_id: str | None = None
     department_id: str | None = None
+    visible_departments: list[str] = Field(default_factory=list)
     manifest_sha256: str
     manifest_yaml: str
     published_at: datetime | None
@@ -281,6 +286,7 @@ async def publish_component(
         experimental_object_code=exp_code or None,
         equipment_id=body.equipment_id or None,
         department_id=UUID(body.department_id) if body.department_id else None,
+        visible_departments=body.visible_departments,
     )
 
     return ComponentVersionResponse(
@@ -324,7 +330,7 @@ async def list_components(
     return ComponentListResponse(
         items=[
             ComponentListItemResponse(
-                id=str(ver.id),
+                id=str(comp.id),
                 name=comp.name,
                 display_name=_parse_display_name(ver.manifest_yaml),
                 description=_parse_description(ver.manifest_yaml),
@@ -366,7 +372,7 @@ async def get_component(
     Raises:
         AppError: code="not_found"，当版本不存在。
     """
-    comp, ver = await service.get_version_by_id(component_id)
+    comp, ver = await service.get_by_component_id(component_id)
     return ComponentDetailResponse(
         id=str(ver.id),
         name=comp.name,
@@ -380,6 +386,7 @@ async def get_component(
         or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
         equipment_id=getattr(ver, "equipment_id", None),
         department_id=str(comp.department_id) if comp.department_id else None,
+        visible_departments=list(comp.visible_departments or []),
         manifest_sha256=ver.manifest_sha256,
         manifest_yaml=ver.manifest_yaml,
         published_at=ver.published_at,
@@ -417,7 +424,7 @@ async def list_component_versions(
     Returns:
         list[ComponentVersionListItem]: 版本列表。
     """
-    comp, ver = await service.get_version_by_id(component_id)
+    comp, ver = await service.get_by_component_id(component_id)
     versions = await service.list_versions(comp.id)
     return [
         ComponentVersionListItem(
@@ -450,7 +457,7 @@ async def archive_component(
     Returns:
         dict: {"status": "deprecated"}
     """
-    comp, _ = await service.get_version_by_id(component_id)
+    comp, _ = await service.get_by_component_id(component_id)
     await service.deprecate(comp.name)
     return {"status": "deprecated"}
 
@@ -471,7 +478,7 @@ async def restore_component(
     Returns:
         dict: {"status": "published"}
     """
-    comp, _ = await service.get_version_by_id(component_id)
+    comp, _ = await service.get_by_component_id(component_id)
     await service.restore(comp.name)
     return {"status": "published"}
 
@@ -515,7 +522,7 @@ async def update_component(
 
     from packages.common.database import session_scope
 
-    comp, _ = await service.get_version_by_id(component_id)
+    comp, _ = await service.get_by_component_id(component_id)
 
     # 归属检查：所有者+上级模型
     from apps.api.dependencies.dept_scope import check_management_permission
@@ -561,7 +568,7 @@ async def delete_component(
     Returns:
         dict: {"status": "deleted"}
     """
-    comp, _ = await service.get_version_by_id(component_id)
+    comp, _ = await service.get_by_component_id(component_id)
 
     # 归属检查：所有者+上级模型
     from apps.api.dependencies.dept_scope import check_management_permission

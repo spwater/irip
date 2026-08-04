@@ -95,6 +95,7 @@ def register(ctx: CompositionContext) -> None:
         return ProvenanceGraphService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
+            actor_id=current_user.user_id,
         )
 
     ctx.app.dependency_overrides[get_provenance_graph_service] = _get_provenance_graph_service_dep

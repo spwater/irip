@@ -38,7 +38,7 @@ from packages.ai.providers import AIProvider, AIRequest, AIResponse
 from packages.ai.showcase_entities import ShowcaseItem, ShowcaseItemRef
 from packages.ai.tools import ToolRegistry
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import Base, session_scope
+from packages.common.database import Base, scoped_session
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -276,7 +276,7 @@ class AIService:
         if not title:
             title = f"对话 {now.strftime('%Y-%m-%d %H:%M')}"
 
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = AIConversation(
                 id=conv_id,
                 user_id=user_id,
@@ -342,7 +342,7 @@ class AIService:
         elif not include_archived:
             conditions.append(AIConversation.archived == sa.false())
 
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             result = await session.execute(
                 sa.select(AIConversation)
                 .where(*conditions)
@@ -385,7 +385,7 @@ class AIService:
             bool: 新的置顶状态。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -421,7 +421,7 @@ class AIService:
             bool: 新的归档状态。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -457,7 +457,7 @@ class AIService:
             AppError: code="not_found"，对话不存在或无权操作。
             AppError: code="forbidden"，对话未归档，不允许删除。
         """
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -503,7 +503,7 @@ class AIService:
             AppError: code="forbidden"，当对话不属于当前用户且非参与者时。
             AppError: code="not_found"，当对话不存在时。
         """
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -604,7 +604,7 @@ class AIService:
         )
         conditions.append(title_or_msg_cond)
 
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             result = await session.execute(
                 sa.select(AIConversation)
                 .where(*conditions)
@@ -669,7 +669,7 @@ class AIService:
 
         from packages.auth.entities import AppUser
 
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # 构建 base 条件
             conditions: list[sa.ColumnElement[bool]] = []
 
@@ -838,8 +838,9 @@ class AIService:
             AppError: code="conflict"，目标用户已是参与者。
             AppError: code="validation_failed"，跨 org 邀请。
         """
+        user_id = inviter_user_id
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -961,8 +962,9 @@ class AIService:
             AppError: code="not_found"，对话不存在或目标非参与者。
             AppError: code="forbidden"，操作者非 owner。
         """
+        user_id = owner_user_id
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -1033,7 +1035,7 @@ class AIService:
             AppError: code="forbidden"，owner 不能退出。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             participant = await session.scalar(
                 sa.select(ConversationParticipant).where(
                     ConversationParticipant.conversation_id == conversation_id,
@@ -1082,7 +1084,7 @@ class AIService:
             AppError: code="not_found"，对话不存在。
             AppError: code="forbidden"，无权访问。
         """
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             from packages.auth.entities import AppUser
 
             conv = await session.scalar(
@@ -1186,7 +1188,7 @@ class AIService:
         admin_roles = {"platform_administrator", "platform_auditor", "lab_director"}
         is_admin = roles is not None and len(admin_roles & set(roles)) > 0
 
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             stmt = sa.select(
                 AppUser.id,
                 AppUser.display_name,
@@ -1283,7 +1285,7 @@ class AIService:
             AppError: code="not_found"，对话不存在或无权操作。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -1376,7 +1378,7 @@ class AIService:
         Raises:
             AppError: code="not_found"，对话不存在或无权操作。
         """
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -1430,7 +1432,7 @@ class AIService:
             AppError: code="not_found"，卡片不存在或无权操作。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             item = await session.scalar(
                 sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id)
             )
@@ -1481,7 +1483,7 @@ class AIService:
         Raises:
             AppError: code="not_found"，卡片不存在或无权操作。
         """
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             item = await session.scalar(
                 sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id)
             )
@@ -1522,7 +1524,7 @@ class AIService:
             AppError: code="not_found"，对话不存在或无权操作。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -1563,7 +1565,7 @@ class AIService:
         Raises:
             AppError: code="not_found"，对话不存在或无权操作。
         """
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属
             conv = await session.scalar(
                 sa.select(AIConversation).where(
@@ -1707,7 +1709,7 @@ class AIService:
         # 热更新：每次 ask 从 DB 重新加载工具声明层（D-4）
         # 表预计 < 50 行，单行 SELECT 开销 < 1ms，可忽略。
         if self._factory is not None:
-            async with session_scope(self._factory) as session:
+            async with scoped_session(self._factory, None, user_id) as session:
                 await self._tool_registry.reload_from_db(session)
 
         # 加载或创建对话
@@ -1730,7 +1732,7 @@ class AIService:
         # 协作对话（参与者 > 1）：mentions 中包含 "ai" 标识才调 AI，否则只保存用户消息
         mentions_list: list[str] = mentions or []
         participant_count: int | None = None
-        async with self._factory() as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             participant_count = await session.scalar(
                 sa.select(sa.func.count())
                 .select_from(ConversationParticipant)
@@ -1788,13 +1790,12 @@ class AIService:
         if system_context:
             user_context["system_context"] = system_context
             # 同时存到对话记录里，切回对话时恢复
-            async with self._factory() as session:
+            async with scoped_session(self._factory, None, user_id) as session:
                 conv_obj = await session.scalar(
                     sa.select(AIConversation).where(AIConversation.id == conversation_id)
                 )
                 if conv_obj:
                     conv_obj.system_context = system_context
-                    await session.commit()
 
         # 构建工具名称元组（仅已启用工具，D-3 禁用工具不进 schema）
         tool_names: tuple[str, ...] = self._tool_registry.enabled_names()
@@ -2179,7 +2180,7 @@ class AIService:
                 pass
 
         # 直接查数据库（含 data_summary）
-        async with self._factory() as session:
+        async with scoped_session(self._factory, org_id, None) as session:
             stmt = sa.select(
                 sa.text("f.id, f.subject_id, f.fact_type")
             ).select_from(sa.text("fact f"))
@@ -2211,7 +2212,7 @@ class AIService:
     async def _handle_search_standards(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 search_standards 工具：搜索标准变量。"""
         query = str(args.get("query", ""))
-        async with self._factory() as session:
+        async with scoped_session(self._factory, org_id, None) as session:
             stmt = (
                 sa.select(sa.text("vv.id, v.code, vv.display_name, vv.canonical_unit"))
                 .select_from(sa.text("variable_version vv"))
@@ -2390,7 +2391,7 @@ class AIService:
         # 查询引用的事实摘要
         fact_summaries: list[dict[str, str]] = []
         if fact_ids and self._factory is not None:
-            async with self._factory() as session:
+            async with scoped_session(self._factory, org_id, None) as session:
                 for fid in fact_ids[:10]:
                     try:
                         result = await session.execute(
@@ -2479,7 +2480,7 @@ class AIService:
             sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             actual_display_name = sender_display_name
             actual_avatar_url = sender_avatar_url
             try:
@@ -2541,7 +2542,7 @@ class AIService:
             sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, user_id) as session:
             # irip-ai-collab: 从数据库获取发送者 display_name 和 avatar_url 快照
             actual_display_name = sender_display_name
             actual_avatar_url = sender_avatar_url
@@ -2694,7 +2695,7 @@ class AIService:
 
         # 更新数据库
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with scoped_session(self._factory, None, None) as session:
             await session.execute(
                 sa.update(AIConversation)
                 .values(title=title, updated_at=now)
@@ -2725,7 +2726,7 @@ class AIService:
         而不仅是在 ask 时才 reload。
         """
         if self._factory is not None:
-            async with session_scope(self._factory) as session:
+            async with scoped_session(self._factory, None, None) as session:
                 await self._tool_registry.reload_from_db(session)
 
     def get_provider_status(self) -> dict[str, Any]:

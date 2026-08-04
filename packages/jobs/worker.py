@@ -83,24 +83,37 @@ class WorkerLeaseManager:
     管理作业租约的获取、续租、释放和回收。
     每个操作在独立事务中执行，确保租约状态与作业执行解耦。
 
+    阶段2 RLS 通电：所有 session 操作使用 _session_scope_with_dept 设置 GUC，
+    确保 RLS 策略不拦截 job 表操作。default_dept_id / default_user_id
+    在 Worker 启动时从环境变量注入（system 哨兵部门 + system_service 用户，
+    后者挂 root 部门以获得全部门可见性）。
+
     Attributes:
         _factory: 异步会话工厂。
         _clock: 时钟实例。
+        _default_dept_id: 默认部门 ID（RLS GUC）。
+        _default_user_id: 默认用户 ID（RLS GUC）。
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
         clock: Clock | None = None,
+        default_dept_id: UUID | None = None,
+        default_user_id: UUID | None = None,
     ) -> None:
         """初始化租约管理器。
 
         Args:
             session_factory: 异步会话工厂。
             clock: 时钟（默认 SystemClock）。
+            default_dept_id: 默认部门 ID（用于 RLS GUC，通常为 system 哨兵部门）。
+            default_user_id: 默认用户 ID（用于 RLS GUC，通常为 system_service 用户）。
         """
         self._factory = session_factory
         self._clock = clock or SystemClock()
+        self._default_dept_id = default_dept_id
+        self._default_user_id = default_user_id
 
     async def acquire(
         self,
@@ -122,7 +135,9 @@ class WorkerLeaseManager:
         """
         expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
 
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(
+            self._factory, self._default_dept_id, self._default_user_id
+        ) as session:
             acquired = await JobRepository.acquire_lease(session, job_id, owner, expires_at)
             return acquired
 
@@ -147,7 +162,9 @@ class WorkerLeaseManager:
         """
         expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
 
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(
+            self._factory, self._default_dept_id, self._default_user_id
+        ) as session:
             acquired, fencing_token = await JobRepository.acquire_lease_with_fencing(
                 session, job_id, owner, expires_at
             )
@@ -171,7 +188,9 @@ class WorkerLeaseManager:
         """
         new_expires_at = self._clock.now() + timedelta(seconds=ttl_seconds)
 
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(
+            self._factory, self._default_dept_id, self._default_user_id
+        ) as session:
             renewed = await JobRepository.renew_lease(session, job_id, owner, new_expires_at)
             return renewed
 
@@ -186,7 +205,9 @@ class WorkerLeaseManager:
             job_id: 作业 UUID。
             owner: 持有租约的 worker ID。
         """
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(
+            self._factory, self._default_dept_id, self._default_user_id
+        ) as session:
             await JobRepository.release_lease(session, job_id, owner)
 
     async def reap_expired(self) -> list[UUID]:
@@ -195,12 +216,17 @@ class WorkerLeaseManager:
         将 running 状态且租约过期的作业重新入队（status->queued），
         并同事务创建 outbox 事件确保 Dispatcher 重新投递。
 
+        使用 default GUC（system_service 用户挂 root 部门 → 全部门可见），
+        确保 RLS 不拦截跨部门作业的回收。
+
         Returns:
             list[UUID]: 被回收的作业 ID 列表。
         """
         now = self._clock.now()
 
-        async with session_scope(self._factory) as session:
+        async with _session_scope_with_dept(
+            self._factory, self._default_dept_id, self._default_user_id
+        ) as session:
             job_ids = await JobRepository.reap_and_redeliver(session, now)
             return job_ids
 
@@ -211,10 +237,16 @@ class JobExecutor:
     负责执行单个作业：获取租约 → 执行处理器 → 提交结果 → 释放租约。
     支持重试和取消。
 
+    阶段2 RLS 通电：default_dept_id / default_user_id 在 Worker 启动时注入，
+    用于 step 3（读取作业）和 lease 操作的 GUC 设置。读取作业后，
+    后续操作使用作业自身的 department_id / created_by 作为 GUC。
+
     Attributes:
         _lease_manager: 租约管理器。
         _factory: 异步会话工厂。
         _handlers: 作业类型 → 处理器映射。
+        _default_dept_id: 默认部门 ID（RLS GUC，system 哨兵部门）。
+        _default_user_id: 默认用户 ID（RLS GUC，system_service 用户）。
     """
 
     def __init__(
@@ -222,6 +254,8 @@ class JobExecutor:
         lease_manager: WorkerLeaseManager,
         session_factory: async_sessionmaker[AsyncSession],
         handlers: dict[str, JobHandler] | None = None,
+        default_dept_id: UUID | None = None,
+        default_user_id: UUID | None = None,
     ) -> None:
         """初始化作业执行器。
 
@@ -229,10 +263,14 @@ class JobExecutor:
             lease_manager: 租约管理器。
             session_factory: 异步会话工厂。
             handlers: 作业类型 → 处理器映射（None 时使用空映射，未知 kind 将失败）。
+            default_dept_id: 默认部门 ID（RLS GUC，system 哨兵部门）。
+            default_user_id: 默认用户 ID（RLS GUC，system_service 用户）。
         """
         self._lease_manager = lease_manager
         self._factory = session_factory
         self._handlers: dict[str, JobHandler] = handlers or {}
+        self._default_dept_id = default_dept_id
+        self._default_user_id = default_user_id
 
     def register_handler(self, kind: str, handler: JobHandler) -> None:
         """注册作业处理器。
@@ -305,8 +343,10 @@ class JobExecutor:
         )
 
         try:
-            # Step 3: 读取作业（无 GUC，worker 直接查询）
-            async with session_scope(self._factory) as session:
+            # Step 3: 读取作业（使用 default GUC，system_service 用户挂 root → 全部门可见）
+            async with _session_scope_with_dept(
+                self._factory, self._default_dept_id, self._default_user_id
+            ) as session:
                 job: Job | None = await JobRepository.get(session, job_id)
                 if job is None:
                     return None

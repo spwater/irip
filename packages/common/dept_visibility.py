@@ -31,7 +31,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.common.tenant_guc import set_user_guc
+from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
 #: 按 dept_id 直接做向下 ∪ 向上递归的 SQL（部门表未启用 RLS，全员可读）。
 #: 与 current_visible_dept_ids() 中 down/up CTE 逻辑一致，只是起点为单个 dept_id。
@@ -89,6 +89,9 @@ async def compute_visible_dept_ids(
     if actor_id is not None and dept_id is not None:
         # 两条路径取并集，兼容 worker 场景（actor=系统用户, dept=任务部门）：
         # 1. 按 actor_id 走 DB 函数（含多部门并集，与 RLS 同源）
+        # 设置两个 GUC：user_id 供 current_visible_dept_ids() 递归，
+        # dept_id 供 RLS 策略的 visible_departments @> [dept_id] 条件
+        await set_dept_guc(session, dept_id)
         await set_user_guc(session, actor_id)
         result = await session.execute(sa.text("SELECT current_visible_dept_ids()"))
         for row in result.fetchall():
@@ -105,6 +108,8 @@ async def compute_visible_dept_ids(
             visible.add(_coerce_uuid(row[0]))
     elif dept_id is not None:
         # 退路：按 dept_id 直接做向下 ∪ 向上递归
+        # 仍设 dept GUC，使 RLS 策略的 visible_departments 条件可生效
+        await set_dept_guc(session, dept_id)
         result = await session.execute(_DEPT_SCOPE_SQL, {"dept_id": str(dept_id)})
         for row in result.fetchall():
             visible.add(_coerce_uuid(row[0]))

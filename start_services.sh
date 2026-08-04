@@ -16,10 +16,11 @@ MODE="${1:-local}"
 
 # 加载 .env
 load_env() {
-  while IFS='=' read -r key value; do
-    [ -z "$key" ] && continue
-    [[ "$key" =~ ^[[:space:]]*# ]] && continue
-    key=$(echo "$key" | xargs)
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
     [ -z "$key" ] && continue
     export "$key=$value" 2>/dev/null || true
   done < .env

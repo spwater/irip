@@ -38,7 +38,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -67,7 +67,7 @@ class DepartmentListResult:
         self.has_more = has_more
 
 
-class DepartmentService:
+class DepartmentService(ScopedSessionMixin):
     """实验室业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、clock（时钟）。
@@ -122,7 +122,7 @@ class DepartmentService:
         Raises:
             AppError: code="conflict"，当编码已存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 阶段2: 唯一约束改为 (parent_id, code)
             stmt = sa.select(Department).where(
                 Department.code == code,
@@ -186,7 +186,7 @@ class DepartmentService:
         # 多查一条判断 has_more
         fetch_limit = effective_limit + 1
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             rows = await DepartmentRepository.select_list(
                 session,
                 status=status,
@@ -222,7 +222,7 @@ class DepartmentService:
         Raises:
             AppError: code="not_found"，当实验室不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             dept = await DepartmentRepository.select_by_id(session, department_id)
         if dept is None:
             raise AppError(
@@ -265,7 +265,7 @@ class DepartmentService:
             AppError: code="conflict"，当 lock_version 不匹配时。
             AppError: code="forbidden"，当修改哨兵部门时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 阶段2: 哨兵保护前置检查
             # 哨兵部门仅允许修改 display_name 和 description，
             # 禁止修改 parent_id（re-parent）和 sort_order（避免打乱树结构）
@@ -330,7 +330,7 @@ class DepartmentService:
             AppError: code="not_found"，当实验室不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             updated = await DepartmentRepository.update_status(
                 session,
                 department_id=department_id,
@@ -398,7 +398,7 @@ class DepartmentService:
         # 递归收集子树所有部门 ID
         subtree_ids: set[UUID] = {department_id}
         pending: list[UUID] = [department_id]
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             while pending:
                 children_result = await session.execute(
                     sa.select(Department.id).where(Department.parent_id.in_(pending))
@@ -440,7 +440,7 @@ class DepartmentService:
         """
         from packages.equipment.entities import Equipment
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 检查是否存在
             existing = await DepartmentRepository.select_by_id(session, department_id)
             if existing is None:

@@ -106,6 +106,10 @@ class Permission:
     FLOW_EXECUTE: str = "flow:execute"
     FLOW_READ: str = "flow:read"
 
+    # 实验项目管理（实验项目提级）
+    EXPERIMENT_PROJECT_MANAGE: str = "experiment_project:manage"
+    EXPERIMENT_PROJECT_READ: str = "experiment_project:read"
+
     # AI 助手（IRIP V3-T01）
     ASSISTANT_USE: str = "assistant:use"
 
@@ -171,6 +175,8 @@ class Permission:
             cls.FLOW_MANAGE,
             cls.FLOW_EXECUTE,
             cls.FLOW_READ,
+            cls.EXPERIMENT_PROJECT_MANAGE,
+            cls.EXPERIMENT_PROJECT_READ,
             cls.ASSISTANT_USE,
             cls.AUDIT_READ,
             cls.SYSTEM_HEALTH,
@@ -210,6 +216,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_READ,
             Permission.COMPONENT_READ,
             Permission.FLOW_READ,
+            Permission.EXPERIMENT_PROJECT_READ,
             Permission.AUDIT_READ,
             Permission.SYSTEM_HEALTH,
         ],
@@ -253,6 +260,8 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.FLOW_MANAGE,
             Permission.FLOW_EXECUTE,
             Permission.FLOW_READ,
+            Permission.EXPERIMENT_PROJECT_MANAGE,
+            Permission.EXPERIMENT_PROJECT_READ,
             Permission.ASSISTANT_USE,
             # irip-ai-collab: 协作权限 + 角色分配
             Permission.CONVERSATION_CREATE,
@@ -291,6 +300,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.FLOW_MANAGE,
             Permission.FLOW_EXECUTE,
             Permission.FLOW_READ,
+            Permission.EXPERIMENT_PROJECT_READ,
             Permission.ASSISTANT_USE,
             # irip-ai-collab: 协作权限（创建/邀请/删除对话）
             Permission.CONVERSATION_CREATE,
@@ -313,6 +323,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.PROVENANCE_READ,
             Permission.COMPONENT_READ,
             Permission.FLOW_READ,
+            Permission.EXPERIMENT_PROJECT_READ,
             Permission.ASSISTANT_USE,
         ],
     },

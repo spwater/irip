@@ -1,0 +1,69 @@
+sequenceDiagram
+    autonumber
+    participant FE as 前端 ProjectList
+    participant API as experiment_projects_router
+    participant SVC as ExperimentProjectService
+    participant REPO as ExperimentProjectRepository
+    participant DB as PostgreSQL
+    participant Auth as require_permission
+
+    rect rgb(240, 248, 255)
+        Note over FE, DB: 流程一：创建实验项目
+        FE->>Auth: POST /api/v1/experiment-projects (experiment_project:manage)
+        Auth-->>FE: CurrentUser 认证通过
+        FE->>API: CreateProjectBody{department_id, code, display_name, description}
+        API->>API: 校验 body + _check_ownership
+        API->>SVC: create(department_id, code, display_name, description, visible_departments)
+        SVC->>REPO: select_by_dept_and_code(dept_id, code)
+        REPO->>DB: SELECT ... WHERE department_id=? AND code=?
+        DB-->>REPO: None（编码不重复）
+        SVC->>REPO: insert(ExperimentProject{...})
+        REPO->>DB: INSERT INTO experiment_project ...
+        DB-->>REPO: 成功
+        SVC-->>API: ExperimentProject
+        API-->>FE: 201 ExperimentProjectResponse
+    end
+
+    rect rgb(255, 248, 240)
+        Note over FE, DB: 流程二：项目列表查询（含任务统计）
+        FE->>Auth: GET /api/v1/experiment-projects?status=active (experiment_project:read)
+        Auth-->>FE: CurrentUser 认证通过
+        FE->>API: list_projects(status, department_id, cursor, limit)
+        API->>SVC: list(department_id, visible_dept_id, status, cursor, limit)
+        SVC->>REPO: select_list(dept_id, visible_dept_id, status, cursor, limit)
+        REPO->>DB: SELECT experiment_project JOIN department WHERE ... (RLS 过滤)
+        DB-->>REPO: list[ExperimentProject, dept_name]
+        SVC->>REPO: count_flows_by_project(project_id) ×N
+        REPO->>DB: SELECT count(*) FROM flow_definition WHERE project_id=?
+        DB-->>REPO: count
+        SVC-->>API: ExperimentProjectListResult{items, next_cursor, has_more}
+        API-->>FE: 200 ExperimentProjectListResponse（含 task_count）
+    end
+
+    rect rgb(240, 255, 240)
+        Note over FE, DB: 流程三：项目内任务列表查询
+        FE->>Auth: GET /api/v1/flows?project_id={uuid} (flow:read)
+        Auth-->>FE: CurrentUser 认证通过
+        FE->>API: list_flows(project_id, status)
+        API->>SVC: list_definitions(status, project_id)
+        SVC->>DB: SELECT flow_definition WHERE project_id=? (RLS 过滤)
+        DB-->>SVC: list[FlowDefinition, FlowDefinitionVersionORM|None]
+        SVC-->>API: 定义+版本列表
+        API-->>FE: 200 FlowListResponse
+    end
+
+    rect rgb(255, 240, 240)
+        Note over FE, DB: 流程四：归档项目（含归档约束）
+        FE->>Auth: PATCH /api/v1/experiment-projects/{id}/status (experiment_project:manage)
+        Auth-->>FE: CurrentUser 认证通过
+        FE->>API: UpdateProjectStatusBody{status: "archived", lock_version}
+        API->>SVC: get(project_id) → 校验归属
+        API->>API: _check_ownership(current_user, project.department_id, project.owner_user_id)
+        API->>SVC: set_status(project_id, "archived", lock_version)
+        SVC->>REPO: update_status(project_id, "archived", lock_version)
+        REPO->>DB: UPDATE experiment_project SET status='archived', lock_version=lock_version+1 WHERE id=? AND lock_version=?
+        DB-->>REPO: 1 row updated（乐观锁通过）
+        SVC-->>API: ExperimentProject
+        API-->>FE: 200 ExperimentProjectResponse
+        Note over FE, DB: 归档后：创建任务时 SVC.check_not_archived() → 409 Conflict
+    end

@@ -31,6 +31,7 @@ from apps.api.routers.collaboration import collaboration_router
 from apps.api.routers.account import account_router
 from apps.api.routers.departments import departments_router
 from apps.api.routers.equipment import equipment_router
+from apps.api.routers.experiment_projects import experiment_projects_router
 from apps.api.routers.facts import facts_router
 from apps.api.routers.files import files_router
 from apps.api.routers.flows import flows_router
@@ -214,6 +215,7 @@ def create_app() -> FastAPI:
     app.include_router(parameters_router)
     app.include_router(components_router)
     app.include_router(flows_router)
+    app.include_router(experiment_projects_router)
     app.include_router(models_router)
     app.include_router(health_router)
     app.include_router(governance_router)

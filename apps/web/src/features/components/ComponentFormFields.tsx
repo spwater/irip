@@ -2,11 +2,14 @@
  * 组件表单字段（表单模式共用，绑定到外层 Form 上下文）。
  *
  * 从 ComponentsPage.tsx 拆出，包含：
- * - 关联实验对象级联选择器
  * - 文件预加载 + 提示词推荐 + 数据抽取预览
+ * - 组件名称 / 描述 / 解析工具等基础字段
+ *
+ * 说明：数据接口不再关联设备与实验对象，仅保留基础字段与归属/可见部门
+ * （归属与可见部门由 ComponentsPage 直接渲染，不在本组件内）。
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Button,
   Card,
@@ -27,23 +30,14 @@ import {
 } from 'antd';
 import type { UploadProps } from 'antd';
 import { apiUploadFile, apiRecommendPrompt, apiExtractPreview } from '@/api/models-ai';
-import { extractApiError, type IndustrialObject } from '@/api/types';
-import type { ObjectOption } from '@/shared/component-utils';
+import { extractApiError } from '@/api/types';
 
 const { Text } = Typography;
 
 export function ComponentFormFields({
-  objectOptions,
-  objectTypeOptions,
-  equipmentOptions,
-  objectMap,
   originalName,
   ingestionToolOptions,
 }: {
-  objectOptions: { value: string; label: string; object_type: string }[];
-  objectTypeOptions: { value: string; label: string }[];
-  equipmentOptions: ObjectOption[];
-  objectMap: Map<string, IndustrialObject>;
   originalName?: string;
   ingestionToolOptions: { value: string; label: string }[];
 }): JSX.Element {
@@ -53,23 +47,9 @@ export function ComponentFormFields({
   const [previewing, setPreviewing] = useState(false);
   const [previewResult, setPreviewResult] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const formInstance = Form.useFormInstance();
 
-  const watchedExpCode = Form.useWatch('experimental_object_code', formInstance);
   const watchedToolType = Form.useWatch('tool_type', formInstance);
-
-  useEffect(() => {
-    if (watchedExpCode) {
-      const obj = objectMap.get(watchedExpCode);
-      if (obj) {
-        const currentName = formInstance.getFieldValue('display_name') as string ?? '';
-        if (!currentName || currentName.endsWith('接口')) {
-          formInstance.setFieldsValue({ display_name: `${obj.display_name}接口` });
-        }
-      }
-    }
-  }, [watchedExpCode, objectMap, formInstance]);
 
   const uploadProps: UploadProps = {
     accept: '.pdf,.txt,.md,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx',
@@ -99,58 +79,15 @@ export function ComponentFormFields({
     <>
       <Row gutter={16}>
         <Col span={12}>
-          <Form.Item name="equipment_id" label="关联设备">
-            <Select
-              placeholder="请选择关联设备"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={equipmentOptions}
-            />
-          </Form.Item>
-        </Col>
-        <Col span={12}>
           <Form.Item label="接口编码">
             <Input value={originalName ?? 'iface_ffffffff'} disabled />
-          </Form.Item>
-        </Col>
-      </Row>
-      <Row gutter={16}>
-        <Col span={4}>
-          <Form.Item label="类型">
-            <Select
-              placeholder="全部"
-              allowClear
-              value={selectedType}
-              onChange={(val: string | undefined) => {
-                setSelectedType(val);
-                if (watchedExpCode) {
-                  const obj = objectMap.get(watchedExpCode);
-                  if (obj && val && obj.object_type !== val) {
-                    formInstance.setFieldsValue({ experimental_object_code: undefined });
-                  }
-                }
-              }}
-              options={objectTypeOptions}
-            />
-          </Form.Item>
-        </Col>
-        <Col span={8}>
-          <Form.Item name="experimental_object_code" label="实验对象">
-            <Select
-              placeholder="请选择实验对象"
-              allowClear
-              showSearch
-              optionFilterProp="label"
-              options={objectOptions.filter((o) => !selectedType || o.object_type === selectedType)}
-            />
           </Form.Item>
         </Col>
         <Col span={12}>
           <Form.Item
             name="display_name"
-            label="组件名称"
-            rules={[{ required: true, message: '请输入组件名称' }]}
+            label="接口名称"
+            rules={[{ required: true, message: '请输入接口名称' }]}
           >
             <Input placeholder="如：XRF-EZ扫描提取器接口" />
           </Form.Item>

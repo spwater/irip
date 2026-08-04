@@ -81,6 +81,7 @@ class CreateObjectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
+    component_id: str | None = Field(None, description="关联数据接口 ID（可选）")
     department_id: str | None = Field(None, description="所属部门 UUID")
     visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")
 
@@ -98,6 +99,7 @@ class ObjectResponse(BaseModel):
     display_name: str
     description: str | None
     equipment_id: str | None
+    component_id: str | None
     visible_departments: list[str]
     status: str
     created_at: datetime
@@ -114,6 +116,7 @@ class ObjectListItem(BaseModel):
     display_name: str
     description: str | None
     equipment_id: str | None
+    component_id: str | None
     department_id: str | None
     visible_departments: list[str]
     status: str
@@ -162,6 +165,7 @@ async def create_object(
         display_name=body.display_name,
         description=body.description,
         equipment_id=body.equipment_id,
+        component_id=UUID(body.component_id) if body.component_id else None,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,
     )
@@ -250,6 +254,7 @@ class UpdateObjectRequest(BaseModel):
     description: str | None = Field(None, max_length=2000)
     object_type: str | None = Field(None, max_length=50, description="对象类型（可选，修改时传入）")
     equipment_id: UUID | None = Field(None, description="关联设备 ID")
+    component_id: str | None = Field(None, description="关联数据接口 ID（可选，None 表示清空关联）")
     department_id: str | None = Field(None, description="新所属部门 UUID（None 表示不修改）")
     visible_departments: list[str] | None = Field(
         None, description="新可见单位 UUID 列表（None 表示不修改）"
@@ -293,6 +298,7 @@ async def update_object(
         description=body.description,
         object_type=body.object_type,
         equipment_id=body.equipment_id,
+        component_id=UUID(body.component_id) if body.component_id else None,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,
     )
@@ -346,6 +352,22 @@ async def delete_object(
     existing = await service.get_object(object_id)
     await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
 
+    # 检查是否有关联的 fact 数据（外键约束保护）
+    async with service._scoped_session() as session:  # noqa: SLF001
+        import sqlalchemy as sa
+        from packages.facts.entities import Fact
+        count_result = await session.execute(
+            sa.select(sa.func.count(Fact.id)).where(Fact.object_id == object_id)
+        )
+        fact_count = int(count_result.scalar() or 0)
+        if fact_count > 0:
+            raise AppError(
+                code="conflict",
+                message=f"无法删除该实验对象，仍有 {fact_count} 条原始数据关联。请先删除或转移关联数据后再操作。",
+                retryable=False,
+                fields={"object_id": str(object_id), "fact_count": fact_count},
+            )
+
     await service.delete_object(object_id)
 
 
@@ -362,6 +384,7 @@ def _object_to_response(obj: object) -> ObjectResponse:
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
+        component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
         visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
@@ -380,6 +403,7 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         display_name=obj.display_name,  # type: ignore[attr-defined]
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
+        component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
         visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]

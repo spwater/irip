@@ -52,7 +52,8 @@ export function FactModal({
 
   // 从流程节点的 params 中提取 experimental_object_code
   const flowNodes = (flow?.latest_version?.nodes ?? []) as FlowNodeSchema[];
-  const expObjectCode = flowNodes
+  // 优先使用 flow_definition 的当前 experimental_object_code，回退到版本快照
+  const expObjectCode = flow?.experimental_object_code ?? flowNodes
     .map((n) => (n.params as Record<string, unknown> | undefined)?.experimental_object_code as string | undefined)
     .find((v): v is string => Boolean(v));
 

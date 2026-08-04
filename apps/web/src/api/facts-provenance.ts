@@ -97,6 +97,8 @@ export type TaskInfo = {
   run_operator: string | null;
   equipment_name: string | null;
   project_name: string | null;
+  owner_name: string | null;
+  job_id: string | null;
   department_name: string | null;
   data_interface: string | null;
   created_at: string | null;

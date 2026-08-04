@@ -255,7 +255,7 @@ async def get_department_name_map(
 
     from packages.departments.entities import Department
 
-    async with service._factory() as session:  # noqa: SLF001
+    async with service._scoped_session() as session:  # noqa: SLF001
         # 阶段2: department 表是结构数据，RLS 按 current_visible_dept_ids() 过滤
         # 可见性由数据库层 RLS 处理，路由层不再做冗余过滤。
         stmt = sa.select(Department.id, Department.display_name).order_by(

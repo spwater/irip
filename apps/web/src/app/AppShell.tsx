@@ -184,7 +184,7 @@ export function AppShell(): JSX.Element | null {
           <Layout style={{ marginLeft: contentMarginLeft, transition: 'margin-left 200ms var(--ocean-motion-easing)' }}>
             <DynamicHeader user={user} onLogout={handleLogout} watermark={watermark} />
 
-            <Content style={{ background: 'transparent', padding: '20px 0 0' }}>
+            <Content style={{ background: 'transparent', padding: '0' }}>
               <ContentFrame>
                 <Outlet />
               </ContentFrame>

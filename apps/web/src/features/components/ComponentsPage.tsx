@@ -3,12 +3,15 @@
  *
  * 从原始 1432 行拆分为 3 个模块：
  * - component-utils.ts: 常量 + 工具函数（YAML 构建/解析、版本比较等）
- * - ComponentFormFields.tsx: 表单字段组件（级联选择器+文件预加载+预览）
+ * - ComponentFormFields.tsx: 表单字段组件（文件预加载+预览）
  * - ComponentDetailPanel.tsx: 详情面板（基本信息+YAML预览+版本历史+回滚）
  * - ComponentsPage.tsx: 主页面（列表+筛选+Modal+Drawer编排）
+ *
+ * 说明：数据接口不再关联设备与实验对象，保留归属部门，新增可见部门
+ * （树形多选 TreeSelect，与实验项目/设备的可见单位设计一致）。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -22,6 +25,7 @@ import {
   Table,
   Tag,
   Tooltip,
+  TreeSelect,
   Typography,
   message,
 } from 'antd';
@@ -33,16 +37,15 @@ import {
   apiDeleteComponent,
   apiGetComponent,
   apiListComponents,
-  apiListEquipment,
   apiPublishComponent,
   apiRestoreComponent,
   type ComponentSummary,
 } from '@/api/equipment-flows';
-import { apiListObjects, apiListObjectTypes } from '@/api/standards-objects';
 import { apiListDepartments } from '@/api/departments';
 import { apiListIngestionTools } from '@/api/models-ai';
-import { extractApiError, type IndustrialObject } from '@/api/types';
+import { extractApiError } from '@/api/types';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
+import { buildDeptTree } from '@/shared/buildDeptTree';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import {
   buildManifestYaml,
@@ -58,12 +61,11 @@ import { ComponentDetailPanel } from './ComponentDetailPanel';
 
 const { Text } = Typography;
 
-export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObject?: string; editId?: string; hideList?: boolean }): JSX.Element {
+export function ComponentsPage({ editId, hideList }: { prefillObject?: string; editId?: string; hideList?: boolean }): JSX.Element {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
-  const [equipmentFilter, setEquipmentFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editOriginalName, setEditOriginalName] = useState<string | undefined>(undefined);
@@ -72,16 +74,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
   const [detailId, setDetailId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (prefillObject) {
-      form.resetFields();
-      setAdvancedMode(false);
-      setModalOpen(true);
-      form.setFieldsValue({ experimental_object_code: prefillObject });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillObject]);
 
   useEffect(() => {
     if (editId) {
@@ -97,36 +89,12 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
     queryFn: () => apiListComponents(),
   });
 
-  const { data: objectData } = useQuery({
-    queryKey: ['objects-for-component'],
-    queryFn: () => apiListObjects({ page_size: 100 }),
-    staleTime: 0,
-    refetchOnMount: true,
-  });
-  const { data: objectTypeData } = useQuery({
-    queryKey: ['object-types'],
-    queryFn: apiListObjectTypes,
-  });
   const { data: ingestionToolsData } = useQuery({
     queryKey: ['ingestion-tools'],
     queryFn: apiListIngestionTools,
   });
   const ingestionToolOptions = (ingestionToolsData ?? []).map((t) => ({
     value: t.name,
-    label: t.display_name,
-  }));
-
-  const objectMap = new Map<string, IndustrialObject>(
-    (objectData?.items ?? []).map((o) => [o.code, o]),
-  );
-  const objectOptions: { value: string; label: string; object_type: string }[] =
-    (objectData?.items ?? []).map((o) => ({
-      value: o.code,
-      label: `${o.display_name} (${o.code})`,
-      object_type: o.object_type,
-    }));
-  const objectTypeOptions = (objectTypeData ?? []).map((t) => ({
-    value: t.code,
     label: t.display_name,
   }));
 
@@ -141,25 +109,12 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const deptNameMap = new Map<string, string>(
     (deptData?.items ?? []).map((d) => [d.id, d.display_name]),
   );
-  const objectCodeToDeptId = new Map<string, string | null>(
-    (objectData?.items ?? []).map((o) => [o.code, o.department_id ?? null]),
+
+  // 部门树数据（用于可见单位树形多选）
+  const deptTreeData = useMemo(
+    () => buildDeptTree(deptData?.items ?? []),
+    [deptData],
   );
-
-  useEffect(() => {
-    if (prefillObject && modalOpen && objectOptions.length > 0) {
-      form.setFieldsValue({ experimental_object_code: prefillObject });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [objectOptions, prefillObject, modalOpen]);
-
-  const { data: equipmentData } = useQuery({
-    queryKey: ['equipment-for-component'],
-    queryFn: () => apiListEquipment({ limit: 100 }),
-  });
-  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
-    value: e.id,
-    label: e.display_name,
-  }));
 
   const allItems: ComponentSummary[] = (() => {
     const items = data?.items ?? [];
@@ -178,13 +133,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   let currentItems = activeTab === 'modern' ? modernItems : archivedItems;
 
   if (deptFilter) {
-    currentItems = currentItems.filter((i) => {
-      const deptId = i.experimental_object_code ? objectCodeToDeptId.get(i.experimental_object_code) : null;
-      return deptId === deptFilter;
-    });
-  }
-  if (equipmentFilter) {
-    currentItems = currentItems.filter((i) => i.equipment_id === equipmentFilter);
+    currentItems = currentItems.filter((i) => i.department_id === deptFilter);
   }
 
   const { data: detail, isLoading: detailLoading } = useQuery({
@@ -249,7 +198,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
 
   const handleOpenModal = (): void => {
     form.resetFields();
-    form.setFieldsValue({ department_id: currentUser?.departmentId ?? undefined });
+    form.setFieldsValue({ department_id: currentUser?.departmentId ?? undefined, visible_departments: [] });
     setAdvancedMode(false);
     setModalOpen(true);
   };
@@ -261,7 +210,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
-        experimental_object_code: (formValues.experimental_object_code as string) ?? '',
         tool_type: (formValues.tool_type as string) ?? 'llm_converter',
       });
       form.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
@@ -273,7 +221,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
-        experimental_object_code: parsed.experimental_object_code,
         tool_type: parsed.tool_type ?? 'llm_converter',
         manifest_yaml: undefined,
       });
@@ -284,26 +231,24 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const handlePublish = async (): Promise<void> => {
     try {
       if (advancedMode) {
-        const values = await form.validateFields(['manifest_yaml', 'experimental_object_code', 'department_id']);
+        const values = await form.validateFields(['manifest_yaml', 'department_id', 'visible_departments']);
         publishMutation.mutate({
           manifest_yaml: values.manifest_yaml as string,
-          experimental_object_code: (values.experimental_object_code as string) ?? null,
           department_id: (values.department_id as string) ?? null,
+          visible_departments: (values.visible_departments as string[] | undefined) ?? null,
         });
       } else {
-        const values = await form.validateFields([...FORM_FIELD_NAMES, 'department_id']);
+        const values = await form.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
-          experimental_object_code: (values.experimental_object_code as string) ?? '',
           tool_type: (values.tool_type as string) ?? 'llm_converter',
         });
         publishMutation.mutate({
           manifest_yaml: yaml,
-          experimental_object_code: (values.experimental_object_code as string) ?? null,
-          equipment_id: (values.equipment_id as string) ?? null,
           department_id: (values.department_id as string) ?? null,
+          visible_departments: (values.visible_departments as string[] | undefined) ?? null,
         });
       }
     } catch {
@@ -330,10 +275,9 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       display_name: parsed.display_name,
       description: parsed.description,
       prompt: parsed.prompt,
-      experimental_object_code: parsed.experimental_object_code ?? compDetail.experimental_object_code,
-      equipment_id: compDetail.equipment_id,
       tool_type: parsed.tool_type ?? 'llm_converter',
-      department_id: (compDetail as Record<string, unknown>).department_id as string | undefined ?? currentUser?.departmentId,
+      department_id: compDetail.department_id ?? currentUser?.departmentId,
+      visible_departments: compDetail.visible_departments ?? [],
     });
     setEditAdvancedMode(false);
     setEditModalOpen(true);
@@ -346,7 +290,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         display_name: (formValues.display_name as string) ?? '',
         description: (formValues.description as string) ?? '',
         prompt: (formValues.prompt as string) ?? '',
-        experimental_object_code: (formValues.experimental_object_code as string) ?? '',
         tool_type: (formValues.tool_type as string) ?? 'llm_converter',
       }, editOriginalName);
       editForm.setFieldsValue({ manifest_yaml: yaml, ...FRESH_FORM_VALUES });
@@ -358,7 +301,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
         display_name: parsed.display_name,
         description: parsed.description,
         prompt: parsed.prompt,
-        experimental_object_code: parsed.experimental_object_code,
         tool_type: parsed.tool_type ?? 'llm_converter',
         manifest_yaml: undefined,
       });
@@ -369,22 +311,24 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
   const handleEditPublish = async (): Promise<void> => {
     try {
       if (editAdvancedMode) {
-        const values = await editForm.validateFields(['manifest_yaml', 'department_id']);
-        publishMutation.mutate({ manifest_yaml: values.manifest_yaml as string, department_id: (values.department_id as string) ?? null });
+        const values = await editForm.validateFields(['manifest_yaml', 'department_id', 'visible_departments']);
+        publishMutation.mutate({
+          manifest_yaml: values.manifest_yaml as string,
+          department_id: (values.department_id as string) ?? null,
+          visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+        });
       } else {
-        const values = await editForm.validateFields([...FORM_FIELD_NAMES, 'department_id']);
+        const values = await editForm.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
           prompt: values.prompt as string,
-          experimental_object_code: (values.experimental_object_code as string) ?? '',
           tool_type: (values.tool_type as string) ?? 'llm_converter',
         }, editOriginalName);
         publishMutation.mutate({
           manifest_yaml: yaml,
-          experimental_object_code: (values.experimental_object_code as string) ?? null,
-          equipment_id: (values.equipment_id as string) ?? null,
           department_id: (values.department_id as string) ?? null,
+          visible_departments: (values.visible_departments as string[] | undefined) ?? null,
         });
       }
     } catch {
@@ -417,23 +361,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
       width: 100,
     },
     {
-      title: '实验对象',
-      dataIndex: 'experimental_object_code',
-      key: 'experimental_object_code',
-      width: 200,
-      render: (code: string) => {
-        if (!code) return <Text type="secondary">-</Text>;
-        const obj = objectMap.get(code);
-        if (!obj) return <Text code>{code}</Text>;
-        return (
-          <Tag color="green" style={{ margin: 0, padding: '2px 10px', borderRadius: 4 }}>
-            {obj.display_name}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: '归属单位',
+      title: '所属单位',
       dataIndex: 'department_id',
       key: 'department_id',
       width: 150,
@@ -554,16 +482,6 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           onChange={(val: string | undefined) => setDeptFilter(val)}
           options={deptOptions}
         />
-        <Select
-          placeholder="按设备筛选"
-          style={{ width: 200 }}
-          allowClear
-          showSearch
-          optionFilterProp="label"
-          value={equipmentFilter}
-          onChange={(val: string | undefined) => setEquipmentFilter(val)}
-          options={equipmentOptions}
-        />
         <Button
           type={activeTab === 'modern' ? 'primary' : 'default'}
           onClick={() => setActiveTab('modern')}
@@ -623,12 +541,29 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           <Form.Item name="department_id" label="归属部门">
             <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
           </Form.Item>
+          <Form.Item
+            name="visible_departments"
+            label="可见单位"
+            tooltip="选填。默认按部门层级可见（上级可看下级、下级可看上级）。如需对其他部门可见，请在此添加。"
+          >
+            <TreeSelect
+              treeData={deptTreeData}
+              treeCheckable
+              treeDefaultExpandAll
+              showSearch
+              treeNodeFilterProp="title"
+              placeholder="不选则按部门层级默认可见"
+              allowClear
+              style={{ width: '100%' }}
+              maxTagCount={5}
+            />
+          </Form.Item>
           {advancedMode ? (
             <Form.Item
               name="manifest_yaml"
-              label="组件清单 (YAML)"
+              label="接口清单 (YAML)"
               rules={[
-                { required: true, message: '请粘贴组件清单 YAML' },
+                { required: true, message: '请粘贴接口清单 YAML' },
                 { min: 10, message: '清单内容过短' },
               ]}
             >
@@ -639,14 +574,14 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               />
             </Form.Item>
           ) : (
-            <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} ingestionToolOptions={ingestionToolOptions} />
+            <ComponentFormFields ingestionToolOptions={ingestionToolOptions} />
           )}
         </Form>
       </Modal>
 
-      {/* 组件详情 Drawer */}
+      {/* 接口详情 Drawer */}
       <Drawer
-        title="组件详情"
+        title="接口详情"
         open={!!detailId}
         onClose={() => setDetailId(null)}
         width={640}
@@ -694,6 +629,23 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
           <Form.Item name="department_id" label="归属部门">
             <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
           </Form.Item>
+          <Form.Item
+            name="visible_departments"
+            label="可见单位"
+            tooltip="选填。默认按部门层级可见（上级可看下级、下级可看上级）。如需对其他部门可见，请在此添加。"
+          >
+            <TreeSelect
+              treeData={deptTreeData}
+              treeCheckable
+              treeDefaultExpandAll
+              showSearch
+              treeNodeFilterProp="title"
+              placeholder="不选则按部门层级默认可见"
+              allowClear
+              style={{ width: '100%' }}
+              maxTagCount={5}
+            />
+          </Form.Item>
           {editAdvancedMode ? (
             <>
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
@@ -701,9 +653,9 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               </Text>
               <Form.Item
                 name="manifest_yaml"
-                label="组件清单 (YAML)"
+                label="接口清单 (YAML)"
                 rules={[
-                  { required: true, message: '请输入组件清单 YAML' },
+                  { required: true, message: '请输入接口清单 YAML' },
                   { min: 10, message: '清单内容过短' },
                 ]}
               >
@@ -718,7 +670,7 @@ export function ComponentsPage({ prefillObject, editId, hideList }: { prefillObj
               <Text type="secondary" style={{ display: 'block', marginBottom: 8, fontSize: 12 }}>
                 填写表单字段，自动生成 YAML。已从 YAML 提取可匹配的字段。
               </Text>
-              <ComponentFormFields objectOptions={objectOptions} objectTypeOptions={objectTypeOptions} equipmentOptions={equipmentOptions} objectMap={objectMap} originalName={editOriginalName} ingestionToolOptions={ingestionToolOptions} />
+              <ComponentFormFields originalName={editOriginalName} ingestionToolOptions={ingestionToolOptions} />
             </>
           )}
         </Form>

@@ -1,0 +1,102 @@
+classDiagram
+    direction TB
+
+    class ExperimentProjectStatus {
+        <<enumeration>>
+        ACTIVE
+        ARCHIVED
+    }
+
+    class ExperimentProject {
+        +UUID id
+        +UUID department_id
+        +str code
+        +str display_name
+        +str~|None~ description
+        +str status
+        +list~str~ visible_departments
+        +str visibility_scope
+        +UUID owner_user_id
+        +datetime created_at
+        +datetime updated_at
+        +int lock_version
+        +__repr__() str
+    }
+
+    class FlowDefinition {
+        +UUID id
+        +UUID department_id
+        +list visible_departments
+        +str visibility_scope
+        +UUID owner_user_id
+        +str~|None~ project_name
+        +UUID~|None~ project_id
+        +str~|None~ operator
+        +str~|None~ experimental_object_code
+        +str code
+        +str display_name
+        +str status
+        +int lock_version
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    class ExperimentProjectRepository {
+        <<static methods>>
+        +insert(session, project) ExperimentProject
+        +select_by_id(session, project_id) ExperimentProject~|None~
+        +select_by_dept_and_code(session, dept_id, code) ExperimentProject~|None~
+        +select_list(session, dept_id, visible_dept_id, status, cursor, limit) list~tuple~
+        +count_flows_by_project(session, project_id) int
+        +update(session, project_id, display_name, description, lock_version) ExperimentProject~|None~
+        +update_status(session, project_id, status, lock_version) ExperimentProject~|None~
+    }
+
+    class ExperimentProjectService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID~|None~ _actor_id
+        +Clock _clock
+        +__init__(session_factory, department_id, clock, actor_id)
+        +department_id UUID
+        +actor_id UUID~|None~
+        +session_factory async_sessionmaker
+        +create(department_id, code, display_name, description, visible_departments) ExperimentProject
+        +list(department_id, visible_dept_id, status, cursor, limit) ExperimentProjectListResult
+        +get(project_id) ExperimentProject
+        +get_with_stats(project_id) tuple~ExperimentProject, int~
+        +update(project_id, display_name, description, lock_version, visible_departments) ExperimentProject
+        +set_status(project_id, status, lock_version) ExperimentProject
+        +check_not_archived(project_id) None
+    }
+
+    class ExperimentProjectListResult {
+        +list items
+        +str~|None~ next_cursor
+        +bool has_more
+    }
+
+    class ExperimentProjectRouter {
+        +APIRouter prefix: /api/v1/experiment-projects
+        +create_project(body, current_user, service) ExperimentProjectResponse
+        +list_projects(current_user, service, status, department_id, cursor, limit) ExperimentProjectListResponse
+        +get_project(project_id, current_user, service) ExperimentProjectDetailResponse
+        +update_project(project_id, body, current_user, service) ExperimentProjectResponse
+        +update_project_status(project_id, body, current_user, service) ExperimentProjectResponse
+    }
+
+    class FlowRuntimeService {
+        +create_definition(code, display_name, nodes, edges, department_id, project_id, operator, experimental_object_code) FlowDefinition
+        +list_definitions(status, project_id) list~tuple~
+        +update_definition_project(flow_id, project_id) FlowDefinition
+    }
+
+    ExperimentProject --> ExperimentProjectStatus : status
+    ExperimentProject }--.. ExperimentProjectRepository : persisted by
+    ExperimentProjectRepository ..> ExperimentProject : operates on
+    ExperimentProjectService --> ExperimentProjectRepository : uses
+    ExperimentProjectService ..> ExperimentProject : manages
+    ExperimentProjectService ..> ExperimentProjectListResult : returns
+    ExperimentProjectRouter --> ExperimentProjectService : depends
+    FlowDefinition --> ExperimentProject : project_id FK
+    FlowRuntimeService ..> FlowDefinition : manages

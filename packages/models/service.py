@@ -26,7 +26,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -71,7 +71,7 @@ class PredictionResult:
     fact_id: UUID | None = None
 
 
-class ModelService:
+class ModelService(ScopedSessionMixin):
     """模型生命周期业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -142,7 +142,7 @@ class ModelService:
             AppError: code="conflict"，当 code 已存在时。
         """
         # 幂等冲突检查
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             existing = await session.scalar(
                 sa.select(Model).where(
@@ -158,7 +158,7 @@ class ModelService:
                     fields={"code": code},
                 )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             model = Model(
                 id=new_id(),
                 department_id=self._dept_id,
@@ -204,7 +204,7 @@ class ModelService:
         Raises:
             AppError: code="not_found"，当模型不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -258,7 +258,7 @@ class ModelService:
             AppError: code="not_found"，当版本不存在时。
             AppError: code="invalid_state"，当版本状态非 draft 时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             version = await self._get_version_owned(session, model_id, version_id)
             if version is None:
                 raise AppError(
@@ -304,7 +304,7 @@ class ModelService:
             AppError: code="not_found"，当版本不存在时。
             AppError: code="invalid_state"，当版本状态非 pending_validation 时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             version = await self._get_version_owned(session, model_id, version_id)
             if version is None:
                 raise AppError(
@@ -357,7 +357,7 @@ class ModelService:
             AppError: code="invalid_state"，当版本状态非 validated 时。
         """
         now = self._clock.now()
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -411,7 +411,7 @@ class ModelService:
             AppError: code="not_found"，当版本不存在时。
             AppError: code="invalid_state"，当目标版本不可回滚时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -460,7 +460,7 @@ class ModelService:
         Raises:
             AppError: code="not_found"，当模型不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -498,7 +498,7 @@ class ModelService:
             AppError: code="invalid_state"，当模型未发布时。
             AppError: code="outside_applicability_domain"，当输入超出适用域时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -542,7 +542,7 @@ class ModelService:
         started_at = self._clock.now()
 
         # 获取版本
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             version = await session.scalar(
                 sa.select(ModelVersion).where(ModelVersion.id == model_version_id)
             )
@@ -637,7 +637,7 @@ class ModelService:
         Raises:
             AppError: code="not_found"，当模型不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             model = await self._get_model_owned(session, model_id)
             if model is None:
                 raise AppError(
@@ -657,7 +657,7 @@ class ModelService:
         Returns:
             list[Model]: 模型列表（按 created_at 升序）。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(Model)
@@ -678,7 +678,7 @@ class ModelService:
         Returns:
             list[ModelVersion]: 版本列表（按 version 升序）。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(ModelVersion)
                 .where(ModelVersion.model_id == model_id)

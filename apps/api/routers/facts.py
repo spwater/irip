@@ -171,7 +171,7 @@ async def list_facts(
         from packages.facts.entities import Fact
 
         fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
-        async with service.session_factory() as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
                 FlowDefinition as _FD,
@@ -239,7 +239,7 @@ async def list_facts(
             department_id=service.department_id,
             uploaded_by=current_user.user_id,
         )
-        async with service.session_factory() as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             for item in items:
                 try:
                     fa_stmt = (
@@ -343,7 +343,7 @@ async def search_facts(
         from packages.facts.entities import Fact
 
         fact_ids = [__import__("uuid").UUID(item.fact_id) for item in items]
-        async with service.session_factory() as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             # snap 查询：JOIN FlowDefinition 拿当前 display_name 覆盖快照 task_name
             from packages.components.flow_runtime import (
                 FlowDefinition as _FD,
@@ -449,7 +449,7 @@ async def search_facts_by_data(
             retryable=False,
         )
 
-    async with service.session_factory() as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         # 查匹配的 fact_id（去重）
         stmt = (
             sa.select(FactDataIndex.fact_id)
@@ -616,7 +616,7 @@ async def get_fact(
     resp = _ref_to_response(ref)
 
     # 补充 JOIN 快照字段（与列表 API 一致）
-    async with service.session_factory() as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         snap_stmt = (
             sa.select(
                 Fact.id,
@@ -670,7 +670,7 @@ async def get_fact_data(
     if fact is None:
         return {"metadata": {}, "points": [], "series": []}
 
-    async with service.session_factory() as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         from packages.common.artifacts import Artifact
 
         # 查找 JSON artifact：优先用 source_artifact_id（如果它是 JSON），
@@ -749,39 +749,69 @@ async def get_fact_data(
                     "run_operator": fact_record.run_operator,
                     "equipment_name": fact_record.equipment_name,
                     "project_name": None,
+                    "owner_name": None,
+                    "job_id": None,
                     "data_interface": None,
                     "created_at": None,
                 }
                 # 通过 flow_run_id 外键补查 project_name, data_interface 和 created_at
+                # 用独立 session + flow_run 的 department_id 设 GUC，绕过 fact vs run 部门不一致的 RLS 问题
                 if fact_record.flow_run_id:
                     from packages.components.flow_runtime import (
                         FlowDefinition,
                         FlowDefinitionVersionORM,
                         FlowRun,
                     )
+                    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+                    import os as _os
 
-                    run_stmt = sa.select(FlowRun).where(FlowRun.id == fact_record.flow_run_id)
-                    run_record = (await session.execute(run_stmt)).scalar_one_or_none()
-                    if run_record:
-                        fv_stmt = sa.select(FlowDefinitionVersionORM).where(
-                            FlowDefinitionVersionORM.id == run_record.flow_version_id
-                        )
-                        fv = (await session.execute(fv_stmt)).scalar_one_or_none()
-                        if fv:
-                            fd_stmt = sa.select(FlowDefinition).where(
-                                FlowDefinition.id == fv.flow_definition_id
+                    # 用 alembic URL (superuser) 开 session 绕过 RLS，仅用于补查元数据
+                    _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "")
+                    if _alembic_url:
+                        from sqlalchemy.ext.asyncio import async_sessionmaker as _asm, create_async_engine as _cae
+                        _engine = _cae(_alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1))
+                        _factory = _asm(_engine, expire_on_commit=False)
+                        async with _factory() as sess:
+                            run_stmt = sa.select(FlowRun).where(FlowRun.id == fact_record.flow_run_id)
+                        run_record = (await sess.execute(run_stmt)).scalar_one_or_none()
+                        if run_record:
+                            fv_stmt = sa.select(FlowDefinitionVersionORM).where(
+                                FlowDefinitionVersionORM.id == run_record.flow_version_id
                             )
-                            fd = (await session.execute(fd_stmt)).scalar_one_or_none()
-                            if fd:
-                                nodes = fv.nodes_json or []
-                                comp_names = list(
-                                    {
-                                        n.get("component_name", "")
-                                        for n in nodes
-                                        if n.get("component_name")
-                                    }
+                            fv = (await sess.execute(fv_stmt)).scalar_one_or_none()
+                            if fv:
+                                fd_stmt = sa.select(FlowDefinition).where(
+                                    FlowDefinition.id == fv.flow_definition_id
                                 )
-                                task_info["project_name"] = fd.project_name
+                                fd = (await sess.execute(fd_stmt)).scalar_one_or_none()
+                                if fd:
+                                    nodes = fv.nodes_json or []
+                                    comp_names = list(
+                                        {
+                                            n.get("component_name", "")
+                                            for n in nodes
+                                            if n.get("component_name")
+                                        }
+                                    )
+                                    # 查 experiment_project 取项目名 + 负责人
+                                    project_name = None
+                                    owner_display_name = None
+                                    if fd.project_id:
+                                        from packages.experiment_project.entities import ExperimentProject
+                                        from packages.auth.entities import AppUser
+
+                                        ep_stmt = sa.select(ExperimentProject).where(
+                                            ExperimentProject.id == fd.project_id
+                                        )
+                                        ep = (await sess.execute(ep_stmt)).scalar_one_or_none()
+                                        if ep:
+                                            project_name = ep.display_name
+                                            owner_stmt = sa.select(AppUser.display_name).where(AppUser.id == ep.owner_user_id)
+                                            owner_row = (await sess.execute(owner_stmt)).scalar_one_or_none()
+                                            owner_display_name = owner_row
+                                task_info["owner_name"] = owner_display_name
+                                task_info["project_name"] = project_name
+                                task_info["job_id"] = str(run_record.job_id) if run_record.job_id else None
                                 task_info["created_at"] = (
                                     fd.created_at.isoformat() if fd.created_at else None
                                 )
@@ -793,7 +823,7 @@ async def get_fact_data(
                                         Department.id == fd.department_id
                                     )
                                     dept_record = (
-                                        await session.execute(dept_stmt)
+                                        await sess.execute(dept_stmt)
                                     ).scalar_one_or_none()
                                     task_info["department_name"] = (
                                         dept_record.display_name if dept_record else None
@@ -821,7 +851,7 @@ async def get_fact_data(
                                         .order_by(ComponentVersion.created_at.desc())
                                         .limit(1)
                                     )
-                                    cv = (await session.execute(cv_stmt)).scalar_one_or_none()
+                                    cv = (await sess.execute(cv_stmt)).scalar_one_or_none()
                                     if cv:
                                         try:
                                             manifest = yaml_lib.safe_load(cv.manifest_yaml)
@@ -837,7 +867,7 @@ async def get_fact_data(
                                         obj_stmt = sa.select(IndustrialObject).where(
                                             IndustrialObject.code == cv.experimental_object_code
                                         )
-                                        obj = (await session.execute(obj_stmt)).scalar_one_or_none()
+                                        obj = (await sess.execute(obj_stmt)).scalar_one_or_none()
                                         if obj:
                                             ds["object_name"] = obj.display_name
                                             if obj.equipment_id:
@@ -847,7 +877,7 @@ async def get_fact_data(
                                                     Equipment.id == obj.equipment_id
                                                 )
                                                 eq = (
-                                                    await session.execute(eq_stmt)
+                                                    await sess.execute(eq_stmt)
                                                 ).scalar_one_or_none()
                                                 if eq:
                                                     ds["equipment_name"] = eq.display_name
@@ -860,17 +890,17 @@ async def get_fact_data(
                                                             Department.id == eq.department_id
                                                         )
                                                         dept = (
-                                                            await session.execute(dept_stmt)
+                                                            await sess.execute(dept_stmt)
                                                         ).scalar_one_or_none()
                                                         if dept:
                                                             ds["department_name"] = (
                                                                 dept.display_name
                                                             )
                                     data_source_list.append(ds)
-                                task_info["data_interface"] = (
-                                    ", ".join(comp_names) if comp_names else None
-                                )
-                                task_info["data_source_list"] = data_source_list
+                                    task_info["data_interface"] = (
+                                        ", ".join(comp_names) if comp_names else None
+                                    )
+                                    task_info["data_source_list"] = data_source_list
         except Exception as e:
             import logging
 
@@ -886,10 +916,18 @@ async def get_fact_data(
                 )
 
                 # 用 flow_run_id 外键反查
-                fr_stmt = sa.select(Fact.flow_run_id).where(Fact.id == fact_id)
-                flow_run_id = (await session.execute(fr_stmt)).scalar_one_or_none()
+                fr_stmt = sa.select(Fact.flow_run_id, Fact.department_id, Fact.owner_user_id).where(Fact.id == fact_id)
+                fr_result = (await session.execute(fr_stmt)).first()
+                flow_run_id = fr_result[0] if fr_result else None
 
                 if flow_run_id:
+                    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+                    # 用 fact 自己的 department_id 设 GUC，确保 RLS 可见
+                    if fr_result and fr_result[1]:
+                        await set_dept_guc(session, fr_result[1])
+                    if fr_result and fr_result[2]:
+                        await set_user_guc(session, fr_result[2])
                     run_stmt = sa.select(FlowRun).where(FlowRun.id == flow_run_id)
                     run_record = (await session.execute(run_stmt)).scalar_one_or_none()
                     if run_record:
@@ -925,6 +963,18 @@ async def get_fact_data(
                                     }
                                 )
 
+                                # 查 experiment_project 取项目名
+                                project_name = None
+                                if fd.project_id:
+                                    from packages.experiment_project.entities import ExperimentProject
+
+                                    ep_stmt = sa.select(ExperimentProject).where(
+                                        ExperimentProject.id == fd.project_id
+                                    )
+                                    ep = (await session.execute(ep_stmt)).scalar_one_or_none()
+                                    if ep:
+                                        project_name = ep.display_name
+
                                 task_info = {
                                     "task_name": fd.display_name,
                                     "task_source": dept_name,
@@ -934,7 +984,9 @@ async def get_fact_data(
                                     )
                                     if run_record
                                     else None,
-                                    "project_name": fd.project_name,
+                                    "project_name": project_name,
+                                    "owner_name": None,
+                                    "job_id": str(run_record.job_id) if run_record and run_record.job_id else None,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
                                     "created_at": fd.created_at.isoformat()
@@ -1040,10 +1092,10 @@ async def delete_fact(
     from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
-    # 先查出关联的 source_artifact_id + 归属信息，用于权限检查和删 MinIO 文件
-    async with service.session_factory() as session:
+    # 先查出关联的 source_artifact_id + flow_run_id + 归属信息
+    async with service._scoped_session() as session:  # noqa: SLF001
         art_result = await session.execute(
-            sa.select(Fact.source_artifact_id, Fact.department_id, Fact.owner_user_id).where(Fact.id == fact_id)
+            sa.select(Fact.source_artifact_id, Fact.department_id, Fact.owner_user_id, Fact.flow_run_id).where(Fact.id == fact_id)
         )
         row = art_result.first()
         if row is None:
@@ -1052,6 +1104,7 @@ async def delete_fact(
         source_artifact_id = row[0]
         fact_dept_id = row[1]
         fact_owner_id = row[2]
+        flow_run_id = row[3]
 
     # 归属检查：所有者+上级模型
     from apps.api.dependencies.dept_scope import check_management_permission
@@ -1077,10 +1130,17 @@ async def delete_fact(
         except Exception:
             _logger.warning("删除 artifact 文件失败", exc_info=True)
 
-    async with session_scope(service.session_factory) as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         # 删除 Fact（FK CASCADE 会自动删除 FactDataIndex）
         await session.execute(sa.delete(Fact).where(Fact.id == fact_id))
         await session.flush()
+
+    # 同时删除关联的 FlowRun（导入历史）
+    if flow_run_id is not None:
+        from packages.components.flow_runtime import FlowRun
+        async with service._scoped_session() as session:  # noqa: SLF001
+            await session.execute(sa.delete(FlowRun).where(FlowRun.id == flow_run_id))
+            await session.flush()
 
 
 @facts_router.delete("/by-task/{task_code}", status_code=204)
@@ -1097,16 +1157,17 @@ async def delete_facts_by_task(
     from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
-    # 先查出关联的 fact_id 和 source_artifact_id
-    async with service.session_factory() as session:
+    # 先查出关联的 fact_id、source_artifact_id 和 flow_run_id
+    async with service._scoped_session() as session:  # noqa: SLF001
         result = await session.execute(
-            sa.select(Fact.id, Fact.source_artifact_id).where(
+            sa.select(Fact.id, Fact.source_artifact_id, Fact.flow_run_id).where(
                 Fact.task_code == task_code
             )
         )
         rows = result.all()
         fact_ids = [row[0] for row in rows]
         artifact_ids = [row[1] for row in rows if row[1] is not None]
+        flow_run_ids = [row[2] for row in rows if row[2] is not None]
 
     # 删 MinIO 中的 artifact 文件
     if artifact_ids:
@@ -1124,6 +1185,13 @@ async def delete_facts_by_task(
             _logger.warning("删除 artifact 文件失败", exc_info=True)
 
     if fact_ids:
-        async with session_scope(service.session_factory) as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             await session.execute(sa.delete(Fact).where(Fact.id.in_(fact_ids)))
+            await session.flush()
+
+    # 同时删除关联的 FlowRun（导入历史）
+    if flow_run_ids:
+        from packages.components.flow_runtime import FlowRun
+        async with service._scoped_session() as session:  # noqa: SLF001
+            await session.execute(sa.delete(FlowRun).where(FlowRun.id.in_(flow_run_ids)))
             await session.flush()

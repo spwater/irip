@@ -22,7 +22,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -59,7 +59,7 @@ class RecipeVersion:
     status: str
 
 
-class RecipeService:
+class RecipeService(ScopedSessionMixin):
     """推导配方业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -117,7 +117,7 @@ class RecipeService:
                 fields={"display_name": "required"},
             )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查 code 唯一性
             existing = await session.scalar(
@@ -201,7 +201,7 @@ class RecipeService:
                 fields={"component_version": "required"},
             )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 加载配方
             recipe = await session.scalar(
@@ -279,7 +279,7 @@ class RecipeService:
         Raises:
             AppError: code="not_found"，当配方不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             recipe = await session.scalar(
                 sa.select(TransformationRecipe).where(
@@ -334,7 +334,7 @@ class RecipeService:
         Returns:
             tuple[list[dict], str | None]: (配方列表, 下一页游标)。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(TransformationRecipe)

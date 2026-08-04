@@ -24,7 +24,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -33,7 +33,7 @@ from packages.jobs.outbox import OutboxDispatcher
 from packages.jobs.repository import JobRepository
 
 
-class JobService:
+class JobService(ScopedSessionMixin):
     """作业业务编排服务。
 
     阶段2：租户标识使用 department_id。
@@ -66,6 +66,7 @@ class JobService:
         self._factory = session_factory
         self._dept_id = department_id
         self._created_by = created_by
+        self._actor_id = created_by
         self._clock = clock or SystemClock()
 
     async def accept(
@@ -99,7 +100,7 @@ class JobService:
                 fields={"kind": "required"},
             )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 幂等检查：查询已有作业
             existing: Job | None = await JobRepository.get_by_idempotency_dept(
                 session, self._dept_id, idempotency_key
@@ -171,7 +172,7 @@ class JobService:
             AppError: code="not_found"，当作业不存在或不属于当前部门时。
             AppError: code="conflict"，当作业已终态时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
                 raise AppError(
@@ -246,7 +247,7 @@ class JobService:
         Raises:
             AppError: code="not_found"，当作业不存在或不属于当前部门时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
                 raise AppError(
@@ -324,7 +325,7 @@ class JobService:
                 ) from exc
             conditions.append(Job.created_at < cursor_dt)
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
             conditions.append(Job.department_id.in_(visible_ids))
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
@@ -398,7 +399,7 @@ class JobService:
         Raises:
             AppError: code="not_found"，当作业不存在或不属于当前部门时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
                 raise AppError(

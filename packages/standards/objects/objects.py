@@ -91,6 +91,8 @@ class IndustrialObject(Base):
         code: 对象编码（部门内 + 类型内唯一）。
         display_name: 中文显示名。
         description: 描述（可选）。
+        equipment_id: 关联设备 ID（可选）。
+        component_id: 关联数据接口 ID（可选，FK→component.id）。
         department_id: 所属部门 ID（nullable，跨实验室可见性基准）。
         visible_departments: 可见单位 ID 列表（JSONB 数组，跨实验室可见性）。
         status: 状态（默认 active）。
@@ -107,6 +109,12 @@ class IndustrialObject(Base):
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    component_id: Mapped[UUID | None] = mapped_column(
+        GUID,
+        sa.ForeignKey("component.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="关联数据接口 ID（可选）",
+    )
     department_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("department.id"),

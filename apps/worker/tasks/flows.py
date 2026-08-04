@@ -128,8 +128,12 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     # 获取最终状态
     from packages.components.flow_runtime import FlowRun
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
     async with session_scope(factory) as session:
+        # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC
+        await set_dept_guc(session, department_id)
+        await set_user_guc(session, sys_user_id)
         run = await session.scalar(sa.select(FlowRun).where(FlowRun.id == run_uuid))
         if run is None:
             return {"error": "run not found", "run_id": run_id}
@@ -194,7 +198,15 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         async_url = db_url
 
     factory = build_session_factory(async_url)
+    # RLS 通电：job 表有 B 类 RLS，使用 system GUC 跨部门更新
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+    from apps.worker.tasks import get_system_guc
+
+    sys_dept, sys_user = get_system_guc()
     async with session_scope(factory) as session:
+        await set_dept_guc(session, sys_dept)
+        await set_user_guc(session, sys_user)
         await session.execute(
             sa.update(Job)
             .values(
@@ -329,7 +341,14 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     run_uuid = UUID(run_id)
     await service.resume(run_uuid)
 
+    # 获取最终状态
+    from packages.components.flow_runtime import FlowRun
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
     async with session_scope(factory) as session:
+        # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC 否则 run=None
+        await set_dept_guc(session, department_id)
+        await set_user_guc(session, sys_user_id)
         run = await session.scalar(sa.select(FlowRun).where(FlowRun.id == run_uuid))
         if run is None:
             return {"error": "run not found", "run_id": run_id}

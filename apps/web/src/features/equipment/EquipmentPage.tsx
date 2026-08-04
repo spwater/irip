@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -12,6 +12,7 @@ import {
   Table,
   Tag,
   Tooltip,
+  TreeSelect,
   Typography,
   message,
 } from 'antd';
@@ -34,6 +35,7 @@ import { ExperimentalObjectPage } from '@/features/standards/ExperimentalObjectP
 import { extractApiError } from '@/api/types';
 import { DataTableShell } from '@/shared/ui';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
+import { buildDeptTree } from '@/shared/buildDeptTree';
 
 /**
  * 设备仪器管理页面
@@ -92,6 +94,12 @@ export function EquipmentPage({
     value: d.id,
     label: d.display_name,
   }));
+
+  // 部门树数据（用于可见单位树形多选）
+  const deptTreeData = useMemo(
+    () => buildDeptTree(deptData?.items ?? []),
+    [deptData],
+  );
 
   // ---- 数据查询：全部门名称映射（不受部门隔离限制，用于可见单位名称展示）----
   const { data: deptNameMapData } = useQuery({
@@ -480,15 +488,18 @@ export function EquipmentPage({
           <Form.Item
             name="visible_departments"
             label="可见单位"
-            tooltip="选择除所属机构外，哪些实验室也可以看到该设备。所属机构默认可见，无需重复选择。"
+            tooltip="选填。默认按部门层级可见（上级可看下级、下级可看上级）。如需对其他部门可见，请在此添加。"
           >
-            <Select
-              mode="multiple"
-              placeholder="选择可见单位（可多选）"
-              options={deptOptions}
+            <TreeSelect
+              treeData={deptTreeData}
+              treeCheckable
+              treeDefaultExpandAll
               showSearch
-              optionFilterProp="label"
+              treeNodeFilterProp="title"
+              placeholder="不选则按部门层级默认可见"
               allowClear
+              style={{ width: '100%' }}
+              maxTagCount={5}
             />
           </Form.Item>
           <Form.Item

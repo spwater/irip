@@ -62,8 +62,19 @@ async def _execute_job_async(job_id: str) -> str:
     async_url = _async_db_url()
 
     factory = build_session_factory(async_url)
-    lease_manager = WorkerLeaseManager(factory)
-    executor = JobExecutor(lease_manager, factory)
+    # RLS 通电：注入 system 哨兵 GUC，使 worker 能跨部门读写 job 表
+    default_dept_id, default_user_id = get_system_guc()
+    lease_manager = WorkerLeaseManager(
+        factory,
+        default_dept_id=default_dept_id,
+        default_user_id=default_user_id,
+    )
+    executor = JobExecutor(
+        lease_manager,
+        factory,
+        default_dept_id=default_dept_id,
+        default_user_id=default_user_id,
+    )
 
     # 注册全部 handler（F-04：显式注册表）
     _register_handlers(executor)
@@ -346,7 +357,17 @@ async def _restore_handler(job: object) -> dict:
                 expires_at=now + timedelta(days=7),
                 department_id=org_id if org_id is not None else new_id(),
             )
+            # RLS 通电：backup_record 有 B 类 RLS，INSERT 需 GUC 通过 WITH CHECK
+            from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+            sys_dept, sys_user = get_system_guc()
+            # 优先使用 job 的 department_id / created_by，退回 system GUC
+            guc_dept = org_id if org_id is not None else sys_dept
+            guc_user = getattr(job, "created_by", None) or sys_user
+
             async with session_scope(factory) as session:
+                await set_dept_guc(session, guc_dept)
+                await set_user_guc(session, guc_user)
                 session.add(record)
                 await session.flush()
 
@@ -527,7 +548,14 @@ async def _audit_export_handler(job: object) -> dict:
     except (ValueError, TypeError):
         org_id = None
 
+    # RLS 通电：audit_event 表有 B 类 RLS，必须设 GUC 否则查询返回空集
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+    sys_dept, sys_user = get_system_guc()
+
     async with session_scope(factory) as session:
+        await set_dept_guc(session, sys_dept)
+        await set_user_guc(session, sys_user)
         # 动态查询 audit_event 表（使用原始 SQL 避免硬依赖 ORM 模型）
         conditions = []
         if org_id is not None:
@@ -611,6 +639,46 @@ def get_system_dept_id() -> str:
     return os.getenv(SYSTEM_DEPT_ENV, "")
 
 
+#: 系统服务用户 ID 环境变量名（Celery worker 无用户会话时作为 GUC actor）。
+SYSTEM_SERVICE_USER_ENV: str = "IRIP_SYSTEM_SERVICE_USER_ID"
+
+
+def get_system_service_user_id() -> str:
+    """获取系统服务用户 ID（从环境变量读取）。
+
+    system_service 用户挂 system 哨兵部门（primary）+ root 哨兵部门（secondary，
+    由迁移 0071 添加），设置 user GUC 后 current_visible_dept_ids() 返回全部门。
+
+    Returns:
+        str: 系统服务用户 UUID 字符串。
+    """
+    return os.getenv(SYSTEM_SERVICE_USER_ENV, "")
+
+
+def _parse_uuid_or_none(value: str) -> UUID | None:
+    """安全解析 UUID 字符串，空或非法时返回 None。"""
+    if not value:
+        return None
+    try:
+        return UUID(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def get_system_guc() -> tuple[UUID | None, UUID | None]:
+    """获取 Worker/Beat 默认 GUC 值（dept_id, user_id）。
+
+    从环境变量读取 system 哨兵部门 ID 和 system_service 用户 ID。
+    用于 Worker 无用户上下文时设置 RLS GUC。
+
+    Returns:
+        tuple[UUID | None, UUID | None]: (dept_id, user_id)。
+    """
+    dept_id = _parse_uuid_or_none(get_system_dept_id())
+    user_id = _parse_uuid_or_none(get_system_service_user_id())
+    return dept_id, user_id
+
+
 async def _execute_beat_task_async(
     task_name: str,
     department_id: str,
@@ -635,12 +703,13 @@ async def _execute_beat_task_async(
 
     factory = build_session_factory(_async_db_url())
     dept_uuid: _UUID | None = _UUID(department_id) if department_id else None
+    # RLS 通电：Beat 无用户 → 使用 system_service 用户 GUC（挂 root 部门 → 全部门可见）
+    user_uuid: _UUID | None = _parse_uuid_or_none(get_system_service_user_id())
 
     async with factory() as session:
         async with session.begin():
-            # Beat 无用户 → user GUC 设空串（fail-closed for private RLS）
             await set_dept_guc(session, dept_uuid)
-            await set_user_guc(session, None)
+            await set_user_guc(session, user_uuid)
             _beat_logger.info("Beat task %s: dept GUC set to %s", task_name, department_id)
             if callable(handler):
                 await handler(session)

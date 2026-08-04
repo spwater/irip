@@ -178,7 +178,15 @@ def reap_expired_leases() -> int:
         async_url = db_url
 
     factory = build_session_factory(async_url)
-    lease_manager = WorkerLeaseManager(factory)
+    # RLS 通电：注入 system 哨兵 GUC，使 reaper 能跨部门回收过期租约
+    from apps.worker.tasks import get_system_guc
+
+    default_dept_id, default_user_id = get_system_guc()
+    lease_manager = WorkerLeaseManager(
+        factory,
+        default_dept_id=default_dept_id,
+        default_user_id=default_user_id,
+    )
 
     async def _reap() -> list:
         return await lease_manager.reap_expired()
@@ -218,10 +226,18 @@ def retry_wait_jobs() -> int:
 
     async def _retry() -> int:
         from packages.common.clock import SystemClock
+        from packages.common.tenant_guc import set_dept_guc, set_user_guc
+
+        # RLS 通电：job 表有 B 类 RLS，必须设 GUC 否则查询返回空集
+        from apps.worker.tasks import get_system_guc
+
+        sys_dept, sys_user = get_system_guc()
 
         clock = SystemClock()
         count = 0
         async with session_scope(factory) as session:
+            await set_dept_guc(session, sys_dept)
+            await set_user_guc(session, sys_user)
             result = await session.execute(
                 sa.select(Job).where(
                     Job.status == JobStatus.RETRY_WAIT.value,
@@ -317,10 +333,19 @@ def daily_backup() -> str:
         now: datetime = datetime.now(UTC)
         backup_dir: str = str(Path(backup_output_dir) / str(job_id))
 
-        # Beat 无用户 → user GUC 设空串（fail-closed for private RLS）
+        # RLS 通电：Beat 无用户 → 使用 system_service 用户 GUC（挂 root → 全部门可见）
+        # 使 current_visible_dept_ids() 返回含 system 哨兵的部门集，INSERT 通过 WITH CHECK
+        from apps.worker.tasks import get_system_service_user_id
+
+        sys_user_id_str: str = get_system_service_user_id()
+        try:
+            sys_user_id: UUID | None = UUID(sys_user_id_str) if sys_user_id_str else None
+        except (ValueError, TypeError):
+            sys_user_id = None
+
         async with session_scope(factory) as session:
             await set_dept_guc(session, dept_id)
-            await set_user_guc(session, None)
+            await set_user_guc(session, sys_user_id)
             job = Job(
                 id=job_id,
                 department_id=dept_id,  # 阶段2：挂 system 哨兵
@@ -398,15 +423,17 @@ def retention_cleanup() -> int:
     service: BackupRecordService = BackupRecordService(factory)
 
     # 阶段2：Beat 清理任务操作 backup_record（敏感档）→ 挂 system 哨兵
-    from apps.worker.tasks import get_system_dept_id
+    from apps.worker.tasks import get_system_dept_id, get_system_service_user_id
 
     dept_id_str: str = get_system_dept_id()
+    user_id_str: str = get_system_service_user_id()
 
     async def _cleanup() -> int:
         from uuid import UUID as _UUID
 
         dept_uuid: _UUID | None = _UUID(dept_id_str) if dept_id_str else None
-        return await service.delete_expired(dept_id=dept_uuid)
+        user_uuid: _UUID | None = _UUID(user_id_str) if user_id_str else None
+        return await service.delete_expired(dept_id=dept_uuid, user_id=user_uuid)
 
     return asyncio.run(_cleanup())
 

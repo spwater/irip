@@ -16,7 +16,7 @@ import {
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { apiGetFact, apiGetFactData } from '@/api/facts-provenance';
 import { apiGetArtifactDownloadUrl } from '@/api/models-ai';
 import { PrivateBadge } from '@/shared/PrivateBadge';
@@ -39,6 +39,8 @@ export function FactDetail(): JSX.Element {
   const params = useParams({ strict: false });
   const factId = String((params as Record<string, unknown>).factId ?? '');
   const navigate = useNavigate();
+  const search = useSearch({ strict: false });
+  const projectFromUrl = (search as Record<string, unknown>).project as string | undefined;
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
   const [publishOpen, setPublishOpen] = useState(false);
@@ -121,9 +123,14 @@ export function FactDetail(): JSX.Element {
               </Button>
             )}
             <Button
-              onClick={() => void navigate({ to: '/lab-ops', search: { tab: 'facts' } })}
+              onClick={() => void navigate({
+                to: '/lab-ops',
+                search: projectFromUrl
+                  ? { tab: 'flows', project: projectFromUrl }
+                  : { tab: 'flows' },
+              })}
             >
-              返回列表
+              返回项目
             </Button>
           </Space>
         }
@@ -147,9 +154,6 @@ export function FactDetail(): JSX.Element {
               <Descriptions.Item label="任务名称">
                 {taskInfo?.task_name ?? '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="负责人">
-                {taskInfo?.operator ?? '-'}
-              </Descriptions.Item>
               <Descriptions.Item label="执行人">
                 {taskInfo?.run_operator ?? '-'}
               </Descriptions.Item>
@@ -161,13 +165,21 @@ export function FactDetail(): JSX.Element {
               <Descriptions.Item label="项目名称">
                 {taskInfo?.project_name ?? '-'}
               </Descriptions.Item>
+              <Descriptions.Item label="项目负责人">
+                {taskInfo?.owner_name ?? '-'}
+              </Descriptions.Item>
               <Descriptions.Item label="所属单位">
                 {taskInfo?.department_name
                   ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{taskInfo.department_name}</Tag>
                   : '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="当前数据ID">
-                <Text code>{fact.subject_id}</Text>
+              <Descriptions.Item label="数据ID">
+                <Text copyable code>{fact.fact_id}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="作业ID">
+                {taskInfo?.job_id
+                  ? <Text copyable code>{taskInfo.job_id}</Text>
+                  : '-'}
               </Descriptions.Item>
               <Descriptions.Item label="数据来源">
                 {taskInfo?.data_source_list && taskInfo.data_source_list.length > 0
@@ -198,9 +210,6 @@ export function FactDetail(): JSX.Element {
               </Descriptions.Item>
               <Descriptions.Item label="创建时间">
                 {fmtTime(taskInfo?.created_at)}
-              </Descriptions.Item>
-              <Descriptions.Item label="事实类型">
-                <Tag color="blue">{fact.fact_type}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="原始数据">
                 {sourceFile ? (

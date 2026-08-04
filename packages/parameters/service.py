@@ -24,7 +24,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -87,7 +87,7 @@ class ParameterVersionRef:
     published_at: datetime | None
 
 
-class ParameterService:
+class ParameterService(ScopedSessionMixin):
     """参数业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -142,7 +142,7 @@ class ParameterService:
                 fields={"variable_code": "required"},
             )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查唯一性
             existing = await session.scalar(
@@ -218,7 +218,7 @@ class ParameterService:
             AppError: code="derivation_not_succeeded"，当推导运行未成功时。
             AppError: code="conflict"，当候选已存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 验证推导运行
             run = await session.scalar(
@@ -336,7 +336,7 @@ class ParameterService:
         Raises:
             AppError: code="not_found"，当候选不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             candidate = await session.scalar(
                 sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
             )
@@ -384,7 +384,7 @@ class ParameterService:
             AppError: code="self_approval_forbidden"，当审核人==提交人。
             AppError: code="derivation_not_succeeded"，当推导运行未成功。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 加载候选
             candidate = await session.scalar(
@@ -550,7 +550,7 @@ class ParameterService:
             AppError: code="candidate_not_pending"，当候选非 pending_review。
             AppError: code="self_approval_forbidden"，当审核人==提交人。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # C-03 IDOR 修复：通过 JOIN Parameter 确保候选属于当前部门
             candidate = await session.scalar(
@@ -632,7 +632,7 @@ class ParameterService:
         Raises:
             AppError: code="not_found"，当参数不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             param = await session.scalar(
                 sa.select(Parameter).where(
@@ -685,7 +685,7 @@ class ParameterService:
         Raises:
             AppError: code="not_found"，当参数或版本不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 校验参数存在
             param = await session.scalar(
@@ -763,7 +763,7 @@ class ParameterService:
         """
         filters = filters or {}
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(Parameter)
@@ -841,7 +841,7 @@ class ParameterService:
         Returns:
             list[dict]: 候选列表。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(ParameterCandidate)
                 .where(ParameterCandidate.parameter_id == parameter_id)
@@ -881,7 +881,7 @@ class ParameterService:
             AppError: code="not_found"，当参数不存在时。
             AppError: code="invalid_transition"，当参数非 published 状态时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             param = await session.scalar(
                 sa.select(Parameter).where(

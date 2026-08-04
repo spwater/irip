@@ -25,7 +25,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # 从环境变量覆盖数据库 URL（支持 async 驱动）
-_db_url = os.getenv("IRIP_DATABASE_URL")
+# RLS 通电后：应用运行时用 irip_app（非 superuser，受 RLS 约束），
+# 迁移用 irip（superuser，可 DDL + 绕过 RLS 做 schema 操作）。
+# 优先 IRIP_ALEMBIC_DATABASE_URL（迁移专用），退回 IRIP_DATABASE_URL。
+_db_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL") or os.getenv("IRIP_DATABASE_URL")
 if _db_url is not None:
     if _db_url.startswith("postgresql+psycopg://"):
         _async_url = _db_url.replace(

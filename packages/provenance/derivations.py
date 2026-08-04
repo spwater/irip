@@ -24,7 +24,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -109,7 +109,7 @@ def _output_from_dict(d: dict) -> ParameterCandidateOutput:
     )
 
 
-class DerivationService:
+class DerivationService(ScopedSessionMixin):
     """推导运行业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -169,7 +169,7 @@ class DerivationService:
             AppError: code="component_unavailable"，当执行器未找到时。
             AppError: code="recipe_not_published"，当配方版本未发布时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 1. 加载证据集版本
             ev_version = await session.scalar(
                 sa.select(EvidenceSetVersion).where(
@@ -330,7 +330,7 @@ class DerivationService:
         Raises:
             AppError: code="not_found"，当运行不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             original_run = await session.scalar(
                 sa.select(DerivationRun).where(DerivationRun.id == run_id)
             )
@@ -378,7 +378,7 @@ class DerivationService:
         Raises:
             AppError: code="not_found"，当运行不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run = await session.scalar(
                 sa.select(DerivationRun).where(
@@ -420,7 +420,7 @@ class DerivationService:
             tuple[list[DerivationRunRef], str | None]:
             (推导运行引用列表, 下一页游标)。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(DerivationRun)

@@ -55,7 +55,7 @@ export function GovernanceConsole(): JSX.Element {
   );
 
   return (
-    <div className="ocean-page-enter" key={activeTab}>
+    <div className="ocean-page-enter" key={activeTab} style={{ paddingTop: 10 }}>
       {activeTab === 'system-config' && isAdmin && (
         <Row gutter={24}>
           <Col xs={24} lg={12}>

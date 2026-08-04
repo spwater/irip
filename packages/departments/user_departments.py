@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.auth.entities import AppUser
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.departments.entities import AppUserDepartment, Department
 
 
@@ -56,7 +56,7 @@ class DepartmentUserItem:
     is_primary: bool
 
 
-class UserDepartmentService:
+class UserDepartmentService(ScopedSessionMixin):
     """用户-实验室关联管理服务（P1）。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）。
@@ -101,7 +101,7 @@ class UserDepartmentService:
             department_ids: 实验室 ID 列表（全量替换）。
             primary_department_id: 主要实验室 ID（None = 无主要实验室）。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 1. 移除不在新列表中的关联
             if department_ids:
                 await session.execute(
@@ -154,7 +154,7 @@ class UserDepartmentService:
         Returns:
             list[UserDepartmentItem]: 用户-实验室关联列表。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(
                     AppUserDepartment.user_id,
@@ -195,7 +195,7 @@ class UserDepartmentService:
         Returns:
             list[DepartmentUserItem]: 实验室下用户列表。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(
                     AppUser.id,

@@ -306,6 +306,16 @@ def _make_mock_session_scope(session: AsyncMock):
     return _scope
 
 
+def _make_mock_scoped_session(session: AsyncMock):
+    """构造 mock _scoped_session 上下文管理器（无参，用 service 内置 factory）。"""
+
+    @asynccontextmanager
+    async def _scope():
+        yield session
+
+    return _scope
+
+
 class TestComponentRegistryIdorFix:
     """ComponentRegistryService 的 department_id 租户隔离测试。"""
 
@@ -321,9 +331,10 @@ class TestComponentRegistryIdorFix:
             actor_id=uuid4(),
         )
 
-        with patch(
-            "packages.components.registry.registry.session_scope",
-            _make_mock_session_scope(mock_session),
+        with patch.object(
+            service,
+            "_scoped_session",
+            _make_mock_scoped_session(mock_session),
         ), patch(
             "packages.components.registry.registry.compute_visible_dept_ids",
             AsyncMock(return_value=[service.department_id]),
@@ -355,9 +366,10 @@ class TestComponentRegistryIdorFix:
             actor_id=uuid4(),
         )
 
-        with patch(
-            "packages.components.registry.registry.session_scope",
-            _make_mock_session_scope(mock_session),
+        with patch.object(
+            service,
+            "_scoped_session",
+            _make_mock_scoped_session(mock_session),
         ):
             # 不抛异常即通过
             await service.delete_component(fake_component.id)
@@ -374,9 +386,10 @@ class TestComponentRegistryIdorFix:
             actor_id=uuid4(),
         )
 
-        with patch(
-            "packages.components.registry.registry.session_scope",
-            _make_mock_session_scope(mock_session),
+        with patch.object(
+            service,
+            "_scoped_session",
+            _make_mock_scoped_session(mock_session),
         ), patch(
             "packages.components.registry.registry.compute_visible_dept_ids",
             AsyncMock(return_value=[service.department_id]),
@@ -397,9 +410,10 @@ class TestComponentRegistryIdorFix:
             actor_id=uuid4(),
         )
 
-        with patch(
-            "packages.components.registry.registry.session_scope",
-            _make_mock_session_scope(mock_session),
+        with patch.object(
+            service,
+            "_scoped_session",
+            _make_mock_scoped_session(mock_session),
         ), patch(
             "packages.components.registry.registry.compute_visible_dept_ids",
             AsyncMock(return_value=[service.department_id]),
@@ -424,9 +438,10 @@ class TestComponentRegistryIdorFix:
             actor_id=uuid4(),
         )
 
-        with patch(
-            "packages.components.registry.registry.session_scope",
-            _make_mock_session_scope(mock_session),
+        with patch.object(
+            service,
+            "_scoped_session",
+            _make_mock_scoped_session(mock_session),
         ), patch(
             "packages.components.registry.registry.compute_visible_dept_ids",
             AsyncMock(return_value=[service.department_id]),

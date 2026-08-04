@@ -107,7 +107,7 @@ class CreateFlowRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     department_id: UUID | None = Field(None, description="执行实验部门 ID")
-    project_name: str | None = Field(None, max_length=200, description="项目名称")
+    project_id: str | None = Field(None, description="所属实验项目 ID")
     operator: str = Field(..., min_length=1, max_length=100, description="执行人")
     experimental_object_code: str | None = Field(None, description="关联实验对象编码")
     nodes: list[FlowNodeSchema] = Field(default_factory=list)
@@ -133,8 +133,9 @@ class UpdateFlowRequest(BaseModel):
 
     display_name: str = Field(..., min_length=1, max_length=200)
     department_id: str | None = None
-    project_name: str | None = None
+    project_id: str | None = None
     operator: str | None = Field(None, max_length=100, description="执行人")
+    experimental_object_code: str | None = Field(None, description="实验对象编码")
 
 
 # ---- 响应模型 ----
@@ -150,7 +151,7 @@ class FlowDefinitionResponse(BaseModel):
     lock_version: int
     department_id: str | None = None
     owner_user_id: str | None = None
-    project_name: str | None = None
+    project_id: str | None = None
     operator: str | None = None
     experimental_object_code: str | None = None
     created_at: datetime
@@ -194,6 +195,8 @@ class FlowRunResponse(BaseModel):
     created_at: datetime
     persisted_as_fact: bool = False
     operator: str | None = None
+    source_filename: str | None = None
+    fact_id: str | None = None
 
 
 class FlowNodeExecutionResponse(BaseModel):
@@ -266,7 +269,7 @@ def _definition_to_response(
         lock_version=definition.lock_version,
         department_id=str(definition.department_id) if definition.department_id else None,
         owner_user_id=str(definition.owner_user_id) if definition.owner_user_id else None,
-        project_name=definition.project_name,
+        project_id=str(definition.project_id) if definition.project_id else None,
         operator=definition.operator,
         experimental_object_code=definition.experimental_object_code,
         created_at=definition.created_at,
@@ -299,6 +302,7 @@ def _version_to_response(
 
 def _run_to_response(run: FlowRun) -> FlowRunResponse:
     """将 FlowRun ORM 转为响应模型。"""
+    snap = run.input_snapshot or {}
     return FlowRunResponse(
         id=str(run.id),
         flow_version_id=str(run.flow_version_id),
@@ -308,7 +312,8 @@ def _run_to_response(run: FlowRun) -> FlowRunResponse:
         started_at=run.started_at,
         completed_at=run.completed_at,
         created_at=run.created_at,
-        operator=(run.input_snapshot or {}).get("_operator"),
+        operator=snap.get("_operator"),
+        source_filename=snap.get("_filename"),
     )
 
 
@@ -362,13 +367,24 @@ async def create_flow(
     edges = _edges_to_schema_list([e.model_dump() for e in body.edges])
     from packages.common.ids import gen_code
 
+    # 归档约束：若传入 project_id，校验项目非归档状态
+    if body.project_id is not None:
+        from packages.experiment_project.service import ExperimentProjectService
+
+        project_service = ExperimentProjectService(
+            session_factory=service.session_factory,
+            department_id=service.department_id,
+            actor_id=service.actor_id,
+        )
+        await project_service.check_not_archived(UUID(body.project_id))
+
     definition = await service.create_definition(
         code=gen_code("task"),
         display_name=body.display_name,
         nodes=nodes,
         edges=edges,
         department_id=body.department_id,
-        project_name=body.project_name,
+        project_id=UUID(body.project_id) if body.project_id else None,
         operator=body.operator,
         experimental_object_code=body.experimental_object_code,
     )
@@ -422,6 +438,7 @@ async def list_flows(
     current_user: ReadUserDep,
     service: FlowServiceDep,
     status: str | None = Query(None, description="按状态过滤"),
+    project_id: str | None = Query(None, description="按项目 ID 过滤"),
 ) -> FlowListResponse:
     """列表查询流程定义。
 
@@ -429,11 +446,12 @@ async def list_flows(
         current_user: 当前认证用户（需 flow:read 权限）。
         service: 流程运行时服务。
         status: 可选，按状态过滤（draft/published/deprecated）。
+        project_id: 可选，按所属项目 ID 过滤。
 
     Returns:
         FlowListResponse: 流程列表。
     """
-    items = await service.list_definitions(status=status)
+    items = await service.list_definitions(status=status, project_id=project_id)
 
     return FlowListResponse(
         items=[_definition_to_response(definition, version) for definition, version in items]
@@ -527,7 +545,7 @@ async def delete_flow(
     from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
-    async with session_scope(service.session_factory) as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
@@ -574,7 +592,7 @@ async def update_flow(
     from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
-    async with session_scope(service.session_factory) as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         from packages.common.dept_visibility import compute_visible_dept_ids
 
         visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
@@ -597,7 +615,7 @@ async def update_flow(
         session_factory=service.session_factory,
     )
 
-    async with session_scope(service.session_factory) as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
         )
@@ -611,9 +629,14 @@ async def update_flow(
             from uuid import UUID as UUIDType
 
             definition.department_id = UUIDType(body.department_id) if body.department_id else None
-        definition.project_name = body.project_name
+        if body.project_id is not None:
+            from uuid import UUID as UUIDType
+
+            definition.project_id = UUIDType(body.project_id) if body.project_id else None
         if body.operator is not None:
             definition.operator = body.operator
+        if body.experimental_object_code is not None:
+            definition.experimental_object_code = body.experimental_object_code or None
         definition.updated_at = datetime.now(UTC)
 
     return _definition_to_response(definition, None)
@@ -648,26 +671,29 @@ async def list_runs(
 
     runs = await service.list_runs(flow_id)
     result = []
-    # 批量查哪些 run 已入库（fact.flow_run_id）
+    # 批量查哪些 run 已入库（fact.flow_run_id）+ fact_id
     run_ids = [r.id for r in runs]
     persisted_ids: set = set()
+    fact_id_map: dict = {}
     if run_ids:
         from packages.facts.entities import Fact
 
-        async with session_scope(service.session_factory) as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             persist_stmt = (
-                sa.select(Fact.flow_run_id)
+                sa.select(Fact.id, Fact.flow_run_id)
                 .where(Fact.flow_run_id.in_(run_ids))
-                .distinct()
             )
             persist_result = await session.execute(persist_stmt)
-            persisted_ids = {row[0] for row in persist_result}
+            for row in persist_result:
+                fact_id_map[row[1]] = str(row[0])
+            persisted_ids = set(fact_id_map.keys())
 
     for r in runs:
         resp = _run_to_response(r)
         resp.persisted_as_fact = r.id in persisted_ids
+        resp.fact_id = fact_id_map.get(r.id)
         # 查询成功节点的 output_summary，或失败节点的 error_message
-        async with session_scope(service.session_factory) as session:
+        async with service._scoped_session() as session:  # noqa: SLF001
             node_stmt = (
                 sa.select(FlowNodeExecution)
                 .where(FlowNodeExecution.flow_run_id == r.id)
@@ -1027,9 +1053,18 @@ async def persist_run_as_fact(
 
         # 4a. 保存原始文件到 artifact 存储
         # 如果 source_path 是 artifact: 前缀，原始文件已经在 MinIO 里了，直接复用 artifact_id
+        # 但 artifact 可能已被删除（用户清理原始数据后重新入库），需校验存在性
         if source_path.startswith("artifact:"):
             try:
-                pdf_artifact_id = UUID(source_path[len("artifact:"):])
+                _candidate_artifact_id = UUID(source_path[len("artifact:"):])
+                # 校验 artifact 是否仍存在
+                async with service._scoped_session() as sess:  # noqa: SLF001
+                    _art_exists = await sess.scalar(
+                        sa.select(Artifact.id).where(Artifact.id == _candidate_artifact_id)
+                    )
+                if _art_exists:
+                    pdf_artifact_id = _candidate_artifact_id
+                # 不存在则 pdf_artifact_id 保持 None，不阻塞写入
             except ValueError:
                 pass
         elif source_path:
@@ -1088,7 +1123,7 @@ async def persist_run_as_fact(
         from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
         from packages.departments.entities import Department
 
-        async with session_scope(service.session_factory) as sess:
+        async with service._scoped_session() as sess:  # noqa: SLF001
             fv_stmt = sa.select(FlowDefinitionVersionORM).where(
                 FlowDefinitionVersionORM.id == run.flow_version_id
             )  # noqa: E501
@@ -1208,7 +1243,7 @@ async def persist_run_as_fact(
             )
 
         if index_rows:
-            async with session_scope(service.session_factory) as sess:
+            async with service._scoped_session() as sess:  # noqa: SLF001
                 await sess.execute(
                     sa.insert(FactDataIndex),
                     index_rows,
@@ -1246,7 +1281,7 @@ async def list_facts_by_flow(
     from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
     from packages.facts.entities import Fact
 
-    async with session_scope(service.session_factory) as session:
+    async with service._scoped_session() as session:  # noqa: SLF001
         # flow_definition → flow_definition_version → flow_run → fact
         stmt = (
             sa.select(Fact)

@@ -21,6 +21,7 @@ export async function apiCreateObject(body: {
   object_type: string;
   description?: string;
   equipment_id?: string;
+  component_id?: string;
   department_id?: string;
   visible_departments?: string[];
 }): Promise<IndustrialObject> {
@@ -47,6 +48,7 @@ export async function apiUpdateObject(objectId: string, body: {
   description?: string | null;
   object_type?: string;
   equipment_id?: string | null;
+  component_id?: string | null;
   department_id?: string | null;
   visible_departments?: string[] | null;
 }): Promise<IndustrialObject> {

@@ -35,6 +35,7 @@ async def _process_derivation_async(
     import sqlalchemy as sa
 
     from packages.common.database import build_session_factory, session_scope
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
     from packages.jobs.entities import Job, JobStatus
     from packages.provenance.derivations import DerivationService
 
@@ -65,6 +66,9 @@ async def _process_derivation_async(
 
     # 更新作业状态为 RUNNING
     async with session_scope(factory) as session:
+        # RLS 通电：job 表有 B 类 RLS，需设 GUC
+        await set_dept_guc(session, department_id)
+        await set_user_guc(session, actor_id)
         await session.execute(
             sa.update(Job)
             .values(
@@ -100,6 +104,9 @@ async def _process_derivation_async(
 
         # 更新作业状态为 COMPLETED
         async with session_scope(factory) as session:
+            # RLS 通电：job 表有 B 类 RLS，需设 GUC
+            await set_dept_guc(session, department_id)
+            await set_user_guc(session, actor_id)
             await session.execute(
                 sa.update(Job)
                 .values(
@@ -115,7 +122,13 @@ async def _process_derivation_async(
 
     except Exception as exc:
         # 更新作业状态为 FAILED
+        from apps.worker.tasks import get_system_guc
+
+        sys_dept, sys_user = get_system_guc()
         async with session_scope(factory) as session:
+            # RLS 通电：job 表有 B 类 RLS，需设 GUC
+            await set_dept_guc(session, sys_dept)
+            await set_user_guc(session, sys_user)
             await session.execute(
                 sa.update(Job)
                 .values(

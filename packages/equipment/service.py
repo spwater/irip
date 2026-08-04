@@ -39,7 +39,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
@@ -68,7 +68,7 @@ class EquipmentListResult:
         self.has_more = has_more
 
 
-class EquipmentService:
+class EquipmentService(ScopedSessionMixin):
     """设备仪器业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、clock（时钟）。
@@ -144,7 +144,7 @@ class EquipmentService:
         Raises:
             AppError: code="conflict"，当编码已存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             existing = await EquipmentRepository.select_by_org_and_code(session, self._dept_id, code)
             if existing is not None:
                 raise AppError(
@@ -204,7 +204,7 @@ class EquipmentService:
         # 多查一位判断 has_more
         fetch_limit = effective_limit + 1
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             rows = await EquipmentRepository.select_list(
                 session,
                 department_id=department_id,
@@ -244,7 +244,7 @@ class EquipmentService:
         Raises:
             AppError: code="not_found"，当设备不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             equipment = await EquipmentRepository.select_by_id(session, equipment_id)
             if equipment is None:
                 raise AppError(
@@ -286,7 +286,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             updated = await EquipmentRepository.update(
                 session,
                 equipment_id=equipment_id,
@@ -336,7 +336,7 @@ class EquipmentService:
             AppError: code="not_found"，当设备不存在时。
             AppError: code="conflict"，当 lock_version 不匹配时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             updated = await EquipmentRepository.update_status(
                 session,
                 equipment_id=equipment_id,
@@ -370,7 +370,7 @@ class EquipmentService:
         Raises:
             AppError: code="not_found"，当设备不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             equipment = await EquipmentRepository.select_by_id(session, equipment_id)
             if equipment is None:
                 raise AppError(

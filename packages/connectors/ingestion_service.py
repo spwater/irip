@@ -24,6 +24,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.facts.quality import QualityAssessment, QualityEngine
 from packages.facts.service import CreateFactCommand, FactService
@@ -216,7 +217,7 @@ def _empty_passed_assessment() -> QualityAssessment:
     )
 
 
-class IngestionPipeline:
+class IngestionPipeline(ScopedSessionMixin):
     """端到端摄入管线：下载→解析→去重→持久化→质量→完成。
 
     标准层空表清理后，映射/标准化逻辑已删除，管线仅做文件摘要去重
@@ -285,7 +286,7 @@ class IngestionPipeline:
             # 3. dedup: 去重检查
             from packages.facts.repository import FactRepository
 
-            async with self._factory() as session:
+            async with self._scoped_session() as session:
                 existing_fact = await FactRepository.find_by_idempotency_key(
                     session, self._dept_id, idempotency_key
                 )

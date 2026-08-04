@@ -14,7 +14,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -25,7 +25,7 @@ from packages.standards.objects import (
 )
 
 
-class ObjectGraphService:
+class ObjectGraphService(ScopedSessionMixin):
     """工业对象图业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）。
@@ -62,6 +62,7 @@ class ObjectGraphService:
         description: str | None = None,
         parent_id: UUID | None = None,
         equipment_id: UUID | None = None,
+        component_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
     ) -> IndustrialObject:
@@ -74,6 +75,7 @@ class ObjectGraphService:
             description: 描述（可选）。
             parent_id: 父对象 ID（可选，便捷反规范化字段）。
             equipment_id: 关联设备 ID（可选）。
+            component_id: 关联数据接口 ID（可选）。
             department_id: 所属部门 ID（可选，跨实验室可见性基准）。
             visible_departments: 可见单位 ID 列表（可选，默认空数组）。
 
@@ -84,7 +86,7 @@ class ObjectGraphService:
             AppError: code="conflict"，当编码已存在时。
             AppError: code="not_found"，当 parent_id 指定的父对象不存在或不属于当前部门时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查编码唯一性
             existing = await session.execute(
@@ -121,12 +123,13 @@ class ObjectGraphService:
             now = datetime.now(UTC)
             obj = IndustrialObject(
                 id=new_id(),
-                department_id=self._dept_id,
+                department_id=department_id or self._dept_id,
                 object_type=object_type,
                 code=code,
                 display_name=display_name,
                 description=description,
                 equipment_id=equipment_id,
+                component_id=component_id,
                 visible_departments=visible_departments or [],
                 visibility_scope="tree",
                 owner_user_id=self._actor_id,
@@ -151,7 +154,7 @@ class ObjectGraphService:
         Raises:
             AppError: code="not_found"，当对象不存在或不属于当前部门时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             obj = await self._get_and_check_org(session, object_id)
             return obj
 
@@ -162,6 +165,7 @@ class ObjectGraphService:
         description: str | None = None,
         object_type: str | None = None,
         equipment_id: UUID | None = None,
+        component_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
     ) -> IndustrialObject:
@@ -172,6 +176,7 @@ class ObjectGraphService:
             display_name: 新显示名。
             description: 新描述。
             equipment_id: 新关联设备 ID。
+            component_id: 新关联数据接口 ID（None 表示清空关联）。
             department_id: 新所属部门 ID（None 表示不修改）。
             visible_departments: 新可见单位 ID 列表（None 表示不修改）。
 
@@ -181,13 +186,14 @@ class ObjectGraphService:
         Raises:
             AppError: code="not_found"，当对象不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             obj = await self._get_and_check_org(session, object_id)
             obj.display_name = display_name
             obj.description = description
             if object_type is not None:
                 obj.object_type = object_type
             obj.equipment_id = equipment_id
+            obj.component_id = component_id
             if department_id is not None:
                 obj.department_id = department_id
             if visible_departments is not None:
@@ -214,7 +220,7 @@ class ObjectGraphService:
         Raises:
             AppError: code="not_found"，当对象不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             obj = await self._get_and_check_org(session, object_id)
             obj.status = status
             obj.updated_at = datetime.now(UTC)
@@ -234,7 +240,7 @@ class ObjectGraphService:
             AppError: code="not_found"，当对象不存在时。
             AppError: code="conflict"，当对象存在活跃关系时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             obj = await self._get_and_check_org(session, object_id)
 
             # 物理删除
@@ -255,7 +261,7 @@ class ObjectGraphService:
         Returns:
             IndustrialObject | None: 对象实体，不存在返回 None。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             result = await session.execute(
                 sa.select(IndustrialObject).where(
@@ -335,7 +341,7 @@ class ObjectGraphService:
                 )
             )
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             query = query.where(IndustrialObject.department_id.in_(visible_ids))
             result = await session.execute(query)

@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
-from packages.common.database import Base, session_scope
+from packages.common.database import Base, ScopedSessionMixin
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
@@ -181,7 +181,7 @@ class Artifact(Base):
         return f"Artifact(id={self.id!r}, filename={self.filename!r}, sha256={self.sha256[:12]}...)"
 
 
-class ArtifactService:
+class ArtifactService(ScopedSessionMixin):
     """内容寻址工件服务。
 
     依赖注入 S3Repository（对象存储）、session_factory（数据库事务）、
@@ -212,6 +212,7 @@ class ArtifactService:
         self._factory = session_factory
         self._dept_id = department_id
         self._uploaded_by = uploaded_by
+        self._actor_id = uploaded_by  # alias for ScopedSessionMixin
 
     async def put_bytes(
         self,
@@ -252,7 +253,7 @@ class ArtifactService:
         object_key: str = _build_object_key(sha256)
         size: int = len(data)
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 查 blob 是否已存在（去重）
             existing_blob: ArtifactBlob | None = await session.scalar(
                 sa.select(ArtifactBlob).where(ArtifactBlob.sha256 == sha256)
@@ -314,7 +315,7 @@ class ArtifactService:
         Raises:
             AppError: code="not_found"，当工件不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             artifact: Artifact | None = await session.scalar(
                 sa.select(Artifact).where(
@@ -353,7 +354,7 @@ class ArtifactService:
         Raises:
             AppError: code="not_found"，当工件不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
@@ -398,7 +399,7 @@ class ArtifactService:
         Raises:
             AppError: code="not_found"，当工件不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
@@ -430,7 +431,7 @@ class ArtifactService:
         Args:
             artifact_id: 工件 UUID。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
@@ -634,7 +635,7 @@ class ArtifactService:
         Raises:
             AppError: code="not_found"，当工件不存在时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
@@ -674,7 +675,7 @@ class ArtifactService:
         Raises:
             AppError: code="not_found"，当工件不存在或无权访问时。
         """
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(

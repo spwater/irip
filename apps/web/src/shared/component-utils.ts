@@ -46,8 +46,6 @@ export const FORM_FIELD_NAMES = [
   'display_name',
   'description',
   'prompt',
-  'experimental_object_code',
-  'equipment_id',
   'tool_type',
 ] as const;
 
@@ -56,7 +54,6 @@ export const FRESH_FORM_VALUES: Record<string, string | undefined> = {
   display_name: undefined,
   description: undefined,
   prompt: undefined,
-  experimental_object_code: undefined,
   tool_type: 'llm_converter',
 };
 
@@ -65,7 +62,8 @@ export interface ComponentFormValues {
   display_name: string;
   description: string;
   prompt: string;
-  experimental_object_code: string;
+  /** 关联实验对象编码（已废弃关联，保留以兼容旧 YAML 解析） */
+  experimental_object_code?: string;
   tool_type: string;
 }
 
@@ -98,7 +96,6 @@ export function buildManifestYaml(v: ComponentFormValues, originalName?: string)
   const displayName = v.display_name ?? '';
   const description = v.description ?? '';
   const prompt = v.prompt ?? '';
-  const expCode = v.experimental_object_code ?? '';
   const toolType = v.tool_type ?? 'llm_converter';
   const nameLine = originalName
     ? `name: ${originalName}`
@@ -128,10 +125,6 @@ export function buildManifestYaml(v: ComponentFormValues, originalName?: string)
     '      type: string',
     '      description: "文件读取方式"',
     '      default: "auto"',
-    '    experimental_object_code:',
-    '      type: string',
-    '      description: "关联实验对象编码"',
-    `      default: "${yamlEscapeDouble(expCode)}"`,
     '    tool_type:',
     '      type: string',
     '      description: "解析工具类型：llm_converter（大模型）或 xrd_converter（XRD 确定性解析）"',

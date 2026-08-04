@@ -25,6 +25,8 @@ export type IndustrialObject = {
   object_type: string;
   description: string | null;
   status: string;
+  equipment_id: string | null;
+  component_id: string | null;
   department_id: string | null;
   visible_departments: string[];
   visibility_scope: 'private' | 'tree' | 'explicit' | 'all';

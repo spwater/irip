@@ -145,14 +145,16 @@ export function createAppRouter() {
     },
   });
 
-  // 实验室运营页面（Tab：实验任务 / 原始数据 / 衍生数据）
+  // 实验室运营页面（Tab：实验项目 / 原始数据 / 衍生数据）
   // 支持 ?tab= 搜索参数，便于从详情页（如事实详情）深链回指定 Tab
+  // 支持 ?project= 搜索参数，用于项目详情页深链（?tab=flows&project={project_id}）
   const labOpsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/lab-ops',
     component: LabOpsPage,
-    validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
+    validateSearch: (search: Record<string, unknown>): { tab?: string; project?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
+      project: typeof search.project === 'string' ? search.project : undefined,
     }),
   });
 

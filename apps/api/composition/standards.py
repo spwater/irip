@@ -84,3 +84,18 @@ def register(ctx: CompositionContext) -> None:
         )
 
     ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep
+
+    # 实验项目服务
+    from apps.api.routers.experiment_projects import get_experiment_project_service
+    from packages.experiment_project.service import ExperimentProjectService
+
+    async def _get_experiment_project_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> ExperimentProjectService:
+        return ExperimentProjectService(
+            session_factory=ctx.session_factory,
+            department_id=current_user.department_id,
+            actor_id=current_user.user_id,
+        )
+
+    ctx.app.dependency_overrides[get_experiment_project_service] = _get_experiment_project_service_dep

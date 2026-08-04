@@ -18,7 +18,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import session_scope
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.facts.observations import FactRef
 from packages.facts.repository import FactRepository
@@ -95,7 +95,7 @@ class CreateFactCommand:
     source_artifact_id: UUID | None = None
 
 
-class FactService:
+class FactService(ScopedSessionMixin):
     """事实业务编排服务。
 
     依赖注入 session_factory（事务管理）、department_id（当前部门）、
@@ -167,7 +167,7 @@ class FactService:
 
         # 2. 幂等检查
         if command.idempotency_key is not None:
-            async with self._factory() as session:
+            async with self._scoped_session() as session:
                 existing = await FactRepository.find_by_idempotency_key(
                     session, command.department_id, command.idempotency_key
                 )
@@ -179,7 +179,7 @@ class FactService:
                     status=existing.status,
                 )
 
-        async with session_scope(self._factory) as session:
+        async with self._scoped_session() as session:
             # 3. 校验工业对象在可见部门范围内
             from packages.common.dept_visibility import compute_visible_dept_ids
 
@@ -242,7 +242,7 @@ class FactService:
         Raises:
             AppError: code="not_found"，当事实不存在时。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             fact = await FactRepository.get_fact(session, fact_id, self._dept_id)
             return FactRef(
                 fact_id=fact_id,
@@ -270,7 +270,7 @@ class FactService:
             tuple[list[FactRef], str | None]:
             (事实引用列表, 下一页游标)。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             items, next_cursor = await FactRepository.search_facts(
                 session,
                 query=query,
@@ -307,7 +307,7 @@ class FactService:
             tuple[list[FactRef], str | None]:
             (事实引用列表, 下一页游标)。
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             items, next_cursor = await FactRepository.list_facts(
                 session,
                 org_id=self._dept_id,

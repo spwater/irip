@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
-  Drawer,
   Form,
   Input,
   Modal,
@@ -9,9 +8,11 @@ import {
   Select,
   Space,
   Spin,
+  Switch,
   Table,
   Tag,
   Tooltip,
+  TreeSelect,
   Typography,
   message,
 } from 'antd';
@@ -34,9 +35,12 @@ import {
   type ObjectTypeDictItem,
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
-import { apiListComponents, apiListEquipment, apiArchiveComponent, apiRestoreComponent, type ComponentSummary } from '@/api/equipment-flows';
+import { buildDeptTree } from '@/shared/buildDeptTree';
+import { apiListEquipment, apiListComponents, apiPublishComponent } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
-import { ComponentsPage } from '@/features/components/ComponentsPage';
+import { apiListIngestionTools } from '@/api/models-ai';
+import { buildManifestYaml, FORM_FIELD_NAMES, FRESH_FORM_VALUES } from '@/shared/component-utils';
+import { ComponentFormFields } from '@/features/components/ComponentFormFields';
 
 /**
  * 实验对象管理页面（要素管理第 3 个 Tab）
@@ -104,10 +108,9 @@ export function ExperimentalObjectPage({
   const [editTypeName, setEditTypeName] = useState('');
   const [editTypeDesc, setEditTypeDesc] = useState('');
   const [form] = Form.useForm();
-  // 接口抽屉：就地编辑/新建组件，不跳转页面
-  const [compDrawerOpen, setCompDrawerOpen] = useState(false);
-  const [compDrawerEditId, setCompDrawerEditId] = useState<string | undefined>(undefined);
-  const [compDrawerPrefill, setCompDrawerPrefill] = useState<string | undefined>(undefined);
+  const [compCreateModalOpen, setCompCreateModalOpen] = useState(false);
+  const [compForm] = Form.useForm();
+  const [compAdvancedMode, setCompAdvancedMode] = useState(false);
 
   // 动态加载类型字典
   const { data: objectTypeData } = useQuery({
@@ -165,21 +168,6 @@ export function ExperimentalObjectPage({
     label: d.display_name,
   }));
 
-  // ---- 组件列表查询：构建 experimental_object_code → ComponentSummary[] 映射 ----
-  // 一个实验对象可绑定多个接口，用于树形展开和操作列
-  const { data: componentsData } = useQuery({
-    queryKey: ['components-for-object-binding'],
-    queryFn: () => apiListComponents(),
-  });
-  const objectCodeToComponents = new Map<string, ComponentSummary[]>();
-  for (const comp of componentsData?.items ?? []) {
-    if (comp.experimental_object_code) {
-      const list = objectCodeToComponents.get(comp.experimental_object_code) ?? [];
-      list.push(comp);
-      objectCodeToComponents.set(comp.experimental_object_code, list);
-    }
-  }
-
   // ---- 设备列表查询（用于接口行的关联设备列）----
   const { data: equipmentData } = useQuery({
     queryKey: ['equipment-for-object-tree'],
@@ -188,6 +176,29 @@ export function ExperimentalObjectPage({
   const equipmentMap = new Map(
     (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
   );
+
+  // ---- 数据接口列表查询（用于下拉选择与列表展示）----
+  const { data: componentData } = useQuery({
+    queryKey: ['components'],
+    queryFn: () => apiListComponents(),
+  });
+  const componentOptions = (componentData?.items ?? []).map((c) => ({
+    value: c.id,
+    label: c.display_name || c.name,
+  }));
+  const componentMap = new Map(
+    (componentData?.items ?? []).map((c) => [c.id, c.display_name || c.name]),
+  );
+
+  // ---- 解析工具列表（用于新建接口表单）----
+  const { data: ingestionToolsData } = useQuery({
+    queryKey: ['ingestion-tools'],
+    queryFn: apiListIngestionTools,
+  });
+  const ingestionToolOptions = (ingestionToolsData ?? []).map((t) => ({
+    value: t.name,
+    label: t.display_name,
+  }));
 
   // ---- 筛选逻辑 ----
   let filteredItems = items;
@@ -201,9 +212,14 @@ export function ExperimentalObjectPage({
     label: d.display_name,
   }));
 
-  // 监听表单中的 department_id，排除已选所属单位后作为可见单位选项
+  // 监听表单中的 department_id
   const watchedDeptId = Form.useWatch('department_id', form);
-  const visibleDeptOptions = allDeptOptions.filter((d) => d.value !== watchedDeptId);
+
+  // 部门树数据（用于可见单位树形多选）
+  const deptTreeData = useMemo(
+    () => buildDeptTree(deptData?.items ?? []),
+    [deptData],
+  );
 
   // ---- 创建 Mutation ----
   const createMutation = useMutation({
@@ -230,6 +246,7 @@ export function ExperimentalObjectPage({
         object_type?: string;
         department_id?: string | null;
         visible_departments?: string[] | null;
+        component_id?: string | null;
       };
     }) => apiUpdateObject(params.id, params.body),
     onSuccess: () => {
@@ -239,6 +256,22 @@ export function ExperimentalObjectPage({
       setEditingItem(null);
       form.resetFields();
       message.success('实验对象更新成功');
+    },
+    onError: (err: unknown) => {
+      message.error(extractApiError(err));
+    },
+  });
+
+  // ---- 新建数据接口 Mutation ----
+  const publishCompMutation = useMutation({
+    mutationFn: apiPublishComponent,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['components'] });
+      setCompCreateModalOpen(false);
+      compForm.resetFields();
+      message.success('数据接口创建成功');
+      // 自动选中新建的接口
+      form.setFieldsValue({ component_id: data.id });
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));
@@ -281,7 +314,7 @@ export function ExperimentalObjectPage({
   const handleCreate = (): void => {
     setEditingItem(null);
     form.resetFields();
-    form.setFieldsValue({ visible_departments: [] });
+    form.setFieldsValue({ visible_departments: [], component_id: undefined });
     setModalOpen(true);
   };
 
@@ -295,6 +328,7 @@ export function ExperimentalObjectPage({
       description: detail.description ?? '',
       department_id: detail.department_id ?? undefined,
       visible_departments: detail.visible_departments ?? [],
+      component_id: detail.component_id ?? undefined,
     });
     setModalOpen(true);
   };
@@ -311,6 +345,7 @@ export function ExperimentalObjectPage({
             object_type: values.object_type,
             department_id: values.department_id,
             visible_departments: values.visible_departments ?? [],
+            component_id: values.component_id ?? null,
           },
         });
       } else {
@@ -320,6 +355,7 @@ export function ExperimentalObjectPage({
           description: values.description,
           department_id: values.department_id,
           visible_departments: values.visible_departments ?? [],
+          component_id: values.component_id || undefined,
         });
       }
     } catch {
@@ -342,7 +378,7 @@ export function ExperimentalObjectPage({
   };
 
   // ---- 构建树形数据：第一层是类型，第二层是对象，第三层是接口 ----
-  type TreeRow = IndustrialObject & { children?: TreeRow[]; isComponent?: boolean; compData?: ComponentSummary };
+  type TreeRow = IndustrialObject & { children?: TreeRow[] };
   const treeData: TreeRow[] = (() => {
     // 按 object_type 分组
     const typeMap = new Map<string, IndustrialObject[]>();
@@ -356,21 +392,8 @@ export function ExperimentalObjectPage({
       if (typeFilter && typeItem.code !== typeFilter) continue;
       const objs = typeMap.get(typeItem.code);
       if (objs && objs.length > 0) {
-        // 对象行，每个对象下挂载其关联的接口
-        const objRows: TreeRow[] = objs.map((obj) => {
-          const comps = objectCodeToComponents.get(obj.code) ?? [];
-          const compChildren: TreeRow[] = comps.map((comp) => ({
-            ...obj,
-            id: `comp_${comp.id}`,
-            display_name: comp.display_name,
-            code: comp.name,
-            description: comp.description ?? null,
-            status: comp.status,
-            isComponent: true,
-            compData: comp,
-          } as TreeRow));
-          return { ...obj, children: compChildren } as TreeRow;
-        });
+        // 对象行（不再挂载接口子行）
+        const objRows: TreeRow[] = objs.map((obj) => ({ ...obj }) as TreeRow);
         tree.push({
           id: `type_${typeItem.code}`,
           code: typeItem.code,
@@ -379,7 +402,11 @@ export function ExperimentalObjectPage({
           description: typeItem.description,
           status: '',
           department_id: null,
+          equipment_id: null,
+          component_id: null,
           visible_departments: [],
+          visibility_scope: 'tree',
+          owner_user_id: null,
           created_at: '',
           updated_at: '',
           lock_version: 0,
@@ -391,18 +418,7 @@ export function ExperimentalObjectPage({
     if (!typeFilter) {
       for (const [, objs] of typeMap) {
         for (const obj of objs) {
-          const comps = objectCodeToComponents.get(obj.code) ?? [];
-          const compChildren: TreeRow[] = comps.map((comp) => ({
-            ...obj,
-            id: `comp_${comp.id}`,
-            display_name: comp.display_name,
-            code: comp.name,
-            description: comp.description ?? null,
-            status: comp.status,
-            isComponent: true,
-            compData: comp,
-          } as TreeRow));
-          tree.push({ ...obj, children: compChildren } as TreeRow);
+          tree.push({ ...obj } as TreeRow);
         }
       }
     }
@@ -410,7 +426,7 @@ export function ExperimentalObjectPage({
   })();
 
   const isTypeRow = (record: TreeRow): boolean => record.id.startsWith('type_');
-  const isComponentRow = (record: TreeRow): boolean => record.isComponent === true;
+  const isObjectRow = (record: TreeRow): boolean => !record.id.toString().startsWith('type_'); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // ---- 表格列定义 ----
   const columns: ColumnsType<TreeRow> = [
@@ -426,24 +442,6 @@ export function ExperimentalObjectPage({
               <Text type="secondary" style={{ fontSize: 12 }}>
                 {record.code}
               </Text>
-            </Space>
-          );
-        }
-        if (isComponentRow(record)) {
-          const eqName = record.compData?.equipment_id ? equipmentMap.get(record.compData.equipment_id) : null;
-          return (
-            <Space size={6}>
-              <Tag color="purple" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 13 }}>
-                {record.display_name}
-              </Tag>
-              {eqName && (
-                <>
-                  <Text type="secondary" style={{ fontSize: 13 }}>→</Text>
-                  <Tag color="cyan" style={{ margin: 0, padding: '2px 10px', borderRadius: 4, fontSize: 12 }}>
-                    {eqName}
-                  </Tag>
-                </>
-              )}
             </Space>
           );
         }
@@ -465,7 +463,7 @@ export function ExperimentalObjectPage({
       key: 'department_id',
       width: 140,
       render: (deptId: string | null, record: TreeRow) => {
-        if (isTypeRow(record) || isComponentRow(record)) return null;
+        if (isTypeRow(record)) return null;
         const name = deptId ? deptMap.get(deptId) : null;
         return name ? <Tag color="geekblue" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{name}</Tag> : <Text type="secondary">-</Text>;
       },
@@ -476,7 +474,7 @@ export function ExperimentalObjectPage({
       key: 'visible_departments',
       width: 300,
       render: (deptIds: string[] | null, record: TreeRow) => {
-        if (isTypeRow(record) || isComponentRow(record)) return null;
+        if (isTypeRow(record)) return null;
         if (!deptIds || deptIds.length === 0) {
           return <Text type="secondary">-</Text>;
         }
@@ -491,12 +489,24 @@ export function ExperimentalObjectPage({
       },
     },
     {
+      title: '数据接口',
+      dataIndex: 'component_id',
+      key: 'component_id',
+      width: 150,
+      render: (compId: string | null, record: TreeRow) => {
+        if (isTypeRow(record)) return null;
+        if (!compId) return <Text type="secondary">-</Text>;
+        const comp = componentMap.get(compId);
+        return comp ? <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{comp}</Tag> : <Text type="secondary">-</Text>;
+      },
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
       width: 80,
       render: (s: string, record: TreeRow) => {
-        if (isTypeRow(record) || isComponentRow(record)) return null;
+        if (isTypeRow(record)) return null;
         return (
           <Tag color={STATUS_COLOR[s] ?? 'default'}>
             {STATUS_LABEL[s] ?? s}
@@ -510,53 +520,6 @@ export function ExperimentalObjectPage({
       width: 200,
       render: (_: unknown, record: TreeRow) => {
         if (isTypeRow(record)) return null;
-        if (isComponentRow(record)) {
-          return (
-            <Space size="small">
-              <Button
-                type="link"
-                size="small"
-                onClick={() => {
-                  if (record.compData) {
-                    setCompDrawerEditId(record.compData.id);
-                    setCompDrawerPrefill(undefined);
-                    setCompDrawerOpen(true);
-                  }
-                }}
-              >
-                编辑
-              </Button>
-              <Popconfirm
-                title={
-                  record.compData?.status === 'published'
-                    ? '确定归档该接口？'
-                    : '确定恢复该接口？'
-                }
-                onConfirm={() => {
-                  if (record.compData?.status === 'published') {
-                    void apiArchiveComponent(record.compData.id).then(() => {
-                      void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
-                    });
-                  } else if (record.compData) {
-                    void apiRestoreComponent(record.compData.id).then(() => {
-                      void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
-                    });
-                  }
-                }}
-                okText="确定"
-                cancelText="取消"
-              >
-                <Button
-                  type="link"
-                  size="small"
-                  danger={record.compData?.status === 'published'}
-                >
-                  {record.compData?.status === 'published' ? '归档' : '恢复'}
-                </Button>
-              </Popconfirm>
-            </Space>
-          );
-        }
         return (
           <Space size="small">
             <Button
@@ -565,17 +528,6 @@ export function ExperimentalObjectPage({
               onClick={() => handleEdit(record)}
             >
               编辑
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => {
-                setCompDrawerEditId(undefined);
-                setCompDrawerPrefill(record.code);
-                setCompDrawerOpen(true);
-              }}
-            >
-              +接口
             </Button>
             <Popconfirm
               title={
@@ -728,16 +680,51 @@ export function ExperimentalObjectPage({
           <Form.Item
             name="visible_departments"
             label="可见单位"
-            tooltip="选择除所属单位外，哪些实验室也可以看到该实验对象。所属单位默认可见，无需重复选择。"
+            tooltip="选填。默认按部门层级可见（上级可看下级、下级可看上级）。如需对其他部门可见，请在此添加。"
           >
-            <Select
-              mode="multiple"
-              placeholder="选择可见单位（可多选，所属单位无需选择）"
-              options={visibleDeptOptions}
+            <TreeSelect
+              treeData={deptTreeData}
+              treeCheckable
+              treeDefaultExpandAll
               showSearch
-              optionFilterProp="label"
+              treeNodeFilterProp="title"
+              placeholder="不选则按部门层级默认可见"
               allowClear
+              style={{ width: '100%' }}
+              maxTagCount={5}
             />
+          </Form.Item>
+          <Form.Item label="数据接口">
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item name="component_id" noStyle>
+                <Select
+                  placeholder="选择数据接口（可选）"
+                  showSearch
+                  optionFilterProp="label"
+                  options={componentOptions}
+                  allowClear
+                  style={{ width: 'calc(100% - 40px)' }}
+                />
+              </Form.Item>
+              <Button
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  const curDept = form.getFieldValue('department_id') as string | undefined;
+                  const curName = form.getFieldValue('display_name') as string | undefined;
+                  compForm.resetFields();
+                  setCompAdvancedMode(false);
+                  compForm.setFieldsValue({
+                    ...FRESH_FORM_VALUES,
+                    tool_type: 'llm_converter',
+                    department_id: curDept,
+                    display_name: curName ? `${curName}接口` : undefined,
+                  });
+                  setCompCreateModalOpen(true);
+                }}
+                title="新建数据接口"
+                style={{ width: 40 }}
+              />
+            </Space.Compact>
           </Form.Item>
         </Form>
       </Modal>
@@ -850,25 +837,116 @@ export function ExperimentalObjectPage({
         )}
       </Modal>
 
-      {/* 接口编辑/新建抽屉：就地操作，不跳转页面 */}
-      <Drawer
-        title="数据接口"
-        open={compDrawerOpen}
-        onClose={() => {
-          setCompDrawerOpen(false);
-          setCompDrawerEditId(undefined);
-          setCompDrawerPrefill(undefined);
-          // 刷新组件列表，更新"接口"/"+接口"按钮状态
-          void queryClient.invalidateQueries({ queryKey: ['components-for-object-binding'] });
+      {/* 新建数据接口弹窗（完整表单，复用 ComponentFormFields） */}
+      <Modal
+        title="新建数据接口"
+        open={compCreateModalOpen}
+        onOk={async () => {
+          try {
+            if (compAdvancedMode) {
+              const values = await compForm.validateFields(['manifest_yaml', 'department_id', 'visible_departments']);
+              publishCompMutation.mutate({
+                manifest_yaml: values.manifest_yaml as string,
+                department_id: (values.department_id as string) ?? null,
+                visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+              });
+            } else {
+              const values = await compForm.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments']);
+              const yaml = buildManifestYaml({
+                display_name: values.display_name as string,
+                description: (values.description as string) ?? '',
+                prompt: (values.prompt as string) ?? '',
+                tool_type: (values.tool_type as string) ?? 'llm_converter',
+              });
+              publishCompMutation.mutate({
+                manifest_yaml: yaml,
+                department_id: (values.department_id as string) ?? null,
+                visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+              });
+            }
+          } catch {
+            // validation error
+          }
         }}
-        width={960}
+        onCancel={() => {
+          setCompCreateModalOpen(false);
+          compForm.resetFields();
+          setCompAdvancedMode(false);
+        }}
+        confirmLoading={publishCompMutation.isPending}
+        okText="发布"
+        cancelText="取消"
+        width={680}
         destroyOnClose
       >
-        <ComponentsPage
-          editId={compDrawerEditId}
-          prefillObject={compDrawerPrefill}
-        />
-      </Drawer>
+        <Form form={compForm} layout="vertical">
+          <div style={{ marginBottom: 16 }}>
+            <Space align="center">
+              <Text>高级模式</Text>
+              <Switch
+                checked={compAdvancedMode}
+                onChange={(checked) => {
+                  if (checked) {
+                    const vals = compForm.getFieldsValue();
+                    const yaml = buildManifestYaml({
+                      display_name: vals.display_name ?? '',
+                      description: vals.description ?? '',
+                      prompt: vals.prompt ?? '',
+                      tool_type: vals.tool_type ?? 'llm_converter',
+                    });
+                    compForm.setFieldsValue({ manifest_yaml: yaml });
+                  }
+                  setCompAdvancedMode(checked);
+                }}
+              />
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {compAdvancedMode ? '直接编辑 YAML 全文' : '填写表单字段，自动生成 YAML'}
+              </Text>
+            </Space>
+          </div>
+          {compAdvancedMode ? (
+            <Form.Item
+              name="manifest_yaml"
+              label="接口清单 (YAML)"
+              rules={[{ required: true, message: '请输入 YAML' }, { min: 10, message: '清单内容过短' }]}
+            >
+              <Input.TextArea
+                placeholder={'name: iface_ffffffff  # 自动生成\nkind: ingestion\ndisplay_name: "接口名"\n...'}
+                rows={16}
+                style={{ fontFamily: 'monospace', fontSize: 13 }}
+              />
+            </Form.Item>
+          ) : (
+            <ComponentFormFields ingestionToolOptions={ingestionToolOptions} />
+          )}
+          <Form.Item name="department_id" label="所属单位">
+            <Select
+              placeholder="选择所属单位（可选）"
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              options={deptOptions}
+            />
+          </Form.Item>
+          <Form.Item
+            name="visible_departments"
+            label="可见单位"
+            tooltip="选填。默认按部门层级可见。如需对其他部门可见，请在此添加。"
+          >
+            <TreeSelect
+              treeData={deptTreeData}
+              treeCheckable
+              treeDefaultExpandAll
+              showSearch
+              treeNodeFilterProp="title"
+              placeholder="不选则按部门层级默认可见"
+              allowClear
+              style={{ width: '100%' }}
+              maxTagCount={5}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
 
     </div>
   );
