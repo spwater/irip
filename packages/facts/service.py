@@ -18,9 +18,9 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import ScopedSessionMixin
+from packages.common.database import ScopedSessionMixin, session_scope
 from packages.common.errors import AppError
-from packages.facts.observations import FactRef
+from packages.facts.observations import FactMeta, FactRef
 from packages.facts.repository import FactRepository
 from packages.standards.objects import IndustrialObject
 
@@ -285,6 +285,127 @@ class FactService(ScopedSessionMixin):
                 for item in items
             ]
             return refs, next_cursor
+
+    # ---- 写操作下沉（新增） ----
+
+    async def archive(self, fact_id: UUID) -> None:
+        """归档实验事实（tombstone，替代物理删除）。
+
+        将 Fact.status 设为 'archived'，不物理删除任何证据记录。
+
+        **session 语义**：使用 ``session_scope(self._factory)``（不设 GUC），
+        保留原 ``archive_fact`` 端点的无 GUC 行为 + 显式
+        ``Fact.department_id == service.department_id`` 过滤。
+
+        Args:
+            fact_id: 事实 UUID。
+
+        Raises:
+            AppError: code="not_found"，当事实不存在时。
+        """
+        async with session_scope(self._factory) as session:
+            fact = await FactRepository.find_fact_in_dept(session, fact_id, self._dept_id)
+            if fact is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"事实不存在: {fact_id}",
+                    retryable=False,
+                    fields={"fact_id": str(fact_id)},
+                )
+            await FactRepository.update_fact_status(session, fact_id, "archived")
+            await session.flush()
+
+    async def get_fact_meta(self, fact_id: UUID) -> FactMeta:
+        """获取事实元数据（delete 前置查询）。
+
+        **session 语义**：使用 ``self._scoped_session()``（设 GUC）。
+
+        Args:
+            fact_id: 事实 UUID。
+
+        Returns:
+            FactMeta: 事实元数据。
+
+        Raises:
+            AppError: code="not_found"，当事实不存在时。
+        """
+        async with self._scoped_session() as session:
+            meta = await FactRepository.get_fact_meta(session, fact_id)
+            if meta is None:
+                raise AppError(
+                    code="not_found",
+                    message="事实不存在",
+                    retryable=False,
+                    fields={"fact_id": str(fact_id)},
+                )
+            return meta
+
+    async def delete_fact_record(
+        self,
+        fact_id: UUID,
+        flow_run_id: UUID | None = None,
+    ) -> None:
+        """删除事实记录（Fact + FlowRun 分两个独立 session）。
+
+        **session 语义**：Fact 删除与 FlowRun 删除分两个独立 ``_scoped_session``
+        （两个独立事务），保留原 ``delete_fact`` 端点的分离事务边界。
+        不合并为单原子事务（失败回滚语义不同）。
+
+        Args:
+            fact_id: 事实 UUID。
+            flow_run_id: 流程运行 UUID（可选，None 时不删 FlowRun）。
+        """
+        # Session 1: 删除 Fact（FK CASCADE 自动删 FactDataIndex）
+        async with self._scoped_session() as session:
+            await FactRepository.delete_facts(session, [fact_id])
+            await session.flush()
+
+        # Session 2: 删除关联的 FlowRun（独立事务）
+        if flow_run_id is not None:
+            async with self._scoped_session() as session:
+                await FactRepository.delete_flow_runs(session, [flow_run_id])
+                await session.flush()
+
+    async def get_facts_meta_by_task(self, task_code: str) -> list[FactMeta]:
+        """按任务编码批量获取事实元数据（delete 前置查询）。
+
+        **session 语义**：使用 ``self._scoped_session()``（设 GUC）。
+
+        Args:
+            task_code: 任务编码。
+
+        Returns:
+            list[FactMeta]: 元数据列表（department_id / owner_user_id 为 None，
+                因为批量删除不做归属校验）。
+        """
+        async with self._scoped_session() as session:
+            return await FactRepository.get_facts_meta_by_task(session, task_code)
+
+    async def delete_facts_records(
+        self,
+        fact_ids: list[UUID],
+        flow_run_ids: list[UUID],
+    ) -> None:
+        """批量删除事实记录（Fact + FlowRun 分两个独立 session）。
+
+        **session 语义**：Fact 删除与 FlowRun 删除分两个独立 ``_scoped_session``
+        （两个独立事务），保留原 ``delete_facts_by_task`` 端点的分离事务边界。
+
+        Args:
+            fact_ids: 事实 UUID 列表。
+            flow_run_ids: 流程运行 UUID 列表。
+        """
+        # Session 1: 删除 Facts
+        if fact_ids:
+            async with self._scoped_session() as session:
+                await FactRepository.delete_facts(session, fact_ids)
+                await session.flush()
+
+        # Session 2: 删除 FlowRuns（独立事务）
+        if flow_run_ids:
+            async with self._scoped_session() as session:
+                await FactRepository.delete_flow_runs(session, flow_run_ids)
+                await session.flush()
 
     async def list_facts(
         self,

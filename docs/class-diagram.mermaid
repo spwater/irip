@@ -1,174 +1,179 @@
+%% facts.py 下沉方案 —— 类图
+%% 架构师：高见远
+
 classDiagram
-    direction TB
+  direction LR
 
-    class Fact {
-        +UUID id
-        +UUID organization_id
-        +UUID~None~ template_version_id
-        +str fact_type
-        +UUID object_id
-        +str status
-        +int lock_version
-        +str~None~ idempotency_key
-        +datetime created_at
-        +datetime updated_at
-        +UUID~None~ created_by
-        +str subject_id
-        +UUID~None~ method_version_id
-        +UUID~None~ flow_run_id
-        +datetime~None~ started_at
-        +datetime~None~ ended_at
-        +str~None~ task_code
-        +str~None~ task_name
-        +str~None~ department_name
-        +str~None~ operator
-        +str~None~ run_operator
-        +str~None~ equipment_name
-        +tsvector search_vector
-    }
+  %% ---- 值对象 ----
+  class FactRef {
+    +fact_id: UUID
+    +fact_type: str
+    +subject_id: str
+    +status: str
+  }
+  class FactDetailRow {
+    +fact_id: UUID
+    +fact_type: str
+    +subject_id: str
+    +status: str
+    +task_code: str | None
+    +task_name: str | None
+    +project_name: str | None
+    +department_name: str | None
+    +operator: str | None
+    +run_operator: str | None
+    +equipment_name: str | None
+    +data_summary: str | None
+    +created_at: datetime | None
+  }
+  class FactMeta {
+    +fact_id: UUID
+    +source_artifact_id: UUID | None
+    +department_id: UUID | None
+    +owner_user_id: UUID | None
+    +flow_run_id: UUID | None
+  }
+  class FactSnapshotRow {
+    +fact_id: UUID
+    +fact_type: str | None
+    +subject_id: str | None
+    +status: str | None
+    +task_code: str | None
+    +task_name: str | None
+    +project_name: str | None
+    +department_name: str | None
+    +operator: str | None
+    +run_operator: str | None
+    +equipment_name: str | None
+    +created_at: datetime | None
+  }
 
-    class FactDataIndex {
-        +UUID id
-        +UUID fact_id
-        +int row_index
-        +str key
-        +str~None~ value_text
-        +float~None~ value_number
-    }
+  %% ---- ORM 实体（既有，仅示意关系） ----
+  class Fact {
+    +id: UUID
+    +fact_type: str
+    +status: str
+    +subject_id: str
+    +task_code: str | None
+    +task_name: str | None
+    +department_name: str | None
+    +operator: str | None
+    +run_operator: str | None
+    +equipment_name: str | None
+    +flow_run_id: UUID | None
+    +source_artifact_id: UUID | None
+    +department_id: UUID
+    +owner_user_id: UUID
+    +created_at: datetime
+  }
+  class FactDataIndex {
+    +fact_id: UUID
+    +key: str
+    +value_text: str | None
+    +value_number: float | None
+  }
+  Fact "1" o-- "many" FactDataIndex : CASCADE
 
-    class FactRef {
-        +UUID fact_id
-        +str fact_type
-        +str subject_id
-        +str status
-    }
+  %% ---- Repository ----
+  class FactRepository {
+    <<静态方法 / async>>
+    +insert_fact(session, ...) Fact
+    +get_fact(session, fact_id, org_id) Fact
+    +search_facts(session, query, org_id, filters, cursor, page_size) tuple~list~dict~, str~
+    +list_facts(session, org_id, filters, cursor, page_size) tuple~list~dict~, str~
+    +find_by_idempotency_key(session, org_id, key) Fact | None
+    +fetch_snapshots(session, fact_ids, include_project, include_base, with_task_code_fallback) dict~UUID, FactSnapshotRow~
+    +count_group_by_task(session, fact_ids) dict~str, int~
+    +search_data_index(session, q, key, value, min_value, max_value, page_size) list~UUID~
+    +find_fact_in_dept(session, fact_id, dept_id) Fact | None
+    +update_fact_status(session, fact_id, status) None
+    +get_fact_meta(session, fact_id) FactMeta | None
+    +get_facts_meta_by_task(session, task_code) list~FactMeta~
+    +find_json_artifact(session, fact_id) Artifact | None
+    +find_source_file_artifact(session, fact_id) Artifact | None
+    +delete_facts(session, fact_ids) None
+    +delete_flow_runs(session, flow_run_ids) None
+  }
 
-    class CreateFactCommand {
-        +str fact_type
-        +UUID~None~ template_version_id
-        +UUID organization_id
-        +UUID object_id
-        +str subject_id
-        +datetime~None~ started_at
-        +datetime~None~ ended_at
-        +UUID~None~ method_version_id
-        +str~None~ idempotency_key
-        +UUID created_by
-        +str~None~ task_code
-        +str~None~ task_name
-        +str~None~ department_name
-        +str~None~ operator
-        +str~None~ run_operator
-        +str~None~ equipment_name
-        +UUID~None~ flow_run_id
-    }
+  %% ---- FactService（写 + 基础 ref） ----
+  class FactService {
+    -_factory: async_sessionmaker
+    -_dept_id: UUID
+    -_actor_id: UUID | None
+    +__init__(session_factory, department_id, actor_id)
+    +department_id UUID
+    +session_factory async_sessionmaker
+    +create(command: CreateFactCommand) FactRef
+    +get(fact_id: UUID) FactRef
+    +search(query, filters, cursor, page_size) tuple~list~FactRef~, str~
+    +list_facts(filters, cursor, page_size) tuple~list~FactRef~, str~
+    +archive(fact_id: UUID) None
+    +get_fact_meta(fact_id: UUID) FactMeta
+    +delete_fact_record(fact_id, flow_run_id) None
+    +get_facts_meta_by_task(task_code: str) list~FactMeta~
+    +delete_facts_records(fact_ids, flow_run_ids) None
+  }
 
-    class FactService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        -_actor_id: UUID~None~
-        +organization_id: UUID
-        +session_factory: async_sessionmaker
-        +create(command: CreateFactCommand) FactRef
-        +get(fact_id: UUID) FactRef
-        +search(query: str, filters: dict, cursor: str, page_size: int) tuple
-        +list_facts(filters: dict, cursor: str, page_size: int) tuple
-    }
+  %% ---- FactQueryService（复杂读，新建） ----
+  class FactQueryService {
+    -_factory: async_sessionmaker
+    -_dept_id: UUID
+    -_actor_id: UUID | None
+    -_s3_repo: S3Repository
+    +__init__(session_factory, department_id, actor_id, s3_repo)
+    +department_id UUID
+    +session_factory async_sessionmaker
+    -_artifact_service() ArtifactService
+    +list_facts_detail(filters, cursor, page_size) tuple~list~FactDetailRow~, str~, dict~str,int~~
+    +search_facts_detail(query, filters, cursor, page_size) tuple~list~FactDetailRow~, str~, dict~str,int~~
+    +search_by_data(q, key, value, min_value, max_value, page_size) tuple~list~FactDetailRow~, dict~str,int~~
+    +get_fact_detail(fact_id: UUID) FactDetailRow
+    +get_fact_data(fact_id: UUID) dict
+    -_build_data_summary(fact_id, session, artifact_service) str | None
+    -_resolve_task_info(fact_record, session) dict
+  }
 
-    class FactRepository {
-        +insert_fact(session, ...) Fact
-        +get_fact(session, fact_id, org_id) Fact
-        +search_facts(session, query, org_id, filters, cursor, page_size) tuple
-        +list_facts(session, org_id, filters, cursor, page_size) tuple
-        +find_by_idempotency_key(session, org_id, key) Fact~None~
-    }
+  %% ---- 外部依赖 ----
+  class ArtifactService {
+    +get_bytes(artifact_id) bytes
+    +delete_artifact(artifact_id) None
+  }
+  class ScopedSessionMixin {
+    <<mixin>>
+    -_scoped_session() AsyncSession
+  }
 
-    class EvidenceMember {
-        +UUID fact_id
-        +str decision
-        +str reason
-        +to_dict() dict
-        +from_dict(d: dict) EvidenceMember
-    }
+  %% ---- Router ----
+  class FactsRouter {
+    +create_fact(body, user, service)
+    +list_facts(user, query_service, ...)
+    +search_facts(user, query_service, ...)
+    +search_facts_by_data(user, query_service, ...)
+    +get_fact(fact_id, user, query_service)
+    +get_fact_data(fact_id, user, query_service)
+    +archive_fact(fact_id, user, service)
+    +delete_fact(fact_id, user, service)
+    +delete_facts_by_task(task_code, user, service)
+  }
 
-    class EvidenceService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        -_actor_id: UUID~None~
-        +create_set(name: str) dict
-        +freeze(set_id: UUID, fact_filter: dict) EvidenceSetRef
-        +get_set(set_id: UUID) dict
-        +list_members(set_id: UUID, version: int) tuple
-    }
+  %% ---- 关系 ----
+  ScopedSessionMixin <|-- FactService
+  ScopedSessionMixin <|-- FactQueryService
+  ScopedSessionMixin <|-- ArtifactService
 
-    class ProvenanceGraphService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        +get_graph(derivation_run_id: UUID) ProvenanceGraph
-        +get_paths_to_raw(parameter_version_id: UUID) list
-        +add_edge(...) None
-    }
+  FactService ..> FactRepository : 委托 DB
+  FactService ..> FactRef : 返回
+  FactService ..> FactMeta : 返回
+  FactQueryService ..> FactRepository : 委托 DB
+  FactQueryService ..> FactDetailRow : 返回
+  FactQueryService ..> ArtifactService : 下载/读取
+  FactRepository ..> Fact : 查询
+  FactRepository ..> FactDataIndex : 查询
+  FactRepository ..> FactSnapshotRow : 返回
+  FactRepository ..> FactMeta : 返回
 
-    class DerivationService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        -_actor_id: UUID~None~
-        +create_run(evidence_set_version_id, recipe_version_id) DerivationRunRef
-        +replay(run_id: UUID) DerivationRunRef
-        +get_run(run_id: UUID) DerivationRunRef
-        +list_runs(cursor: str, page_size: int) tuple
-    }
-
-    class ParameterService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        -_actor_id: UUID~None~
-        +create_parameter(variable_code, object_id) dict
-        +create_candidate(...) dict
-        +approve(candidate_id, reviewer) ParameterVersionRef
-        +reject(candidate_id, reviewer, comment) dict
-        +get_parameter(parameter_id) dict
-        +get_version(parameter_id, version) ParameterVersionRef
-        +list_parameters(filters, cursor, page_size) tuple
-        +list_candidates(parameter_id) list
-        +deprecate(parameter_id) dict
-    }
-
-    class IngestionPipeline {
-        -_factory: async_sessionmaker
-        -_fact_service: FactService
-        -_quality_engine: QualityEngine
-        -_org_id: UUID
-        -_actor_id: UUID~None~
-        +ingest_file(file_path, mapping_profile_version_id, template_version_id, object_id, method_version_id) IngestionResult
-        +ingest_batch(file_paths, ...) tuple
-    }
-
-    class ModelService {
-        -_factory: async_sessionmaker
-        -_org_id: UUID
-        -_artifact_service: Any
-        -_fact_service: Any~None~
-        -_clock: Clock
-        +create_model(code, display_name) Model
-        +create_version(model_id, contract, ...) ModelVersion
-        +publish(model_id, version_id) Model
-        +predict(model_id, inputs) PredictionResult
-        +predict_version(model_version_id, inputs) PredictionResult
-    }
-
-    Fact ||--o{ FactDataIndex : "1:N (fact_id FK)"
-    FactService --> FactRepository : uses
-    FactRepository --> Fact : CRUD
-    FactService ..> FactRef : returns
-    FactService ..> CreateFactCommand : accepts
-    EvidenceService ..> EvidenceMember : creates
-    EvidenceService --> Fact : queries
-    ProvenanceGraphService --> Fact : queries
-    DerivationService ..> EvidenceMember : reads
-    DerivationService --> Fact : queries
-    ParameterService --> Fact : queries (via staleness removed)
-    IngestionPipeline --> FactService : uses
-    IngestionPipeline ..> CreateFactCommand : builds
-    ModelService --> FactService : uses
-    ModelService ..> CreateFactCommand : builds
+  FactsRouter ..> FactService : 写 + 基础
+  FactsRouter ..> FactQueryService : 复杂读
+  FactsRouter ..> FactResponse : 映射
+  FactsRouter ..> ArtifactService : 删 MinIO（delete）
+  FactsRouter ..> check_management_permission : 归属校验

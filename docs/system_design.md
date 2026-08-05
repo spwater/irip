@@ -1,469 +1,294 @@
-# IRIP Fact 版本链清理 — 系统设计与任务分解
+# facts.py 下沉方案与任务分解（系统设计）
 
-## Part A: System Design
+> 架构师：高见远 ｜ 目标文件：`apps/api/routers/facts.py`（1246 行，73 处直接 ORM）
+> 约束：纯重构——不改变任何业务行为，API URL / 请求体 / 响应体不变；保持 `FactService.__init__` 签名兼容；保持 `scoped_session` GUC 设置方式；权限检查保留在 Router 层；参考已完成的 `governance.py` / `object_types.py` 下沉模式。
 
-### 1. Implementation Approach
+---
 
-#### 1.1 核心技术挑战
+## Part A：系统设计
 
-当前 IRIP 的 fact 层设计了一套完整的版本链（fact → fact_revision → raw/normalized_observation, fact_revision_link, fact_artifact），但实际从未使用多版本功能（50条fact，每条恰好1个revision，1:1）。本次重构的目标是：
+### 1. 实现方案（Implementation Approach）
 
-1. **删除 7 张表**：fact_revision, raw_observation, normalized_observation, quality_assessment, fact_artifact, fact_revision_link, parameter_staleness
-2. **字段合并**：将 fact_revision 中的有用字段合并回 fact 表
-3. **FactDataIndex FK 改造**：从 fact_revision_id 改为 fact_id
-4. **全链路适配**：修改所有引用 FactRevision 的模块（provenance, ai, models, connectors, api routers, flows）
-5. **前端适配**：修改 API 类型定义和前端组件
-6. **Migration 0055**：DROP 表 + ALTER fact + FK 改造 + 清理 trigger/权限
-7. **测试适配**：更新或删除相关测试文件
+#### 1.1 核心技术难点
 
-#### 1.2 框架与库选择
+1. **"上帝 Router"**：`facts.py` 9 个端点中 8 个直接使用 `session.execute / sa.select / sa.insert / sa.update / sa.delete / sa.text`，共 73 处。`GET /facts/{id}/data` 单个端点约 400 行，含跨包 JOIN（FlowRun→FlowDefinitionVersion→FlowDefinition→ExperimentProject→AppUser→Department→ComponentVersion→IndustrialObject→Equipment）与**绕过 RLS 的 alembic-URL 超管引擎**逻辑。
+2. **快照富化（Snapshot Enrichment）重复 4 次**：`list_facts` / `search_facts` / `search_facts_by_data` / `get_fact` 各自手写 `Fact ⟕ FlowRun ⟕ FlowDefinitionVersion ⟕ FlowDefinition (⟕ ExperimentProject)` 的 JOIN，用 `coalesce(FlowDefinition.display_name, Fact.task_name)` 覆盖 `task_name`。差异点：① `list` 版多 JOIN `ExperimentProject` 取 `project_name`，且 JOIN 条件为**双路径** `sa.or_(FV.flow_definition_id==FD.id, Fact.task_code==FD.code)`（无 flow_run 时按 task_code 兜底）；② `search`/`search-data`/`get` 仅单路径 `FV.flow_definition_id==FD.id`，不取 `project_name`。
+3. **group_counts 两种语义**：`list`/`search` 用全局 `GROUP BY task_code`（不受分页限制）；`search-data` 用 `fact_id IN (...)` 过滤后的 group count。
+4. **data_summary 重复 2 次**：`list` / `search-data` 都执行"查 JSON Artifact → 下载 → 解析 points/series → 拼摘要串"。逻辑相同，且都在**独立 session** 中执行以避免 `ResourceClosedError`（Artifact 下载走 `ArtifactService.get_bytes`，内部自开 session）。
+5. **JSON Artifact 查找逻辑重复 3 次**：`list` / `search-data` / `get_fact_data` 都做"优先 `source_artifact_id` 且 `media_type=application/json`，否则 fallback 用 `flow_run_id` 查 `extract_{run_id}.json`"。
+6. **写操作的 S3 依赖**：`delete_fact` / `delete_facts_by_task` 需删 MinIO Artifact，依赖 `ArtifactService`（需 `s3_repo`）。但 `FactService.__init__` 签名必须保持兼容，不能注入 `s3_repo`。
+7. **archive 的 session 语义特殊**：`archive_fact` 当前用 `session_scope(service.session_factory)`（**不设 GUC**）+ 显式 `Fact.department_id == service.department_id` 过滤；其余写操作用 `service._scoped_session()`（**设 GUC**）。两种 session 语义必须分别保留。
 
-无新增框架/库。沿用现有技术栈：
-- **后端**: Python 3.12 + SQLAlchemy 2.0 + Alembic + FastAPI + asyncpg
-- **前端**: React + TypeScript + MUI
-- **数据库**: PostgreSQL
+#### 1.2 框架/库选型
+
+| 用途 | 选型 | 理由 |
+|------|------|------|
+| ORM | SQLAlchemy 2.x async（现有） | 项目既有栈，不引入新依赖 |
+| 会话/GUC | `ScopedSessionMixin._scoped_session()` / `scoped_session()` / `session_scope()`（`packages/common/database.py`） | 复用治理层已验证的 RLS GUC 模式 |
+| 对象存储 | `ArtifactService` + `S3Repository`（现有） | data_summary 读取 / 删除复用既有服务 |
+| 分页 | keyset cursor（`_encode_cursor` / `_decode_cursor`，已在 repository） | 保持现有分页协议不变 |
+| 值对象 | `@dataclass(frozen=True)`（`packages/facts/observations.py`） | 与现有 `FactRef` 风格一致 |
 
 #### 1.3 架构模式
 
-沿用现有分层架构：
-- **entities.py** (ORM 层) → **repository.py** (数据访问层) → **service.py** (业务编排层) → **routers/*.py** (API 层)
-- 值对象 (observations.py) 在服务层与 API 层之间传递
+沿用 `governance.py` 下沉后的分层（Router → Service → Repository），但**读侧拆分**出独立的 `FactQueryService`：
+
+- **Router**（`apps/api/routers/facts.py`）：权限依赖（`require_permission`）、请求/响应模型、`_ref_to_response` 映射、归属校验（`check_management_permission`）、MinIO Artifact 删除编排。**不含任何 `sa.*` / `session.execute`**。
+- **FactService**（`packages/facts/service.py`，写 + 基础 ref）：保持 `__init__(session_factory, department_id, actor_id)` 签名不变；新增写操作（archive）与元数据/删除（DB 侧）。
+- **FactQueryService**（`packages/facts/query_service.py`，**新建**，复杂读）：快照富化、group_counts、data_summary、`search_by_data`、`get_fact_data`（含 alembic-URL RLS 绕过）。依赖 `s3_repo`（DI 注入，不破坏 FactService 签名）。
+- **FactRepository**（`packages/facts/repository.py`，数据访问）：封装所有 `sa.select/insert/update/delete`，方法为 `async` + 接收 `AsyncSession`。
+
+**为什么新建 FactQueryService 而非全塞进 FactService**：`get_fact_data` 的跨包多级 JOIN + alembic-URL 超管引擎约 300 行，data_summary 需 `s3_repo` 依赖，与 FactService 的纯 DB 写侧关注点不同；合并会使 FactService 再次退化为 god-service。读/写分离后 FactService 保持精简（create + 基础 ref + 写），FactQueryService 承担所有读投影。
 
 ---
 
-### 2. File List
+### 2. 文件列表（File List）
 
-#### 2.1 需要修改的文件（后端核心 — facts 模块）
+> 相对路径均相对项目根 `/Users/shuipei/Desktop/snowSP/irip/`。
 
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/facts/entities.py` | 删除 FactRevision, RawObservation, NormalizedObservation, FactArtifact, FactRevisionLink ORM 类；修改 Fact 类（合并字段、删除 current_revision）；修改 FactDataIndex（FK 改为 fact_id） |
-| `packages/facts/observations.py` | 删除 RawObservationInput, NormalizedObservationInput, RawObservation, NormalizedObservation 值对象；FactRevisionRef 改为 FactRef（去掉 revision, revision_id） |
-| `packages/facts/service.py` | 删除 revise(), list_revisions(), get_observations() 方法；简化 create()（直接写 fact 表）；简化 get(), search(), list_facts()（直接查 fact 表）；删除 ReviseFactCommand；CreateFactCommand 去掉 raw/normalized/artifacts 字段 |
-| `packages/facts/repository.py` | 删除 insert_revision, insert_raw_observations, insert_normalized_observations, insert_artifacts, insert_revision_link, get_revision, get_latest_revision, get_revisions, get_raw_observations, get_normalized_observations, get_artifacts, get_revision_link, search_facts, list_facts 中关联 FactRevision 的逻辑；改为直接查 fact 表 |
-| `packages/facts/__init__.py` | 更新模块文档字符串 |
+#### 修改文件
 
-#### 2.2 需要修改的文件（后端 — parameters 模块）
+| # | 路径 | 改动概要 |
+|----|------|----------|
+| M1 | `apps/api/routers/facts.py` | 8 个端点瘦身为"权限 + 模型 + 调 service/query_service + 映射"；新增 `get_fact_query_service` DI 占位与 `FactQueryServiceDep`；删除全部直接 ORM。预计 1246 → ~280 行 |
+| M2 | `packages/facts/service.py` | FactService 新增：`archive` / `get_fact_meta` / `delete_fact_record` / `get_facts_meta_by_task` / `delete_facts_records`；保留 `create` / `get` / `search` / `list_facts` |
+| M3 | `packages/facts/repository.py` | FactRepository 新增静态方法：`fetch_snapshots` / `count_group_by_task` / `search_data_index` / `get_fact_meta` / `get_facts_meta_by_task` / `find_fact_in_dept` / `find_json_artifact` / `find_source_file_artifact` / `delete_facts` / `delete_flow_runs` / `update_fact_status` |
+| M4 | `packages/facts/observations.py` | 新增值对象：`FactDetailRow` / `FactMeta` / `FactSnapshotRow`（内部行类型） |
+| M5 | `apps/api/composition/facts.py` | 新增 `_get_fact_query_service_dep`（用 `ctx.s3_repo` 构建 `FactQueryService`，含 `_rls_dept_id` 设置），注册到 `dependency_overrides` |
 
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/parameters/entities.py` | 删除 ParameterStaleness ORM 类 |
-| `packages/parameters/staleness.py` | **删除整个文件** |
-| `packages/parameters/service.py` | 删除 import StalenessChecker/ParameterStaleness；删除 check_staleness() 方法；删除 approve() 中创建 staleness 条目的逻辑 |
-| `packages/parameters/__init__.py` | 更新模块文档字符串 |
+#### 新建文件
 
-#### 2.3 需要修改的文件（后端 — provenance 模块）
+| # | 路径 | 内容 |
+|----|------|------|
+| N1 | `packages/facts/query_service.py` | `FactQueryService`：`list_facts_detail` / `search_facts_detail` / `search_by_data` / `get_fact_detail` / `get_fact_data` + 私有 `_build_data_summary` / `_resolve_task_info` |
 
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/provenance/evidence.py` | EvidenceMember 值对象去掉 fact_revision, fact_revision_id 字段；freeze() 改为查 Fact 表（不再 JOIN FactRevision）；删除 quality_assessment 关联查询 |
-| `packages/provenance/graph.py` | 删除 import FactRevision, RawObservation；get_graph() 和 get_paths_to_raw() 中将 fact_revision 节点改为 fact 节点；ProvenanceNode.node_type 的 "fact_revision" 改为 "fact" |
-| `packages/provenance/derivations.py` | 删除 import NormalizedObservation；create_run() 中从 EvidenceMember 获取 fact_id（而非 fact_revision_id）；溯源边的 target_type 从 "fact_revision" 改为 "fact" |
-| `packages/provenance/entities.py` | 删除 import packages.facts.entities（fact_revision table 注册）；ProvenanceEdge 注释中 "fact_revision" 改为 "fact" |
-| `packages/provenance/__init__.py` | 更新模块文档字符串 |
+#### 设计产物（本次产出）
 
-#### 2.4 需要修改的文件（后端 — ai 模块）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/ai/service.py` | _handle_search_facts() 中的 fallback SQL 从 `fact f JOIN fact_revision fr` 改为直接查 `fact` 表 |
-| `packages/ai/tools.py` | 删除 suggest_fact_revision 候选工具定义（fact 不可编辑，无修订概念） |
-| `packages/ai/citations.py` | Citation 值对象 object_type 中的 "fact_revision" 改为 "fact"（仅注释/文档变更） |
-
-#### 2.5 需要修改的文件（后端 — models 模块）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/models/service.py` | _write_execution_fact() 中删除 import RawObservation, NormalizedObservation；CreateFactCommand 去掉 raw/normalized 参数 |
-
-#### 2.6 需要修改的文件（后端 — connectors 模块）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `packages/connectors/ingestion_service.py` | 删除 import RawObservationInput, NormalizedObservationInput；CreateFactCommand 去掉 raw/normalized 参数；删除 raw/norm 构建逻辑 |
-
-#### 2.7 需要修改的文件（API routers）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `apps/api/routers/facts.py` | 删除 RawObservationItem, NormalizedObservationItem, ObservationsResponse, RawObservationResponse, NormalizedObservationResponse, ReviseFactRequest 模型；删除 list_revisions, get_revision, get_observations, revise_fact 端点；简化 create_fact（去掉 raw/normalized/artifacts）；FactRevisionResponse 改为 FactResponse（去掉 revision, revision_id）；list_facts/search_facts/search_facts_by_data/get_fact_data/delete_fact/delete_facts_by_task 中所有 FactRevision 引用改为 Fact |
-| `apps/api/routers/flows.py` | persist_run_as_fact 中 CreateFactCommand 去掉 raw/normalized；FactDataIndex 写入用 fact_id 替代 revision_id；list_facts_by_flow 中 FactRevision 查询改为 Fact 查询；list_runs 中 FactRevision.flow_run_id 查询改为 Fact.flow_run_id；FactRevisionRef 改为 FactRef |
-| `apps/api/routers/provenance.py` | EvidenceMemberResponse 去掉 fact_revision, fact_revision_id；_member_to_response() 适配 |
-
-#### 2.8 需要修改的文件（前端）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `apps/web/src/api/types.ts` | FactSummary 去掉 revision, revision_id；FactDetail 去掉 revision, revision_id；删除 FactRevision, RawObservation, NormalizedObservation, ObservationsResponse 类型 |
-| `apps/web/src/api/facts-provenance.ts` | 删除 apiListFactRevisions, apiGetFactRevision, apiGetFactObservations 函数；FactSummary/FactDetail 适配 |
-| `apps/web/src/api/facts.ts` | 删除 FactRevision, RawObservation, NormalizedObservation, ObservationsResponse 的 re-export |
-
-#### 2.9 需要新建的文件
-
-| 文件路径 | 说明 |
-|---------|------|
-| `migrations/versions/0055_drop_fact_version_chain.py` | 新迁移：DROP 7张表 + ALTER fact 表加字段 + 修改 FactDataIndex FK + 清理 trigger + 清理 RLS/权限 |
-
-#### 2.10 需要修改的文件（测试）
-
-| 文件路径 | 修改说明 |
-|---------|---------|
-| `tests/integration/facts/test_fact_revisions.py` | **删除整个文件**（版本链功能已删除） |
-| `tests/unit/facts/test_fact_invariants.py` | 删除修订相关测试用例（immutable_revisions, revision_preserves_previous）；保留 idempotency 测试 |
-| `tests/unit/facts/conftest.py` | 适配 FactService 新签名（去掉 raw/normalized） |
-| `tests/integration/parameters/conftest.py` | 删除 quality_assessment 引用 |
-| `tests/integration/parameters/test_parameter_approval.py` | 删除 staleness 相关测试用例 |
-| `tests/integration/provenance/test_replay.py` | 适配 EvidenceMember 无 fact_revision_id；适配 ProvenanceEdge target_type "fact" |
-| `tests/integration/ai/test_offline_citations.py` | 适配 search_facts 返回结构变更 |
-| `tests/integration/ingestion/test_particle_ingestion.py` | 适配 CreateFactCommand 新签名 |
-| `tests/integration/models/test_model_lifecycle.py` | 适配 CreateFactCommand 新签名 |
-| `tests/acceptance/test_v1_invariants.py` | 删除修订相关不变量测试 |
-| `tests/unit/provenance/test_evidence_freeze.py` | 适配 EvidenceMember 无 fact_revision_id |
-| `tests/unit/ai/test_tool_policy.py` | 删除 suggest_fact_revision 工具测试 |
-| `tests/unit/test_migration_files.py` | 更新 0033/0034 immutable_tables 测试（fact_revision 从不可变表列表移除） |
-| `tests/conftest.py` | 适配 import 变更 |
+| # | 路径 | 内容 |
+|----|------|------|
+| D1 | `docs/system_design.md` | 本文件 |
+| D2 | `docs/class-diagram.mermaid` | 类图 |
+| D3 | `docs/sequence-diagram.mermaid` | 时序图 |
 
 ---
 
-### 3. Data Structures and Interfaces
+### 3. 数据结构与接口（Data Structures and Interfaces）
 
-#### 3.1 Fact 表新结构（合并后）
+> 完整 Mermaid 见 `docs/class-diagram.mermaid`。此处给出方法清单与关系摘要。
 
-```sql
--- fact 表新结构（合并 fact_revision 字段后）
-fact {
-    -- 原有字段
-    id              UUID PK
-    organization_id UUID NOT NULL
-    template_version_id UUID        -- 原有，保留
-    fact_type       TEXT NOT NULL    -- 原有
-    object_id       UUID NOT NULL FK -- 原有 → industrial_object
-    status          TEXT NOT NULL DEFAULT 'active'  -- 原有
-    lock_version    INTEGER NOT NULL DEFAULT 0       -- 原有
-    idempotency_key TEXT                             -- 原有
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now() -- 原有
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now() -- 原有
-    created_by      UUID FK → app_user               -- 原有
-
-    -- 从 fact_revision 合并的字段
-    subject_id          TEXT NOT NULL               -- 合并
-    method_version_id   UUID FK → method_version    -- 合并
-    flow_run_id         UUID FK → flow_run           -- 合并
-    started_at          TIMESTAMPTZ                  -- 合并
-    ended_at            TIMESTAMPTZ                  -- 合并
-    task_code           TEXT                         -- 合并
-    task_name           TEXT                         -- 合并
-    department_name     TEXT                         -- 合并
-    operator            TEXT                         -- 合并
-    run_operator        TEXT                         -- 合并
-    equipment_name      TEXT                         -- 合并
-    search_vector       tsvector                     -- 合并（全文搜索向量）
-
-    -- 删除的字段
-    -- current_revision  -- 删除（无版本概念）
-}
-```
-
-**字段合并决策表**：
-
-| fact_revision 字段 | 决策 | 理由 |
-|---|---|---|
-| subject_id | ✅ 合并 | 前端列表/详情页必需 |
-| method_version_id | ✅ 合并 | 关联方法版本 |
-| flow_run_id | ✅ 合并 | 关联流程运行（flows.py 必需） |
-| started_at | ✅ 合并 | 实验时间 |
-| ended_at | ✅ 合并 | 实验时间 |
-| task_code | ✅ 合并 | 任务快照（list_facts 分组） |
-| task_name | ✅ 合并 | 任务快照 |
-| department_name | ✅ 合并 | 部门快照 |
-| operator | ✅ 合并 | 操作人快照 |
-| run_operator | ✅ 合并 | 运行操作人快照 |
-| equipment_name | ✅ 合并 | 设备名快照 |
-| search_vector | ✅ 合并 | 全文搜索向量 |
-| revision | ❌ 不合并 | 版本号概念已删除 |
-| revision_reason | ❌ 不合并 | 无修订概念 |
-| revision_summary | ❌ 不合并 | 无修订概念（原为质量评估摘要 JSONB） |
-| template_version_id | ❌ 不合并 | fact 表已有此字段 |
-| fact_type | ❌ 不合并 | fact 表已有此字段 |
-| object_id | ❌ 不合并 | fact 表已有此字段 |
-| created_at | ❌ 不合并 | fact 表已有此字段 |
-| created_by | ❌ 不合并 | fact 表已有此字段 |
-
-#### 3.2 FactDataIndex 变更
-
-```sql
--- 修改前
-fact_data_index {
-    id              UUID PK
-    fact_revision_id UUID FK → fact_revision  -- 旧
-    row_index       INTEGER
-    key             TEXT
-    value_text      TEXT
-    value_number    FLOAT
-}
-
--- 修改后
-fact_data_index {
-    id              UUID PK
-    fact_id          UUID FK → fact  -- 新（FK 从 fact_revision_id 改为 fact_id）
-    row_index       INTEGER
-    key             TEXT
-    value_text      TEXT
-    value_number    FLOAT
-}
-```
-
-#### 3.3 删除的 ORM 类列表
-
-| ORM 类 | 文件 | 对应表 |
-|--------|------|-------|
-| `FactRevision` | packages/facts/entities.py | fact_revision |
-| `RawObservation` | packages/facts/entities.py | raw_observation |
-| `NormalizedObservation` | packages/facts/entities.py | normalized_observation |
-| `FactArtifact` | packages/facts/entities.py | fact_artifact |
-| `FactRevisionLink` | packages/facts/entities.py | fact_revision_link |
-| `ParameterStaleness` | packages/parameters/entities.py | parameter_staleness |
-| (无 ORM 类，仅 migration 创建) | migrations/versions/0013_quality_ingestion.py | quality_assessment |
-
-#### 3.4 类图
-
-详见 `docs/class-diagram.mermaid`
-
----
-
-### 4. Program Call Flow
-
-#### 4.1 简化后的 Fact 创建流程
-
-详见 `docs/sequence-diagram.mermaid`
-
-**核心变化**：
-- 旧流程：创建 fact → 创建 fact_revision → 创建 raw_observations → 创建 normalized_observations → 创建 fact_artifacts → 返回 FactRevisionRef
-- 新流程：创建 fact（含所有合并字段） → 返回 FactRef
-
-#### 4.2 简化后的 Fact 搜索流程
-
-- 旧流程：search_facts() JOIN fact_revision 搜索 search_vector → 返回 FactRevisionRef
-- 新流程：search_facts() 直接查 fact 表的 search_vector → 返回 FactRef
-
----
-
-### 5. Anything UNCLEAR
-
-1. **fact 表的不可变性**：fact_revision 原来是不可变表（有 trigger 阻止 UPDATE/DELETE）。合并字段后，fact 表需要保持不可变吗？**假设**：fact 表本身不是不可变表（status 字段需要更新，如 archive），但实验数据写入后不可编辑。保持现状（fact 表可 UPDATE status，但业务层保证实验数据不修改）。
-
-2. **search_vector 生成列**：fact_revision 的 search_vector 是一个 server_default 生成的 tsvector 列。合并到 fact 表后，需要重建这个生成列。**假设**：在 migration 0055 中 ALTER TABLE fact ADD COLUMN search_vector tsvector GENERATED ALWAYS AS (...) STORED。
-
-3. **FactDataIndex 已有数据**：当前有数据通过 fact_revision_id 关联。由于产品未发布、数据可全删，**假设**：migration 0055 中先 DROP fact_data_index 的 FK 约束，再重建为 fact_id 关联，已有数据忽略（可全删）。
-
-4. **EvidenceMember 的 fact_revision_id 字段**：evidence_set_version.members JSONB 中存储了 fact_revision_id。删除 fact_revision 表后，这些 JSONB 中的引用将失效。**假设**：EvidenceMember 改为存储 fact_id（去掉 fact_revision 和 fact_revision_id 字段），已有数据可全删。
-
-5. **ProvenanceEdge 的 target_type="fact_revision"**：provenance_edge 表中已有的边引用了 fact_revision 类型的节点。**假设**：已有数据可全删，新边使用 target_type="fact"。
-
-6. **quality_assessment 表**：该表没有 ORM 类（仅在 migration 0013 中创建），但 evidence.py 的 freeze() 方法有动态引用（通过 sa.table() 构建临时查询）。删除该表后，需要同时删除 evidence.py 中的 quality 过滤逻辑。
-
----
-
-## Part B: Task Decomposition
-
-### 6. Required Packages
-
-无新增第三方包。沿用现有依赖。
-
----
-
-### 7. Task List (ordered by dependency)
-
-#### T01: Migration 0055 + ORM 层重构（entities + observations 值对象）
-
-- **Task Name**: 数据库迁移 + ORM 模型重构
-- **Source Files**:
-  - `migrations/versions/0055_drop_fact_version_chain.py` (新建)
-  - `packages/facts/entities.py` (修改)
-  - `packages/facts/observations.py` (修改)
-  - `packages/parameters/entities.py` (修改)
-  - `packages/facts/__init__.py` (修改)
-  - `packages/parameters/__init__.py` (修改)
-- **Dependencies**: 无
-- **Priority**: P0
-- **详细说明**:
-  - 创建 migration 0055：DROP 7张表（fact_revision, raw_observation, normalized_observation, quality_assessment, fact_artifact, fact_revision_link, parameter_staleness），ALTER fact 表加字段（subject_id, method_version_id, flow_run_id, started_at, ended_at, task_code, task_name, department_name, operator, run_operator, equipment_name, search_vector），ALTER fact 表删字段（current_revision），ALTER fact_data_index 改 FK（fact_revision_id → fact_id），DROP trigger prevent_modify_fact_revision，恢复 irip_runtime 对 fact 表的 UPDATE 权限
-  - 修改 entities.py：删除 6 个 ORM 类（FactRevision, RawObservation, NormalizedObservation, FactArtifact, FactRevisionLink, ParameterStaleness），修改 Fact 类（加合并字段、删 current_revision），修改 FactDataIndex（FK 改为 fact_id）
-  - 修改 observations.py：删除 RawObservationInput, NormalizedObservationInput, RawObservation, NormalizedObservation 值对象；FactRevisionRef 改为 FactRef（fact_id, fact_type, subject_id, status + 合并的快照字段）
-
-#### T02: 服务层 + 数据访问层重构（service + repository + parameters staleness）
-
-- **Task Name**: 业务服务层与数据访问层重构
-- **Source Files**:
-  - `packages/facts/service.py` (修改)
-  - `packages/facts/repository.py` (修改)
-  - `packages/parameters/staleness.py` (删除)
-  - `packages/parameters/service.py` (修改)
-- **Dependencies**: T01
-- **Priority**: P0
-- **详细说明**:
-  - service.py：删除 revise(), list_revisions(), get_observations() 方法；删除 ReviseFactCommand；简化 CreateFactCommand（去掉 raw, normalized, artifacts）；简化 create()（直接写 fact 表，不再创建 revision/observations/artifacts）；简化 get()（直接查 fact 表）；简化 search() 和 list_facts()（直接查 fact 表，不再 JOIN FactRevision）；返回值改为 FactRef
-  - repository.py：删除所有 revision/observation/artifact/link 相关方法；insert_fact() 方法增加合并字段参数；search_facts() 改为直接查 fact.search_vector；list_facts() 改为直接查 fact 表（不再 JOIN FactRevision 查最新修订）；find_by_idempotency_key() 适配新返回值
-  - staleness.py：删除整个文件
-  - parameters/service.py：删除 import StalenessChecker/ParameterStaleness；删除 check_staleness() 方法；删除 approve() 中创建 staleness 条目的逻辑（第510-527行）
-
-#### T03: API 路由 + 跨模块适配（routers + provenance + ai + models + connectors）
-
-- **Task Name**: API 路由层与跨模块适配
-- **Source Files**:
-  - `apps/api/routers/facts.py` (修改)
-  - `apps/api/routers/flows.py` (修改)
-  - `apps/api/routers/provenance.py` (修改)
-  - `packages/provenance/evidence.py` (修改)
-  - `packages/provenance/graph.py` (修改)
-  - `packages/provenance/derivations.py` (修改)
-  - `packages/provenance/entities.py` (修改)
-  - `packages/provenance/__init__.py` (修改)
-  - `packages/ai/service.py` (修改)
-  - `packages/ai/tools.py` (修改)
-  - `packages/ai/citations.py` (修改)
-  - `packages/models/service.py` (修改)
-  - `packages/connectors/ingestion_service.py` (修改)
-- **Dependencies**: T01, T02
-- **Priority**: P0
-- **详细说明**:
-  - facts.py：删除修订/观察值相关端点和模型；FactRevisionResponse 改为 FactResponse（去掉 revision, revision_id）；list_facts/search_facts/search_facts_by_data 中 FactRevision 查询改为 Fact 查询（task_code 等快照字段直接从 fact 表读）；get_fact_data 中 FactRevision/FactArtifact/RawObservation 查询改为从 Fact 表和 Artifact 直接查询；delete_fact/delete_facts_by_task 中 FactRevision 查询改为 Fact 查询
-  - flows.py：persist_run_as_fact 中 CreateFactCommand 去掉 raw/normalized；FactDataIndex 写入用 fact_id 替代 revision_id；list_facts_by_flow 中 FactRevision 查询改为 Fact 查询；list_runs 中 FactRevision.flow_run_id 查询改为 Fact.flow_run_id；FactRevisionRef 改为 FactRef
-  - provenance.py：EvidenceMemberResponse 去掉 fact_revision, fact_revision_id
-  - evidence.py：EvidenceMember 去掉 fact_revision, fact_revision_id；freeze() 改为查 Fact 表（不再 JOIN FactRevision）；删除 quality_assessment 关联查询
-  - graph.py：ProvenanceNode node_type "fact_revision" 改为 "fact"；get_graph/get_paths_to_raw 中 FactRevision 查询改为 Fact 查询；删除 RawObservation import
-  - derivations.py：create_run() 从 EvidenceMember 获取 fact_id；溯源边 target_type "fact_revision" 改为 "fact"；删除 NormalizedObservation import
-  - ai/service.py：_handle_search_facts() fallback SQL 从 JOIN fact_revision 改为直接查 fact 表
-  - ai/tools.py：删除 suggest_fact_revision 候选工具
-  - ai/citations.py：Citation object_type 注释更新
-  - models/service.py：_write_execution_fact() 去掉 raw/normalized
-  - connectors/ingestion_service.py：去掉 raw/norm 构建，CreateFactCommand 新签名
-
-#### T04: 前端适配 + 测试适配
-
-- **Task Name**: 前端类型与组件适配 + 测试文件适配
-- **Source Files**:
-  - `apps/web/src/api/types.ts` (修改)
-  - `apps/web/src/api/facts-provenance.ts` (修改)
-  - `apps/web/src/api/facts.ts` (修改)
-  - `tests/integration/facts/test_fact_revisions.py` (删除)
-  - `tests/unit/facts/test_fact_invariants.py` (修改)
-  - `tests/unit/facts/conftest.py` (修改)
-  - `tests/integration/parameters/conftest.py` (修改)
-  - `tests/integration/parameters/test_parameter_approval.py` (修改)
-  - `tests/integration/provenance/test_replay.py` (修改)
-  - `tests/integration/ai/test_offline_citations.py` (修改)
-  - `tests/integration/ingestion/test_particle_ingestion.py` (修改)
-  - `tests/integration/models/test_model_lifecycle.py` (修改)
-  - `tests/acceptance/test_v1_invariants.py` (修改)
-  - `tests/unit/provenance/test_evidence_freeze.py` (修改)
-  - `tests/unit/ai/test_tool_policy.py` (修改)
-  - `tests/unit/test_migration_files.py` (修改)
-  - `tests/conftest.py` (修改)
-- **Dependencies**: T01, T02, T03
-- **Priority**: P1
-- **详细说明**:
-  - 前端 types.ts：FactSummary 去掉 revision/revision_id；FactDetail 去掉 revision/revision_id；删除 FactRevision/RawObservation/NormalizedObservation/ObservationsResponse 类型
-  - 前端 facts-provenance.ts：删除 apiListFactRevisions, apiGetFactRevision, apiGetFactObservations
-  - 前端 facts.ts：删除对应 re-export
-  - 删除 test_fact_revisions.py
-  - 适配所有测试文件中的 FactService 新签名、CreateFactCommand 新签名、FactRef 替代 FactRevisionRef、EvidenceMember 无 fact_revision_id 等
-
----
-
-### 8. Shared Knowledge
-
-#### 8.1 FactRef 值对象替代 FactRevisionRef
+#### 3.1 值对象（`packages/facts/observations.py`，新增）
 
 ```python
 @dataclass(frozen=True)
-class FactRef:
-    """事实引用（服务返回值），替代原 FactRevisionRef。"""
+class FactDetailRow:          # 读投影（list/search/search-data/get-detail 返回）
     fact_id: UUID
     fact_type: str
     subject_id: str
     status: str
-```
-
-**约定**：
-- 所有原来返回 `FactRevisionRef` 的方法现在返回 `FactRef`
-- `FactRef` 去掉了 `revision` 和 `revision_id` 字段（无版本概念）
-- API 响应中 `revision` 和 `revision_id` 字段不再返回（前端兼容性：前端类型定义同步删除）
-
-#### 8.2 CreateFactCommand 简化
-
-```python
-@dataclass(frozen=True)
-class CreateFactCommand:
-    fact_type: Literal["experiment_run", "simulation_run", "document_record", "model_execution"]
-    template_version_id: UUID | None
-    organization_id: UUID
-    object_id: UUID
-    subject_id: str
-    started_at: datetime | None
-    ended_at: datetime | None
-    method_version_id: UUID | None
-    idempotency_key: str | None
-    created_by: UUID
     task_code: str | None = None
     task_name: str | None = None
+    project_name: str | None = None      # 仅 list_facts_detail 填充
     department_name: str | None = None
     operator: str | None = None
     run_operator: str | None = None
     equipment_name: str | None = None
-    flow_run_id: UUID | None = None
+    data_summary: str | None = None
+    created_at: datetime | None = None
+
+@dataclass(frozen=True)
+class FactMeta:               # 写侧元数据（delete 前置查询）
+    fact_id: UUID
+    source_artifact_id: UUID | None
+    department_id: UUID | None
+    owner_user_id: UUID | None
+    flow_run_id: UUID | None
+
+class FactSnapshotRow(NamedTuple):  # 仓储内部行（fetch_snapshots 返回元素）
+    fact_id: UUID
+    fact_type: str | None
+    subject_id: str | None
+    status: str | None
+    task_code: str | None
+    task_name: str | None
+    project_name: str | None
+    department_name: str | None
+    operator: str | None
+    run_operator: str | None
+    equipment_name: str | None
+    created_at: datetime | None
 ```
 
-**约定**：
-- 删除了 `raw`, `normalized`, `artifacts` 字段（raw/normalized 表已删除）
-- artifact 关联通过独立的 artifact 机制处理（flows.py 的 persist_run_as_fact 中上传 artifact 后，通过 fact.id 关联）
+#### 3.2 FactRepository（`packages/facts/repository.py`，新增静态方法）
 
-#### 8.3 ProvenanceEdge 节点类型变更
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `fetch_snapshots` | `(session, fact_ids: list[UUID], *, include_project=False, include_base=False, with_task_code_fallback=False) -> dict[UUID, FactSnapshotRow]` | 统一的快照 JOIN（FlowRun→FlowDefinitionVersion→FlowDefinition，可选→ExperimentProject）。`include_base` 时额外取 `fact_type/subject_id/status`（search-data / get-detail 用）。`with_task_code_fallback=True` 时 JOIN 条件用 `sa.or_(FV.flow_definition_id==FD.id, Fact.task_code==FD.code)`（仅 `list` 版原行为）；其余用单路径 `FV.flow_definition_id==FD.id` |
+| `count_group_by_task` | `(session, fact_ids: list[UUID] \| None = None) -> dict[str, int]` | `fact_ids=None`→全局 group count（list/search）；否则按 `IN(...)` 过滤（search-data） |
+| `search_data_index` | `(session, *, q, key, value, min_value, max_value, page_size) -> list[UUID]` | FactDataIndex 去重 fact_id 查询；无匹配条件返回 `None`（由调用方校验） |
+| `find_fact_in_dept` | `(session, fact_id, dept_id) -> Fact \| None` | dept 范围内查 Fact（archive 用，保留原 `Fact.department_id==dept AND id==fact_id` 语义） |
+| `update_fact_status` | `(session, fact_id, status) -> None` | archive 状态更新 |
+| `get_fact_meta` | `(session, fact_id) -> FactMeta \| None` | 取 `source_artifact_id/department_id/owner_user_id/flow_run_id` |
+| `get_facts_meta_by_task` | `(session, task_code) -> list[FactMeta]` | 批量取（`id, source_artifact_id, flow_run_id`） |
+| `find_json_artifact` | `(session, fact_id) -> Artifact \| None` | JSON Artifact 查找（source_artifact_id 优先，fallback `extract_{flow_run_id}.json`） |
+| `find_source_file_artifact` | `(session, fact_id) -> Artifact \| None` | 非 JSON 原始文件（PDF 等） |
+| `delete_facts` | `(session, fact_ids: list[UUID]) -> None` | `sa.delete(Fact).where(id.in_(...))`（FK CASCADE 自动删 FactDataIndex） |
+| `delete_flow_runs` | `(session, flow_run_ids: list[UUID]) -> None` | `sa.delete(FlowRun).where(id.in_(...))` |
 
-- `source_type` / `target_type` 中 `"fact_revision"` → `"fact"`
-- EvidenceMember JSONB 中 `fact_revision_id` / `fact_revision` → `fact_id`
+> 保留既有：`insert_fact` / `get_fact` / `search_facts` / `list_facts` / `find_by_idempotency_key`。
 
-#### 8.4 API 响应字段变更
+#### 3.3 FactService（`packages/facts/service.py`，新增方法）
 
-- FactRevisionResponse → FactResponse
-- 删除 `revision`, `revision_id` 字段
-- 保留 `fact_id`, `fact_type`, `subject_id`, `status`, `task_code`, `task_name`, `department_name`, `operator`, `run_operator`, `equipment_name`, `data_summary`
+> `__init__(session_factory, department_id, actor_id)` **签名不变**。保留 `create` / `get` / `search` / `list_facts`。
 
-#### 8.5 FactDataIndex FK 变更
+| 方法 | 签名 | session 语义 | 说明 |
+|------|------|-------------|------|
+| `archive` | `(fact_id: UUID) -> None` | `session_scope(self._factory)`（**不设 GUC**，保留原行为） | `find_fact_in_dept` → not_found → `update_fact_status("archived")` |
+| `get_fact_meta` | `(fact_id: UUID) -> FactMeta` | `self._scoped_session()` | `repo.get_fact_meta` → None 则 raise `not_found` |
+| `delete_fact_record` | `(fact_id: UUID, flow_run_id: UUID \| None = None) -> None` | **两个独立 session**（保留原 Fact/FlowRun 分离事务边界） | session1: `delete_facts([fact_id])`；session2: `delete_flow_runs([flow_run_id])` |
+| `get_facts_meta_by_task` | `(task_code: str) -> list[FactMeta]` | `self._scoped_session()` | `repo.get_facts_meta_by_task` |
+| `delete_facts_records` | `(fact_ids: list[UUID], flow_run_ids: list[UUID]) -> None` | **两个独立 session**（保留原分离边界） | session1: `delete_facts`；session2: `delete_flow_runs` |
 
-- `fact_revision_id` → `fact_id`
-- 写入时使用 `ref.fact_id`（而非 `ref.revision_id`）
+#### 3.4 FactQueryService（`packages/facts/query_service.py`，新建）
 
-#### 8.6 删除的方法/端点清单
+```python
+class FactQueryService(ScopedSessionMixin):
+    def __init__(self, session_factory, department_id, actor_id, s3_repo) -> None: ...
+    # 公开只读属性：department_id / session_factory / actor_id（同 FactService）
+    def _artifact_service(self) -> ArtifactService: ...   # 用 s3_repo + session_factory + dept + actor 构建
+    async def list_facts_detail(self, *, filters, cursor, page_size) -> tuple[list[FactDetailRow], str | None, dict[str, int]]: ...
+    async def search_facts_detail(self, *, query, filters, cursor, page_size) -> tuple[list[FactDetailRow], str | None, dict[str, int]]: ...
+    async def search_by_data(self, *, q, key, value, min_value, max_value, page_size) -> tuple[list[FactDetailRow], dict[str, int]]: ...
+    async def get_fact_detail(self, fact_id: UUID) -> FactDetailRow: ...
+    async def get_fact_data(self, fact_id: UUID) -> dict: ...
+    # 私有
+    async def _build_data_summary(self, fact_id, session, artifact_service) -> str | None: ...
+    async def _resolve_task_info(self, fact_record, session) -> dict: ...   # 含 alembic-URL 绕过 + fallback
+```
 
-| 方法/端点 | 位置 | 删除原因 |
-|----------|------|---------|
-| `FactService.revise()` | service.py | fact 不可编辑 |
-| `FactService.list_revisions()` | service.py | 无版本链 |
-| `FactService.get_observations()` | service.py | raw/normalized 表删除 |
-| `ReviseFactCommand` | service.py | 无修订概念 |
-| `list_revisions` 端点 | facts.py | 无版本链 |
-| `get_revision` 端点 | facts.py | 无版本链 |
-| `get_observations` 端点 | facts.py | raw/normalized 表删除 |
-| `revise_fact` 端点 | facts.py | fact 不可编辑 |
-| `ParameterService.check_staleness()` | parameters/service.py | staleness 模块删除 |
-| `StalenessChecker` 类 | staleness.py | staleness 模块删除 |
-| `suggest_fact_revision` 工具 | ai/tools.py | fact 不可编辑 |
+| 方法 | 行为要点 |
+|------|----------|
+| `list_facts_detail` | ① `repo.list_facts` → 基础 dict + fact_ids；② session A：`fetch_snapshots(fact_ids, include_project=True, with_task_code_fallback=True)` + `count_group_by_task(None)`；③ session B（独立，避免 ResourceClosedError）：逐项 `find_json_artifact` + `ArtifactService.get_bytes` → `_build_data_summary`；④ 组装 `FactDetailRow` |
+| `search_facts_detail` | ① `repo.search_facts` → fact_ids；② session A：`fetch_snapshots(fact_ids, include_project=False)` + `count_group_by_task(None)`；③ **不做 data_summary**（与原 `search` 一致） |
+| `search_by_data` | ① session：`search_data_index` → fact_ids（空则直接返回空）；② `fetch_snapshots(fact_ids, include_project=False, include_base=True)` → items；③ `count_group_by_task(fact_ids)`；④ `find_json_artifact` + data_summary |
+| `get_fact_detail` | ① `repo.get_fact`（not_found 抛出）；② `fetch_snapshots([fact_id], include_base=True)` → 组装 `FactDetailRow` |
+| `get_fact_data` | 完整保留原 `get_fact_data` 逻辑：`find_json_artifact` → 下载解析 → `_resolve_task_info`（快照优先 → flow_run_id 的 alembic-URL 超管引擎补查 data_source_list → fallback 用 fact 自身 GUC 反查）→ `find_source_file_artifact` → 返回 `result_data` dict |
+
+#### 3.5 Router（`apps/api/routers/facts.py`，重构后）
+
+保留：`CreateFactRequest` / `FactResponse` / `FactListResponse` / `_ref_to_response` / `WriteUserDep` / `ReadUserDep` / `get_fact_service` / `FactServiceDep`。
+新增：`get_fact_query_service`（DI 占位） / `FactQueryServiceDep`。
+
+| 端点 | 重构后职责 |
+|------|------------|
+| `POST /facts` | **不变**（`service.create`） |
+| `GET /facts` | `query_service.list_facts_detail` → 映射 `FactDetailRow`→`FactResponse` |
+| `GET /facts/search` | `query_service.search_facts_detail` → 映射 |
+| `GET /facts/search-data` | 参数校验（至少一个条件，保留）→ `query_service.search_by_data` → 映射 |
+| `GET /facts/{id}` | `query_service.get_fact_detail` → 映射 |
+| `GET /facts/{id}/data` | `query_service.get_fact_data` → 原样返回 dict |
+| `POST /facts/{id}/archive` | `service.archive` |
+| `DELETE /facts/{id}` | `meta = service.get_fact_meta` → `check_management_permission`（router）→ 删 MinIO（router，`ArtifactService`）→ `service.delete_fact_record(fact_id, meta.flow_run_id)` |
+| `DELETE /facts/by-task/{task_code}` | `metas = service.get_facts_meta_by_task` → 删 MinIO（router 循环）→ `service.delete_facts_records(fact_ids, flow_run_ids)` |
 
 ---
 
-### 9. Task Dependency Graph
+### 4. 程序调用流（Program Call Flow）
 
-```mermaid
-graph TD
-    T01[T01: Migration 0055 + ORM 层重构] --> T02[T02: 服务层 + 数据访问层重构]
-    T01 --> T03[T03: API 路由 + 跨模块适配]
-    T02 --> T03
-    T03 --> T04[T04: 前端适配 + 测试适配]
+> 完整 Mermaid 见 `docs/sequence-diagram.mermaid`。此处列三个关键流程摘要。
+
+#### 4.1 `GET /facts`（list_facts_detail）
+Router → `FactQueryService.list_facts_detail` → `FactRepository.list_facts`（分页）→ session A：`fetch_snapshots` + `count_group_by_task` → session B：`find_json_artifact` + `ArtifactService.get_bytes` + `_build_data_summary` → 返回 `(items, next_cursor, group_counts)` → Router 映射 `FactResponse`。
+
+#### 4.2 `GET /facts/{id}/data`（get_fact_data）
+Router → `FactQueryService.get_fact_data` → `find_json_artifact` → `ArtifactService.get_bytes`（下载 JSON）→ `_resolve_task_info`：快照字段命中？→ 是：alembic-URL 超管引擎补查 data_source_list；否：fact 自身 GUC 反查 FlowRun 链 → `find_source_file_artifact` → 返回 dict。
+
+#### 4.3 `DELETE /facts/{id}`（delete_fact）
+Router → `FactService.get_fact_meta`（not_found 校验）→ Router `check_management_permission` → Router 删 MinIO Artifact（`ArtifactService.delete_artifact`）→ `FactService.delete_fact_record`（session1 删 Fact / session2 删 FlowRun）。
+
+---
+
+### 5. 待明确事项（Anything UNCLEAR）
+
+1. **archive 的 session 语义**：原 `archive_fact` 用 `session_scope(service.session_factory)` **不设 GUC** + 显式 `Fact.department_id==service.department_id` 过滤。设计中新 `FactService.archive` **保留此行为**（不切换到 `_scoped_session`）。若评审认为应统一为带 GUC 的 `_scoped_session`，需确认 fact 表当前是否已启用 RLS（启用后无 GUC 会 fail-closed）。**假设：保持原样，不改 session 语义。**
+
+2. **delete 的事务边界**：原 `delete_fact` / `delete_facts_by_task` 将"删 Fact"与"删 FlowRun"放在**两个独立 `_scoped_session`**（两个独立事务）中。设计中新 `FactService.delete_fact_record` / `delete_facts_records` **保留两段独立 session**，以严格"不改变行为"。若评审希望改为单事务原子删除，需明确批准（属行为变更：失败回滚语义不同）。**假设：保留分离边界。**
+
+3. **`get_fact_data` 的 not_found 分支**：原代码 `fact = await service.get(fact_id); if fact is None: return empty`，但 `service.get` 在 fact 不存在时**抛 `not_found`**，故 `if fact is None` 为死分支（实际会 404）。设计中 `FactQueryService.get_fact_data` 用 `repo.get_fact`（抛 not_found）保持"实际 404"行为；如需保留字面"返回空 dict"死分支，请明示。**假设：按实际行为（404）实现，不保留死分支。**
+
+4. **`get_fact_data` 的 alembic-URL 超管引擎**：该逻辑读 `IRIP_ALEMBIC_DATABASE_URL` 环境变量、替换驱动为 `psycopg_async`、开独立 engine 绕过 RLS 补查跨部门元数据。**设计中原样搬迁至 `FactQueryService._resolve_task_info`，不改任何连接/SQL/GUC 细节**。此为最高风险点，建议搬迁后做端到端回归（含跨部门 fact 的 data 接口）。
+
+5. **`s3_repo` 注入**：`FactQueryService.__init` 新增 `s3_repo` 参数（`ctx.s3_repo` 注入）。`FactService.__init` **不**新增 `s3_repo`（保持兼容）；写侧删 MinIO 仍由 Router 用 `ArtifactService` 编排。如希望写侧也下沉 MinIO 删除，需放宽"FactService.__init__ 兼容"约束或改用方法参数注入。**假设：写侧 MinIO 删除保留在 Router。**
+
+6. **`FactService.list_facts` / `search` / `get` 去留**：这些既有方法目前仍被 Router 调用（取基础 ref）。重构后 Router 改用 `FactQueryService`，这些方法**是否仍有其他调用方**未全量排查。设计选择**保留不删**（向后兼容），仅 Router 不再调用 `list_facts`/`search`；`get` 在 `get_fact_detail` 内部可继续复用或改走 repository。**假设：保留全部既有方法，不删除。**
+
+7. **`search-data` 的参数校验位置**：原 Router 内 `if not conditions: raise AppError(validation_failed)`。设计**保留在 Router**（与权限/模型校验同层）。若希望全部下沉到 service，可调整。**假设：保留在 Router。**
+
+8. **`data_summary` 的 session 隔离**：原 `list` 注释"在独立 session 中执行，避免 ResourceClosedError"（Artifact 下载后原 session 结果集已关闭）。设计中 `list_facts_detail` / `search_by_data` 的 snap+count 与 data_summary **分别用独立 session**，保留此隔离。
+
+---
+
+## Part B：任务分解
+
+### 6. 依赖包（Required Packages）
+
+无新增第三方包。全部基于项目既有栈：
+
+```
+- sqlalchemy>=2.0: ORM（已有）
+- fastapi: 路由/依赖注入（已有）
+- pydantic: 请求/响应模型（已有）
+- packages.common.artifacts.ArtifactService: 对象存储读写（已有）
+- packages.common.database.ScopedSessionMixin/scoped_session/session_scope: 会话/GUC（已有）
 ```
 
-**说明**：
-- T01 是基础，必须先完成（定义新的数据结构和值对象）
-- T02 依赖 T01（服务层使用新的 ORM 类和值对象）
-- T03 依赖 T01 和 T02（API 层调用服务层，跨模块引用新的值对象）
-- T04 依赖 T01/T02/T03（前端类型和测试需要匹配最终 API 契约）
+### 7. 任务列表（按依赖排序）
+
+| Task | 名称 | 源文件 | 依赖 | 优先级 |
+|------|------|--------|------|--------|
+| T01 | 设计文档 + 数据契约（DTO） | `docs/system_design.md`、`docs/class-diagram.mermaid`、`docs/sequence-diagram.mermaid`、`packages/facts/observations.py` | — | P0 |
+| T02 | 仓储层下沉（Repository） | `packages/facts/repository.py`、`packages/facts/observations.py`、`packages/facts/query_service.py`（模块骨架+导入） | T01 | P0 |
+| T03 | FactQueryService（复杂读） | `packages/facts/query_service.py`、`packages/facts/repository.py`、`packages/facts/observations.py` | T02 | P0 |
+| T04 | FactService 写操作下沉 | `packages/facts/service.py`、`packages/facts/repository.py`、`packages/facts/observations.py` | T02 | P1 |
+| T05 | 路由重构 + DI 集成 | `apps/api/routers/facts.py`、`apps/api/composition/facts.py`、`packages/facts/query_service.py` | T03、T04 | P0 |
+
+**任务说明**：
+
+- **T01 — 设计文档 + 数据契约**：产出 3 份设计文档；在 `observations.py` 新增 `FactDetailRow` / `FactMeta` / `FactSnapshotRow` 值对象（所有后续任务的返回类型契约）。
+- **T02 — 仓储层下沉**：在 `repository.py` 实现全部新静态方法（`fetch_snapshots` / `count_group_by_task` / `search_data_index` / `find_fact_in_dept` / `update_fact_status` / `get_fact_meta` / `get_facts_meta_by_task` / `find_json_artifact` / `find_source_file_artifact` / `delete_facts` / `delete_flow_runs`）；创建 `query_service.py` 模块骨架（导入 + 类占位），供 T03 填充。
+- **T03 — FactQueryService**：实现 `list_facts_detail` / `search_facts_detail` / `search_by_data` / `get_fact_detail` / `get_fact_data` + 私有 `_build_data_summary` / `_resolve_task_info`（含 alembic-URL 绕过原样搬迁）。
+- **T04 — FactService 写操作下沉**：`service.py` 新增 `archive` / `get_fact_meta` / `delete_fact_record` / `get_facts_meta_by_task` / `delete_facts_records`；`__init__` 签名不变。
+- **T05 — 路由重构 + DI 集成**：`facts.py` 8 个端点瘦身（删除全部直接 ORM，保留权限/模型/归属校验/MinIO 删除编排）；`composition/facts.py` 新增 `FactQueryService` DI（`ctx.s3_repo`）；校验 `facts.py` 内 `sa.select/insert/update/delete/text/session.execute` 归零。
+
+### 8. 共享知识（Shared Knowledge）
+
+```
+- 分层约定：Router 不含任何 sa.* / session.execute；Service 不含 HTTP/Pydantic；Repository 不含业务规则。
+- session 语义：
+  · 写/读带 RLS → ScopedSessionMixin._scoped_session()（设 dept+user GUC）
+  · archive 例外 → session_scope(self._factory)（不设 GUC，保留原行为）
+  · delete_fact_record / delete_facts_records → Fact 删除与 FlowRun 删除分两个独立 session（保留原事务边界）
+- FactService.__init__(session_factory, department_id, actor_id) 签名不可变；_rls_dept_id 由 composition 注入。
+- FactQueryService.__init__(session_factory, department_id, actor_id, s3_repo) — s3_repo 由 composition 用 ctx.s3_repo 注入。
+- 快照富化统一走 FactRepository.fetch_snapshots(fact_ids, include_project=, include_base=)；task_name = coalesce(FlowDefinition.display_name, Fact.task_name)。
+- group_counts：list/search 用全局 count_group_by_task(None)；search-data 用 count_group_by_task(fact_ids)。
+- data_summary 与 snap/count 分独立 session（避免 Artifact 下载导致 ResourceClosedError）。
+- JSON Artifact 查找统一走 FactRepository.find_json_artifact（source_artifact_id 优先，fallback extract_{flow_run_id}.json）。
+- 权限：require_permission("fact:read"/"fact:write") 保留 Router；delete_fact 的 check_management_permission 保留 Router。
+- MinIO Artifact 删除（delete_fact/delete_facts_by_task）保留 Router 编排（FactService 不注入 s3_repo）。
+- get_fact_data 的 alembic-URL 超管引擎逻辑原样搬迁至 FactQueryService._resolve_task_info，不改连接/SQL/GUC。
+- API URL / 请求体 / 响应体 / 状态码 / 错误码完全不变。
+- 所有时间字段序列化为 ISO 8601（created_at.isoformat()）。
+```
+
+### 9. 任务依赖图（Task Dependency Graph）
+
+```mermaid
+graph LR
+    T01[T01 设计文档+数据契约] --> T02[T02 仓储层下沉]
+    T02 --> T03[T03 FactQueryService 复杂读]
+    T02 --> T04[T04 FactService 写操作下沉]
+    T03 --> T05[T05 路由重构+DI 集成]
+    T04 --> T05
+```
+
+> T03 与 T04 仅依赖 T02，可并行；T05 汇聚两者。关键路径：T01 → T02 → T03 → T05。

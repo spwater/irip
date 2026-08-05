@@ -1,54 +1,121 @@
+%% facts.py 下沉方案 —— 关键时序图
+%% 架构师：高见远
+
+%% ============================================================
+%% 流程 1：GET /facts （list_facts_detail —— 快照富化 + group_counts + data_summary）
+%% ============================================================
 sequenceDiagram
-    participant C as Client
-    participant R as FactsRouter
-    participant S as FactService
+    autonumber
+    participant R as Router (list_facts)
+    participant Q as FactQueryService
     participant Repo as FactRepository
-    participant DB as PostgreSQL
+    participant Art as ArtifactService
+    participant DB as DB (GUC session)
 
-    Note over C,DB: 简化后的 Fact 创建流程（无版本链）
+    R->>Q: list_facts_detail(filters, cursor, page_size)
+    Q->>Repo: list_facts(session, org_id, filters, cursor, page_size)
+    Repo->>DB: SELECT fact (keyset 分页)
+    DB-->>Repo: rows[dict] + next_cursor
+    Repo-->>Q: (items, next_cursor)  note over Q: fact_ids = [i.fact_id]
 
-    C->>R: POST /api/v1/facts (CreateFactRequest)
-    R->>S: create(CreateFactCommand)
-    S->>S: 校验 fact_type 合法
-    S->>S: 幂等检查（idempotency_key）
+    Q->>Repo: fetch_snapshots(sessionA, fact_ids, include_project=True)
+    Repo->>DB: Fact ⟕ FlowRun ⟕ FlowDefinitionVersion ⟕ FlowDefinition ⟕ ExperimentProject
+    DB-->>Repo: dict[UUID, FactSnapshotRow]
+    Repo-->>Q: snap_map
+    Q->>Repo: count_group_by_task(sessionA, None)
+    Repo->>DB: SELECT task_code, count(distinct id) GROUP BY task_code
+    DB-->>Q: group_counts (全局)
 
-    alt 幂等命中
-        S->>Repo: find_by_idempotency_key(org_id, key)
-        Repo->>DB: SELECT FROM fact WHERE org_id AND idempotency_key
-        DB-->>Repo: existing Fact
-        Repo-->>S: Fact
-        S-->>R: FactRef(fact_id, fact_type, subject_id, status)
-    else 新建
-        S->>S: 校验 template_version_id 已发布
-        S->>S: 校验 object_id 属于组织
-        S->>S: 校验 method_version_id 已发布（可选）
-        S->>Repo: insert_fact(org_id, template_version_id, fact_type, object_id, subject_id, method_version_id, flow_run_id, started_at, ended_at, task_code, task_name, department_name, operator, run_operator, equipment_name, status, idempotency_key, created_by)
-        Repo->>DB: INSERT INTO fact (...)
-        DB-->>Repo: Fact ORM
-        Repo-->>S: Fact
-        S-->>R: FactRef(fact_id, fact_type, subject_id, status)
+    Q->>Repo: find_json_artifact(sessionB, fact_id)  for each item
+    Repo->>DB: source_artifact_id JSON ? : fallback extract_{run_id}.json
+    DB-->>Repo: Artifact | None
+    Repo-->>Q: art_record
+    Q->>Art: get_bytes(art_record.id)
+    Art-->>Q: bytes
+    Q->>Q: _build_data_summary(parse JSON points/series)
+    Q-->>R: (list[FactDetailRow], next_cursor, group_counts)
+    R->>R: 映射 FactResponse  note over R: 无任何 sa.*
+
+%% ============================================================
+%% 流程 2：GET /facts/{id}/data （get_fact_data —— 含 alembic-URL RLS 绕过）
+%% ============================================================
+sequenceDiagram
+    autonumber
+    participant R as Router (get_fact_data)
+    participant Q as FactQueryService
+    participant Repo as FactRepository
+    participant Art as ArtifactService
+    participant DB as DB (GUC session)
+    participant ALE as Alembic-URL 超管引擎 (绕过 RLS)
+
+    R->>Q: get_fact_data(fact_id)
+    Q->>Repo: get_fact(session, fact_id, dept)  note over Q: not_found 抛出
+    Repo->>DB: SELECT fact
+    DB-->>Q: fact_record
+    Q->>Repo: find_json_artifact(session, fact_id)
+    Repo->>DB: JSON artifact 查找
+    DB-->>Q: art_record | None
+    alt art_record is None
+        Q-->>R: {metadata:{}, points:[], series:[]}
+    else art_record 存在
+        Q->>Art: get_bytes(art_record.id)
+        Art-->>Q: bytes (try/except → json_error)
+        Q->>Q: json.loads → result_data
+
+        Q->>Q: _resolve_task_info(fact_record, session)
+        alt 快照命中 (task_code/task_name)
+            Q->>ALE: open engine(IRIP_ALEMBIC_DATABASE_URL → psycopg_async)
+            Q->>ALE: FlowRun → FlowDefinitionVersion → FlowDefinition
+            ALE-->>Q: fd
+            Q->>ALE: ExperimentProject → AppUser(owner) → Department
+            ALE-->>Q: project_name/owner_name/dept
+            Q->>ALE: ComponentVersion(manifest YAML) → IndustrialObject → Equipment → Department
+            ALE-->>Q: data_source_list
+            Q->>Q: task_info = {snapshot + 补查}
+        else 快照未命中
+            Q->>DB: set_dept_guc(fact_dept) + set_user_guc(fact_owner)
+            Q->>DB: FlowRun → FlowDefinitionVersion → FlowDefinition → ExperimentProject → Department
+            DB-->>Q: task_info (fallback)
+        end
+        Q->>Q: result_data["task_info"] = task_info
+
+        Q->>Repo: find_source_file_artifact(session, fact_id)
+        Repo->>DB: 非 JSON source artifact (PDF 等)
+    DB-->>Q: pdf_artifact | None
+    Q->>Q: result_data["source_file"] = {...}
+    Q-->>R: result_data (dict)
     end
 
-    R-->>C: 201 FactResponse(fact_id, fact_type, subject_id, status)
+%% ============================================================
+%% 流程 3：DELETE /facts/{id} （delete_fact —— 归属校验 + MinIO 删除 + 分离事务删除）
+%% ============================================================
+sequenceDiagram
+    autonumber
+    participant R as Router (delete_fact)
+    participant S as FactService
+    participant Repo as FactRepository
+    participant Perm as check_management_permission
+    participant Art as ArtifactService
+    participant DB as DB (GUC session)
 
-    Note over C,DB: 简化后的 Fact 搜索流程
-
-    C->>R: GET /api/v1/facts/search?q=粒度
-    R->>S: search(query, filters, cursor, page_size)
-    S->>Repo: search_facts(query, org_id, filters, cursor, page_size)
-    Repo->>DB: SELECT FROM fact WHERE search_vector @@ tsquery AND org_id AND filters ORDER BY created_at
-    DB-->>Repo: rows
-    Repo-->>S: [FactRef, next_cursor]
-    S-->>R: [FactRef, next_cursor]
-    R-->>C: FactListResponse(items, next_cursor)
-
-    Note over C,DB: 简化后的 Fact 详情获取流程
-
-    C->>R: GET /api/v1/facts/{fact_id}
-    R->>S: get(fact_id)
-    S->>Repo: get_fact(fact_id, org_id)
-    Repo->>DB: SELECT FROM fact WHERE id AND org_id
-    DB-->>Repo: Fact
-    Repo-->>S: Fact
-    S-->>R: FactRef(fact_id, fact_type, subject_id, status)
-    R-->>C: FactResponse(fact_id, fact_type, subject_id, status, task_code, ...)
+    R->>S: get_fact_meta(fact_id)
+    S->>Repo: get_fact_meta(session, fact_id)
+    Repo->>DB: SELECT source_artifact_id, department_id, owner_user_id, flow_run_id
+    DB-->>S: FactMeta | None
+    alt None
+        S-->>R: raise AppError(not_found)
+    else 存在
+        S-->>R: FactMeta
+        R->>Perm: check_management_permission(current_user, meta.department_id, meta.owner_user_id, factory)
+        Perm-->>R: OK / raise forbidden
+        alt meta.source_artifact_id
+            R->>Art: delete_artifact(meta.source_artifact_id)  note over R: MinIO 删除保留 Router
+            Art-->>R: done (warning on fail)
+        end
+        R->>S: delete_fact_record(fact_id, meta.flow_run_id)
+        S->>Repo: delete_facts(session1, [fact_id])  note over S,Repo: session1 事务
+        Repo->>DB: DELETE fact (CASCADE FactDataIndex)
+        S->>Repo: delete_flow_runs(session2, [flow_run_id])  note over S,Repo: session2 独立事务
+        Repo->>DB: DELETE flow_run
+        S-->>R: None (204)
+    end
