@@ -4,7 +4,7 @@
 # - 行宽 100、target py312，与架构文档 §6.1 对齐
 [project]
 name = "irip-platform"
-version = "0.2.0"
+version = "0.8.0"
 description = "Industrial Research Intelligence Platform (IRIP) — Phase V0 Platform Skeleton"
 readme = "README.md"
 requires-python = ">=3.12"

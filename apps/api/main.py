@@ -167,7 +167,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="IRIP",
         description="Industrial Research Intelligence Platform — API",
-        version="0.2.0",
+        version="0.8.0",
         lifespan=lifespan,
     )
 
@@ -197,7 +197,7 @@ def create_app() -> FastAPI:
     from starlette.middleware.base import BaseHTTPMiddleware
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=metrics_middleware)
-    set_app_info(version="0.2.0", environment=os.getenv("IRIP_ENV", "development"))
+    set_app_info(version="0.8.0", environment=os.getenv("IRIP_ENV", "development"))
 
     # ---- 路由 ----
     @app.get("/", include_in_schema=False)

@@ -21,7 +21,7 @@
 {
   "format_version": 1,
   "created_at": "2026-07-22T10:00:00+00:00",
-  "application_version": "0.2.0",
+  "application_version": "0.8.0",
   "migration_version": "0050_component_active_version",
   "database_sha256": "a1b2c3...",
   "object_count": 42,
@@ -383,7 +383,7 @@ age binary not found
 | `IRIP_MINIO_SECRET_KEY` | MinIO 秘密密钥 | `irip_dev_password` |
 | `IRIP_MINIO_BUCKET` | MinIO bucket | `irip-artifacts` |
 | `IRIP_MINIO_REGION` | MinIO 区域 | `us-east-1` |
-| `IRIP_APPLICATION_VERSION` | 应用版本 | `0.2.0` |
+| `IRIP_APPLICATION_VERSION` | 应用版本 | `0.8.0` |
 | `IRIP_BACKUP_OUTPUT_DIR` | 备份输出目录 | 系统临时目录 |
 | `IRIP_BACKUP_AGE_RECIPIENT` | age 加密公钥 | （不加密） |
 | `IRIP_BACKUP_AGE_IDENTITY` | age 解密身份文件 | （不解密） |

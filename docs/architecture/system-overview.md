@@ -1,6 +1,6 @@
 # IRIP 系统架构概览
 
-> 版本：0.2.0 · 覆盖 Phase V0–V3
+> 版本：0.8.0 · 覆盖 Phase V0–V3
 > 关联文档：`docs/arch-v0.md`、`docs/arch/v2-architecture.md`、`docs/arch/v3-architecture.md`
 > 关联图表：`docs/class-diagram.mermaid`、`docs/sequence-diagram.mermaid`
 

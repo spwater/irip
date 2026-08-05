@@ -55,7 +55,7 @@ from packages.common.s3_repository import S3Repository
 logger = logging.getLogger(__name__)
 
 #: IRIP 应用版本（从环境变量或硬编码默认值读取）。
-IRIP_APPLICATION_VERSION: str = os.getenv("IRIP_APPLICATION_VERSION", "0.2.0")
+IRIP_APPLICATION_VERSION: str = os.getenv("IRIP_APPLICATION_VERSION", "0.8.0")
 
 #: age 加密 recipient 环境变量名。
 AGE_RECIPIENT_ENV: str = "IRIP_BACKUP_AGE_RECIPIENT"
