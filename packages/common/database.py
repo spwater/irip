@@ -163,12 +163,22 @@ class ScopedSessionMixin:
 
     @asynccontextmanager
     async def _scoped_session(self) -> AsyncIterator[AsyncSession]:
-        """带 GUC 的事务会话上下文，用 ``_dept_id`` / ``_actor_id`` 自动设 GUC。
+        """带 GUC 的事务会话上下文，用 ``_rls_dept_id`` / ``_dept_id`` / ``_actor_id`` 自动设 GUC。
+
+        RLS 部门 GUC 优先使用 ``_rls_dept_id``（平台管理员绕过隔离），
+        缺失时回退到 ``_dept_id``（正常租户隔离）。
+
+        ``_rls_dept_id`` 仅影响 RLS GUC（app.current_dept_id），
+        ``_dept_id`` 仍用于业务逻辑（如设备编码唯一性检查），不受影响。
+        ``_actor_id`` 始终使用实际用户 ID（私有数据可见性不受影响）。
 
         Yields:
             AsyncSession: 已开启事务并设置好租户 GUC 的异步会话。
         """
-        dept_id: UUID | None = getattr(self, "_dept_id", None)
+        rls_dept_id: UUID | None = getattr(self, "_rls_dept_id", None)
+        dept_id: UUID | None = (
+            rls_dept_id if rls_dept_id is not None else getattr(self, "_dept_id", None)
+        )
         user_id: UUID | None = getattr(self, "_actor_id", None)
         async with scoped_session(self._factory, dept_id, user_id) as session:
             yield session

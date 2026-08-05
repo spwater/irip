@@ -25,7 +25,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.jobs.entities import TERMINAL_STATUSES, Job, JobRef, JobStatus
@@ -182,16 +181,6 @@ class JobService(ScopedSessionMixin):
                     fields={"job_id": str(job_id)},
                 )
 
-            # 租户隔离检查：不可见部门作业返回 not_found
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
-            if job.department_id not in visible_ids:
-                raise AppError(
-                    code="not_found",
-                    message=f"作业不存在: {job_id}",
-                    retryable=False,
-                    fields={"job_id": str(job_id)},
-                )
-
             current_status = JobStatus(job.status)
             if current_status in TERMINAL_STATUSES:
                 raise AppError(
@@ -250,15 +239,6 @@ class JobService(ScopedSessionMixin):
         async with self._scoped_session() as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
-                raise AppError(
-                    code="not_found",
-                    message=f"作业不存在: {job_id}",
-                    retryable=False,
-                    fields={"job_id": str(job_id)},
-                )
-
-            # 租户隔离检查：跨部门作业返回 not_found
-            if job.department_id != self._dept_id:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",
@@ -326,8 +306,6 @@ class JobService(ScopedSessionMixin):
             conditions.append(Job.created_at < cursor_dt)
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
-            conditions.append(Job.department_id.in_(visible_ids))
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
             from packages.components.flow_runtime import (
                 FlowDefinition as FlowDefORM,
@@ -402,16 +380,6 @@ class JobService(ScopedSessionMixin):
         async with self._scoped_session() as session:
             job: Job | None = await JobRepository.get(session, job_id)
             if job is None:
-                raise AppError(
-                    code="not_found",
-                    message=f"作业不存在: {job_id}",
-                    retryable=False,
-                    fields={"job_id": str(job_id)},
-                )
-
-            # 租户隔离检查：不可见部门作业返回 not_found
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._created_by)
-            if job.department_id not in visible_ids:
                 raise AppError(
                     code="not_found",
                     message=f"作业不存在: {job_id}",

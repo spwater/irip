@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.models.adapters import build_adapter
@@ -143,10 +142,8 @@ class ModelService(ScopedSessionMixin):
         """
         # 幂等冲突检查
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             existing = await session.scalar(
                 sa.select(Model).where(
-                    Model.department_id.in_(visible_ids),
                     Model.code == code,
                 )
             )
@@ -658,10 +655,8 @@ class ModelService(ScopedSessionMixin):
             list[Model]: 模型列表（按 created_at 升序）。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(Model)
-                .where(Model.department_id.in_(visible_ids))
                 .order_by(Model.created_at)
             )
             if status is not None:
@@ -694,11 +689,9 @@ class ModelService(ScopedSessionMixin):
         model_id: UUID,
     ) -> Model | None:
         """获取属于当前部门的模型。"""
-        visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
         return await session.scalar(
             sa.select(Model).where(
                 Model.id == model_id,
-                Model.department_id.in_(visible_ids),
             )
         )
 

@@ -26,7 +26,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.ids import new_id
 from packages.facts.entities import Fact
 from packages.provenance.entities import (
@@ -140,12 +139,10 @@ class ProvenanceGraphService(ScopedSessionMixin):
         visited_edges: set[tuple[UUID, UUID, str]] = set()
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 加载推导运行节点
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == derivation_run_id,
-                    DerivationRun.department_id.in_(visible_ids),
                 )
             )
             if run is None:
@@ -170,7 +167,6 @@ class ProvenanceGraphService(ScopedSessionMixin):
             edge_result = await session.execute(
                 sa.select(ProvenanceEdge).where(
                     ProvenanceEdge.derivation_run_id == derivation_run_id,
-                    ProvenanceEdge.department_id.in_(visible_ids),
                 )
             )
             provenance_edges = edge_result.scalars().all()
@@ -242,13 +238,11 @@ class ProvenanceGraphService(ScopedSessionMixin):
             list[list[ProvenanceNode]]: 路径列表，每条路径从参数版本到事实。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # BFS: 从 parameter_version 出发，沿边向上遍历
             edges_result = await session.execute(
                 sa.select(ProvenanceEdge).where(
                     ProvenanceEdge.target_id == parameter_version_id,
                     ProvenanceEdge.target_type == "parameter_version",
-                    ProvenanceEdge.department_id.in_(visible_ids),
                 )
             )
             start_edges = edges_result.scalars().all()
@@ -315,7 +309,6 @@ class ProvenanceGraphService(ScopedSessionMixin):
                 up_edges_result = await session.execute(
                     sa.select(ProvenanceEdge).where(
                         ProvenanceEdge.target_id == current_id,
-                        ProvenanceEdge.department_id.in_(visible_ids),
                     )
                 )
                 up_edges = up_edges_result.scalars().all()

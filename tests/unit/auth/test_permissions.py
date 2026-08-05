@@ -98,6 +98,8 @@ class TestRolePermissionMatrix:
             "flow:manage",
             "flow:execute",
             "flow:read",
+            "experiment_project:manage",
+            "experiment_project:read",
             "assistant:use",
             "conversation:create",
             "conversation:invite",
@@ -111,6 +113,8 @@ class TestRolePermissionMatrix:
         """实验室成员权限：实验操作 + 只读管理 + 协作。"""
         perms = set(BUILTIN_ROLES["lab_member"]["permissions"])  # type: ignore[arg-type]
         assert perms == {
+            "standard:read",
+            "standard:write",
             "fact:read",
             "fact:write",
             "artifact:read",
@@ -129,9 +133,12 @@ class TestRolePermissionMatrix:
             "ingestion:write",
             "provenance:read",
             "provenance:write",
+            "component:manage",
             "component:read",
+            "flow:manage",
             "flow:execute",
             "flow:read",
+            "experiment_project:read",
             "assistant:use",
             "conversation:create",
             "conversation:invite",
@@ -156,6 +163,7 @@ class TestRolePermissionMatrix:
             "provenance:read",
             "component:read",
             "flow:read",
+            "experiment_project:read",
             "assistant:use",
         }
 

@@ -28,7 +28,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from packages.common.database import Base, ScopedSessionMixin
 from packages.common.db_types import GUID, UTCDateTime
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.hashing import sha256_bytes
 from packages.common.ids import new_id
@@ -316,11 +315,9 @@ class ArtifactService(ScopedSessionMixin):
             AppError: code="not_found"，当工件不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             artifact: Artifact | None = await session.scalar(
                 sa.select(Artifact).where(
                     Artifact.id == artifact_id,
-                    Artifact.department_id.in_(visible_ids),
                 )
             )
             if artifact is None:
@@ -355,12 +352,10 @@ class ArtifactService(ScopedSessionMixin):
             AppError: code="not_found"，当工件不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.department_id.in_(visible_ids),
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -400,12 +395,10 @@ class ArtifactService(ScopedSessionMixin):
             AppError: code="not_found"，当工件不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.department_id.in_(visible_ids),
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -432,12 +425,10 @@ class ArtifactService(ScopedSessionMixin):
             artifact_id: 工件 UUID。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob).where(
                         Artifact.id == artifact_id,
-                        Artifact.department_id.in_(visible_ids),
                         ArtifactBlob.sha256 == Artifact.sha256,
                     )
                 )
@@ -636,7 +627,6 @@ class ArtifactService(ScopedSessionMixin):
             AppError: code="not_found"，当工件不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
                     sa.select(ArtifactBlob.object_key)
@@ -646,7 +636,6 @@ class ArtifactService(ScopedSessionMixin):
                     )
                     .where(
                         Artifact.id == artifact_id,
-                        Artifact.department_id.in_(visible_ids),
                     )
                 )
             ).first()
@@ -676,7 +665,6 @@ class ArtifactService(ScopedSessionMixin):
             AppError: code="not_found"，当工件不存在或无权访问时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._uploaded_by)
             row = (
                 await session.execute(
                     sa.select(Artifact, ArtifactBlob)
@@ -686,7 +674,6 @@ class ArtifactService(ScopedSessionMixin):
                     )
                     .where(
                         Artifact.id == artifact_id,
-                        Artifact.department_id.in_(visible_ids),
                     )
                 )
             ).first()

@@ -15,7 +15,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import MAX_PAGE_SIZE
@@ -87,11 +86,9 @@ class ObjectGraphService(ScopedSessionMixin):
             AppError: code="not_found"，当 parent_id 指定的父对象不存在或不属于当前部门时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查编码唯一性
             existing = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.department_id.in_(visible_ids),
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -262,10 +259,8 @@ class ObjectGraphService(ScopedSessionMixin):
             IndustrialObject | None: 对象实体，不存在返回 None。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             result = await session.execute(
                 sa.select(IndustrialObject).where(
-                    IndustrialObject.department_id.in_(visible_ids),
                     IndustrialObject.object_type == object_type,
                     IndustrialObject.code == code,
                 )
@@ -342,8 +337,6 @@ class ObjectGraphService(ScopedSessionMixin):
             )
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
-            query = query.where(IndustrialObject.department_id.in_(visible_ids))
             result = await session.execute(query)
             objects = list(result.scalars().all())
 
@@ -381,15 +374,6 @@ class ObjectGraphService(ScopedSessionMixin):
         )
         obj = result.scalar_one_or_none()
         if obj is None:
-            raise AppError(
-                code="not_found",
-                message="工业对象不存在",
-                retryable=False,
-                fields={"object_id": str(object_id)},
-            )
-        # 可见性检查：对象部门必须在可见集中
-        visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
-        if obj.department_id not in visible_ids:
             raise AppError(
                 code="not_found",
                 message="工业对象不存在",

@@ -316,14 +316,6 @@ export function DepartmentManagement(): JSX.Element {
   };
 
   // ---- re-parent 移动操作 ----
-  const handleReparentClick = (record: DepartmentListItem): void => {
-    if (isSentinelDept(record.code)) return; // 哨兵部门不可移动
-    setReparentTarget(record);
-    setReparentNewParent(null);
-    setReparentImpact(null);
-    setReparentConfirmOpen(true);
-  };
-
   const handleReparentFetchImpact = async (): Promise<void> => {
     if (!reparentTarget) return;
     setReparentLoading(true);
@@ -346,10 +338,10 @@ export function DepartmentManagement(): JSX.Element {
         id: reparentTarget.id,
         body: {
           display_name: reparentTarget.display_name,
-          description: detail.description,
+          description: detail.description ?? undefined,
           sort_order: reparentTarget.sort_order,
           lock_version: detail.lock_version,
-          parent_id: reparentNewParent,
+          parent_id: reparentNewParent ?? undefined,
         },
       });
       setReparentConfirmOpen(false);

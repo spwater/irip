@@ -541,15 +541,12 @@ async def delete_flow(
     import sqlalchemy as sa
 
     from packages.common.database import session_scope
-    from packages.common.dept_visibility import compute_visible_dept_ids
     from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
     async with service._scoped_session() as session:  # noqa: SLF001
-        visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
-            FlowDefinition.department_id.in_(visible_ids),
         )
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()
@@ -593,12 +590,8 @@ async def update_flow(
     from packages.components.flow_runtime import FlowDefinition
 
     async with service._scoped_session() as session:  # noqa: SLF001
-        from packages.common.dept_visibility import compute_visible_dept_ids
-
-        visible_ids = await compute_visible_dept_ids(session, service.department_id, service.actor_id)
         stmt = sa.select(FlowDefinition).where(
             FlowDefinition.id == flow_id,
-            FlowDefinition.department_id.in_(visible_ids),
         )
         result = await session.execute(stmt)
         definition = result.scalar_one_or_none()

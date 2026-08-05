@@ -34,7 +34,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import Base, ScopedSessionMixin
 from packages.common.db_types import GUID, UTCDateTime
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.departments.entities import Department  # noqa: F401 — ensure FK target registered in metadata
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -645,10 +644,8 @@ class FlowRuntimeService(ScopedSessionMixin):
                 )
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             existing: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.code == code,
                 )
             )
@@ -769,10 +766,8 @@ class FlowRuntimeService(ScopedSessionMixin):
         now: datetime = self._clock.now()
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.id == flow_definition_id,
                 )
             )
@@ -828,8 +823,7 @@ class FlowRuntimeService(ScopedSessionMixin):
                 定义 + 最新版本（无版本时为 None），按 code 排序。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
-            query = sa.select(FlowDefinition).where(FlowDefinition.department_id.in_(visible_ids))
+            query = sa.select(FlowDefinition)
             if status is not None:
                 query = query.where(FlowDefinition.status == status)
             if project_id is not None:
@@ -865,10 +859,8 @@ class FlowRuntimeService(ScopedSessionMixin):
             AppError: code="not_found"，当定义不存在。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -902,10 +894,8 @@ class FlowRuntimeService(ScopedSessionMixin):
         """
         now: datetime = self._clock.now()
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -936,10 +926,8 @@ class FlowRuntimeService(ScopedSessionMixin):
         """
         now: datetime = self._clock.now()
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             definition: FlowDefinition | None = await session.scalar(
                 sa.select(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.id == flow_id,
                 )
             )
@@ -972,7 +960,6 @@ class FlowRuntimeService(ScopedSessionMixin):
             AppError: code="not_found"，当版本不存在。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             row = (
                 await session.execute(
                     sa.select(FlowDefinition, FlowDefinitionVersionORM)
@@ -981,7 +968,6 @@ class FlowRuntimeService(ScopedSessionMixin):
                         FlowDefinitionVersionORM.flow_definition_id == FlowDefinition.id,
                     )
                     .where(
-                        FlowDefinition.department_id.in_(visible_ids),
                         FlowDefinitionVersionORM.id == version_id,
                     )
                 )
@@ -1098,10 +1084,8 @@ class FlowRuntimeService(ScopedSessionMixin):
         """
         # 1. 加载执行记录与版本
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1348,10 +1332,8 @@ class FlowRuntimeService(ScopedSessionMixin):
             AppError: code="not_found"，当执行记录不存在。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1524,10 +1506,8 @@ class FlowRuntimeService(ScopedSessionMixin):
 
         # 更新数据库状态
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1564,10 +1544,8 @@ class FlowRuntimeService(ScopedSessionMixin):
             AppError: code="validation_failed"，当节点非失败状态。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1745,10 +1723,8 @@ class FlowRuntimeService(ScopedSessionMixin):
             AppError: code="not_found"，当执行记录不存在。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run: FlowRun | None = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1780,11 +1756,9 @@ class FlowRuntimeService(ScopedSessionMixin):
             run_id: 执行记录 ID。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 先查出关联的 job_id
             run = await session.scalar(
                 sa.select(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1797,7 +1771,6 @@ class FlowRuntimeService(ScopedSessionMixin):
             # 删除执行记录
             await session.execute(
                 sa.delete(FlowRun).where(
-                    FlowRun.department_id.in_(visible_ids),
                     FlowRun.id == run_id,
                 )
             )
@@ -1822,7 +1795,6 @@ class FlowRuntimeService(ScopedSessionMixin):
             flow_id: 流程定义 ID。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 查询该流程定义的所有版本 ID
             version_ids_result = await session.execute(
                 sa.select(FlowDefinitionVersionORM.id).where(
@@ -1862,7 +1834,6 @@ class FlowRuntimeService(ScopedSessionMixin):
             # 5. 删除流程定义本身
             await session.execute(
                 sa.delete(FlowDefinition).where(
-                    FlowDefinition.department_id.in_(visible_ids),
                     FlowDefinition.id == flow_id,
                 )
             )

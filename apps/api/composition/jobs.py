@@ -21,6 +21,7 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.jobs.service import JobService
 
     async def _get_job_service(
@@ -28,10 +29,14 @@ def register(ctx: CompositionContext) -> None:
     ) -> JobService:
         """按请求构造作业服务，从 DB 查询当前用户的 department_id。"""
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return JobService(
+        service = JobService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             created_by=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_job_service] = _get_job_service

@@ -36,7 +36,7 @@ import {
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
 import { buildDeptTree } from '@/shared/buildDeptTree';
-import { apiListEquipment, apiListComponents, apiPublishComponent } from '@/api/equipment-flows';
+import { apiListComponents, apiPublishComponent } from '@/api/equipment-flows';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { apiListIngestionTools } from '@/api/models-ai';
 import { buildManifestYaml, FORM_FIELD_NAMES, FRESH_FORM_VALUES } from '@/shared/component-utils';
@@ -168,15 +168,6 @@ export function ExperimentalObjectPage({
     label: d.display_name,
   }));
 
-  // ---- 设备列表查询（用于接口行的关联设备列）----
-  const { data: equipmentData } = useQuery({
-    queryKey: ['equipment-for-object-tree'],
-    queryFn: () => apiListEquipment({ limit: 100 }),
-  });
-  const equipmentMap = new Map(
-    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name]),
-  );
-
   // ---- 数据接口列表查询（用于下拉选择与列表展示）----
   const { data: componentData } = useQuery({
     queryKey: ['components'],
@@ -211,9 +202,6 @@ export function ExperimentalObjectPage({
     value: d.id,
     label: d.display_name,
   }));
-
-  // 监听表单中的 department_id
-  const watchedDeptId = Form.useWatch('department_id', form);
 
   // 部门树数据（用于可见单位树形多选）
   const deptTreeData = useMemo(
@@ -426,7 +414,6 @@ export function ExperimentalObjectPage({
   })();
 
   const isTypeRow = (record: TreeRow): boolean => record.id.startsWith('type_');
-  const isObjectRow = (record: TreeRow): boolean => !record.id.toString().startsWith('type_'); // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // ---- 表格列定义 ----
   const columns: ColumnsType<TreeRow> = [

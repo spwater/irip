@@ -1035,7 +1035,7 @@ class TestDeptScope:
     """验证 dept_scope 辅助函数。"""
 
     def test_should_filter_by_department_root_member(self):
-        """root 部门成员不需要过滤"""
+        """root 部门成员如果没有平台管理员角色，仍需过滤"""
         from apps.api.dependencies.dept_scope import should_filter_by_department
         from apps.api.dependencies.auth import CurrentUser
 
@@ -1046,7 +1046,7 @@ class TestDeptScope:
             department_id=uuid4(),
             is_root_member=True,
         )
-        assert should_filter_by_department(user) is False
+        assert should_filter_by_department(user) is True
 
     def test_should_filter_by_department_normal_user(self):
         """普通部门成员需要过滤"""
@@ -1091,18 +1091,19 @@ class TestDeptScope:
         assert should_filter_by_department(user) is False
 
     def test_get_department_filter_root_returns_none(self):
-        """root 成员的 department_filter 为 None（不过滤）"""
+        """root 成员如果没有平台管理员角色，department_filter 返回其 department_id"""
         from apps.api.dependencies.dept_scope import get_department_filter
         from apps.api.dependencies.auth import CurrentUser
 
+        dept_id = uuid4()
         user = CurrentUser(
             user_id=uuid4(),
             email="root@irip.local",
             roles=[],
-            department_id=uuid4(),
+            department_id=dept_id,
             is_root_member=True,
         )
-        assert get_department_filter(user) is None
+        assert get_department_filter(user) == dept_id
 
     def test_get_department_filter_normal_returns_dept_id(self):
         """普通用户的 department_filter 为其 department_id"""
@@ -1120,18 +1121,20 @@ class TestDeptScope:
         assert get_department_filter(user) == dept_id
 
     def test_can_edit_department_root_member(self):
-        """root 成员可编辑任意部门数据"""
+        """root 成员如果没有平台管理员角色，只能编辑本部门数据"""
         from apps.api.dependencies.dept_scope import can_edit_department
         from apps.api.dependencies.auth import CurrentUser
 
+        dept_id = uuid4()
         user = CurrentUser(
             user_id=uuid4(),
             email="root@irip.local",
             roles=[],
-            department_id=uuid4(),
+            department_id=dept_id,
             is_root_member=True,
         )
-        assert can_edit_department(user, uuid4()) is True
+        assert can_edit_department(user, dept_id) is True
+        assert can_edit_department(user, uuid4()) is False
 
     def test_can_edit_department_same_dept(self):
         """普通用户可编辑本部门数据"""

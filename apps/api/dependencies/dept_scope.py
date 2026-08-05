@@ -31,25 +31,42 @@ logger = logging.getLogger(__name__)
 def should_filter_by_department(user: CurrentUser) -> bool:
     """判断当前用户是否需要按实验室过滤数据。
 
-    阶段2：不再硬编码 platform_administrator/platform_auditor 角色判断，
-    改为通过 CurrentUser.is_root_member 字段判断（在 get_current_user 时填充）。
-    root 部门成员不受数据隔离限制。
-
-    保持同步签名，向后兼容现有路由调用。
+    平台管理员/平台监督员不受数据隔离限制。
+    其他角色按部门隔离。
 
     Args:
-        user: 当前认证用户（需含 is_root_member 字段）。
+        user: 当前认证用户。
 
     Returns:
         bool: True 表示需要按实验室过滤，False 表示不受限制。
     """
-    is_root = getattr(user, "is_root_member", False)
-    if is_root:
-        return False
-    # 过渡期：platform_administrator/platform_auditor 也不过滤
     if "platform_administrator" in user.roles or "platform_auditor" in user.roles:
         return False
     return True
+
+
+def get_rls_dept_id(user: CurrentUser, root_dept_id: UUID | None) -> UUID | None:
+    """获取用于 RLS GUC 的部门 ID。
+
+    平台管理员/平台监督员（非 root 成员）使用 root 部门 ID，
+    使 current_visible_dept_ids() 返回全部部门（root + 所有子孙 = 全部）。
+
+    root 成员本身就使用自己的 department_id（已在 root 部门），
+    无需替换。其他用户使用自己的 department_id。
+
+    Args:
+        user: 当前认证用户。
+        root_dept_id: root 哨兵部门 ID（从 CompositionContext 获取）。
+
+    Returns:
+        UUID | None: 用于 RLS GUC 的部门 ID。返回 None 表示使用 _dept_id 默认行为。
+    """
+    if not should_filter_by_department(user):
+        # 不需要过滤的用户：如果是 root 成员，自己的 dept_id 就是 root，无需替换
+        # 如果不是 root 成员但是 platform_administrator/auditor，用 root_dept_id
+        if not user.is_root_member and root_dept_id is not None:
+            return root_dept_id
+    return None  # 返回 None 表示用 _dept_id 默认行为
 
 
 def get_department_filter(user: CurrentUser) -> UUID | None:

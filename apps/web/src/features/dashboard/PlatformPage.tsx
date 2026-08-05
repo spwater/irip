@@ -69,7 +69,7 @@ export function PlatformPage(): JSX.Element {
     <div
       className="ocean-page-enter"
       key={activeTab}
-      style={activeTab === 'assistant' ? { overflow: 'hidden', height: '100%' } : undefined}
+      style={activeTab === 'assistant' ? { overflow: 'hidden', height: '100%' } : { minHeight: 'calc(100vh - 200px)' }}
     >
       {activeTab === 'assistant' && <AssistantPage />}
       {activeTab === 'ai-tools' && isAdmin && <AIToolsPage />}

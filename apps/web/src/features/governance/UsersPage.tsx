@@ -99,6 +99,8 @@ export function UsersPage(): JSX.Element {
     return u.department_id === deptFilter;
   });
 
+  const [deptRefreshTrigger, setDeptRefreshTrigger] = useState(0);
+
   // ---- 数据查询：每个用户的多部门关联 ----
   const [userDepts, setUserDepts] = useState<Record<string, { deptId: string; deptName: string; isPrimary: boolean }[]>>({});
   const dataItems = data?.items;
@@ -130,7 +132,7 @@ export function UsersPage(): JSX.Element {
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dataItems, departments]);
+  }, [dataItems, departments, deptRefreshTrigger]);
 
   // ---- 编辑用户 Mutation ----
   // ---- 新建用户 Mutation ----
@@ -262,6 +264,7 @@ export function UsersPage(): JSX.Element {
         }
       }
       await queryClient.refetchQueries({ queryKey: ['governance', 'users'] });
+      setDeptRefreshTrigger((v) => v + 1);
       setCreateModalOpen(false);
       createForm.resetFields();
       message.success('用户创建成功');
@@ -307,6 +310,7 @@ export function UsersPage(): JSX.Element {
       }
       // 强制立即刷新用户列表
       await queryClient.refetchQueries({ queryKey: ['governance', 'users'] });
+      setDeptRefreshTrigger((v) => v + 1);
       setAssignTarget(null);
       form.resetFields();
       message.success('用户信息更新成功');

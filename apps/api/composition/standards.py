@@ -33,6 +33,7 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.departments.service import DepartmentService
     from packages.departments.user_departments import UserDepartmentService
     from packages.equipment.service import EquipmentService
@@ -42,11 +43,15 @@ def register(ctx: CompositionContext) -> None:
     async def _get_object_graph_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ObjectGraphService:
-        return ObjectGraphService(
+        service = ObjectGraphService(
             session_factory=ctx.session_factory,
             department_id=current_user.department_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_object_graph_service] = _get_object_graph_service_dep
 
@@ -55,10 +60,14 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> DepartmentService:
         # 阶段2: 直接从 CurrentUser 拿 department_id（get_current_user 已查 DB）
-        return DepartmentService(
+        service = DepartmentService(
             session_factory=ctx.session_factory,
             department_id=current_user.department_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_department_service] = _get_department_service_dep
 
@@ -66,11 +75,15 @@ def register(ctx: CompositionContext) -> None:
     async def _get_equipment_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> EquipmentService:
-        return EquipmentService(
+        service = EquipmentService(
             session_factory=ctx.session_factory,
             department_id=current_user.department_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_equipment_service] = _get_equipment_service_dep
 
@@ -78,10 +91,14 @@ def register(ctx: CompositionContext) -> None:
     async def _get_user_department_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> UserDepartmentService:
-        return UserDepartmentService(
+        service = UserDepartmentService(
             session_factory=ctx.session_factory,
             department_id=current_user.department_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep
 
@@ -92,10 +109,14 @@ def register(ctx: CompositionContext) -> None:
     async def _get_experiment_project_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ExperimentProjectService:
-        return ExperimentProjectService(
+        service = ExperimentProjectService(
             session_factory=ctx.session_factory,
             department_id=current_user.department_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_experiment_project_service] = _get_experiment_project_service_dep

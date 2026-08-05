@@ -30,7 +30,7 @@ import {
   apiUpdateEquipmentStatus,
   type EquipmentListItem,
 } from '@/api/equipment-flows';
-import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
+import { apiListDepartments } from '@/api/departments';
 import { ExperimentalObjectPage } from '@/features/standards/ExperimentalObjectPage';
 import { extractApiError } from '@/api/types';
 import { DataTableShell } from '@/shared/ui';
@@ -99,17 +99,6 @@ export function EquipmentPage({
   const deptTreeData = useMemo(
     () => buildDeptTree(deptData?.items ?? []),
     [deptData],
-  );
-
-  // ---- 数据查询：全部门名称映射（不受部门隔离限制，用于可见单位名称展示）----
-  const { data: deptNameMapData } = useQuery({
-    queryKey: ['department-name-map'],
-    queryFn: apiGetDepartmentNameMap,
-  });
-
-  // 部门 ID → 名称映射（完整，不受隔离限制），用于列表中展示可见单位名称
-  const deptMap = new Map(
-    (deptNameMapData ?? []).map((d) => [d.id, d.display_name] as const),
   );
 
   // ---- 创建 Mutation ----

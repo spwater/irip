@@ -21,7 +21,7 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PlusOutlined, PlayCircleOutlined, ClusterOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -52,7 +52,7 @@ import { apiUploadFile, apiListIngestionTools } from '@/api/models-ai';
 import { apiListObjects, apiListObjectTypes, apiCreateObject } from '@/api/standards-objects';
 import { buildManifestYaml, FORM_FIELD_NAMES, FRESH_FORM_VALUES } from '@/shared/component-utils';
 import { ComponentFormFields } from '@/features/components/ComponentFormFields';
-import { apiListDepartments, type DepartmentListItem } from '@/api/departments';
+import { apiListDepartments } from '@/api/departments';
 import { buildDeptTree } from '@/shared/buildDeptTree';
 import { extractApiError, type IndustrialObject } from '@/api/types';
 import { useAuthStore } from '@/features/auth/AuthProvider';
@@ -103,14 +103,12 @@ export function FlowDetail({
   const currentUser = useAuthStore((s) => s.user);
   const [selectedFlowId, setSelectedFlowId] = useState<string | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [runModalOpen, setRunModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editFlowId, setEditFlowId] = useState<string | null>(null);
   const [editForm] = Form.useForm();
   const [dataRunId, setDataRunId] = useState<string | null>(null);
   const [factModalOpen, setFactModalOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadLoading, setUploadLoading] = useState<string | null>(null);
   const artifactMapRef = useRef<Record<string, string>>({});
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [flowPageSize, setFlowPageSize] = useState(10);
@@ -129,17 +127,15 @@ export function FlowDetail({
   const [compCreateModalOpen, setCompCreateModalOpen] = useState(false);
   const [compForm] = Form.useForm();
   const [compAdvancedMode, setCompAdvancedMode] = useState(false);
-  const [runSelectedComp, setRunSelectedComp] = useState<string | undefined>(undefined);
   const [batchSelectedComp, setBatchSelectedComp] = useState<string | undefined>(undefined);
   const [batchOperator, setBatchOperator] = useState<string>('');
   const [batchPrompt, setBatchPrompt] = useState<string>('');
-  const [runParams, setRunParams] = useState<[string, unknown][]>([]);
 
   /** 管理权限检查：所有者 + 上级向下 + 负责人管本部门 */
   const canManage = (flow: FlowSummary | undefined | null): boolean => {
     if (!flow || !currentUser) return false;
-    // root 成员 / 平台管理员不受限
-    if (currentUser.isRootMember) return true;
+    // 平台管理员不受限
+    if (currentUser.roles.includes('platform_administrator')) return true;
     // 数据所有者可管理
     if (flow.owner_user_id && currentUser.id === flow.owner_user_id) return true;
     // 实验室负责人可管本部门成员的数据
@@ -332,23 +328,6 @@ export function FlowDetail({
         return undefined;
       })()
     : undefined;
-  const runParamEntries = (() => {
-    if (!runNode) return [];
-    const params = (runNode.params as Record<string, unknown>) ?? {};
-    const runCompName = runNode?.component_name;
-    const runCompObj = runCompName ? compMap.get(runCompName) : undefined;
-    const isRunLlm = runCompObj?.tool_type === 'llm_converter';
-    const entries = Object.entries(params).filter(([key]) => key !== 'experimental_object_code' && key !== 'tool_type' && !(key === 'prompt' && !isRunLlm));
-    const orderedKeys = ['path', 'file_engine', 'prompt'];
-    return entries.sort((a, b) => {
-      const ai = orderedKeys.indexOf(a[0]);
-      const bi = orderedKeys.indexOf(b[0]);
-      if (ai >= 0 && bi >= 0) return ai - bi;
-      if (ai >= 0) return -1;
-      if (bi >= 0) return 1;
-      return 0;
-    });
-  })();
 
   // 接口选项按当前账户可见性过滤（后端已通过 compute_visible_dept_ids 处理，
   // 上下互见 + 同部门可见 + 横向白名单），前端不再按实验对象筛选
@@ -465,21 +444,6 @@ export function FlowDetail({
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  // ---- 创建运行 Mutation ----
-  const createRunMutation = useMutation({
-    mutationFn: (vars: { flowId: string; body: { inputs: Record<string, unknown> } }) =>
-      apiCreateFlowRun(vars.flowId, vars.body),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ['flow-runs', selectedFlowId] });
-      void queryClient.invalidateQueries({ queryKey: ['flow-run', data.id] });
-      setRunModalOpen(false);
-      runForm.resetFields();
-      message.success('流程执行已创建');
-      setActiveRunId(data.id);
-    },
-    onError: (err: unknown) => message.error(extractApiError(err)),
-  });
-
   // ---- 继续 / 取消 Mutation ----
   const resumeMutation = useMutation({
     mutationFn: apiResumeFlowRun,
@@ -526,73 +490,6 @@ export function FlowDetail({
       });
     } catch {
       // 校验失败
-    }
-  };
-
-  const handleCreateRun = async (): Promise<void> => {
-    if (!selectedFlowId) return;
-    if (!runSelectedComp) {
-      message.warning('请先选择数据接口');
-      return;
-    }
-    try {
-      const values = await runForm.validateFields();
-
-      // 检查是否需要先发布（component 变了或没有 published 版本）
-      const currentNode = (flow?.latest_version?.nodes as FlowNodeSchema[] | undefined)?.[0];
-      const needPublish = !currentNode || currentNode.component_name !== runSelectedComp;
-
-      if (needPublish) {
-        const comp = componentOptions.find((c) => c.value === runSelectedComp);
-        if (!comp) {
-          message.error('找不到选中的数据接口');
-          return;
-        }
-        // 获取组件参数定义
-        let params: Record<string, unknown> = {};
-        try {
-          const detail = await apiGetComponent(comp.summary.id);
-          const parsed = parseManifest(detail.manifest_yaml);
-          for (const p of parsed.params) {
-            params[p.name] = p.default ?? '';
-          }
-        } catch {
-          // 获取详情失败时用空 params
-        }
-        const nodes: FlowNodeSchema[] = [{
-          node_id: 'n1',
-          component_name: runSelectedComp,
-          component_version: comp.version,
-          params: {
-            ...params,
-            experimental_object_code: flow?.experimental_object_code ?? null,
-          },
-        }];
-        // 发布
-        await apiPublishFlow(selectedFlowId, { nodes });
-        await queryClient.refetchQueries({ queryKey: ['flow', selectedFlowId] });
-      }
-
-      // 构建 inputs
-      const inputs: Record<string, unknown> = {};
-      for (const [key] of runParams) {
-        if (key === 'experimental_object_code' || key === 'tool_type') continue;
-        const formKey = `n1__${key}`;
-        const artifactVal = artifactMapRef.current[formKey];
-        if (artifactVal) {
-          inputs[key] = artifactVal;
-          continue;
-        }
-        const formValue = values[formKey];
-        if (formValue !== undefined && formValue !== '') {
-          inputs[key] = formValue;
-        }
-      }
-      // 执行人存入元信息（为空时取任务执行人）
-      inputs['_operator'] = (values.run_operator as string) || flow?.operator || '';
-      createRunMutation.mutate({ flowId: selectedFlowId, body: { inputs } });
-    } catch (err) {
-      message.error(`参数解析失败: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -1836,7 +1733,6 @@ export function FlowDetail({
           if (!file) return;
           const formKey = fileInputRef.current?.dataset.formkey;
           if (!formKey) return;
-          setUploadLoading(formKey);
           try {
             const res = await apiUploadFile(file);
             runForm.setFieldValue(formKey, file.name);
@@ -1845,7 +1741,6 @@ export function FlowDetail({
           } catch (err) {
             message.error(`上传失败: ${err instanceof Error ? err.message : String(err)}`);
           } finally {
-            setUploadLoading(null);
             if (fileInputRef.current) {
               fileInputRef.current.value = '';
               delete fileInputRef.current.dataset.formkey;

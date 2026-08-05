@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Avatar, Button, Grid, Layout, Menu, Space, Typography } from 'antd';
 import { Outlet, useLocation, useNavigate } from '@tanstack/react-router';
 import type { MenuProps } from 'antd';
@@ -200,12 +200,19 @@ export function AppShell(): JSX.Element | null {
 /** 星期中文映射 */
 const WEEKDAYS_CN = ['日', '一', '二', '三', '四', '五', '六'] as const;
 
-/** 侧边栏底部时钟：大号等宽时间 + 日期星期 + 版本行（每秒刷新） */
+/** 侧边栏底部时钟：大号等宽时间 + 日期星期 + 版本行（每秒刷新，纯 DOM 更新避免 React 重渲染） */
 function SiderClock(): JSX.Element {
-  const [now, setNow] = useState(() => new Date());
+  const timeRef = useRef<HTMLSpanElement>(null);
+  const dateRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
+    const fmt = () => {
+      const n = new Date();
+      if (timeRef.current) timeRef.current.textContent = dayjs(n).format('HH:mm:ss');
+      if (dateRef.current) dateRef.current.textContent = `${dayjs(n).format('YYYY-MM-DD')} 星期${WEEKDAYS_CN[n.getDay()]}`;
+    };
+    fmt();
+    const timer = setInterval(fmt, 1000);
     return () => clearInterval(timer);
   }, []);
 
@@ -223,6 +230,7 @@ function SiderClock(): JSX.Element {
     >
       {/* 大号等宽时间 */}
       <span
+        ref={timeRef}
         className="ocean-tabular-nums"
         style={{
           fontFamily: 'var(--ocean-font-mono)',
@@ -233,20 +241,17 @@ function SiderClock(): JSX.Element {
           lineHeight: 1.1,
           fontVariantNumeric: 'tabular-nums',
         }}
-      >
-        {dayjs(now).format('HH:mm:ss')}
-      </span>
+      />
       {/* 日期 + 星期 */}
       <span
+        ref={dateRef}
         style={{
           fontFamily: 'var(--ocean-font-mono)',
           fontSize: 12,
           letterSpacing: 1,
           color: 'var(--ocean-text-secondary)',
         }}
-      >
-        {dayjs(now).format('YYYY-MM-DD')} 星期{WEEKDAYS_CN[now.getDay()]}
-      </span>
+      />
       {/* 版本行 */}
       <span
         style={{
@@ -286,7 +291,8 @@ function DynamicHeader({
         display: 'flex',
         flexDirection: 'column',
         background: 'linear-gradient(to bottom, rgba(203, 228, 238, 0.72) 0px, rgba(234, 246, 249, 0.18) 120px, rgba(234, 246, 249, 0) 170px)',
-        backdropFilter: 'blur(8px)',
+        backdropFilter: 'blur(4px)',
+        willChange: 'backdrop-filter',
         padding: isHero ? '16px 24px' : '16px 24px 36px',
         borderBottom: 'none',
         position: 'sticky',

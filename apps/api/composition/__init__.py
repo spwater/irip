@@ -28,6 +28,9 @@ class CompositionContext:
         s3_repo: S3 / MinIO 存储客户端。
         redis_url: Redis 连接 URL。
         token_secret: JWT 签名密钥。
+        root_dept_id: root 哨兵部门 ID，用于平台管理员/平台监督员
+            的 RLS 绕过（使其 current_visible_dept_ids() 返回全部部门）。
+            启动时查询一次，缓存在此处。可能为 None（DB 中无 root 部门）。
     """
 
     app: FastAPI
@@ -35,6 +38,7 @@ class CompositionContext:
     s3_repo: object
     redis_url: str
     token_secret: str
+    root_dept_id: UUID | None = None
 
 
 async def lookup_dept_id(
@@ -80,6 +84,33 @@ async def lookup_dept_id(
                 fields={"user_id": str(user_id)},
             )
         return user.department_id
+
+
+async def lookup_root_dept_id(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> UUID | None:
+    """查询 root 哨兵部门 ID（code='root'）。
+
+    启动时调用一次，缓存在 CompositionContext 中。
+    平台管理员/平台监督员（非 root 成员）使用此 ID 设置 RLS GUC，
+    使 current_visible_dept_ids() 返回全部部门（root + 所有子孙 = 全部）。
+
+    Args:
+        session_factory: 异步会话工厂。
+
+    Returns:
+        UUID | None: root 部门 ID，不存在时返回 None。
+    """
+    import sqlalchemy as sa
+
+    from packages.departments.entities import Department
+
+    async with session_factory() as session:
+        result = await session.execute(
+            sa.select(Department.id).where(Department.code == "root")
+        )
+        row = result.first()
+        return row[0] if row is not None else None
 
 
 def register_all(ctx: CompositionContext) -> None:

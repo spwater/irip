@@ -25,7 +25,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.parameters.entities import (
@@ -143,11 +142,9 @@ class ParameterService(ScopedSessionMixin):
             )
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 检查唯一性
             existing = await session.scalar(
                 sa.select(Parameter).where(
-                    Parameter.department_id.in_(visible_ids),
                     Parameter.variable_code == variable_code.strip(),
                     Parameter.object_id == object_id,
                 )
@@ -219,12 +216,10 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="conflict"，当候选已存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 验证推导运行
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == derivation_run_id,
-                    DerivationRun.department_id.in_(visible_ids),
                 )
             )
             if run is None:
@@ -250,7 +245,6 @@ class ParameterService(ScopedSessionMixin):
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.department_id.in_(visible_ids),
                 )
             )
             if param is None:
@@ -385,7 +379,6 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="derivation_not_succeeded"，当推导运行未成功。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 1. 加载候选
             candidate = await session.scalar(
                 sa.select(ParameterCandidate).where(ParameterCandidate.id == candidate_id)
@@ -425,7 +418,6 @@ class ParameterService(ScopedSessionMixin):
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == candidate.derivation_run_id,
-                    DerivationRun.department_id.in_(visible_ids),
                 )
             )
             if run is None:
@@ -551,14 +543,12 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="self_approval_forbidden"，当审核人==提交人。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # C-03 IDOR 修复：通过 JOIN Parameter 确保候选属于当前部门
             candidate = await session.scalar(
                 sa.select(ParameterCandidate)
                 .join(Parameter, ParameterCandidate.parameter_id == Parameter.id)
                 .where(
                     ParameterCandidate.id == candidate_id,
-                    Parameter.department_id.in_(visible_ids),
                 )
             )
             if candidate is None:
@@ -633,11 +623,9 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="not_found"，当参数不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.department_id.in_(visible_ids),
                 )
             )
             if param is None:
@@ -686,12 +674,10 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="not_found"，当参数或版本不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             # 校验参数存在
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.department_id.in_(visible_ids),
                 )
             )
             if param is None:
@@ -764,10 +750,8 @@ class ParameterService(ScopedSessionMixin):
         filters = filters or {}
 
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(Parameter)
-                .where(Parameter.department_id.in_(visible_ids))
                 .order_by(Parameter.created_at, Parameter.id)
                 .limit(page_size + 1)
             )
@@ -882,11 +866,9 @@ class ParameterService(ScopedSessionMixin):
             AppError: code="invalid_transition"，当参数非 published 状态时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             param = await session.scalar(
                 sa.select(Parameter).where(
                     Parameter.id == parameter_id,
-                    Parameter.department_id.in_(visible_ids),
                 )
             )
             if param is None:

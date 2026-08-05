@@ -25,7 +25,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.provenance.algorithms import (
@@ -379,11 +378,9 @@ class DerivationService(ScopedSessionMixin):
             AppError: code="not_found"，当运行不存在时。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             run = await session.scalar(
                 sa.select(DerivationRun).where(
                     DerivationRun.id == run_id,
-                    DerivationRun.department_id.in_(visible_ids),
                 )
             )
             if run is None:
@@ -421,10 +418,8 @@ class DerivationService(ScopedSessionMixin):
             (推导运行引用列表, 下一页游标)。
         """
         async with self._scoped_session() as session:
-            visible_ids = await compute_visible_dept_ids(session, self._dept_id, self._actor_id)
             stmt = (
                 sa.select(DerivationRun)
-                .where(DerivationRun.department_id.in_(visible_ids))
                 .order_by(DerivationRun.created_at, DerivationRun.id)
                 .limit(page_size + 1)
             )

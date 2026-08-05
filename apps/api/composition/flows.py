@@ -24,6 +24,7 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from apps.api.routers.ai_config import get_active_ai_config
     from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
@@ -36,11 +37,15 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ComponentRegistryService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return ComponentRegistryService(
+        service = ComponentRegistryService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_component_registry_service] = (
         _get_component_registry_service_dep
@@ -56,6 +61,9 @@ def register(ctx: CompositionContext) -> None:
             department_id=dept_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            registry._rls_dept_id = rls_dept_id
         if _flow_runner is None:
             _flow_runner = PythonComponentRunner()
             register_builtin_components(_flow_runner)
@@ -64,13 +72,17 @@ def register(ctx: CompositionContext) -> None:
             department_id=dept_id,
             created_by=current_user.user_id,
         )
+        if rls_dept_id is not None:
+            job_svc._rls_dept_id = rls_dept_id
         art_svc = ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
             department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
-        return FlowRuntimeService(
+        if rls_dept_id is not None:
+            art_svc._rls_dept_id = rls_dept_id
+        flow_svc = FlowRuntimeService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             actor_id=current_user.user_id,
@@ -80,5 +92,8 @@ def register(ctx: CompositionContext) -> None:
             artifact_service=art_svc,
             ai_config_provider=get_active_ai_config,
         )
+        if rls_dept_id is not None:
+            flow_svc._rls_dept_id = rls_dept_id
+        return flow_svc
 
     ctx.app.dependency_overrides[get_flow_service] = _get_flow_service_dep

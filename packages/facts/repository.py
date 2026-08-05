@@ -20,7 +20,6 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.facts.entities import Fact
@@ -220,15 +219,6 @@ class FactRepository:
                 retryable=False,
                 fields={"fact_id": str(fact_id)},
             )
-        # 可见性检查：fact 部门必须在可见集中
-        visible_ids = await compute_visible_dept_ids(session, org_id)
-        if fact.department_id not in visible_ids:
-            raise AppError(
-                code="not_found",
-                message="事实不存在",
-                retryable=False,
-                fields={"fact_id": str(fact_id)},
-            )
         return fact
 
     @staticmethod
@@ -273,7 +263,6 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
             )
             .where(
-                Fact.department_id.in_(await compute_visible_dept_ids(session, org_id)),
                 Fact.search_vector.op("@@")(tsquery),
             )
             .order_by(
@@ -358,7 +347,6 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
                 Fact.id.label("fact_uuid"),
             )
-            .where(Fact.department_id.in_(await compute_visible_dept_ids(session, org_id)))
             .order_by(Fact.created_at.asc(), Fact.id.asc())
             .limit(fetch_limit)
         )

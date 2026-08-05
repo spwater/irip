@@ -31,7 +31,7 @@ from packages.audit.repository import AuditRecorder
 from packages.auth.entities import AppUser
 from packages.auth.passwords import hash_password
 from packages.auth.permissions import BUILTIN_ROLES
-from packages.common.database import session_scope
+from packages.common.database import session_scope, scoped_session
 from packages.common.errors import AppError
 from packages.departments.entities import AppUserDepartment
 
@@ -381,7 +381,7 @@ async def create_user(
                 fields={"department_id": body.department_id},
             ) from exc
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         # 检查邮箱唯一性
         existing = await session.execute(sa.select(AppUser).where(AppUser.email == body.email))
         if existing.scalar_one_or_none() is not None:
@@ -474,7 +474,7 @@ async def update_user(
         if not _is_platform_admin(current_user):
             _validate_assignable_roles(current_user, body.roles)
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         user = await session.get(AppUser, user_id)
         if user is None:
             raise AppError(
@@ -554,7 +554,7 @@ async def assign_roles(
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, body.roles)
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
@@ -632,7 +632,7 @@ async def remove_role(
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, [role])
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
@@ -709,7 +709,7 @@ async def update_user_status(
             fields={"status": body.status},
         )
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is None:
             raise AppError(
@@ -769,7 +769,7 @@ async def delete_user(
             fields={},
         )
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         user = await session.get(AppUser, user_id)
         if user is None:
             raise AppError(
@@ -891,7 +891,7 @@ async def data_transfer(
             fields={},
         )
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         # 统计影响行数
         count_stmt = sa.text(
             f"SELECT COUNT(*) FROM {body.table} WHERE department_id = :from_dept_id"
@@ -979,7 +979,7 @@ async def get_root_data_stats(
     """
     from packages.departments.entities import Department
 
-    async with session_scope(session_factory) as session:
+    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
         # 查找 root 部门
         dept_result = await session.execute(
             sa.select(Department).where(Department.code == "root")

@@ -8,9 +8,8 @@ create(department_id, code, display_name, description, visible_departments):
   3. 返回 ExperimentProject。
 
 list(department_id, visible_dept_id, status, cursor, limit):
-  1. 用 compute_visible_dept_ids 过滤可见部门；
-  2. 分页查询项目列表 + 部门名 JOIN + count_flows_by_project 统计；
-  3. 编码 next_cursor（keyset pagination）。
+  1. 分页查询项目列表 + 部门名 JOIN + count_flows_by_project 统计（可见性由 RLS 保证）；
+  2. 编码 next_cursor（keyset pagination）。
 
 get(project_id):
   1. 查询项目 → 不存在抛 AppError(not_found)。
@@ -31,7 +30,6 @@ check_not_archived(project_id):
 - code 创建后锁定不可修改（UpdateProjectBody 不含 code，UPDATE 不写 code 列）；
 - 乐观锁：WHERE id=? AND lock_version=?，影响 0 行 → 409；
 - 归档约束：项目 archived 时拒绝新建任务（409）；
-- 所有操作通过 compute_visible_dept_ids 过滤可见部门。
 
 风格参考 packages/equipment/service.py。
 """
@@ -49,7 +47,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import ScopedSessionMixin
-from packages.common.dept_visibility import compute_visible_dept_ids
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE

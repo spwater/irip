@@ -45,7 +45,7 @@ export function FactModal({ open, onClose, onSuccess, factId }: FactModalProps):
       const payload: Record<string, unknown> = {
         ...values,
         visibility_scope: isPrivate ? 'private' : 'tree',
-        owner_user_id: user?.user_id,
+        owner_user_id: user?.id,
       };
 
       if (factId) {

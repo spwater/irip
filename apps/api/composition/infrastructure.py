@@ -16,7 +16,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_dept_id, lookup_dept_id
+from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.assistant import get_ai_service  # noqa: F401 (re-export guard)
 from apps.api.routers.audit import get_audit_session_factory
@@ -38,6 +38,8 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.common.artifacts import ArtifactService
     from packages.connectors.mapping import IngestionService
     from packages.parameters.service import ParameterService
@@ -53,13 +55,16 @@ def register(ctx: CompositionContext) -> None:
     ) -> ArtifactService:
         """按请求构造工件服务，从 DB 查询当前用户的 department_id。"""
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return ArtifactService(
+        service = ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
-            department_id=dept_id,  # 
+            department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_artifact_service] = _get_artifact_service
 
@@ -77,11 +82,14 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> IngestionService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return IngestionService(
+        service = IngestionService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_ingestion_service] = _get_ingestion_service_dep
 
@@ -90,11 +98,14 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ParameterService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return ParameterService(
+        service = ParameterService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             actor_id=current_user.user_id,
         )
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
+        if rls_dept_id is not None:
+            service._rls_dept_id = rls_dept_id
+        return service
 
     ctx.app.dependency_overrides[get_parameter_service] = _get_parameter_service_dep

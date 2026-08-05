@@ -61,6 +61,7 @@
 
 .ocean-backdrop__tide--back svg {
   animation: ocean-tide-drift-a 56s linear infinite;
+  will-change: transform;
 }
 
 .ocean-backdrop__tide--front {
@@ -71,6 +72,7 @@
 
 .ocean-backdrop__tide--front svg {
   animation: ocean-tide-drift-b 38s linear infinite;
+  will-change: transform;
 }
 
 @keyframes ocean-tide-drift-a {
@@ -102,6 +104,7 @@
     transparent 100%
   );
   animation: ocean-current-sweep 26s var(--ocean-motion-easing-tide) infinite alternate;
+  will-change: transform;
 }
 
 @keyframes ocean-current-sweep {

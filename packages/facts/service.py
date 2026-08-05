@@ -180,14 +180,10 @@ class FactService(ScopedSessionMixin):
                 )
 
         async with self._scoped_session() as session:
-            # 3. 校验工业对象在可见部门范围内
-            from packages.common.dept_visibility import compute_visible_dept_ids
-
-            visible_ids = await compute_visible_dept_ids(session, command.department_id, self._actor_id)
+            # 3. 校验工业对象存在
             obj = await session.scalar(
                 sa.select(IndustrialObject).where(
                     IndustrialObject.id == command.object_id,
-                    IndustrialObject.department_id.in_(visible_ids),
                 )
             )
             if obj is None:

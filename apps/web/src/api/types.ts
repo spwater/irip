@@ -57,6 +57,7 @@ export type FactSummary = {
   status: string;
   task_code: string | null;
   task_name: string | null;
+  project_name: string | null;
   department_name: string | null;
   operator: string | null;
   run_operator: string | null;

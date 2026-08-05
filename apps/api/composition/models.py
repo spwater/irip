@@ -19,6 +19,7 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
+    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.common.artifacts import ArtifactService
     from packages.facts.service import FactService
     from packages.models.service import ModelService
@@ -27,24 +28,32 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> ModelService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         art_svc = ArtifactService(
             s3_repo=ctx.s3_repo,
             session_factory=ctx.session_factory,
             department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
+        if rls_dept_id is not None:
+            art_svc._rls_dept_id = rls_dept_id
         # 注入 FactService，使模型预测结果写入溯源事实链
         fact_svc = FactService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             actor_id=current_user.user_id,
         )
-        return ModelService(
+        if rls_dept_id is not None:
+            fact_svc._rls_dept_id = rls_dept_id
+        model_svc = ModelService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
             actor_id=current_user.user_id,
             artifact_service=art_svc,
             fact_service=fact_svc,
         )
+        if rls_dept_id is not None:
+            model_svc._rls_dept_id = rls_dept_id
+        return model_svc
 
     ctx.app.dependency_overrides[get_model_service] = _get_model_service_dep

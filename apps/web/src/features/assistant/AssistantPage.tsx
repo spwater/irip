@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   Avatar,
   Button,
@@ -90,26 +90,30 @@ export function AssistantPage(): JSX.Element {
     enabled: factModalOpen,
   });
 
-  // 按任务分组样品，支持搜索过滤
+  // 按项目→任务分组样品，支持搜索过滤（三层树：项目→任务→数据）
   const factGroups = useMemo(() => {
     const allFacts = factsData?.items ?? [];
     const filtered = factSearchText.trim()
       ? allFacts.filter((f) =>
           f.subject_id.toLowerCase().includes(factSearchText.toLowerCase()) ||
-          (f.task_name ?? '').toLowerCase().includes(factSearchText.toLowerCase())
+          (f.task_name ?? '').toLowerCase().includes(factSearchText.toLowerCase()) ||
+          (f.project_name ?? '').toLowerCase().includes(factSearchText.toLowerCase())
         )
       : allFacts;
-    const groups: Record<string, { taskName: string; facts: FactSummary[] }> = {};
+    // 三层结构: { [projectKey]: { projectName, tasks: { [taskCode]: { taskName, facts } } } }
+    const projects: Record<string, { projectName: string; tasks: Record<string, { taskName: string; facts: FactSummary[] }> }> = {};
     for (const f of filtered) {
-      const key = f.task_code ?? '未分组';
-      if (!groups[key]) groups[key] = { taskName: f.task_name ?? f.task_code ?? '未分组', facts: [] };
-      groups[key].facts.push(f);
+      const projKey = f.project_name ?? '未分类项目';
+      const taskKey = f.task_code ?? '未分组';
+      if (!projects[projKey]) projects[projKey] = { projectName: projKey, tasks: {} };
+      if (!projects[projKey].tasks[taskKey]) projects[projKey].tasks[taskKey] = { taskName: f.task_name ?? f.task_code ?? '未分组', facts: [] };
+      projects[projKey].tasks[taskKey].facts.push(f);
     }
-    return groups;
+    return projects;
   }, [factsData, factSearchText]);
 
   const allFilteredFactIds = useMemo(() => {
-    return Object.values(factGroups).flatMap((g) => g.facts.map((f) => f.fact_id));
+    return Object.values(factGroups).flatMap((p) => Object.values(p.tasks).flatMap((t) => t.facts.map((f) => f.fact_id)));
   }, [factGroups]);
 
   const allSelected = allFilteredFactIds.length > 0 && allFilteredFactIds.every((id) => selectedFactIds.includes(id));
@@ -494,7 +498,7 @@ export function AssistantPage(): JSX.Element {
   // 避免硬编码 180px 在 header 高度变化时不准
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState('calc(100vh - 180px)');
-  useEffect(() => {
+  useLayoutEffect(() => {
     const updateHeight = () => {
       const el = containerRef.current;
       if (!el) return;
@@ -505,10 +509,12 @@ export function AssistantPage(): JSX.Element {
     };
     updateHeight();
     window.addEventListener('resize', updateHeight);
-    // 延迟一次，等 header 渲染完成
-    const timer = setTimeout(updateHeight, 200);
+    // 延迟一次，等 header 渲染完成（用 rAF 比 setTimeout 更早）
+    const rafId = requestAnimationFrame(updateHeight);
+    const timer = setTimeout(updateHeight, 100);
     return () => {
       window.removeEventListener('resize', updateHeight);
+      cancelAnimationFrame(rafId);
       clearTimeout(timer);
     };
   }, []);
@@ -1054,22 +1060,20 @@ export function AssistantPage(): JSX.Element {
             </div>
           </div>
 
-          {/* 分组列表 */}
+          {/* 分组列表：三层树 项目→任务→数据 */}
           <div style={{ flex: 1, overflow: 'auto', padding: '8px 16px' }}>
             {Object.keys(factGroups).length === 0 ? (
               <div style={{ textAlign: 'center', padding: 40, color: 'var(--ocean-text-muted)' }}>
                 <Text type="secondary">暂无数据或未找到匹配的样品</Text>
               </div>
             ) : (
-              Object.entries(factGroups).map(([taskCode, group]) => {
-                const groupIds = group.facts.map((f) => f.fact_id);
-                const groupAllSelected = groupIds.every((id) => selectedFactIds.includes(id));
-                const groupSomeSelected = groupIds.some((id) => selectedFactIds.includes(id));
-                // 搜索时自动展开，否则按 expandedGroups 状态
-                const isExpanded = factSearchText.trim() || expandedGroups.has(taskCode);
+              Object.entries(factGroups).map(([projKey, project]) => {
+                const projectTaskIds = Object.values(project.tasks).flatMap((t) => t.facts.map((f) => f.fact_id));
+                const projectAllSelected = projectTaskIds.every((id) => selectedFactIds.includes(id));
+                const projectSomeSelected = projectTaskIds.some((id) => selectedFactIds.includes(id));
                 return (
-                  <div key={taskCode} style={{ marginBottom: 4 }}>
-                    {/* 任务分组标题 */}
+                  <div key={projKey} style={{ marginBottom: 4 }}>
+                    {/* 项目分组标题 */}
                     <div
                       style={{
                         display: 'flex',
@@ -1083,54 +1087,95 @@ export function AssistantPage(): JSX.Element {
                       onClick={() => {
                         setExpandedGroups((prev) => {
                           const next = new Set(prev);
-                          if (next.has(taskCode)) next.delete(taskCode);
-                          else next.add(taskCode);
+                          if (next.has(projKey)) next.delete(projKey);
+                          else next.add(projKey);
                           return next;
                         });
                       }}
                     >
                       <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
-                        {isExpanded ? '▼' : '▶'}
+                        {factSearchText.trim() || expandedGroups.has(projKey) ? '▼' : '▶'}
                       </span>
                       <Checkbox
-                        checked={groupAllSelected}
-                        indeterminate={!groupAllSelected && groupSomeSelected}
-                        onChange={() => handleToggleGroup(groupIds)}
+                        checked={projectAllSelected}
+                        indeterminate={!projectAllSelected && projectSomeSelected}
+                        onChange={() => handleToggleGroup(projectTaskIds)}
                         onClick={(e) => e.stopPropagation()}
                       />
-                      <Text strong style={{ fontSize: 13 }}>{group.taskName}</Text>
-                      <Tag style={{ fontSize: 10, margin: 0 }}>{group.facts.length}</Tag>
-                      {groupSomeSelected && !groupAllSelected && (
-                        <Tag color="blue" style={{ fontSize: 10, margin: 0 }}>
-                          已选 {groupIds.filter((id) => selectedFactIds.includes(id)).length}
-                        </Tag>
-                      )}
+                      <Text strong style={{ fontSize: 14 }}>{project.projectName}</Text>
+                      <Tag style={{ fontSize: 10, margin: 0 }}>{projectTaskIds.length}</Tag>
                     </div>
-                    {/* 样品列表 - 折叠时不渲染 */}
-                    {isExpanded && (
-                      <div style={{ paddingLeft: 28, paddingTop: 4 }}>
-                        {group.facts.map((f) => (
-                          <div
-                            key={f.fact_id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 8,
-                              padding: '4px 0',
-                              cursor: 'pointer',
-                              borderRadius: 4,
-                              background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
-                            }}
-                            onClick={() => handleToggleFact(f.fact_id)}
-                          >
-                            <Checkbox
-                              checked={selectedFactIds.includes(f.fact_id)}
-                              onChange={() => handleToggleFact(f.fact_id)}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
-                          </div>
-                        ))}
+                    {/* 任务列表 */}
+                    {(factSearchText.trim() || expandedGroups.has(projKey)) && (
+                      <div style={{ paddingLeft: 24 }}>
+                        {Object.entries(project.tasks).map(([taskCode, group]) => {
+                          const groupIds = group.facts.map((f) => f.fact_id);
+                          const groupAllSelected = groupIds.every((id) => selectedFactIds.includes(id));
+                          const groupSomeSelected = groupIds.some((id) => selectedFactIds.includes(id));
+                          const taskExpandedKey = `${projKey}::${taskCode}`;
+                          const isTaskExpanded = factSearchText.trim() || expandedGroups.has(taskExpandedKey);
+                          return (
+                            <div key={taskCode} style={{ marginBottom: 2 }}>
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  padding: '6px 0',
+                                  cursor: 'pointer',
+                                  userSelect: 'none',
+                                }}
+                                onClick={() => {
+                                  setExpandedGroups((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(taskExpandedKey)) next.delete(taskExpandedKey);
+                                    else next.add(taskExpandedKey);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
+                                  {isTaskExpanded ? '▼' : '▶'}
+                                </span>
+                                <Checkbox
+                                  checked={groupAllSelected}
+                                  indeterminate={!groupAllSelected && groupSomeSelected}
+                                  onChange={() => handleToggleGroup(groupIds)}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <Text style={{ fontSize: 13, fontWeight: 500 }}>{group.taskName}</Text>
+                                <Tag style={{ fontSize: 10, margin: 0 }}>{group.facts.length}</Tag>
+                              </div>
+                              {/* 样品列表 */}
+                              {isTaskExpanded && (
+                                <div style={{ paddingLeft: 28, paddingTop: 2 }}>
+                                  {group.facts.map((f) => (
+                                    <div
+                                      key={f.fact_id}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 8,
+                                        padding: '4px 0',
+                                        cursor: 'pointer',
+                                        borderRadius: 4,
+                                        background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
+                                      }}
+                                      onClick={() => handleToggleFact(f.fact_id)}
+                                    >
+                                      <Checkbox
+                                        checked={selectedFactIds.includes(f.fact_id)}
+                                        onChange={() => handleToggleFact(f.fact_id)}
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

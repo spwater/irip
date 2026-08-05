@@ -94,7 +94,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       4. JWT 密钥；
       5. 通过 composition provider 模块设置全部依赖覆盖。
     """
-    from apps.api.composition import CompositionContext, register_all
+    from apps.api.composition import CompositionContext, lookup_root_dept_id, register_all
 
     # ---- 1. 数据库会话工厂 ----
     db_url = os.getenv("IRIP_DATABASE_URL", "")
@@ -114,12 +114,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     token_secret = os.getenv("IRIP_JWT_SECRET", "irip-dev-secret-2026")
 
     # ---- 5. 依赖覆盖（按领域 provider 模块注册） ----
+    # 查询 root 部门 ID（用于平台管理员/平台监督员 RLS 绕过）
+    root_dept_id = await lookup_root_dept_id(session_factory)
     ctx = CompositionContext(
         app=app,
         session_factory=session_factory,
         s3_repo=s3_repo,
         redis_url=redis_url,
         token_secret=token_secret,
+        root_dept_id=root_dept_id,
     )
     register_all(ctx)
 

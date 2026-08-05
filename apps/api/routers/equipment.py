@@ -229,9 +229,9 @@ async def list_equipment(
     Returns:
         EquipmentListResponse: 分页列表。
     """
-    # 可见性过滤：传 service.department_id 让 repository 用 compute_visible_dept_ids 过滤
-    dept_id = UUID(department_id) if department_id is not None else service.department_id
-    visible_dept_id = service.department_id
+    # RLS 自动处理可见性，不再需要应用层部门过滤
+    dept_id = UUID(department_id) if department_id is not None else None
+    visible_dept_id = None
     result = await service.list(
         department_id=dept_id,
         visible_dept_id=visible_dept_id,

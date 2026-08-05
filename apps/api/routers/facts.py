@@ -78,6 +78,7 @@ class FactResponse(BaseModel):
     status: str
     task_code: str | None = None
     task_name: str | None = None
+    project_name: str | None = None
     department_name: str | None = None
     operator: str | None = None
     run_operator: str | None = None
@@ -182,12 +183,16 @@ async def list_facts(
             from packages.components.flow_runtime import (
                 FlowRun as _FR,
             )
+            from packages.experiment_project.entities import (
+                ExperimentProject as _EP,
+            )
 
             snap_stmt = (
                 sa.select(
                     Fact.id,
                     Fact.task_code,
                     sa.func.coalesce(_FD.display_name, Fact.task_name).label("task_name"),
+                    _EP.display_name.label("project_name"),
                     Fact.department_name,
                     Fact.operator,
                     Fact.run_operator,
@@ -196,23 +201,29 @@ async def list_facts(
                 )
                 .outerjoin(_FR, Fact.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
-                .outerjoin(_FD, _FV.flow_definition_id == _FD.id)
+                # 备选路径：无 flow_run 时通过 task_code 直接 JOIN flow_definition
+                .outerjoin(_FD, sa.or_(
+                    _FV.flow_definition_id == _FD.id,
+                    Fact.task_code == _FD.code,
+                ))
+                .outerjoin(_EP, _FD.project_id == _EP.id)
                 .where(Fact.id.in_(fact_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6], row[7])
+                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
             for item in items:
                 snap = snap_map.get(item.fact_id)
                 if snap:
                     item.task_code = snap[0]
                     item.task_name = snap[1]
-                    item.department_name = snap[2]
-                    item.operator = snap[3]
-                    item.run_operator = snap[4]
-                    item.equipment_name = snap[5]
-                    item.created_at = snap[6].isoformat() if snap[6] else None
+                    item.project_name = snap[2]
+                    item.department_name = snap[3]
+                    item.operator = snap[4]
+                    item.run_operator = snap[5]
+                    item.equipment_name = snap[6]
+                    item.created_at = snap[7].isoformat() if snap[7] else None
 
             # 查每个 task_code 的总数（不受分页限制）
             count_stmt = (

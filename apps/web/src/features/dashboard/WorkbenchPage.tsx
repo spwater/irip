@@ -67,8 +67,27 @@ interface DonutChartProps {
 function DonutChart({ title, data, loading, height = 220 }: DonutChartProps): JSX.Element {
   const chartRef = useRef<HTMLDivElement>(null);
   const [echart, setEchart] = useState<unknown>(null);
+  const [inView, setInView] = useState(false);
+
+  // 仅在进入视口后才初始化 ECharts，避免不可见图表浪费渲染
+  useEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     import('echarts').then((echarts) => {
       if (!cancelled && chartRef.current) {
@@ -77,7 +96,7 @@ function DonutChart({ title, data, loading, height = 220 }: DonutChartProps): JS
       }
     });
     return () => { cancelled = true; };
-  }, [height]);
+  }, [height, inView]);
 
   useEffect(() => {
     if (!echart) return;
@@ -181,8 +200,26 @@ function TrendChart({
 }: TrendChartProps): JSX.Element {
   const chartRef = useRef<HTMLDivElement>(null);
   const [echart, setEchart] = useState<unknown>(null);
+  const [inView, setInView] = useState(false);
 
   useEffect(() => {
+    const el = chartRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '100px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!inView) return;
     let cancelled = false;
     import('echarts').then((echarts) => {
       if (!cancelled && chartRef.current) {
@@ -191,7 +228,7 @@ function TrendChart({
       }
     });
     return () => { cancelled = true; };
-  }, [height]);
+  }, [height, inView]);
 
   useEffect(() => {
     if (!echart) return;
@@ -465,7 +502,7 @@ export function WorkbenchPage(): JSX.Element {
   ];
 
   return (
-    <div className="ocean-page-enter">
+    <div className="ocean-page-enter" style={{ minHeight: 'calc(100vh - 200px)' }}>
       {/* 数据主视觉：深潮 Hero + 摘要指标条（非对称构图） */}
       <div
         style={{

@@ -161,9 +161,6 @@ def _register_handlers(executor: JobExecutor) -> None:
     executor.register_handler("flow_execute", _flow_execute_adapter)
     executor.register_handler("flow_resume", _flow_resume_adapter)
 
-    # Ingestion handler
-    executor.register_handler("ingestion", _adapt(process_ingestion_job))
-
     # Model handler
     executor.register_handler("model_train", _adapt(train_model_job))
     executor.register_handler("model_predict", _adapt(predict_model_job))
@@ -599,7 +596,6 @@ def _do_execute_job(job_id: str) -> str:
 
 # 导入各领域任务，确保 Celery 能发现它们
 from apps.worker.tasks.flows import execute_flow_job, resume_flow_job  # noqa: E402, F401
-from apps.worker.tasks.ingestion import process_ingestion_job  # noqa: E402, F401
 from apps.worker.tasks.models import (  # noqa: E402, F401
     predict_model_job,
     publish_model_job,
