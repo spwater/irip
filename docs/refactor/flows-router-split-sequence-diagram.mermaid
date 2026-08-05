@@ -1,0 +1,128 @@
+sequenceDiagram
+    participant C as Client
+    participant R as Router (flows.py)
+    participant F as FlowRuntimeService
+    participant D as FlowDefinitionService
+    participant RS as FlowRunService
+    participant FFS as FlowFactService
+    participant AS as ArtifactService
+    participant FS as FactService
+    participant DB as Database
+
+    Note over R: 5 个端点的下沉调用流程
+
+    %% ---- update_flow ----
+    rect rgb(240, 248, 255)
+        Note over C,DB: 1. update_flow (PATCH /flows/{flow_id})
+        C->>R: PATCH /api/v1/flows/{flow_id}
+        R->>R: require_permission("flow:manage")
+        R->>F: get_definition(flow_id)
+        F->>D: get_definition(flow_id)
+        D->>DB: SELECT FlowDefinition WHERE id = flow_id
+        DB-->>D: FlowDefinition ORM
+        D-->>F: (definition, version)
+        F-->>R: (definition, version)
+        R->>R: check_management_permission(current_user, definition.department_id, definition.owner_user_id)
+        R->>F: update_definition(flow_id, display_name, ...)
+        F->>D: update_definition(...)
+        D->>DB: SELECT + UPDATE FlowDefinition
+        D-->>F: FlowDefinition
+        F-->>R: FlowDefinition
+        R-->>C: FlowDefinitionResponse
+    end
+
+    %% ---- delete_flow ----
+    rect rgb(255, 245, 238)
+        Note over C,DB: 2. delete_flow (DELETE /flows/{flow_id})
+        C->>R: DELETE /api/v1/flows/{flow_id}
+        R->>R: require_permission("flow:manage")
+        R->>F: get_definition(flow_id)
+        F->>D: get_definition(flow_id)
+        D->>DB: SELECT FlowDefinition
+        D-->>F: (definition, version)
+        F-->>R: (definition, version)
+        R->>R: check_management_permission(...)
+        R->>F: delete_flow(flow_id)
+        F->>D: delete_flow(flow_id)
+        D->>DB: DELETE cascade
+        D-->>F: None
+        F-->>R: None
+        R-->>C: 204 No Content
+    end
+
+    %% ---- list_runs ----
+    rect rgb(240, 255, 240)
+        Note over C,DB: 3. list_runs (GET /flows/{flow_id}/runs)
+        C->>R: GET /api/v1/flows/{flow_id}/runs
+        R->>R: require_permission("flow:read")
+        R->>F: list_runs(flow_id)
+        F->>RS: list_runs(flow_id)
+        RS->>DB: SELECT FlowRun
+        RS-->>F: list[FlowRun]
+        F-->>R: runs
+        R->>F: get_run_fact_ids([r.id for r in runs])
+        F->>RS: get_run_fact_ids(run_ids)
+        RS->>DB: SELECT Fact.id, Fact.flow_run_id WHERE flow_run_id IN (...)
+        RS-->>F: {run_id: fact_id_str}
+        F-->>R: fact_id_map
+        loop for each run
+            R->>F: get_latest_node_execution(run.id)
+            F->>RS: get_latest_node_execution(run_id)
+            RS->>DB: SELECT FlowNodeExecution ORDER BY completed_at DESC LIMIT 1
+            RS-->>F: FlowNodeExecution | None
+            F-->>R: node | None
+        end
+        R-->>C: list[FlowRunResponse]
+    end
+
+    %% ---- persist_run_as_fact ----
+    rect rgb(255, 250, 240)
+        Note over C,DB: 4. persist_run_as_fact (POST /flows/runs/{run_id}/persist-fact)
+        C->>R: POST /api/v1/flows/runs/{run_id}/persist-fact
+        R->>R: require_permission("flow:manage")
+        R->>F: get_run(run_id)
+        F->>RS: get_run(run_id)
+        RS->>DB: SELECT FlowRun + FlowNodeExecution
+        RS-->>F: (run, executions)
+        F-->>R: (run, executions)
+        R->>R: Extract points/series/header from succeeded nodes
+        R->>R: Override with body.custom_data if provided
+        alt source_path starts with "artifact:"
+            R->>F: flow_fact_service.resolve_artifact_filename(artifact_id)
+            F->>FFS: resolve_artifact_filename(artifact_id)
+            FFS->>DB: SELECT Artifact WHERE id = ?
+            FFS-->>R: source_filename
+        else local file
+            R->>R: source_filename = Path(source_path).name
+        end
+        R->>R: Build ArtifactService (S3)
+        R->>AS: put_bytes(raw_data) → pdf_artifact_id
+        R->>AS: put_bytes(export_json) → data_artifact_id
+        R->>F: flow_fact_service.get_task_snapshot(run.flow_version_id, run.input_snapshot)
+        F->>FFS: get_task_snapshot(flow_version_id, input_snapshot)
+        FFS->>DB: SELECT FlowDefinitionVersionORM JOIN FlowDefinition JOIN Equipment JOIN Department
+        FFS-->>R: TaskSnapshot
+        R->>R: Build CreateFactCommand with TaskSnapshot
+        R->>FS: create(command)
+        FS->>DB: INSERT Fact
+        FS-->>R: FactRef
+        R->>F: flow_fact_service.write_fact_data_index(fact_id, points)
+        F->>FFS: write_fact_data_index(fact_id, points)
+        FFS->>DB: INSERT FactDataIndex (batch)
+        FFS-->>R: None
+        R-->>C: PersistFactResponse
+    end
+
+    %% ---- list_facts_by_flow ----
+    rect rgb(248, 240, 255)
+        Note over C,DB: 5. list_facts_by_flow (GET /flows/{flow_id}/facts)
+        C->>R: GET /api/v1/flows/{flow_id}/facts
+        R->>R: require_permission("flow:read")
+        R->>F: list_facts_by_flow(flow_id)
+        F->>RS: list_facts_by_flow(flow_id)
+        RS->>DB: SELECT Fact JOIN FlowRun JOIN FlowDefinitionVersionORM WHERE flow_definition_id = ?
+        RS-->>F: list[Fact]
+        F-->>R: list[Fact]
+        R->>R: Map to FactResponse list
+        R-->>C: FactListResponse
+    end

@@ -40,6 +40,10 @@ from packages.components.flow.entities import (  # noqa: F401
     FlowRun,
 )
 from packages.components.flow.execution_engine import FlowExecutionEngine  # noqa: F401
+from packages.components.flow.flow_fact_service import (  # noqa: F401
+    FlowFactService,
+    TaskSnapshot,
+)
 from packages.components.flow.flows import (
     FlowEdge,
     FlowNode,
@@ -247,6 +251,25 @@ class FlowRuntimeService(ScopedSessionMixin):
         """删除流程定义及其所有版本和运行记录（委托到 FlowDefinitionService）。"""
         await self._definition_svc.delete_flow(flow_id)
 
+    async def update_definition(
+        self,
+        flow_id: UUID,
+        display_name: str,
+        department_id: str | None = None,
+        project_id: str | None = None,
+        operator: str | None = None,
+        experimental_object_code: str | None = None,
+    ) -> FlowDefinition:
+        """更新流程定义（委托到 FlowDefinitionService）。"""
+        return await self._definition_svc.update_definition(
+            flow_id,
+            display_name,
+            department_id,
+            project_id,
+            operator,
+            experimental_object_code,
+        )
+
     # ---- 执行管理（list_runs/create_run/get_run/delete_run 委托 FlowRunService）----
 
     async def list_runs(self, flow_id: UUID) -> list[FlowRun]:
@@ -268,6 +291,27 @@ class FlowRuntimeService(ScopedSessionMixin):
     async def delete_run(self, run_id: UUID) -> None:
         """删除执行记录（委托到 FlowRunService）。"""
         await self._run_svc.delete_run(run_id)
+
+    async def get_run_fact_ids(
+        self,
+        run_ids: list[UUID],
+    ) -> dict[UUID, str]:
+        """批量查询 run 已入库的 fact_id 映射（委托到 FlowRunService）。"""
+        return await self._run_svc.get_run_fact_ids(run_ids)
+
+    async def get_latest_node_execution(
+        self,
+        run_id: UUID,
+    ) -> FlowNodeExecution | None:
+        """查询 run 的最新节点执行记录（委托到 FlowRunService）。"""
+        return await self._run_svc.get_latest_node_execution(run_id)
+
+    async def list_facts_by_flow(
+        self,
+        flow_id: UUID,
+    ) -> list[Any]:
+        """查询某个流程定义产出的所有事实（委托到 FlowRunService）。"""
+        return await self._run_svc.list_facts_by_flow(flow_id)
 
     # ---- 执行编排（委托 FlowExecutionEngine）----
 

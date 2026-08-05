@@ -26,7 +26,7 @@ DI 约定（与 V1 standards 路由一致）：
 """
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -537,20 +537,8 @@ async def delete_flow(
     service: FlowServiceDep,
 ) -> None:
     """删除流程定义及其所有版本和运行记录。"""
-    # 归属检查：所有者+上级模型
-    import sqlalchemy as sa
-
-    from packages.common.errors import AppError
-    from packages.components.flow_runtime import FlowDefinition
-
-    async with service._scoped_session() as session:  # noqa: SLF001
-        stmt = sa.select(FlowDefinition).where(
-            FlowDefinition.id == flow_id,
-        )
-        result = await session.execute(stmt)
-        definition = result.scalar_one_or_none()
-        if definition is None:
-            raise AppError(code="not_found", message="流程定义不存在")
+    # 归属检查：查定义后校验权限
+    definition, _version = await service.get_definition(flow_id)
 
     from apps.api.dependencies.dept_scope import check_management_permission
 
@@ -582,19 +570,8 @@ async def update_flow(
     Returns:
         FlowDefinitionResponse: 更新后的流程定义。
     """
-    import sqlalchemy as sa
-
-    from packages.common.errors import AppError
-    from packages.components.flow_runtime import FlowDefinition
-
-    async with service._scoped_session() as session:  # noqa: SLF001
-        stmt = sa.select(FlowDefinition).where(
-            FlowDefinition.id == flow_id,
-        )
-        result = await session.execute(stmt)
-        definition = result.scalar_one_or_none()
-        if definition is None:
-            raise AppError(code="not_found", message="流程定义不存在")
+    # 查定义用于权限检查
+    definition, _version = await service.get_definition(flow_id)
 
     # 归属检查：所有者+上级模型
     from apps.api.dependencies.dept_scope import check_management_permission
@@ -606,29 +583,14 @@ async def update_flow(
         session_factory=service.session_factory,
     )
 
-    async with service._scoped_session() as session:  # noqa: SLF001
-        stmt = sa.select(FlowDefinition).where(
-            FlowDefinition.id == flow_id,
-        )
-        result = await session.execute(stmt)
-        definition = result.scalar_one_or_none()
-        if definition is None:
-            raise AppError(code="not_found", message="流程定义不存在")
-
-        definition.display_name = body.display_name
-        if body.department_id is not None:
-            from uuid import UUID as UUIDType
-
-            definition.department_id = UUIDType(body.department_id) if body.department_id else None
-        if body.project_id is not None:
-            from uuid import UUID as UUIDType
-
-            definition.project_id = UUIDType(body.project_id) if body.project_id else None
-        if body.operator is not None:
-            definition.operator = body.operator
-        if body.experimental_object_code is not None:
-            definition.experimental_object_code = body.experimental_object_code or None
-        definition.updated_at = datetime.now(UTC)
+    definition = await service.update_definition(
+        flow_id=flow_id,
+        display_name=body.display_name,
+        department_id=body.department_id,
+        project_id=body.project_id,
+        operator=body.operator,
+        experimental_object_code=body.experimental_object_code,
+    )
 
     return _definition_to_response(definition, None)
 
@@ -655,47 +617,24 @@ async def list_runs(
     Returns:
         list[FlowRunResponse]: 运行记录列表（按创建时间降序）。
     """
-    import sqlalchemy as sa
-
-    from packages.components.flow_runtime import FlowNodeExecution
-
     runs = await service.list_runs(flow_id)
-    result = []
+    result: list[FlowRunResponse] = []
     # 批量查哪些 run 已入库（fact.flow_run_id）+ fact_id
     run_ids = [r.id for r in runs]
-    persisted_ids: set = set()
-    fact_id_map: dict = {}
-    if run_ids:
-        from packages.facts.entities import Fact
-
-        async with service._scoped_session() as session:  # noqa: SLF001
-            persist_stmt = sa.select(Fact.id, Fact.flow_run_id).where(Fact.flow_run_id.in_(run_ids))
-            persist_result = await session.execute(persist_stmt)
-            for row in persist_result:
-                fact_id_map[row[1]] = str(row[0])
-            persisted_ids = set(fact_id_map.keys())
+    fact_id_map: dict[UUID, str] = await service.get_run_fact_ids(run_ids) if run_ids else {}
+    persisted_ids: set[UUID] = set(fact_id_map.keys())
 
     for r in runs:
         resp = _run_to_response(r)
         resp.persisted_as_fact = r.id in persisted_ids
         resp.fact_id = fact_id_map.get(r.id)
         # 查询成功节点的 output_summary，或失败节点的 error_message
-        async with service._scoped_session() as session:  # noqa: SLF001
-            node_stmt = (
-                sa.select(FlowNodeExecution)
-                .where(FlowNodeExecution.flow_run_id == r.id)
-                .order_by(FlowNodeExecution.completed_at.desc())
-                .limit(1)
-            )
-            node_result = await session.execute(node_stmt)
-            node = node_result.scalar_one_or_none()
-            if node:
-                if node.status == "succeeded" and node.output_summary:
-                    resp.output_summary = node.output_summary
-                elif node.status == "failed" and node.diagnostics:
-                    resp.error_message = node.diagnostics.get(
-                        "error_message", str(node.diagnostics)
-                    )  # noqa: E501
+        node = await service.get_latest_node_execution(r.id)
+        if node:
+            if node.status == "succeeded" and node.output_summary:
+                resp.output_summary = node.output_summary
+            elif node.status == "failed" and node.diagnostics:
+                resp.error_message = node.diagnostics.get("error_message", str(node.diagnostics))
         result.append(resp)
     return result
 
@@ -941,8 +880,15 @@ async def persist_run_as_fact(
     )
 
     from packages.common.artifacts import ArtifactService
-    from packages.common.ids import new_id
+    from packages.components.flow.flow_fact_service import FlowFactService
     from packages.facts.service import CreateFactCommand, FactService
+
+    # 构建流程事实入库服务（由 Router 直接构造，类似 FactService 模式）
+    flow_fact_svc = FlowFactService(
+        session_factory=service.session_factory,
+        department_id=service.department_id,
+        actor_id=current_user.user_id,
+    )
 
     # 1. 获取执行记录和节点输出
     run, executions = await service.get_run(run_id)
@@ -1010,16 +956,8 @@ async def persist_run_as_fact(
     source_filename: str = ""
     if source_path.startswith("artifact:"):
         try:
-            import sqlalchemy as sa
-
-            from packages.common.artifacts import Artifact
-            from packages.common.database import session_scope as _session_scope
-
             _art_id = UUID(source_path[len("artifact:") :])
-            async with _session_scope(service.session_factory) as sess:
-                _art = await sess.scalar(sa.select(Artifact).where(Artifact.id == _art_id))
-                if _art and _art.filename:
-                    source_filename = _art.filename
+            source_filename = await flow_fact_svc.resolve_artifact_filename(_art_id) or ""
         except Exception:
             pass
     elif source_path:
@@ -1047,11 +985,7 @@ async def persist_run_as_fact(
             try:
                 _candidate_artifact_id = UUID(source_path[len("artifact:") :])
                 # 校验 artifact 是否仍存在
-                async with service._scoped_session() as sess:  # noqa: SLF001
-                    _art_exists = await sess.scalar(
-                        sa.select(Artifact.id).where(Artifact.id == _candidate_artifact_id)
-                    )
-                if _art_exists:
+                if await flow_fact_svc.check_artifact_exists(_candidate_artifact_id):
                     pdf_artifact_id = _candidate_artifact_id
                 # 不存在则 pdf_artifact_id 保持 None，不阻塞写入
             except ValueError:
@@ -1101,68 +1035,10 @@ async def persist_run_as_fact(
         pass
 
     # 6. 查询任务信息快照（入库时保存，避免后续反查 JOIN）
-    task_code: str | None = None
-    task_name: str | None = None
-    department_name: str | None = None
-    operator: str | None = None
-    run_operator: str | None = None
-    equipment_name: str | None = None
-    try:
-        import sqlalchemy as sa
-
-        from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
-        from packages.departments.entities import Department
-
-        async with service._scoped_session() as sess:  # noqa: SLF001
-            fv_stmt = sa.select(FlowDefinitionVersionORM).where(
-                FlowDefinitionVersionORM.id == run.flow_version_id
-            )  # noqa: E501
-            fv = (await sess.execute(fv_stmt)).scalar_one_or_none()
-            if fv:
-                fd_stmt = sa.select(FlowDefinition).where(
-                    FlowDefinition.id == fv.flow_definition_id
-                )  # noqa: E501
-                fd = (await sess.execute(fd_stmt)).scalar_one_or_none()
-                if fd:
-                    task_code = fd.code
-                    task_name = fd.display_name
-                    operator = fd.operator
-                    run_operator = (run.input_snapshot or {}).get("_operator")
-                    # 从 nodes_json 获取 component_name，查 equipment_name
-                    nodes = fv.nodes_json or []
-                    if isinstance(nodes, list) and len(nodes) > 0:
-                        comp_name = (
-                            (nodes[0] or {}).get("component_name")
-                            if isinstance(nodes[0], dict)
-                            else None
-                        )
-                        if comp_name:
-                            from packages.components.registry import Component as _C
-                            from packages.components.registry import ComponentVersion as _CV
-                            from packages.equipment.entities import Equipment as _EQ
-
-                            eq_stmt = (
-                                sa.select(_EQ.display_name)
-                                .select_from(_C)
-                                .join(_CV, _CV.component_id == _C.id)
-                                .outerjoin(_EQ, _CV.equipment_id == sa.cast(_EQ.id, sa.Text))
-                                .where(_C.name == comp_name)
-                                .where(_CV.equipment_id.isnot(None))
-                                .order_by(_CV.version.desc())
-                                .limit(1)
-                            )
-                            eq_row = (await sess.execute(eq_stmt)).first()
-                            if eq_row:
-                                equipment_name = eq_row[0]
-                    if fd.department_id:
-                        dept_stmt = sa.select(Department).where(Department.id == fd.department_id)
-                        dept_record = (await sess.execute(dept_stmt)).scalar_one_or_none()
-                        if dept_record:
-                            department_name = dept_record.display_name
-    except Exception as _e:
-        import logging
-
-        logging.getLogger(__name__).warning("fact ingest snapshot failed: %s", _e)
+    snapshot = await flow_fact_svc.get_task_snapshot(
+        flow_version_id=run.flow_version_id,
+        input_snapshot=run.input_snapshot or {},
+    )
 
     # 7. 创建事实
     fact_service = FactService(
@@ -1173,8 +1049,12 @@ async def persist_run_as_fact(
 
     # 入库命名：统一用 任务名-文件名(去后缀) 作为子项名，任务名作为分组名
     file_stem = Path(source_filename).stem if source_filename else ""
-    subject_id = f"{task_name or ''}-{file_stem}" if file_stem else (task_name or str(run_id))
-    group_name = task_name or ""
+    subject_id = (
+        f"{snapshot.task_name or ''}-{file_stem}"
+        if file_stem
+        else (snapshot.task_name or str(run_id))
+    )
+    group_name = snapshot.task_name or ""
 
     command = CreateFactCommand(
         fact_type="experiment_run",
@@ -1185,12 +1065,12 @@ async def persist_run_as_fact(
         ended_at=run.completed_at,
         idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
         created_by=current_user.user_id,
-        task_code=task_code,
+        task_code=snapshot.task_code,
         task_name=group_name,
-        department_name=department_name,
-        operator=operator,
-        run_operator=run_operator,
-        equipment_name=equipment_name,
+        department_name=snapshot.department_name,
+        operator=snapshot.operator,
+        run_operator=snapshot.run_operator,
+        equipment_name=snapshot.equipment_name,
         flow_run_id=run_id,
         source_artifact_id=pdf_artifact_id or data_artifact_id,
     )
@@ -1198,49 +1078,7 @@ async def persist_run_as_fact(
     ref = await fact_service.create(command)
 
     # 写入通用数据索引（KV 展平），支持跨任务内容搜索
-    try:
-        import sqlalchemy as sa
-
-        from packages.common.ids import new_id
-        from packages.facts.entities import FactDataIndex
-
-        index_rows = []
-        for row_idx, point in enumerate(points):
-            if not isinstance(point, dict):
-                continue
-            key = point.get("name", f"item_{row_idx}")
-            value = point.get("value")
-            # 数值存 value_number，其他存 value_text
-            val_num = None
-            val_text = None
-            if isinstance(value, (int, float)):
-                val_num = float(value)
-                val_text = str(value)
-            elif value is not None:
-                val_text = str(value)
-            else:
-                continue
-            index_rows.append(
-                {
-                    "id": new_id(),
-                    "fact_id": ref.fact_id,
-                    "row_index": row_idx,
-                    "key": str(key),
-                    "value_text": val_text,
-                    "value_number": val_num,
-                }
-            )
-
-        if index_rows:
-            async with service._scoped_session() as sess:  # noqa: SLF001
-                await sess.execute(
-                    sa.insert(FactDataIndex),
-                    index_rows,
-                )
-    except Exception as e:
-        import logging
-
-        logging.getLogger(__name__).warning(f"Failed to write data index: {e}")
+    await flow_fact_svc.write_fact_data_index(ref.fact_id, points)
 
     return PersistFactResponse(
         fact_id=ref.fact_id,
@@ -1264,35 +1102,20 @@ async def list_facts_by_flow(
     通过 flow_run_id 外键反查：flow_definition → flow_definition_version
     → flow_run → fact_revision。
     """
-    import sqlalchemy as sa
+    facts = await service.list_facts_by_flow(flow_id)
 
-    from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
-    from packages.facts.entities import Fact
-
-    async with service._scoped_session() as session:  # noqa: SLF001
-        # flow_definition → flow_definition_version → flow_run → fact
-        stmt = (
-            sa.select(Fact)
-            .join(FlowRun, Fact.flow_run_id == FlowRun.id)
-            .join(FlowDefinitionVersionORM, FlowRun.flow_version_id == FlowDefinitionVersionORM.id)
-            .where(FlowDefinitionVersionORM.flow_definition_id == flow_id)
-            .order_by(Fact.created_at.desc())
+    # 构造 FactResponse 列表
+    items = [
+        FactResponse(
+            fact_id=str(f.id),
+            fact_type=f.fact_type,
+            subject_id=f.subject_id,
+            status=f.status,
+            task_code=f.task_code,
+            task_name=f.task_name,
+            department_name=f.department_name,
         )
-        result = await session.execute(stmt)
-        facts = result.scalars().all()
+        for f in facts
+    ]
 
-        # 构造 FactResponse 列表
-        items = [
-            FactResponse(
-                fact_id=str(f.id),
-                fact_type=f.fact_type,
-                subject_id=f.subject_id,
-                status=f.status,
-                task_code=f.task_code,
-                task_name=f.task_name,
-                department_name=f.department_name,
-            )
-            for f in facts
-        ]
-
-        return FactListResponse(items=items, next_cursor=None)
+    return FactListResponse(items=items, next_cursor=None)

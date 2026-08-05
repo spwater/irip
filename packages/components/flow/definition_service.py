@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -516,3 +516,57 @@ class FlowDefinitionService(ScopedSessionMixin):
                 )
             )
             await session.flush()
+
+    async def update_definition(
+        self,
+        flow_id: UUID,
+        display_name: str,
+        department_id: str | None = None,
+        project_id: str | None = None,
+        operator: str | None = None,
+        experimental_object_code: str | None = None,
+    ) -> FlowDefinition:
+        """更新流程定义（display_name + 可选字段）。
+
+        可选更新 department_id/project_id/operator/experimental_object_code。
+
+        Args:
+            flow_id: 流程定义 ID。
+            display_name: 新显示名称。
+            department_id: 新部门 ID（字符串 UUID，空串清空为 None）。
+            project_id: 新项目 ID（字符串 UUID，空串清空为 None）。
+            operator: 新执行人（None 不修改）。
+            experimental_object_code: 新实验对象编码（空串清空为 None）。
+
+        Returns:
+            FlowDefinition: 更新后的定义。
+
+        Raises:
+            AppError: code="not_found"，当定义不存在。
+        """
+        async with self._scoped_session() as session:
+            definition: FlowDefinition | None = await session.scalar(
+                sa.select(FlowDefinition).where(
+                    FlowDefinition.id == flow_id,
+                )
+            )
+            if definition is None:
+                raise AppError(
+                    code="not_found",
+                    message=f"流程定义不存在: {flow_id}",
+                    retryable=False,
+                    fields={"flow_id": str(flow_id)},
+                )
+
+            definition.display_name = display_name
+            if department_id is not None:
+                definition.department_id = UUID(department_id) if department_id else None
+            if project_id is not None:
+                definition.project_id = UUID(project_id) if project_id else None
+            if operator is not None:
+                definition.operator = operator
+            if experimental_object_code is not None:
+                definition.experimental_object_code = experimental_object_code or None
+            definition.updated_at = datetime.now(UTC)
+            await session.flush()
+            return definition

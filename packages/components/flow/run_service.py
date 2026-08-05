@@ -26,6 +26,7 @@ from packages.components.flow.entities import (
     FlowNodeExecution,
     FlowRun,
 )
+from packages.facts.entities import Fact
 
 
 class FlowRunService(ScopedSessionMixin):
@@ -217,3 +218,76 @@ class FlowRunService(ScopedSessionMixin):
 
                 await session.execute(sa.delete(Job).where(Job.id == job_id))
             await session.flush()
+
+    async def get_run_fact_ids(
+        self,
+        run_ids: list[UUID],
+    ) -> dict[UUID, str]:
+        """批量查询 run 已入库的 fact_id 映射。
+
+        Args:
+            run_ids: 运行记录 ID 列表。
+
+        Returns:
+            dict[UUID, str]: {run_id: fact_id_str} 映射（仅包含已入库的 run）。
+        """
+        if not run_ids:
+            return {}
+        async with self._scoped_session() as session:
+            persist_stmt = sa.select(Fact.id, Fact.flow_run_id).where(Fact.flow_run_id.in_(run_ids))
+            persist_result = await session.execute(persist_stmt)
+            fact_id_map: dict[UUID, str] = {}
+            for row in persist_result:
+                fact_id_map[row[1]] = str(row[0])
+            return fact_id_map
+
+    async def get_latest_node_execution(
+        self,
+        run_id: UUID,
+    ) -> FlowNodeExecution | None:
+        """查询 run 的最新节点执行记录（按 completed_at 降序取第一条）。
+
+        Args:
+            run_id: 运行记录 ID。
+
+        Returns:
+            FlowNodeExecution | None: 最新节点执行记录，无记录时返回 None。
+        """
+        async with self._scoped_session() as session:
+            node_stmt = (
+                sa.select(FlowNodeExecution)
+                .where(FlowNodeExecution.flow_run_id == run_id)
+                .order_by(FlowNodeExecution.completed_at.desc())
+                .limit(1)
+            )
+            node_result = await session.execute(node_stmt)
+            return node_result.scalar_one_or_none()
+
+    async def list_facts_by_flow(
+        self,
+        flow_id: UUID,
+    ) -> list[Fact]:
+        """查询某个流程定义产出的所有事实。
+
+        通过 flow_definition → flow_definition_version → flow_run → fact
+        四表 JOIN 反查。
+
+        Args:
+            flow_id: 流程定义 ID。
+
+        Returns:
+            list[Fact]: 事实列表（按 created_at 降序）。
+        """
+        async with self._scoped_session() as session:
+            stmt = (
+                sa.select(Fact)
+                .join(FlowRun, Fact.flow_run_id == FlowRun.id)
+                .join(
+                    FlowDefinitionVersionORM,
+                    FlowRun.flow_version_id == FlowDefinitionVersionORM.id,
+                )
+                .where(FlowDefinitionVersionORM.flow_definition_id == flow_id)
+                .order_by(Fact.created_at.desc())
+            )
+            result = await session.execute(stmt)
+            return list(result.scalars().all())

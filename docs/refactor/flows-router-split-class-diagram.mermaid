@@ -1,0 +1,84 @@
+classDiagram
+    class FlowRuntimeService {
+        -FlowDefinitionService _definition_svc
+        -FlowRunService _run_svc
+        -FlowExecutionEngine _execution_engine
+        -FlowFactService _fact_svc
+        +async_sessionmaker session_factory
+        +UUID department_id
+        +UUID actor_id
+        +FlowFactService flow_fact_service
+        +update_definition(flow_id, display_name, department_id, project_id, operator, experimental_object_code) FlowDefinition
+        +get_run_fact_ids(run_ids) dict~UUID, str~
+        +get_latest_node_execution(run_id) FlowNodeExecution
+        +list_facts_by_flow(flow_id) list~Fact~
+    }
+
+    class FlowDefinitionService {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        -UUID _actor_id
+        -ComponentRegistryService _registry
+        -Clock _clock
+        +create_definition() FlowDefinition
+        +publish_version() FlowDefinitionVersionORM
+        +list_definitions() list
+        +get_definition(flow_id) tuple
+        +deprecate_definition(flow_id) FlowDefinition
+        +restore_definition(flow_id) FlowDefinition
+        +delete_flow(flow_id) None
+        +update_definition(flow_id, display_name, department_id, project_id, operator, experimental_object_code) FlowDefinition
+    }
+
+    class FlowRunService {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        -UUID _actor_id
+        -Any _job_service
+        -Clock _clock
+        -Any _definition_svc
+        +list_runs(flow_id) list~FlowRun~
+        +create_run(flow_version_id, inputs) FlowRun
+        +get_run(run_id) tuple
+        +delete_run(run_id) None
+        +get_run_fact_ids(run_ids) dict~UUID, str~
+        +get_latest_node_execution(run_id) FlowNodeExecution
+        +list_facts_by_flow(flow_id) list~Fact~
+    }
+
+    class FlowExecutionEngine {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        -UUID _actor_id
+        -ComponentRegistryService _registry
+        -ComponentRunner _runner
+        -Clock _clock
+        +execute(run_id) None
+        +resume(run_id) None
+        +cancel(run_id) FlowRun
+        +retry_node(run_id, node_id) FlowNodeExecution
+    }
+
+    class FlowFactService {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        +resolve_artifact_filename(artifact_id) str
+        +check_artifact_exists(artifact_id) bool
+        +get_task_snapshot(flow_version_id, input_snapshot) TaskSnapshot
+        +write_fact_data_index(fact_id, points) None
+    }
+
+    class TaskSnapshot {
+        +str task_code
+        +str task_name
+        +str department_name
+        +str operator
+        +str run_operator
+        +str equipment_name
+    }
+
+    FlowRuntimeService --> FlowDefinitionService : delegates
+    FlowRuntimeService --> FlowRunService : delegates
+    FlowRuntimeService --> FlowExecutionEngine : delegates
+    FlowRuntimeService --> FlowFactService : delegates
+    FlowFactService ..> TaskSnapshot : returns
