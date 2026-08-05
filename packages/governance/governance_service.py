@@ -697,13 +697,30 @@ class GovernanceService(ScopedSessionMixin):
             root_id = str(root_dept.id)
             root_name = root_dept.display_name
 
-            # 统计各表行数
+            # 获取 root 及其所有子孙部门 ID（管理员视角应统计全组织数据）
+            dept_ids_result = await session.execute(
+                sa.text(
+                    "WITH RECURSIVE dept_tree AS ("
+                    "  SELECT id FROM department WHERE id = :root_id"
+                    "  UNION ALL"
+                    "  SELECT d.id FROM department d"
+                    "  JOIN dept_tree t ON d.parent_id = t.id"
+                    ") SELECT id FROM dept_tree"
+                ),
+                {"root_id": root_id},
+            )
+            visible_dept_ids = [str(row[0]) for row in dept_ids_result]
+
+            # 统计各表行数（root 及所有子孙部门）
             stats: list[dict[str, Any]] = []
             for table_name, display_name in _ROOT_STATS_TABLES.items():
                 count_stmt = sa.text(
-                    f"SELECT COUNT(*) FROM {table_name} WHERE department_id = :root_id"
+                    f"SELECT COUNT(*) FROM {table_name} WHERE department_id = ANY(:dept_ids)"
                 )
-                count_result = await session.execute(count_stmt, {"root_id": root_id})
+                count_result = await session.execute(
+                    count_stmt,
+                    {"dept_ids": visible_dept_ids},
+                )
                 count = count_result.scalar() or 0
                 stats.append(
                     {
