@@ -23,8 +23,7 @@ import pytest
 # 迁移 0061 已被压缩为 0001_squashed_baseline.py，
 # 以下测试类引用的旧迁移文件已删除，全部 skip。
 pytestmark = pytest.mark.skip(
-    reason="迁移 0061 已 squashed 为 0001_squashed_baseline.py，"
-    "旧迁移文件已删除（M-13 squashing）"
+    reason="迁移 0061 已 squashed 为 0001_squashed_baseline.py，旧迁移文件已删除（M-13 squashing）"
 )
 
 MIGRATIONS_DIR = Path(__file__).parents[2] / "migrations" / "versions"
@@ -184,8 +183,8 @@ class TestMigration0061Downgrade:
         """downgrade 删除字段的顺序与 upgrade 添加顺序相反。"""
         content = _read_file_text("0061")
         # downgrade 中 backup_method 应先于 backup_timestamp 删除
-        backup_method_pos = content.rfind("drop_column(\"backup_record\", \"backup_method\"")
-        backup_timestamp_pos = content.rfind("drop_column(\"backup_record\", \"backup_timestamp\"")
+        backup_method_pos = content.rfind('drop_column("backup_record", "backup_method"')
+        backup_timestamp_pos = content.rfind('drop_column("backup_record", "backup_timestamp"')
         if backup_method_pos > 0 and backup_timestamp_pos > 0:
             assert backup_method_pos < backup_timestamp_pos, (
                 "downgrade 应先删 backup_method 再删 backup_timestamp"

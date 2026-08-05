@@ -4,8 +4,9 @@
 此模块在 celery_app.py 的 execute_job 任务中被调用。
 
 技术设计文档 F-04 S8.5：所有异步任务只通过 Outbox->Dispatcher->Celery 一条通道。
-此处注册全部 handler（flow, ingestion, model, backup, restore, audit_export），
+此处注册全部 handler（flow, ingestion, model, backup, audit_export），
 确保 JobExecutor 能处理所有已注册的作业类型。
+Restore 已迁移至 dangerous-ops profile 的 restore 服务（需 Docker socket + superuser）。
 
 C-02 改动：
 - Worker 侧二次校验 kind 和权限；
@@ -166,9 +167,9 @@ def _register_handlers(executor: JobExecutor) -> None:
     executor.register_handler("model_predict", _adapt(predict_model_job))
     executor.register_handler("model_publish", _adapt(publish_model_job))
 
-    # Backup / Restore / Audit Export handler（F-04 S8.5）
+    # Backup / Audit Export handler（F-04 S8.5）
+    # Restore 已迁移至 dangerous-ops profile 的 restore 服务（需 Docker socket + superuser）
     executor.register_handler("backup", _backup_handler)
-    executor.register_handler("restore", _restore_handler)
     executor.register_handler("audit_export", _audit_export_handler)
 
 
@@ -250,6 +251,7 @@ async def _backup_handler(job: object) -> dict:
             if backup_timestamp_str:
                 try:
                     from datetime import datetime
+
                     backup_timestamp = datetime.fromisoformat(backup_timestamp_str)
                 except (ValueError, TypeError):
                     pass
@@ -380,6 +382,7 @@ async def _restore_handler(job: object) -> dict:
             if pre_backup_ts_str:
                 try:
                     from datetime import datetime as _dt
+
                     pre_backup_timestamp = _dt.fromisoformat(pre_backup_ts_str)
                 except (ValueError, TypeError):
                     pass
@@ -595,18 +598,16 @@ def _do_execute_job(job_id: str) -> str:
 
 
 # 导入各领域任务，确保 Celery 能发现它们
+# ---- Beat 定时任务辅助函数（阶段2 多租户隔离键升级）----
+# 原 tasks.py 被 tasks/ 包目录遮蔽，Beat 函数合并到此处避免死代码。
+import logging as _logging  # noqa: E402
+
 from apps.worker.tasks.flows import execute_flow_job, resume_flow_job  # noqa: E402, F401
 from apps.worker.tasks.models import (  # noqa: E402, F401
     predict_model_job,
     publish_model_job,
     train_model_job,
 )
-
-
-# ---- Beat 定时任务辅助函数（阶段2 多租户隔离键升级）----
-# 原 tasks.py 被 tasks/ 包目录遮蔽，Beat 函数合并到此处避免死代码。
-
-import logging as _logging
 
 _beat_logger = _logging.getLogger(__name__)
 

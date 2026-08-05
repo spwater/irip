@@ -17,6 +17,8 @@
 import ipaddress
 import os
 import socket
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
@@ -211,6 +213,44 @@ class SafeHTTPClient:
             ResponseTooLargeError: 当响应过大时。
         """
         return await self._request("POST", url, **kwargs)
+
+    @asynccontextmanager
+    async def stream(self, method: str, url: str, **kwargs: Any) -> AsyncIterator[httpx.Response]:
+        """发起流式 HTTP 请求（SSRF-safe），逐块读取响应。
+
+        与 ``post()`` / ``get()`` 不同，此方法不缓冲整个响应体，
+        而是返回未消费的流式 Response，供调用方逐行/逐块迭代
+        （如 SSE ``data:`` 行解析）。
+
+        安全措施：与 ``_request`` 相同的 SSRF 校验（协议检查 + DNS 解析
+        + 私网阻断），但不做响应体大小限制（流式响应大小不可预知）。
+
+        Args:
+            method: HTTP 方法（GET/POST 等）。
+            url: 目标 URL。
+            **kwargs: 传递给 httpx 的额外参数（json、headers 等）。
+
+        Yields:
+            httpx.Response: 未消费的流式响应，调用方可使用
+            ``aiter_lines()`` / ``aiter_bytes()`` 迭代。
+
+        Raises:
+            SSRFBlockedError: 当目标地址不安全（私网地址）时。
+            ValueError: 当 URL 格式无效或协议不支持时。
+        """
+        parsed = httpx.URL(url)
+
+        # 1. 校验协议
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme} (only http/https allowed)")
+
+        # 2. DNS 解析 -> 校验 IP（H-05: SSRF 防护）
+        if not self._allow_private:
+            _resolve_and_validate(str(parsed.host), parsed.port)
+
+        # 3. 使用底层 httpx 客户端打开流式连接
+        async with self._client.stream(method, url, **kwargs) as response:
+            yield response
 
     async def put(self, url: str, **kwargs: Any) -> httpx.Response:
         """发起 PUT 请求（SSRF-safe）。

@@ -25,7 +25,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.common.errors import AppError
 from packages.equipment.service import EquipmentService
 
 #: 路由实例。

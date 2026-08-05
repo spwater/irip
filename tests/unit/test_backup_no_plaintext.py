@@ -22,13 +22,13 @@ import pytest
 # 这些测试是 v1 格式的遗留测试。v2 有独立测试覆盖（test_backup_manifest_v2.py 等）。
 pytestmark = pytest.mark.skip(reason="PITR v2 格式变更，v1 tar 格式测试已过时")
 
-from deployments.compose.backup import (
+from deployments.compose.backup import (  # noqa: E402
     BACKUP_TAR_AGE_FILENAME,
     BACKUP_TAR_FILENAME,
     BackupConfig,
     BackupService,
 )
-from deployments.compose.backup_manifest import (
+from deployments.compose.backup_manifest import (  # noqa: E402
     DATABASE_DUMP_FILENAME,
     MANIFEST_FILENAME,
     OBJECTS_DIRNAME,

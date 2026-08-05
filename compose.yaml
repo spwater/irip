@@ -94,7 +94,8 @@ services:
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -133,7 +134,10 @@ services:
     <<: *security-base
     command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 备份/恢复 subprocess 专用 superuser 连接串（pg_basebackup/pg_dump 需全量数据，RLS 会过滤 irip_app）
+      IRIP_DATABASE_ADMIN_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -158,8 +162,6 @@ services:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
       # PITR: WAL 归档目录（备份/恢复需访问）
       - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
-      # PITR: Docker socket（恢复需控制 PG 容器 stop/start）
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
         condition: service_healthy
@@ -180,7 +182,8 @@ services:
     <<: *security-base
     command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -274,7 +277,7 @@ services:
       IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
-      IRIP_APPLICATION_VERSION: ${IRIP_APPLICATION_VERSION:-0.1.0}
+      IRIP_APPLICATION_VERSION: ${IRIP_APPLICATION_VERSION:-0.2.0}
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
       IRIP_BACKUP_AGE_RECIPIENT: ${IRIP_BACKUP_AGE_RECIPIENT:-}
       # PITR + mc mirror 相关环境变量

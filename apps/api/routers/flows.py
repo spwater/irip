@@ -540,7 +540,6 @@ async def delete_flow(
     # 归属检查：所有者+上级模型
     import sqlalchemy as sa
 
-    from packages.common.database import session_scope
     from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
@@ -585,7 +584,6 @@ async def update_flow(
     """
     import sqlalchemy as sa
 
-    from packages.common.database import session_scope
     from packages.common.errors import AppError
     from packages.components.flow_runtime import FlowDefinition
 
@@ -659,7 +657,6 @@ async def list_runs(
     """
     import sqlalchemy as sa
 
-    from packages.common.database import session_scope
     from packages.components.flow_runtime import FlowNodeExecution
 
     runs = await service.list_runs(flow_id)
@@ -672,10 +669,7 @@ async def list_runs(
         from packages.facts.entities import Fact
 
         async with service._scoped_session() as session:  # noqa: SLF001
-            persist_stmt = (
-                sa.select(Fact.id, Fact.flow_run_id)
-                .where(Fact.flow_run_id.in_(run_ids))
-            )
+            persist_stmt = sa.select(Fact.id, Fact.flow_run_id).where(Fact.flow_run_id.in_(run_ids))
             persist_result = await session.execute(persist_stmt)
             for row in persist_result:
                 fact_id_map[row[1]] = str(row[0])
@@ -935,10 +929,10 @@ async def persist_run_as_fact(
     创建 Fact 记录，每个 point 作为一条 raw observation。
     如果执行时传了 path 且是 PDF 文件，同时上传 PDF 到 artifact 存储。
     """
-    from pathlib import Path
-
     # DEBUG: 打印请求体
     import logging as _dbg_log
+    from pathlib import Path
+
     _dbg_log.getLogger(__name__).warning(
         "DEBUG persist-fact body: object_id=%s, custom_data is None=%s, custom_data keys=%s",
         body.object_id,
@@ -984,10 +978,12 @@ async def persist_run_as_fact(
 
     # 2a. 如果传入了编辑后的自定义数据，覆盖提取的数据
     import logging as _logging
+
     _logging.getLogger(__name__).info(
         "persist_fact custom_data=%s, points=%d, series=%d",
         body.custom_data is not None,
-        len(points), len(series),
+        len(points),
+        len(series),
     )
     if body.custom_data:
         _logging.getLogger(__name__).info(
@@ -1049,7 +1045,7 @@ async def persist_run_as_fact(
         # 但 artifact 可能已被删除（用户清理原始数据后重新入库），需校验存在性
         if source_path.startswith("artifact:"):
             try:
-                _candidate_artifact_id = UUID(source_path[len("artifact:"):])
+                _candidate_artifact_id = UUID(source_path[len("artifact:") :])
                 # 校验 artifact 是否仍存在
                 async with service._scoped_session() as sess:  # noqa: SLF001
                     _art_exists = await sess.scalar(
@@ -1074,7 +1070,9 @@ async def persist_run_as_fact(
                     ".jpeg": "image/jpeg",
                     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     ".xls": "application/vnd.ms-excel",
-                    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    ".docx": (
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ),
                     ".doc": "application/msword",
                     ".txt": "text/plain",
                     ".csv": "text/csv",
@@ -1112,7 +1110,6 @@ async def persist_run_as_fact(
     try:
         import sqlalchemy as sa
 
-        from packages.common.database import session_scope
         from packages.components.flow_runtime import FlowDefinition, FlowDefinitionVersionORM
         from packages.departments.entities import Department
 
@@ -1204,7 +1201,6 @@ async def persist_run_as_fact(
     try:
         import sqlalchemy as sa
 
-        from packages.common.database import session_scope
         from packages.common.ids import new_id
         from packages.facts.entities import FactDataIndex
 
@@ -1270,7 +1266,6 @@ async def list_facts_by_flow(
     """
     import sqlalchemy as sa
 
-    from packages.common.database import session_scope
     from packages.components.flow_runtime import FlowDefinitionVersionORM, FlowRun
     from packages.facts.entities import Fact
 

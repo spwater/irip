@@ -20,7 +20,6 @@ from packages.common.ids import new_id
 from packages.common.pagination import MAX_PAGE_SIZE
 from packages.standards.objects import (
     IndustrialObject,
-    RelationType,
 )
 
 

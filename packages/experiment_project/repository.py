@@ -200,7 +200,8 @@ class ExperimentProjectRepository:
         session: AsyncSession,
         project_id: UUID,
     ) -> int:
-        """统计项目下的数据数（fact 通过 flow_run → flow_definition_version → flow_definition 关联到 project）。
+        """统计项目下的数据数（fact 通过 flow_run →
+        flow_definition_version → flow_definition 关联到 project）。
 
         Args:
             session: 异步会话。
@@ -294,10 +295,7 @@ class ExperimentProjectRepository:
         ).all()
         fact_map: dict[UUID, int] = {row[0]: row[1] for row in fact_rows}
 
-        return {
-            pid: (task_map.get(pid, 0), fact_map.get(pid, 0))
-            for pid in project_ids
-        }
+        return {pid: (task_map.get(pid, 0), fact_map.get(pid, 0)) for pid in project_ids}
 
     @staticmethod
     async def batch_owner_names(
@@ -320,9 +318,7 @@ class ExperimentProjectRepository:
 
         rows = (
             await session.execute(
-                sa.select(AppUser.id, AppUser.display_name).where(
-                    AppUser.id.in_(user_ids)
-                )
+                sa.select(AppUser.id, AppUser.display_name).where(AppUser.id.in_(user_ids))
             )
         ).all()
         return {row[0]: row[1] for row in rows}

@@ -31,18 +31,16 @@ if _PROJECT_ROOT not in sys.path:
 
 def test_imports():
     """验证模块导入、注册表只有 2 个插件、种子数据只有 2 个 ingestion 工具。"""
-    from packages.plugins.converters.common.text_extractor import extract_text
-    from packages.plugins.converters.common.llm_utils import call_llm_for_structured
-    from packages.plugins.converters.llm_converter.converter import LlmConverter, LlmConverterError
-    from packages.plugins.converters.xrd_converter.converter import XrdConverter
     from packages.plugins import registry as plugin_registry
 
     # 注册表只有 2 个插件
-    assert sorted(plugin_registry.list_plugins()) == ["llm_converter", "xrd_converter"], \
+    assert sorted(plugin_registry.list_plugins()) == ["llm_converter", "xrd_converter"], (
         f"注册表插件不符: {sorted(plugin_registry.list_plugins())}"
+    )
 
     # 种子数据只有 2 个 ingestion 工具
     from packages.ai.tools import PLUGIN_TOOLS
+
     ingestion_tools = [t for t in PLUGIN_TOOLS if t.category == "ingestion"]
     assert len(ingestion_tools) == 2, f"ingestion 工具数应为 2，实际 {len(ingestion_tools)}"
     assert {t.name for t in ingestion_tools} == {"xrd_converter", "llm_converter"}
@@ -56,6 +54,7 @@ def test_imports():
 def test_text_extractor_txt():
     """测试文本文件提取。"""
     from pathlib import Path
+
     from packages.plugins.converters.common.text_extractor import extract_text
 
     tmp_path = None
@@ -74,6 +73,7 @@ def test_text_extractor_txt():
 def test_text_extractor_unknown_format():
     """测试不支持的格式 → 直接读取文本。"""
     from pathlib import Path
+
     from packages.plugins.converters.common.text_extractor import extract_text
 
     tmp_path = None
@@ -101,7 +101,7 @@ def test_llm_utils_no_prompt():
 
     try:
         asyncio.run(call_llm_for_structured("content", "", None))
-        assert False, "应抛出 AppError"
+        raise AssertionError("应抛出 AppError")
     except AppError as e:
         assert "prompt" in e.message.lower() or "缺少" in e.message
 
@@ -113,7 +113,7 @@ def test_llm_utils_no_ai_config():
 
     try:
         asyncio.run(call_llm_for_structured("content", "test prompt", None))
-        assert False, "应抛出 AppError"
+        raise AssertionError("应抛出 AppError")
     except AppError as e:
         assert "配置" in e.message or "configured" in e.message.lower()
 
@@ -122,9 +122,9 @@ def test_llm_utils_empty_content():
     """空内容应返回空结果（不调 LLM）。"""
     from packages.plugins.converters.common.llm_utils import call_llm_for_structured
 
-    result = asyncio.run(call_llm_for_structured(
-        "", "prompt", {"base_url": "x", "api_key": "y", "model_name": "z"}
-    ))
+    result = asyncio.run(
+        call_llm_for_structured("", "prompt", {"base_url": "x", "api_key": "y", "model_name": "z"})
+    )
     assert result == {"metadata": {}, "points": [], "series": []}
 
 
@@ -136,6 +136,7 @@ def test_llm_utils_empty_content():
 def test_exception_hierarchy():
     """验证 llm_converter 异常体系。"""
     from packages.plugins.converters.llm_converter.converter import LlmConverterError
+
     assert issubclass(LlmConverterError, Exception)
 
 
@@ -165,6 +166,7 @@ def _run_all_tests():
         except Exception as exc:
             print(f"  FAIL  {name}: {exc}")
             import traceback
+
             traceback.print_exc()
             failed += 1
 

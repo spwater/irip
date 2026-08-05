@@ -13,7 +13,6 @@ provenance_setup 仅创建工业对象，CreateFactCommand 不再需要 template
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -363,7 +362,7 @@ class TestProvenanceGraph:
             subject_id="GRAPH-FACT-001",
             value="42.5",
         )
-        fact_ref = await fact_service.create(command)
+        await fact_service.create(command)
 
         # 2. 冻结证据集
         create_result = await evidence_service.create_set("Graph Test Set")
@@ -411,8 +410,6 @@ class TestProvenanceGraph:
 
         # 验证 derivation_run → fact 边
         dr_to_fact_edges = [
-            e
-            for e in graph.edges
-            if e.source_type == "derivation_run" and e.target_type == "fact"
+            e for e in graph.edges if e.source_type == "derivation_run" and e.target_type == "fact"
         ]
         assert len(dr_to_fact_edges) >= 1

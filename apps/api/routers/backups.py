@@ -305,7 +305,7 @@ async def create_backup(
         if current_user.department_id is not None
         else current_user.user_id
     )
-    backup_service: BackupRecordService = BackupRecordService(session_factory)
+    BackupRecordService(session_factory)
 
     job_id: UUID = new_id()
     now: datetime = datetime.now(UTC)
@@ -397,34 +397,49 @@ async def get_backup_stats(
         BackupStatsResponse: 备份汇总统计。
     """
     async with session_factory() as session:
-        total_count: int = await session.scalar(
-            sa.select(sa.func.count()).select_from(BackupRecord)
-        ) or 0
-        total_size: int = await session.scalar(
-            sa.select(sa.func.coalesce(sa.func.sum(BackupRecord.file_size), 0)).select_from(
-                BackupRecord
+        total_count: int = (
+            await session.scalar(sa.select(sa.func.count()).select_from(BackupRecord)) or 0
+        )
+        total_size: int = (
+            await session.scalar(
+                sa.select(sa.func.coalesce(sa.func.sum(BackupRecord.file_size), 0)).select_from(
+                    BackupRecord
+                )
             )
-        ) or 0
-        daily_count: int = await session.scalar(
-            sa.select(sa.func.count()).select_from(BackupRecord).where(
-                BackupRecord.backup_type == BackupType.DAILY.value
+            or 0
+        )
+        daily_count: int = (
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(BackupRecord)
+                .where(BackupRecord.backup_type == BackupType.DAILY.value)
             )
-        ) or 0
-        milestone_count: int = await session.scalar(
-            sa.select(sa.func.count()).select_from(BackupRecord).where(
-                BackupRecord.backup_type == BackupType.MILESTONE.value
+            or 0
+        )
+        milestone_count: int = (
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(BackupRecord)
+                .where(BackupRecord.backup_type == BackupType.MILESTONE.value)
             )
-        ) or 0
-        succeeded_count: int = await session.scalar(
-            sa.select(sa.func.count()).select_from(BackupRecord).where(
-                BackupRecord.status == BackupStatus.SUCCEEDED.value
+            or 0
+        )
+        succeeded_count: int = (
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(BackupRecord)
+                .where(BackupRecord.status == BackupStatus.SUCCEEDED.value)
             )
-        ) or 0
-        failed_count: int = await session.scalar(
-            sa.select(sa.func.count()).select_from(BackupRecord).where(
-                BackupRecord.status == BackupStatus.FAILED.value
+            or 0
+        )
+        failed_count: int = (
+            await session.scalar(
+                sa.select(sa.func.count())
+                .select_from(BackupRecord)
+                .where(BackupRecord.status == BackupStatus.FAILED.value)
             )
-        ) or 0
+            or 0
+        )
 
     return BackupStatsResponse(
         total_count=total_count,
@@ -646,7 +661,7 @@ async def delete_backup(
 
     # 删除文件系统目录
     backup_dir: Path = Path(record.file_path)
-    if backup_dir.exists():
+    if backup_dir.exists():  # noqa: ASYNC240
         shutil.rmtree(backup_dir, ignore_errors=True)
 
     # 删除数据库记录

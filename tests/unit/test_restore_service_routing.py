@@ -20,16 +20,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from deployments.compose.backup_manifest import (
+    BASE_TAR_GZ_FILENAME,
     MINIO_MIRROR_DIRNAME,
     PG_BASEBACKUP_DIRNAME,
-    BASE_TAR_GZ_FILENAME,
     PG_WAL_TAR_GZ_FILENAME,
-    BackupManifest,
     compute_manifest_v2,
     save_manifest,
 )
 from deployments.compose.restore import RestoreConfig, RestoreService, run_restore
-
 
 # ============================================================
 # RestoreConfig 新增字段
@@ -276,7 +274,9 @@ class TestRestoreV2Order:
         with patch.object(service, "_mc_restore_minio", side_effect=track_mc_restore):
             with patch.object(service, "_pitr_restore", side_effect=track_pitr_restore):
                 with patch.object(service, "_run_smoke_queries", side_effect=fake_smoke):
-                    with patch.object(service, "_validate_referential_integrity", side_effect=fake_referential):
+                    with patch.object(
+                        service, "_validate_referential_integrity", side_effect=fake_referential
+                    ):
                         with patch.object(service._validator, "validate", return_value=True):
                             await service.restore()
 
@@ -318,7 +318,9 @@ class TestRestoreV2Order:
         with patch.object(service, "_mc_restore_minio"):
             with patch.object(service, "_pitr_restore", side_effect=track_pitr):
                 with patch.object(service, "_run_smoke_queries", side_effect=fake_smoke):
-                    with patch.object(service, "_validate_referential_integrity", side_effect=fake_referential):
+                    with patch.object(
+                        service, "_validate_referential_integrity", side_effect=fake_referential
+                    ):
                         with patch.object(service._validator, "validate", return_value=True):
                             await service.restore()
 
@@ -355,7 +357,9 @@ class TestRestoreV2Order:
         with patch.object(service, "_mc_restore_minio"):
             with patch.object(service, "_pitr_restore", side_effect=track_pitr):
                 with patch.object(service, "_run_smoke_queries", side_effect=fake_smoke):
-                    with patch.object(service, "_validate_referential_integrity", side_effect=fake_referential):
+                    with patch.object(
+                        service, "_validate_referential_integrity", side_effect=fake_referential
+                    ):
                         with patch.object(service._validator, "validate", return_value=True):
                             await service.restore()
 
@@ -480,14 +484,17 @@ class TestRunRestorePassesRecoveryTargetTime:
 
         target_time = "2026-08-16T10:30:00+00:00"
 
-        with patch.dict(os.environ, {
-            "IRIP_DATABASE_URL": "postgresql+psycopg://irip:pass@localhost:5432/irip",
-            "IRIP_MINIO_ENDPOINT": "http://localhost:9000",
-            "IRIP_MINIO_ACCESS_KEY": "irip",
-            "IRIP_MINIO_SECRET_KEY": "pass",
-            "IRIP_MINIO_BUCKET": "irip-artifacts",
-            "IRIP_MINIO_REGION": "us-east-1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "IRIP_DATABASE_URL": "postgresql+psycopg://irip:pass@localhost:5432/irip",
+                "IRIP_MINIO_ENDPOINT": "http://localhost:9000",
+                "IRIP_MINIO_ACCESS_KEY": "irip",
+                "IRIP_MINIO_SECRET_KEY": "pass",
+                "IRIP_MINIO_BUCKET": "irip-artifacts",
+                "IRIP_MINIO_REGION": "us-east-1",
+            },
+        ):
             with patch("deployments.compose.restore.RestoreService") as mock_service_cls:
                 mock_service = MagicMock()
                 mock_service.restore = AsyncMock()
@@ -520,14 +527,17 @@ class TestRunRestorePassesRecoveryTargetTime:
             json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
         )
 
-        with patch.dict(os.environ, {
-            "IRIP_DATABASE_URL": "postgresql+psycopg://irip:pass@localhost:5432/irip",
-            "IRIP_MINIO_ENDPOINT": "http://localhost:9000",
-            "IRIP_MINIO_ACCESS_KEY": "irip",
-            "IRIP_MINIO_SECRET_KEY": "pass",
-            "IRIP_MINIO_BUCKET": "irip-artifacts",
-            "IRIP_MINIO_REGION": "us-east-1",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "IRIP_DATABASE_URL": "postgresql+psycopg://irip:pass@localhost:5432/irip",
+                "IRIP_MINIO_ENDPOINT": "http://localhost:9000",
+                "IRIP_MINIO_ACCESS_KEY": "irip",
+                "IRIP_MINIO_SECRET_KEY": "pass",
+                "IRIP_MINIO_BUCKET": "irip-artifacts",
+                "IRIP_MINIO_REGION": "us-east-1",
+            },
+        ):
             with patch("deployments.compose.restore.RestoreService") as mock_service_cls:
                 mock_service = MagicMock()
                 mock_service.restore = AsyncMock()

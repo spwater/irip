@@ -36,6 +36,11 @@ export function LabOpsPage(): JSX.Element {
   const projectId: string | undefined =
     typeof projectRaw === 'string' && projectRaw !== '' ? projectRaw : undefined;
 
+  // 衍生数据 Tab 的 provenance_run_id URL 参数（用于深链溯源）
+  const provenanceRunIdRaw = (search as Record<string, unknown>).provenance_run_id;
+  const provenanceRunId: string | undefined =
+    typeof provenanceRunIdRaw === 'string' && provenanceRunIdRaw !== '' ? provenanceRunIdRaw : undefined;
+
   const handleTabChange = (key: string): void => {
     void navigate({ to: '/lab-ops', search: { tab: key }, replace: true });
   };
@@ -59,7 +64,9 @@ export function LabOpsPage(): JSX.Element {
     <div className="ocean-page-enter" key={activeTab}>
       {activeTab === 'flows' &&
         (projectId ? <ProjectDetail projectId={projectId} /> : <ProjectList />)}
-      {activeTab === 'parameters' && <ParameterPage />}
+      {activeTab === 'parameters' && (
+        <ParameterPage initialProvenanceRunId={provenanceRunId} />
+      )}
       {activeTab === 'models' && (
         <FeedbackState state="empty" title="模型发布" description="开发中，待发布" style={{ padding: 80 }} />
       )}

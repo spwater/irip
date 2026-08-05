@@ -378,6 +378,7 @@ def run_bootstrap(
 
     # 测试环境无 worker 运行，写入 fake heartbeat 使 health/ready 通过
     import time
+
     import redis as _redis
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:56379/0")

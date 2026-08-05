@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
-from packages.facts.service import FactService
 from packages.parameters.entities import (
     Parameter,
     ParameterCandidate,

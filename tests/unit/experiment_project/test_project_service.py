@@ -1,4 +1,5 @@
-"""ExperimentProjectService 单元测试：create / list / get / update / set_status / check_not_archived。
+"""ExperimentProjectService 单元测试：
+create / list / get / update / set_status / check_not_archived。
 
 测试策略：
 - 使用 AsyncMock mock repository 方法，隔离数据库依赖
@@ -8,7 +9,7 @@
 对应架构设计 §7.6 乐观锁约定 + §7.3 错误码约定。
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -21,10 +22,9 @@ from packages.experiment_project.entities import (
 )
 from packages.experiment_project.service import (
     ExperimentProjectService,
-    _encode_cursor,
     _decode_cursor,
+    _encode_cursor,
 )
-
 
 # ===========================================================================
 # 辅助函数
@@ -79,20 +79,20 @@ class TestServiceCreate:
         """创建项目成功：编码不重复时正常创建"""
         service = _make_service()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_repo.select_by_dept_and_code = AsyncMock(return_value=None)
+
             # insert 返回传入的 project 对象
             def _insert_side_effect(session, project):
                 return project
+
             mock_repo.insert = AsyncMock(side_effect=_insert_side_effect)
 
             result = await service.create(
@@ -116,12 +116,10 @@ class TestServiceCreate:
         """创建项目编码重复 → AppError(conflict)"""
         service = _make_service()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -161,12 +159,10 @@ class TestServiceGet:
             actor_id=uuid4(),
         )
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -183,12 +179,10 @@ class TestServiceGet:
         service = _make_service()
         project_id = uuid4()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -216,12 +210,10 @@ class TestServiceUpdate:
         project_id = uuid4()
         updated = _make_project(project_id=project_id, lock_version=1, display_name="新名称")
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -247,12 +239,10 @@ class TestServiceUpdate:
         project_id = uuid4()
         existing = _make_project(project_id=project_id, lock_version=1)
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -276,12 +266,10 @@ class TestServiceUpdate:
         service = _make_service()
         project_id = uuid4()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -314,12 +302,10 @@ class TestServiceSetStatus:
         project_id = uuid4()
         archived = _make_project(project_id=project_id, status="archived", lock_version=1)
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -341,12 +327,10 @@ class TestServiceSetStatus:
         project_id = uuid4()
         restored = _make_project(project_id=project_id, status="active", lock_version=2)
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -367,12 +351,10 @@ class TestServiceSetStatus:
         project_id = uuid4()
         existing = _make_project(project_id=project_id, lock_version=1)
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -394,12 +376,10 @@ class TestServiceSetStatus:
         service = _make_service()
         project_id = uuid4()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -543,12 +523,10 @@ class TestServiceGetWithStats:
         project_id = uuid4()
         project = _make_project(project_id=project_id)
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -568,12 +546,10 @@ class TestServiceGetWithStats:
         service = _make_service()
         project_id = uuid4()
 
-        with patch.object(
-            service, "_scoped_session"
-        ) as mock_scope, patch(
-            "packages.experiment_project.service.ExperimentProjectRepository"
-        ) as mock_repo:
-
+        with (
+            patch.object(service, "_scoped_session") as mock_scope,
+            patch("packages.experiment_project.service.ExperimentProjectRepository") as mock_repo,
+        ):
             mock_session = AsyncMock()
             mock_scope.return_value.__aenter__ = AsyncMock(return_value=mock_session)
             mock_scope.return_value.__aexit__ = AsyncMock(return_value=None)

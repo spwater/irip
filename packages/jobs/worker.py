@@ -28,7 +28,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.tenant_guc import set_dept_guc, set_user_guc
 from packages.jobs.entities import (
@@ -379,7 +378,9 @@ class JobExecutor:
                     retryable=False,
                     fields={"kind": kind},
                 )
-                await self._commit_failure(job_id, lock_version, error, attempt, max_attempts, dept_id, job_user_id)
+                await self._commit_failure(
+                    job_id, lock_version, error, attempt, max_attempts, dept_id, job_user_id
+                )
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -390,7 +391,9 @@ class JobExecutor:
                 result_data = await handler(job)
             except AppError as exc:
                 # 不可重试的错误
-                await self._commit_failure(job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id)
+                await self._commit_failure(
+                    job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id
+                )
                 return JobResult(
                     job_id=job_id,
                     status=JobStatus.FAILED,
@@ -400,7 +403,9 @@ class JobExecutor:
                 # 可重试的错误
                 should_retry = attempt + 1 < max_attempts
                 if should_retry:
-                    await self._commit_retry(job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id)
+                    await self._commit_retry(
+                        job_id, lock_version, exc, attempt, max_attempts, dept_id, job_user_id
+                    )
                     return JobResult(
                         job_id=job_id,
                         status=JobStatus.RETRY_WAIT,
@@ -433,7 +438,9 @@ class JobExecutor:
                     )
 
             # Step 5: 乐观锁提交结果（使用 fencing token）
-            committed = await self._commit_success(job_id, lock_version, result_data, dept_id, job_user_id)
+            committed = await self._commit_success(
+                job_id, lock_version, result_data, dept_id, job_user_id
+            )
 
             if committed:
                 return JobResult(

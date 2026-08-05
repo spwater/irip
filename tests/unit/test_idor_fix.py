@@ -98,7 +98,7 @@ class TestDepartmentRepositoryIdorFix:
         session.execute.return_value = mock_result
 
         dept_id = uuid4()
-        org_id = uuid4()
+        uuid4()
 
         result = await DepartmentRepository.update(
             session,
@@ -366,7 +366,8 @@ class TestComponentRegistryIdorFix:
         mock_session.scalar.assert_called_once()
 
     async def test_delete_component_query_uses_rls(self) -> None:
-        """delete_component 的 SELECT 查询不再包含应用层 department_id WHERE 条件（RLS 处理可见性）。"""
+        """delete_component 的 SELECT 查询不再包含应用层
+        department_id WHERE 条件（RLS 处理可见性）。"""
         mock_session = AsyncMock()
         mock_session.scalar.return_value = None
 

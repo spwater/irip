@@ -12,8 +12,7 @@
 对应 docs/arch-db-backup-pitr-upgrade.md §1.5。
 """
 
-import os
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -24,7 +23,6 @@ from deployments.compose.backup import (
     BackupService,
     build_backup_config_from_env,
 )
-
 
 # ============================================================
 # BackupConfig 新增字段
@@ -184,6 +182,7 @@ class TestBasebackup:
         service = self._make_service()
 
         with patch.object(service, "_query_wal_lsn", return_value="0/1000000"):
+
             def fake_run(cmd, **kwargs):
                 target_dir = Path(cmd[cmd.index("-D") + 1])
                 (target_dir / "base.tar.gz").write_bytes(b"base")
@@ -228,6 +227,7 @@ class TestBasebackup:
         captured_cmd = []
 
         with patch.object(service, "_query_wal_lsn", return_value="0/1000000"):
+
             def fake_run(cmd, **kwargs):
                 captured_cmd.extend(cmd)
                 target_dir = Path(cmd[cmd.index("-D") + 1])
@@ -251,6 +251,7 @@ class TestBasebackup:
         captured_cmd = []
 
         with patch.object(service, "_query_wal_lsn", return_value="0/1000000"):
+
             def fake_run(cmd, **kwargs):
                 captured_cmd.extend(cmd)
                 target_dir = Path(cmd[cmd.index("-D") + 1])
@@ -337,6 +338,7 @@ class TestMcMirrorMinio:
         captured_cmd = []
 
         with patch.object(service, "_setup_mc_alias"):
+
             def fake_run(cmd, **kwargs):
                 captured_cmd.extend(cmd)
                 r = MagicMock()
@@ -395,7 +397,9 @@ class TestBackupPitrFlow:
 
         with patch.object(service, "_basebackup", side_effect=fake_basebackup):
             with patch.object(service, "_mc_mirror_minio", side_effect=fake_mc_mirror):
-                with patch.object(service, "_query_migration_version", side_effect=fake_query_migration):
+                with patch.object(
+                    service, "_query_migration_version", side_effect=fake_query_migration
+                ):
                     manifest = await service.backup()
 
         assert manifest.format_version == 2
@@ -421,7 +425,9 @@ class TestBackupPitrFlow:
 
         with patch.object(service, "_basebackup", side_effect=fake_basebackup):
             with patch.object(service, "_mc_mirror_minio", side_effect=fake_mc_mirror):
-                with patch.object(service, "_query_migration_version", side_effect=fake_query_migration):
+                with patch.object(
+                    service, "_query_migration_version", side_effect=fake_query_migration
+                ):
                     manifest = await service.backup()
 
         ts = manifest.extra["backup_timestamp"]
@@ -447,7 +453,9 @@ class TestBackupPitrFlow:
 
         with patch.object(service, "_basebackup", side_effect=fake_basebackup):
             with patch.object(service, "_mc_mirror_minio", side_effect=fake_mc_mirror):
-                with patch.object(service, "_query_migration_version", side_effect=fake_query_migration):
+                with patch.object(
+                    service, "_query_migration_version", side_effect=fake_query_migration
+                ):
                     manifest = await service.backup()
 
         # manifest.json 应在 backup_id 子目录中
@@ -457,6 +465,7 @@ class TestBackupPitrFlow:
 
         # 验证写入的 manifest 格式正确
         import json
+
         saved = json.loads(manifest_path.read_text())
         assert saved["format_version"] == 2
         assert saved["extra"]["backup_method"] == "pitr"
@@ -485,7 +494,9 @@ class TestBackupPitrFlow:
 
         with patch.object(service, "_basebackup", side_effect=fake_basebackup):
             with patch.object(service, "_mc_mirror_minio", side_effect=fake_mc_mirror):
-                with patch.object(service, "_query_migration_version", side_effect=fake_query_migration):
+                with patch.object(
+                    service, "_query_migration_version", side_effect=fake_query_migration
+                ):
                     manifest = await service.backup()
 
         backup_dir = tmp_path / manifest.backup_id

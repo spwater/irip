@@ -1,0 +1,199 @@
+classDiagram
+    class AIConversation {
+        +UUID id
+        +UUID user_id
+        +str title
+        +str provider_mode
+        +bool pinned
+        +bool archived
+        +str|None system_context
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    class AIMessage {
+        +UUID id
+        +UUID conversation_id
+        +str role
+        +str content
+        +list tool_calls_json
+        +list citations_json
+        +list mentions
+        +UUID|None sender_user_id
+        +str|None sender_display_name
+        +str|None sender_avatar_url
+        +str|None uncertainty
+        +datetime created_at
+    }
+
+    class ConversationRef {
+        +UUID id
+        +str title
+        +str provider_mode
+        +bool pinned
+        +bool archived
+        +datetime created_at
+        +datetime updated_at
+        +str|None system_context
+        +UUID user_id
+        +list~dict~ participants
+    }
+
+    class MessageRef {
+        +UUID id
+        +UUID conversation_id
+        +str role
+        +str content
+        +list~dict~ tool_calls
+        +list~dict~ citations
+        +str|None uncertainty
+        +datetime created_at
+        +list~str~ mentions
+        +UUID|None sender_user_id
+        +str|None sender_display_name
+        +str|None sender_avatar_url
+    }
+
+    class CancellationRegistry {
+        -_active: dict~UUID, asyncio.Event~
+        +register(conversation_id: UUID) asyncio.Event
+        +cancel(conversation_id: UUID) bool
+        +unregister(conversation_id: UUID) void
+        +get(conversation_id: UUID) asyncio.Event|None
+    }
+
+    class ConversationService {
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        +create_conversation(user_id, department_id, title, provider_mode) ConversationRef
+        +list_conversations(user_id, department_id, limit, include_archived, archived_only) list~ConversationRef~
+        +toggle_pin(conversation_id, user_id, pinned) bool
+        +toggle_archive(conversation_id, user_id, archived) bool
+        +delete_conversation(conversation_id, user_id) None
+        +list_messages(conversation_id, user_id) list~MessageRef~
+        +search_conversations(user_id, department_id, keyword, ...) list~ConversationRef~
+    }
+
+    class CollaborationService {
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        +list_conversations_with_tab(user_id, department_id, tab, ...) list~ConversationRef~
+        +add_participant(conversation_id, inviter_user_id, target_user_id) ParticipantRef
+        +remove_participant(conversation_id, owner_user_id, target_user_id) None
+        +leave_conversation(conversation_id, user_id) None
+        +list_participants(conversation_id, user_id) list~ParticipantRef~
+        +list_mentionable_users(user_id, department_id, roles) list~MentionableUserRef~
+    }
+
+    class ShowcaseService {
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        -_check_conversation_access(session, conversation_id, user_id) bool
+        +add_showcase_item(user_id, conversation_id, ...) ShowcaseItemRef
+        +list_showcase_items(conversation_id, user_id) list~ShowcaseItemRef~
+        +update_showcase_item(item_id, user_id, title) ShowcaseItemRef
+        +delete_showcase_item(item_id, user_id) None
+        +reorder_showcase_items(conversation_id, user_id, item_ids) None
+        +generate_summary(conversation_id, user_id) tuple~str, int~
+    }
+
+    class ToolExecutor {
+        -_tool_registry: ToolRegistry
+        -_fact_service: Any
+        -_parameter_service: Any
+        -_model_service: Any
+        -_provenance_service: Any
+        -_factory: async_sessionmaker
+        +check_role_permission(user, action) bool
+        +build_tool_schemas() tuple~dict~
+        +execute_tool(tool_name, args, user, org_id) dict
+        -_handle_search_facts(args, org_id) dict
+        -_handle_search_standards(args, org_id) dict
+        -_handle_search_parameters(args, org_id) dict
+        -_handle_explain_provenance(args, org_id) dict
+        -_handle_compare_experiments(args, org_id) dict
+        -_handle_run_model(args, user, org_id) dict
+        -_handle_draft_report(args, org_id) dict
+        -_handle_extract_data(args, org_id) dict
+    }
+
+    class MessagePersistence {
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        -_provider: AIProvider
+        +redact_credentials(text) str
+        +persist_user_message_only(conversation_id, user_id, question, mentions, ...) None
+        +persist_messages(conversation_id, user_id, question, response, mentions, ...) None
+        +auto_generate_title(conversation_id, question, answer) None
+    }
+
+    class _AskContext {
+        +UUID user_id
+        +UUID org_id
+        +UUID conversation_id
+        +str question
+        +list history_messages
+        +list msg_list
+        +dict user_context
+        +tuple tool_names
+        +tuple tool_schemas
+        +AIRequest ai_request
+        +asyncio.Event cancel_event
+        +list mentions
+        +bool thinking_enabled
+        +str provider_name
+        +bool mention_only
+    }
+
+    class AskService {
+        -_provider: AIProvider
+        -_tool_registry: ToolRegistry
+        -_tool_executor: ToolExecutor
+        -_persistence: MessagePersistence
+        -_conversation_svc: ConversationService
+        -_cancellation: CancellationRegistry
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        +ask(user, question, conversation_id, ...) AIResponse
+        +stream_ask(user, question, conversation_id, ...) AsyncIterator~dict~
+        -_prepare_ask(user, question, ...) _AskContext
+        -_execute_and_finalize(response, ctx, user) AIResponse
+        +cancel_request(conversation_id) bool
+        +reload_tools() None
+        +get_provider_status() dict
+    }
+
+    class AIService {
+        -_cancellation: CancellationRegistry
+        -_conversation_svc: ConversationService
+        -_collaboration_svc: CollaborationService
+        -_showcase_svc: ShowcaseService
+        -_tool_executor: ToolExecutor
+        -_persistence: MessagePersistence
+        -_ask_svc: AskService
+        -_provider: AIProvider
+        -_tool_registry: ToolRegistry
+        -_factory: async_sessionmaker
+        -_clock: Clock
+        +__init__(provider, tool_registry, fact_service, ...) None
+        +create_conversation(...) ConversationRef
+        +list_conversations(...) list~ConversationRef~
+        +ask(...) AIResponse
+        +stream_ask(...) AsyncIterator
+        +cancel_request(...) bool
+    }
+
+    AIConversation <.. AIService : manages via sub-services
+    AIMessage <.. AIService : manages via sub-services
+    ConversationRef <.. ConversationService : returns
+    MessageRef <.. ConversationService : returns
+    CancellationRegistry <-- AskService : uses
+    ConversationService <-- AskService : delegates create/list
+    ToolExecutor <-- AskService : delegates tool exec
+    MessagePersistence <-- AskService : delegates persist
+    ConversationService <-- AIService : delegates
+    CollaborationService <-- AIService : delegates
+    ShowcaseService <-- AIService : delegates
+    AskService <-- AIService : delegates
+    CancellationRegistry <-- AIService : owns
+    _AskContext <.. AskService : internal data contract

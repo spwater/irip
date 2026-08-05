@@ -21,6 +21,7 @@ REST API（如 OpenAI 官方、Azure OpenAI、本地 vLLM、Ollama 等）。
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -155,6 +156,142 @@ class OpenAICompatibleProvider:
         data: dict[str, Any] = resp.json()
         return self._parse_response(data, request)
 
+    async def stream_complete(
+        self,
+        request: AIRequest,
+        cancel_event: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """流式调用 OpenAI 兼容 API，逐 chunk 产出文本增量。
+
+        与 ``complete()`` 不同，此方法使用 SSE 流式传输，逐行解析
+        ``data: {json}`` 事件，实时 yield 文本增量。流结束后组装完整的
+        tool_calls 并通过 ``done`` 事件返回。
+
+        Args:
+            request: AI 请求。
+            cancel_event: 取消事件，set() 时中断流式读取。
+
+        Yields:
+            dict: 流式事件，格式为：
+                - ``{"type": "chunk", "content": "文本增量"}`` — 文本块
+                - ``{"type": "done", "tool_calls": [...]}`` — 流结束 + 组装的工具调用
+                - ``{"type": "error", "message": "错误信息"}`` — 错误
+        """
+        payload = self._build_payload(request)
+        payload["stream"] = True
+        headers = self._build_headers()
+
+        # 按 index 累积 tool_calls fragments
+        tool_calls_fragments: dict[int, dict[str, Any]] = {}
+
+        try:
+            # H-05: 使用 SafeHTTPClient（SSRF 防护），流式模式不限制响应体大小
+            async with SafeHTTPClient(timeout=self._timeout, max_size=50 * 1024 * 1024) as client:
+                async with client.stream(
+                    "POST",
+                    f"{self._base_url}/chat/completions",
+                    json=payload,
+                    headers=headers,
+                ) as resp:
+                    if resp.status_code != 200:
+                        # 读取错误响应体（流式模式下需要显式 aread）
+                        error_body = await resp.aread()
+                        error_text = error_body.decode("utf-8", errors="replace")
+                        import logging
+
+                        logging.getLogger(__name__).error(
+                            f"AI provider stream error {resp.status_code}: {error_text[:500]}"
+                        )
+                        yield {
+                            "type": "error",
+                            "message": (
+                                f"AI 服务返回错误状态码 {resp.status_code}: {error_text[:200]}"
+                            ),
+                        }
+                        return
+
+                    async for line in resp.aiter_lines():
+                        # 取消检查
+                        if cancel_event is not None and cancel_event.is_set():
+                            yield {
+                                "type": "error",
+                                "message": "请求已被用户取消",
+                            }
+                            return
+
+                        line = line.strip()
+                        if not line or not line.startswith("data: "):
+                            continue
+
+                        data_str = line[6:]
+                        if data_str.strip() == "[DONE]":
+                            break
+
+                        try:
+                            chunk = json.loads(data_str)
+                        except (json.JSONDecodeError, TypeError):
+                            continue
+
+                        choices = chunk.get("choices") or []
+                        if not choices:
+                            continue
+
+                        delta = choices[0].get("delta") or {}
+
+                        # 文本增量
+                        content = delta.get("content")
+                        if content:
+                            yield {"type": "chunk", "content": content}
+
+                        # tool_calls fragments（按 index 累积）
+                        raw_tool_calls = delta.get("tool_calls")
+                        if raw_tool_calls:
+                            for tc in raw_tool_calls:
+                                idx = tc.get("index", 0)
+                                if idx not in tool_calls_fragments:
+                                    tool_calls_fragments[idx] = {
+                                        "id": "",
+                                        "tool": "",
+                                        "args_str": "",
+                                    }
+                                frag = tool_calls_fragments[idx]
+                                if tc.get("id"):
+                                    frag["id"] = tc["id"]
+                                func = tc.get("function") or {}
+                                if func.get("name"):
+                                    frag["tool"] = func["name"]
+                                if func.get("arguments"):
+                                    frag["args_str"] += func["arguments"]
+
+        except httpx.TimeoutException:
+            yield {"type": "error", "message": "AI 服务请求超时"}
+            return
+        except httpx.HTTPError:
+            yield {"type": "error", "message": "AI 服务连接失败"}
+            return
+        except AppError as exc:
+            yield {"type": "error", "message": str(exc.message)}
+            return
+
+        # 组装完整 tool_calls
+        assembled_tool_calls: list[dict[str, Any]] = []
+        for idx in sorted(tool_calls_fragments.keys()):
+            frag = tool_calls_fragments[idx]
+            try:
+                args = json.loads(frag["args_str"]) if frag["args_str"] else {}
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            assembled_tool_calls.append(
+                {
+                    "id": frag["id"],
+                    "tool": frag["tool"],
+                    "args": args if isinstance(args, dict) else {},
+                    "summary": f"调用工具 {frag['tool']}",
+                }
+            )
+
+        yield {"type": "done", "tool_calls": assembled_tool_calls}
+
     def _build_headers(self) -> dict[str, str]:
         """构建 HTTP 请求头（含 Authorization，密钥不外泄）。"""
         return {
@@ -191,10 +328,10 @@ class OpenAICompatibleProvider:
             '"layout":{"title":"误差棒图"}}\n'
             "```"
             "\n支持的 Plotly 图表类型："
-            "- error bar（误差棒图）: type=\"bar\" + error_y"
-            "- box plot（箱线图）: type=\"box\""
-            "- 3D scatter（三维散点图）: type=\"scatter3d\""
-            "- heatmap（热力图）: type=\"heatmap\""
+            '- error bar（误差棒图）: type="bar" + error_y'
+            '- box plot（箱线图）: type="box"'
+            '- 3D scatter（三维散点图）: type="scatter3d"'
+            '- heatmap（热力图）: type="heatmap"'
             "\n普通二维图表（折线/柱状/饼图/散点图）仍使用 ECharts。"
             "仅当需要 ECharts 不支持的科研图表时才使用 Plotly。"
             "\n\n**引用式画图（chart-ref）：**"
@@ -204,11 +341,18 @@ class OpenAICompatibleProvider:
             "前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点。"
             "\nchart-ref 单系列示例："
             "```chart-ref\n"
-            '{"sample":"BL-18.txt","series_index":0,"chart_type":"line","x_col":0,"y_col":1,"title":"拉曼光谱","x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
+            '{"sample":"BL-18.txt","series_index":0,"chart_type":"line",'
+            '"x_col":0,"y_col":1,"title":"拉曼光谱",'
+            '"x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
             "```"
             "\nchart-ref 多系列示例（多样品对比）："
             "```chart-ref\n"
-            '{"series":[{"sample":"BL-18.txt","series_index":0,"x_col":0,"y_col":1,"name":"BL-18"},{"sample":"BL-19.txt","series_index":0,"x_col":0,"y_col":1,"name":"BL-19"}],"chart_type":"line","title":"拉曼光谱对比","x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
+            '{"series":[{"sample":"BL-18.txt","series_index":0,'
+            '"x_col":0,"y_col":1,"name":"BL-18"},'
+            '{"sample":"BL-19.txt","series_index":0,'
+            '"x_col":0,"y_col":1,"name":"BL-19"}],'
+            '"chart_type":"line","title":"拉曼光谱对比",'
+            '"x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
             "```"
             "\n字段说明："
             "- sample: 样品标签（匹配 system_context 里的 ### 样品: XXX）"

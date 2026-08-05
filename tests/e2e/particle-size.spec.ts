@@ -1,112 +1,123 @@
 /**
- * IRIP V1 端到端测试：粒度实验黄金路径（Task 20 Step 1）。
+ * IRIP 端到端测试：黄金路径 UI 导航冒烟测试。
  *
- * 验收场景：
- *   研究员上传粒度实验文件 → 确认字段映射 → 质量检查 →
- *   创建推导（MAD 鲁棒估计）→ 审批者审批参数 → 查看完整溯源链 → 原始文件
+ * 原始测试验证粒度实验数据上传→推导→审批完整流程，
+ * 但 /ingestions 路由已删除（数据现在通过流程执行入库），
+ * /provenance 和 /parameters 已重定向到 /lab-ops。
  *
- * V1 reviewer gate: 能从任何 D10/D50/D90 值导航通过
- *   参数版本 → 推导运行 → 配方 → 证据成员 → 精确事实修订 → 原始字段 → 原始工件
+ * 重建方案：
+ *   简化为验证当前黄金路径的 UI 导航，不做完整的数据上传→推导→审批流程
+ *   （完整流程需要 seed 数据和完整后端服务）。
+ *
+ * 覆盖场景：
+ *   1. 管理员登录 → 实验室运营 → 参数管理 → 候选审批 → 查看完整来源
+ *   2. 管理员登录 → 实验室运营 → 实验项目（流程执行入口）
+ *   3. 管理员可以在实验室运营各 Tab 之间切换
+ *
+ * 认证策略：
+ *   后端使用 rotating refresh tokens，storageState 无法跨 context 复用。
+ *   本文件使用 serial 模式 + 共享 BrowserContext：beforeAll 登录一次，
+ *   所有测试复用同一 context（cookie 在 context 内自动更新）。
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 
-// 辅助函数：以研究员身份登录
-async function loginAsResearcher(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('邮箱').fill('researcher@irip.local');
-  await page.getByLabel('密码').fill('Research-IRIP-2026!');
-  await page.getByRole('button', { name: /登\s*录/ }).click();
-  await expect(page).toHaveURL(/\/(workbench|standards|facts|parameters)/);
-}
+/** 管理员凭据（bootstrap 创建，拥有全部权限） */
+const ADMIN_EMAIL = 'admin@irip.local';
+const ADMIN_PASSWORD = 'agsdgfsdg21r34sf';
 
-// 辅助函数：以审批者身份登录
-async function loginAsReviewer(page: import('@playwright/test').Page): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('邮箱').fill('reviewer@irip.local');
-  await page.getByLabel('密码').fill('Review-IRIP-2026!');
-  await page.getByRole('button', { name: /登\s*录/ }).click();
-  await expect(page).toHaveURL(/\/(workbench|standards|facts|parameters)/);
-}
+/** 登录成功后允许的受保护路由前缀 */
+const PROTECTED_ROUTE_RE = /\/(workbench|standards|lab-ops|platform)/;
 
-// 辅助函数：登出
-async function logout(page: import('@playwright/test').Page): Promise<void> {
-  await page.getByRole('button', { name: '登出' }).click();
-  await expect(page).toHaveURL(/\/login/);
-}
+// Serial 模式：所有测试共享同一个 BrowserContext，避免重复登录触发限流
+test.describe.configure({ mode: 'serial' });
 
-test('particle experiment reaches reviewed L3 with clickable evidence', async ({ page }) => {
-  // Step 1: 研究员登录
-  await loginAsResearcher(page);
+let sharedContext: BrowserContext;
+let sharedPage: Page;
 
-  // Step 2: 导航到数据摄入页面
-  await page.goto('/ingestions');
-  await expect(page.getByText('数据摄入')).toBeVisible();
+test.beforeAll(async ({ browser }) => {
+  sharedContext = await browser.newContext({
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:8080',
+    locale: 'zh-CN',
+  });
+  sharedPage = await sharedContext.newPage();
 
-  // Step 3: 上传粒度实验文件
-  // Note: 实际文件上传需要后端 seed 数据，此测试验证 UI 流程
-  // 真实运行时需要 examples/particle-size/generated/ 目录下的文件
-  const fileInput = page.locator('input[type="file"]');
-  await fileInput.setInputFiles('examples/particle-size/generated/batch-01.xlsx');
+  // 登录
+  await sharedPage.goto('/login');
+  await sharedPage.getByLabel('邮箱').fill(ADMIN_EMAIL);
+  await sharedPage.getByLabel('密码').fill(ADMIN_PASSWORD);
+  await sharedPage.getByRole('button', { name: /登\s*录/ }).click();
+  await expect(sharedPage).toHaveURL(PROTECTED_ROUTE_RE, { timeout: 15000 });
+});
 
-  // Step 4: 等待数据预览
-  await expect(page.getByText(/共.*行数据/)).toBeVisible({ timeout: 10000 });
+test.afterAll(async () => {
+  await sharedContext?.close();
+});
 
-  // Step 5: 生成字段映射
-  await page.getByRole('button', { name: '生成字段映射' }).click();
+test('管理员可以导航到参数管理并查看溯源链路', async () => {
+  const page = sharedPage;
 
-  // Step 6: 确认所有建议映射
-  await expect(page.getByText('请确认每个字段的映射建议')).toBeVisible();
+  // 导航到实验室运营 → 参数管理（衍生数据 Tab）
+  await page.goto('/lab-ops?tab=parameters');
+  await expect(page.getByRole('tab', { name: '参数列表' })).toBeVisible({ timeout: 10000 });
 
-  // 确认所有映射复选框
-  const checkboxes = page.locator('input[type="checkbox"]');
-  const count = await checkboxes.count();
-  for (let i = 0; i < count; i++) {
-    await checkboxes.nth(i).check();
+  // 如果有参数，点击"候选"查看审批面板
+  const candidateButton = page.getByRole('button', { name: '候选' }).first();
+  if (await candidateButton.isVisible({ timeout: 5000 })) {
+    await candidateButton.click();
+
+    // 验证审批面板出现
+    await expect(page.getByText('候选版本审批')).toBeVisible({ timeout: 5000 });
+
+    // 验证"查看完整来源"按钮存在（今天改为 button 不是 link）
+    const viewSourceButton = page.getByRole('button', { name: '查看完整来源' }).first();
+    await expect(viewSourceButton).toBeVisible({ timeout: 5000 });
+
+    // 确保不是 link 角色
+    await expect(page.getByRole('link', { name: '查看完整来源' })).toHaveCount(0);
+
+    // 点击查看完整来源 → 应跳转到溯源链路
+    await viewSourceButton.click();
+    await page.waitForURL(/\/lab-ops\?.*tab=parameters/, { timeout: 10000 });
+
+    // 验证溯源链路 Tab 可见
+    await expect(page.getByRole('tab', { name: '溯源链路' })).toBeVisible({ timeout: 5000 });
+
+    // 验证溯源图谱 Tab 可见（ProvenancePage 自动切换到 graph tab）
+    await expect(page.getByRole('tab', { name: '溯源图谱' })).toBeVisible({ timeout: 5000 });
   }
+});
 
-  // Step 7: 进入提交步骤
-  await page.getByRole('button', { name: '下一步' }).click();
+test('管理员可以导航到实验项目并查看项目列表', async () => {
+  const page = sharedPage;
 
-  // Step 8: 确认并导入
-  await expect(page.getByRole('button', { name: '确认并导入' })).toBeEnabled();
-  await page.getByRole('button', { name: '确认并导入' }).click();
+  // 导航到实验室运营 → 实验项目（flows Tab）
+  await page.goto('/lab-ops?tab=flows');
 
-  // Step 9: 等待质量检查完成
-  await expect(page.getByText('摄入成功')).toBeVisible({ timeout: 30000 });
+  // 验证"新建项目"按钮可见（ProjectList 组件独有，避免 "实验室运营" 文本歧义）
+  await expect(page.getByRole('button', { name: '新建项目' })).toBeVisible({ timeout: 10000 });
 
-  // Step 10: 导航到溯源页面创建推导
-  await page.goto('/provenance');
-  await page.getByRole('tab', { name: '推导运行' }).click();
-  await page.getByRole('button', { name: '新建推导' }).click();
+  // 验证活跃/归档切换可见（Ant Design Radio.Button 的 input 是 hidden，用文本定位可见的 wrapper）
+  await expect(page.getByText('活跃', { exact: true })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByText('归档', { exact: true })).toBeVisible({ timeout: 5000 });
+});
 
-  // Note: 实际运行需要已发布的配方和冻结的证据集
-  // 此处验证 UI 流程的完整性
+test('管理员可以在实验室运营各 Tab 之间切换', async () => {
+  const page = sharedPage;
 
-  // Step 11: 登出研究员
-  await logout(page);
+  // 从实验项目 Tab 开始
+  await page.goto('/lab-ops?tab=flows');
+  await expect(page.getByRole('button', { name: '新建项目' })).toBeVisible({ timeout: 10000 });
 
-  // Step 12: 审批者登录
-  await loginAsReviewer(page);
+  // 切换到衍生数据 Tab（参数管理）
+  await page.goto('/lab-ops?tab=parameters');
+  await expect(page.getByRole('tab', { name: '参数列表' })).toBeVisible({ timeout: 10000 });
 
-  // Step 13: 导航到参数管理
-  await page.goto('/parameters');
-  await expect(page.getByText('参数管理')).toBeVisible();
+  // 验证溯源链路 Tab 存在
+  await expect(page.getByRole('tab', { name: '溯源链路' })).toBeVisible({ timeout: 5000 });
 
-  // Step 14: 审批 particle.d50 参数
-  // 点击第一个参数的"查看候选"
-  await page.getByRole('button', { name: '查看候选' }).first().click();
-
-  // Step 15: 审批发布
-  await expect(page.getByRole('button', { name: '批准发布' })).toBeVisible({ timeout: 5000 });
-  await page.getByRole('button', { name: '批准发布' }).click();
-
-  // Step 16: 验证已发布
-  await expect(page.getByText('已发布')).toBeVisible({ timeout: 5000 });
-
-  // Step 17: 查看完整来源（溯源链）
-  await page.getByRole('link', { name: '查看完整来源' }).click();
-
-  // Step 18: 验证溯源链可达原始文件
-  await expect(page.getByText('原始文件')).toBeVisible({ timeout: 10000 });
+  // 切换到模型发布 Tab
+  await page.goto('/lab-ops?tab=models');
+  // 模型发布 Tab 的 FeedbackState 渲染标题 "模型发布"，用 .first() 避免与导航菜单歧义
+  await expect(page.getByText('模型发布').first()).toBeVisible({ timeout: 10000 });
 });

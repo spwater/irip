@@ -225,11 +225,10 @@ def retry_wait_jobs() -> int:
     factory = build_session_factory(async_url)
 
     async def _retry() -> int:
-        from packages.common.clock import SystemClock
-        from packages.common.tenant_guc import set_dept_guc, set_user_guc
-
         # RLS 通电：job 表有 B 类 RLS，必须设 GUC 否则查询返回空集
         from apps.worker.tasks import get_system_guc
+        from packages.common.clock import SystemClock
+        from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
         sys_dept, sys_user = get_system_guc()
 
@@ -288,8 +287,6 @@ def daily_backup() -> str:
     from datetime import UTC, datetime, timedelta
     from uuid import UUID
 
-    import sqlalchemy as sa
-
     from packages.backups.entities import BackupRecord, BackupStatus, BackupType
     from packages.common.database import build_session_factory, session_scope
     from packages.common.ids import new_id
@@ -319,9 +316,9 @@ def daily_backup() -> str:
     # 过渡期：保留 org_id 供双写（阶段3退役后删除）
     org_id_str: str = os.getenv("IRIP_SYSTEM_ORG_ID", "")
     try:
-        org_id: UUID = UUID(org_id_str) if org_id_str else new_id()
+        UUID(org_id_str) if org_id_str else new_id()
     except ValueError:
-        org_id = new_id()
+        new_id()
 
     backup_output_dir: str = os.getenv("IRIP_BACKUP_OUTPUT_DIR", "/backups")
     from pathlib import Path
@@ -409,6 +406,7 @@ def retention_cleanup() -> int:
     import os
 
     from packages.backups.service import BackupRecordService
+    from packages.common.database import build_session_factory
 
     db_url = os.getenv(
         "IRIP_DATABASE_URL",
@@ -501,18 +499,59 @@ def run_worker_healthcheck_server(
 # ---- Worker 健康检查自动接通 ----
 
 
+def _assert_not_superuser() -> None:
+    """安全断言：运行时连接角色不能是 superuser 或 bypassrls。
+
+    RLS 是唯一隔离层，运行时连接角色不能是 superuser 或 bypassrls，
+    否则 RLS 将被绕过，纵深归零。使用同步 SQLAlchemy 引擎执行检查。
+    """
+    db_url: str = os.getenv("IRIP_DATABASE_URL", "")
+    if not db_url:
+        return
+
+    # 确保使用同步驱动（psycopg，非 psycopg_async）
+    sync_url: str = db_url
+    if sync_url.startswith("postgresql+psycopg_async://"):
+        sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql+psycopg://", 1)
+
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(sync_url)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    "SELECT rolsuper, rolbypassrls, current_user "
+                    "FROM pg_roles WHERE rolname = current_user"
+                )
+            )
+            row = result.fetchone()
+            if row and (row[0] or row[1]):
+                raise RuntimeError(
+                    f"安全断言失败：运行时连接角色 {row[2]} 是 superuser 或 bypassrls，"
+                    "RLS 将被绕过。请检查 IRIP_DATABASE_APP_USER 配置。"
+                )
+    finally:
+        engine.dispose()
+
+
 @worker_process_init.connect
 def _start_healthcheck_on_worker_init(**kwargs: object) -> None:
-    """Worker 子进程启动时自动启动健康检查 HTTP 服务器。
+    """Worker 子进程启动时自动启动健康检查 HTTP 服务器 + RLS 安全断言。
 
     通过 ``worker_process_init`` signal 接通 ``run_worker_healthcheck_server()``，
     使每个 Worker 进程在 9100 端口提供 ``GET /health`` 端点，
     供 Docker Compose / Kubernetes liveness probe 探测存活状态。
 
+    同时执行 RLS 安全断言：运行时连接角色不能是 superuser 或 bypassrls，
+    否则 RLS 将被绕过。断言失败时抛出 RuntimeError 阻止 worker 启动。
+
     在 prefork 模式下（--concurrency>1）每个子进程都会触发此信号。
     第一个子进程成功绑定端口；后续子进程端口冲突时静默跳过，
     因为只需要一个进程对外提供健康检查端点即可。
     """
+    # 安全断言：拒绝 superuser/bypassrls 运行时连接
+    _assert_not_superuser()
     try:
         run_worker_healthcheck_server()
     except OSError:

@@ -88,9 +88,7 @@ class Fact(Base):
         nullable=True,
     )
     # 合并自 fact_revision 的字段
-    subject_id: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("''")
-    )
+    subject_id: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("''"))
     flow_run_id: Mapped[UUID | None] = mapped_column(
         GUID,
         sa.ForeignKey("flow_run.id", ondelete="SET NULL"),
@@ -151,10 +149,7 @@ class Fact(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"Fact(id={self.id!r}, fact_type={self.fact_type!r}, "
-            f"status={self.status!r})"
-        )
+        return f"Fact(id={self.id!r}, fact_type={self.fact_type!r}, status={self.status!r})"
 
 
 class FactDataIndex(Base):

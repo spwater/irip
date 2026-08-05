@@ -55,7 +55,7 @@ from packages.common.s3_repository import S3Repository
 logger = logging.getLogger(__name__)
 
 #: IRIP 应用版本（从环境变量或硬编码默认值读取）。
-IRIP_APPLICATION_VERSION: str = os.getenv("IRIP_APPLICATION_VERSION", "0.1.0")
+IRIP_APPLICATION_VERSION: str = os.getenv("IRIP_APPLICATION_VERSION", "0.2.0")
 
 #: age 加密 recipient 环境变量名。
 AGE_RECIPIENT_ENV: str = "IRIP_BACKUP_AGE_RECIPIENT"
@@ -675,9 +675,9 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
     Returns:
         BackupConfig: 备份配置。
     """
-    db_url: str = os.getenv("IRIP_DATABASE_URL", "")
+    db_url: str = os.getenv("IRIP_DATABASE_ADMIN_URL", "") or os.getenv("IRIP_DATABASE_URL", "")
     if not db_url:
-        raise RuntimeError("IRIP_DATABASE_URL environment variable is required")
+        raise RuntimeError("IRIP_DATABASE_URL or IRIP_DATABASE_ADMIN_URL environment variable is required")
 
     endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
     if not endpoint.startswith("http"):

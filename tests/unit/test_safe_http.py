@@ -13,9 +13,8 @@
 HTTP 响应通过 mock httpx.AsyncClient 实现。
 """
 
-import os
-
 import ipaddress
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -24,7 +23,7 @@ import pytest
 # 之前还检查 IRIP_DATABASE_URL 是否存在，但这些测试用 mock httpx 不需要数据库
 _SANDBOX_ENV = os.environ.get("SANDBOX") is not None
 
-from packages.common.safe_http import (
+from packages.common.safe_http import (  # noqa: E402
     PRIVATE_NETWORKS,
     ResponseTooLargeError,
     SafeHTTPClient,

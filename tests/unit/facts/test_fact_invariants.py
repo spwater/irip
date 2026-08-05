@@ -14,10 +14,8 @@ FactTemplateVersion 的 list 测试已随 migration 0057 删除。
 """
 
 from datetime import UTC, datetime
-from uuid import UUID
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.errors import AppError
 from packages.facts.service import CreateFactCommand, FactService

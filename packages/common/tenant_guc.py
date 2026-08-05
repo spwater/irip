@@ -10,9 +10,10 @@
 - None 时设为空串（非 NULL），确保 RLS fail-closed 语义。
 """
 
+from uuid import UUID
+
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
 
 #: 部门隔离 GUC 名称（RLS 策略锚定此 GUC）。
 DEPT_GUC: str = "app.current_dept_id"
@@ -49,9 +50,7 @@ async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
         dept_id: 部门 UUID，None 时设空串（fail-closed）。
     """
     value = _safe_literal(str(dept_id)) if dept_id is not None else "''"
-    await session.execute(
-        sa.text(f"SET LOCAL {DEPT_GUC} = {value}")
-    )
+    await session.execute(sa.text(f"SET LOCAL {DEPT_GUC} = {value}"))
 
 
 async def set_user_guc(session: AsyncSession, user_id: UUID | None) -> None:
@@ -65,6 +64,4 @@ async def set_user_guc(session: AsyncSession, user_id: UUID | None) -> None:
         user_id: 用户 UUID，None 时设空串（fail-closed）。
     """
     value = _safe_literal(str(user_id)) if user_id is not None else "''"
-    await session.execute(
-        sa.text(f"SET LOCAL {USER_GUC} = {value}")
-    )
+    await session.execute(sa.text(f"SET LOCAL {USER_GUC} = {value}"))

@@ -8,12 +8,9 @@
 对应 docs/arch-db-backup-pitr-upgrade.md §3.1 / §3.4。
 """
 
-import pytest
 import sqlalchemy as sa
-from sqlalchemy.orm import Mapped
 
 from packages.backups.entities import BackupMethod, BackupRecord, BackupStatus, BackupType
-
 
 # ============================================================
 # BackupMethod 枚举
@@ -81,7 +78,11 @@ class TestBackupRecordPitrFields:
         assert col is not None
         assert col.server_default is not None
         # server_default 可能是 text('pitr') 或 'pitr'
-        default_text = str(col.server_default.arg) if hasattr(col.server_default, "arg") else str(col.server_default)
+        default_text = (
+            str(col.server_default.arg)
+            if hasattr(col.server_default, "arg")
+            else str(col.server_default)
+        )
         assert "pitr" in default_text
 
     def test_backup_method_not_nullable(self) -> None:

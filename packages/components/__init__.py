@@ -3,6 +3,7 @@
 提供组件清单校验、注册表服务、运行器（Python / CLI）等能力，
 支撑数据管线可插拔组件架构。
 """
+
 # re-export 核心模块供 from packages.components import X 使用
 from packages.components.flow import (  # noqa: F401
     PROTECTED_PARAMS,

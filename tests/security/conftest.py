@@ -283,6 +283,7 @@ def sec_api_client(
     client = TestClient(app)
     # H-07: 重置全局限流器，避免跨测试文件累积触发 rate_limited
     from packages.common.rate_limiter import get_rate_limiter
+
     get_rate_limiter().reset()
     yield client
     get_rate_limiter().reset()

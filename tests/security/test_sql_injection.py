@@ -130,9 +130,7 @@ class TestRoleSelectOnly:
             async with engine.connect() as conn:
                 await conn.execute(sa.text("DROP ROLE IF EXISTS irip_readonly"))
                 await conn.execute(sa.text("CREATE ROLE irip_readonly NOLOGIN"))
-                await conn.execute(
-                    sa.text("GRANT SELECT ON audit_event TO irip_readonly")
-                )
+                await conn.execute(sa.text("GRANT SELECT ON audit_event TO irip_readonly"))
                 await conn.commit()
 
             async with engine.connect() as conn:
@@ -144,8 +142,7 @@ class TestRoleSelectOnly:
                 try:
                     await conn.execute(
                         sa.text(
-                            "INSERT INTO audit_event (department_id, action) "
-                            "VALUES (:org, :action)"
+                            "INSERT INTO audit_event (department_id, action) VALUES (:org, :action)"
                         ),
                         {"org": str(org_id), "action": "test.readonly.insert"},
                     )
@@ -160,9 +157,7 @@ class TestRoleSelectOnly:
             # 清理临时角色
             async with engine.connect() as conn:
                 await conn.execute(sa.text("RESET ROLE"))
-                await conn.execute(
-                    sa.text("REVOKE SELECT ON audit_event FROM irip_readonly")
-                )
+                await conn.execute(sa.text("REVOKE SELECT ON audit_event FROM irip_readonly"))
                 await conn.execute(sa.text("DROP ROLE irip_readonly"))
                 await conn.commit()
         finally:

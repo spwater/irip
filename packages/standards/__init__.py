@@ -9,6 +9,7 @@
 - 顶层 shim 文件 object_graph.py / object_type_dict.py，供其他模块通过
   顶层路径导入。
 """
+
 # ruff: noqa: F401
 from packages.standards.objects import (
     HIERARCHICAL_RELATIONS,

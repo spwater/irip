@@ -181,6 +181,10 @@ vi.mock('@/api/equipment-flows', () => ({
   apiRestoreComponent: vi.fn(),
   apiActivateVersion: vi.fn(),
   apiDeleteComponent: vi.fn(),
+  apiPublishComponent: vi.fn(() =>
+    Promise.resolve({ id: 'comp-new-1', name: 'new_component', version: '1.0.0', kind: 'transform', runtime: 'python', status: 'published', manifest_sha256: 'sha256', published_at: '2025-01-01T00:00:00Z', created_at: '2025-01-01T00:00:00Z' }),
+  ),
+  apiListComponentVersions: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('@/api/types', () => ({
@@ -196,6 +200,9 @@ vi.mock('@/api/models-ai', () => ({
 vi.mock('@/api/standards-objects', () => ({
   apiListObjects: vi.fn(() => Promise.resolve({ items: [], next_cursor: null, has_more: false })),
   apiListObjectTypes: vi.fn(() => Promise.resolve([])),
+  apiCreateObject: vi.fn(() =>
+    Promise.resolve({ id: 'obj-test-001', code: 'test-obj', display_name: '测试对象' }),
+  ),
 }));
 
 vi.mock('@/api/departments', () => ({

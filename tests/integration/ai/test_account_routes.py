@@ -12,7 +12,6 @@
 
 from uuid import uuid4
 
-import pytest
 import sqlalchemy as sa
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -20,14 +19,17 @@ from fastapi.testclient import TestClient
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.account import account_router, get_account_session_factory
+from packages.auth.passwords import hash_password, verify_password
 from packages.common.error_codes import ErrorCode
 from packages.common.errors import AppError
-from packages.auth.passwords import hash_password, verify_password
 
 
-def _insert_user(sync_engine, email: str, org_id=None, display_name="用户", roles=None, password="Old-Pass-2026!"):
+def _insert_user(
+    sync_engine, email: str, org_id=None, display_name="用户", roles=None, password="Old-Pass-2026!"
+):
     """插入测试用户并返回 (user_id, org_id, password_hash)。"""
     import json
+
     from packages.common.ids import new_id as _new_id
 
     user_id = _new_id()
@@ -88,9 +90,7 @@ def _build_app(async_session_factory, current_user):
 class TestGetProfile:
     """P0-05: 查询个人信息。"""
 
-    def test_get_profile_returns_avatar_roles_org(
-        self, async_session_factory, sync_engine
-    ):
+    def test_get_profile_returns_avatar_roles_org(self, async_session_factory, sync_engine):
         user_id, org_id, _ = _insert_user(
             sync_engine,
             f"prof-{uuid4().hex[:8]}@irip.local",
@@ -158,9 +158,7 @@ class TestUpdateProfile:
             _cleanup_user(sync_engine, user_id)
 
     def test_update_avatar_url(self, async_session_factory, sync_engine):
-        user_id, org_id, _ = _insert_user(
-            sync_engine, f"ava-{uuid4().hex[:8]}@irip.local"
-        )
+        user_id, org_id, _ = _insert_user(sync_engine, f"ava-{uuid4().hex[:8]}@irip.local")
         try:
             current_user = CurrentUser(
                 user_id=user_id,
@@ -251,12 +249,8 @@ class TestChangePassword:
         finally:
             _cleanup_user(sync_engine, user_id)
 
-    def test_change_password_too_short_rejected_by_schema(
-        self, async_session_factory, sync_engine
-    ):
-        user_id, org_id, _ = _insert_user(
-            sync_engine, f"shortpwd-{uuid4().hex[:8]}@irip.local"
-        )
+    def test_change_password_too_short_rejected_by_schema(self, async_session_factory, sync_engine):
+        user_id, org_id, _ = _insert_user(sync_engine, f"shortpwd-{uuid4().hex[:8]}@irip.local")
         try:
             current_user = CurrentUser(
                 user_id=user_id,

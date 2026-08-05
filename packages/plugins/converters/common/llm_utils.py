@@ -23,7 +23,6 @@ import httpx
 from packages.common.errors import AppError
 from packages.common.safe_http import SafeHTTPClient
 
-
 # ============================================================
 # LLM API 调用
 # ============================================================
@@ -120,7 +119,7 @@ async def call_llm_for_structured(
     content: str,
     prompt: str,
     ai_config: dict[str, Any] | None,
-    timeout: int = 300,
+    timeout: int = 300,  # noqa: ASYNC109
     max_chars: int = 999999999,
 ) -> dict[str, Any]:
     """用提取的文本内容 + prompt 调用 LLM，返回 {metadata, points, series}。

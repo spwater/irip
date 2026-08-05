@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
@@ -79,10 +79,12 @@ const NODE_TYPE_LABEL: Record<string, string> = {
  * - 配方：列表 + 创建 + 发布
  * - 推导运行：列表 + 创建 + 重放 + 查看图谱
  * - 溯源图谱：选择运行后展示节点和边的表格
+ *
+ * @param initialRunId - 可选，从深链传入的推导运行 ID。若提供则自动切换到图谱 Tab 并选中该运行。
  */
-export function ProvenancePage(): JSX.Element {
+export function ProvenancePage({ initialRunId }: { initialRunId?: string }): JSX.Element {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('evidence-sets');
+  const [activeTab, setActiveTab] = useState(initialRunId ? 'graph' : 'evidence-sets');
 
   // 证据集状态
   const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
@@ -97,7 +99,15 @@ export function ProvenancePage(): JSX.Element {
   const [runForm] = Form.useForm();
 
   // 图谱状态
-  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
+  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(initialRunId);
+
+  // 当 initialRunId 变化时（同页面深链导航），同步选中运行和图谱 Tab
+  useEffect(() => {
+    if (initialRunId) {
+      setSelectedRunId(initialRunId);
+      setActiveTab('graph');
+    }
+  }, [initialRunId]);
 
   // ---- 数据查询 ----
   const { data: evidenceSetsData, isLoading: evidenceLoading } = useQuery({

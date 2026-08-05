@@ -126,7 +126,7 @@ root（公共，= 机构）
 | `packages/plugins/` | Converter 插件：路由/注册/OCR |
 | `apps/api/routers/` | API 路由层 |
 | `apps/worker/` | Celery Worker 任务 |
-| `migrations/versions/` | Alembic 迁移（0001 基线 + 0062-0068 增量） |
+| `migrations/versions/` | Alembic 迁移（0001 基线 + 0062-0073 增量） |
 
 ### 前端
 

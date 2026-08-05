@@ -13,8 +13,8 @@ from uuid import uuid4
 
 import pytest
 
-from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.auth import CurrentUser
+from apps.api.dependencies.authorization import require_permission
 from packages.auth.permissions import (
     BUILTIN_ROLES,
     Permission,

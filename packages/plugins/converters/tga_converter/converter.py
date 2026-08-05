@@ -186,6 +186,7 @@ _HEADER_KEY_MAP: dict[str, str] = {
     "备注": "remarks",
 }
 
+
 # 列名映射（中文 → 英文+单位）
 def _build_column_names(col_line: str, unit_line: str) -> list[str]:
     """根据列名行和单位行构建标准列名。
@@ -195,7 +196,8 @@ def _build_column_names(col_line: str, unit_line: str) -> list[str]:
         unit_line: 单位行，如 "℃      min   mW/mg     %      %/min μV/mW"
 
     Returns:
-        标准列名列表，如 ["温度 (℃)", "时间 (min)", "DSC (mW/mg)", "TG (%)", "DTG (%/min)", "灵敏度 (μV/mW)"]
+        标准列名列表，如 ["温度 (℃)", "时间 (min)", "DSC (mW/mg)",
+        "TG (%)", "DTG (%/min)", "灵敏度 (μV/mW)"]
     """
     col_names = col_line.split()
     unit_names = unit_line.split()
@@ -257,7 +259,12 @@ def parse_tga(file_path: str) -> dict[str, Any]:
             continue
 
         # 单位行：列名行之后的非纯数字行
-        if separator_indices and col_line is not None and unit_line is None and not _DATA_LINE_PATTERN.match(stripped):
+        if (
+            separator_indices
+            and col_line is not None
+            and unit_line is None
+            and not _DATA_LINE_PATTERN.match(stripped)
+        ):
             unit_line = stripped
             continue
 
@@ -269,7 +276,14 @@ def parse_tga(file_path: str) -> dict[str, Any]:
         columns = _build_column_names(col_line, unit_line)
     else:
         # 回退默认列名
-        columns = ["温度 (℃)", "时间 (min)", "DSC (mW/mg)", "TG (%)", "DTG (%/min)", "灵敏度 (μV/mW)"]
+        columns = [
+            "温度 (℃)",
+            "时间 (min)",
+            "DSC (mW/mg)",
+            "TG (%)",
+            "DTG (%/min)",
+            "灵敏度 (μV/mW)",
+        ]
 
     logger.info(
         "TGA 标头解析: %d 项, 列: %s",
@@ -292,7 +306,7 @@ def parse_tga(file_path: str) -> dict[str, Any]:
         result = _parse_data_line(line)
         if result is not None:
             if len(result) >= 2:
-                data_rows.append(result[:len(columns)])
+                data_rows.append(result[: len(columns)])
             else:
                 skipped_lines += 1
         else:
@@ -406,7 +420,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print(
-            "用法: python -m packages.plugins.converters.tga_converter.converter <NETZSCH STA 导出文件路径>"
+            "用法: python -m packages.plugins.converters.tga_converter.converter"
+            " <NETZSCH STA 导出文件路径>"
         )
         sys.exit(1)
 

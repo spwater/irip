@@ -6,5 +6,7 @@
 
 export {
   type AssistantMessage,
+  type StreamEvent,
   apiSendMessage,
+  apiSendMessageStream,
 } from './models-ai';

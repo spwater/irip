@@ -1,4 +1,5 @@
 """兼容 shim — 已移至 packages.components.flow.flows。"""
+
 from packages.components.flow.flows import (  # noqa: F401
     FlowDefinitionVersion,
     FlowEdge,

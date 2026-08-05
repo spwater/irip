@@ -655,10 +655,7 @@ class ModelService(ScopedSessionMixin):
             list[Model]: 模型列表（按 created_at 升序）。
         """
         async with self._scoped_session() as session:
-            stmt = (
-                sa.select(Model)
-                .order_by(Model.created_at)
-            )
+            stmt = sa.select(Model).order_by(Model.created_at)
             if status is not None:
                 stmt = stmt.where(Model.status == status)
             result = await session.execute(stmt)

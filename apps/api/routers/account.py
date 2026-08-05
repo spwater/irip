@@ -14,23 +14,20 @@
 """
 
 import asyncio
-import os
 from datetime import UTC, datetime
 from typing import Annotated, Any
-from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from apps.api.dependencies.auth import CurrentUser, get_current_user
+from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.auth.entities import AppUser
 from packages.auth.passwords import hash_password, verify_password
 from packages.common.database import session_scope
 from packages.common.errors import AppError
-from packages.common.ids import new_id
 
 #: 路由实例。
 account_router = APIRouter(prefix="/api/v1/account", tags=["account"])
@@ -85,9 +82,7 @@ class ChangePasswordRequest(BaseModel):
     """修改密码请求。"""
 
     old_password: str = Field(..., min_length=1, max_length=128, description="旧密码")
-    new_password: str = Field(
-        ..., min_length=6, max_length=128, description="新密码（至少 6 位）"
-    )
+    new_password: str = Field(..., min_length=6, max_length=128, description="新密码（至少 6 位）")
 
 
 class AvatarUploadResponse(BaseModel):

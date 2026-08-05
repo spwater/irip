@@ -166,9 +166,7 @@ class TestPublishComponent:
 
         # 获取自动生成的组件名，用它发布新版本
         comp, _ = await registry_service.get_version_by_id(version_v1.id)
-        v2_yaml = VALID_YAML_INGESTION_V2.replace(
-            "name: csv_ingestion", f"name: {comp.name}"
-        )
+        v2_yaml = VALID_YAML_INGESTION_V2.replace("name: csv_ingestion", f"name: {comp.name}")
         manifest_v2 = validator.validate(v2_yaml)
         version_v2 = await registry_service.publish(manifest_v2)
 
@@ -334,15 +332,11 @@ class TestListComponents:
         validator: ManifestValidator,
     ) -> None:
         """同一组件多版本，列表返回组件及其当前活跃版本。"""
-        version_v1 = await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        version_v1 = await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         comp, _ = await registry_service.get_version_by_id(version_v1.id)
         component_name = comp.name
 
-        v2_yaml = VALID_YAML_INGESTION_V2.replace(
-            "name: csv_ingestion", f"name: {component_name}"
-        )
+        v2_yaml = VALID_YAML_INGESTION_V2.replace("name: csv_ingestion", f"name: {component_name}")
         await registry_service.publish(validator.validate(v2_yaml))
 
         items = await registry_service.list()
@@ -361,9 +355,7 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃已发布组件。"""
-        version = await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        version = await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         comp, _ = await registry_service.get_version_by_id(version.id)
 
         component = await registry_service.deprecate(comp.name)
@@ -384,9 +376,7 @@ class TestDeprecateComponent:
         validator: ManifestValidator,
     ) -> None:
         """废弃后仍可通过 status=deprecated 列出。"""
-        version = await registry_service.publish(
-            validator.validate(VALID_YAML_INGESTION)
-        )
+        version = await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         comp, _ = await registry_service.get_version_by_id(version.id)
         await registry_service.deprecate(comp.name)
 

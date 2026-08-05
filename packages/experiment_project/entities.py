@@ -68,9 +68,7 @@ class ExperimentProject(Base):
     code: Mapped[str] = mapped_column(sa.Text, nullable=False)
     display_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     # ---- A 类多租户 4 列（与 equipment 一致） ----
     visible_departments: Mapped[list[str]] = mapped_column(
         JSONB,

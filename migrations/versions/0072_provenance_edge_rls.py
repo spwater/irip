@@ -5,15 +5,23 @@ provenance_edge 是唯一没在 0065 迁移中切换为 department_id 策略的�
 而 `app.current_org_id` 在整个代码库从未被设置，导致通电后该表查询返回空集。
 
 操作：
-1. 给 provenance_edge 添加 department_id 列（NOT NULL，FK→department.id）
-   — 表当前 0 行，直接 ADD COLUMN NOT NULL 无需 backfill
-2. DROP 旧 RLS 策略（锚 org）
-3. CREATE 新 RLS 策略（锚 dept，B 类层级：department_id IN (SELECT current_visible_dept_ids())）
-4. 删除 organization_id 列（阶段3 已删除 org 概念，此列已无用）
+1. 给 provenance_edge 添加 department_id 列（nullable，无 default）
+2. 确定性回填：存量行挂 root 部门（code='root' AND parent_id IS NULL）
+3. 显式检查：回填后不应有 NULL，否则抛异常中止
+4. 设为 NOT NULL
+5. 添加 FK 约束 → department.id
+6. 添加索引（RLS 策略过滤会用到）
+7. DROP 旧 RLS 策略（锚 org）
+8. CREATE 新 RLS 策略（锚 dept，B 类层级：department_id IN (SELECT current_visible_dept_ids())）
+9. 删除 organization_id 列（阶段3 已删除 org 概念，此列已无用）
+
+支持空表和存量表两种场景：
+- 空表：回填 UPDATE 影响 0 行，步骤 3 检查通过，直接设 NOT NULL
+- 存量表：回填 UPDATE 将所有行挂 root 部门，步骤 3 验证无 NULL
 
 前置条件：
 - 0071 已执行（RLS 通电完成）
-- provenance_edge 表当前 0 行（无 backfill 需求）
+- department 表中存在 code='root' AND parent_id IS NULL 的 root 部门
 
 Revision ID: 0072
 Revises: 0071
@@ -31,30 +39,46 @@ depends_on = None
 def upgrade() -> None:
     """provenance_edge RLS 策略从 org_id 切换到 dept_id。"""
 
-    # === 1. 添加 department_id 列 ===
-    # 表当前 0 行，可直接 ADD COLUMN NOT NULL
-    op.execute(
-        "ALTER TABLE provenance_edge ADD COLUMN department_id uuid NOT NULL "
-        "DEFAULT gen_random_uuid()"
-    )
-    # 去掉 DEFAULT（后续 INSERT 由应用层提供值）
-    op.execute("ALTER TABLE provenance_edge ALTER COLUMN department_id DROP DEFAULT")
-    # 添加 FK 约束
-    op.execute(
-        "ALTER TABLE provenance_edge ADD CONSTRAINT "
-        "fk_provenance_edge_department_id FOREIGN KEY (department_id) "
-        "REFERENCES department(id)"
-    )
-    # 添加索引（RLS 策略过滤会用到）
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_provenance_edge_department_id "
-        "ON provenance_edge (department_id)"
-    )
+    # === 1. 添加 department_id 列（nullable，无 default） ===
+    op.execute("ALTER TABLE provenance_edge ADD COLUMN department_id uuid")
 
-    # === 2. DROP 旧 RLS 策略（锚 org） ===
+    # === 2. 确定性回填：存量行挂 root 部门 ===
+    op.execute("""
+        UPDATE provenance_edge
+        SET department_id = (SELECT id FROM department WHERE code = 'root' AND parent_id IS NULL)
+        WHERE department_id IS NULL
+    """)
+
+    # === 3. 显式检查：回填后不应有 NULL ===
+    op.execute("""
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM provenance_edge WHERE department_id IS NULL) THEN
+                RAISE EXCEPTION '0072 回填失败：provenance_edge 仍有 department_id 为 NULL 的行';
+            END IF;
+        END $$;
+    """)
+
+    # === 4. 设为 NOT NULL ===
+    op.execute("ALTER TABLE provenance_edge ALTER COLUMN department_id SET NOT NULL")
+
+    # === 5. 添加 FK 约束 ===
+    op.execute("""
+        ALTER TABLE provenance_edge ADD CONSTRAINT
+        fk_provenance_edge_department_id FOREIGN KEY (department_id)
+        REFERENCES department(id)
+    """)
+
+    # === 6. 添加索引（RLS 策略过滤会用到） ===
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_provenance_edge_department_id
+        ON provenance_edge (department_id)
+    """)
+
+    # === 7. DROP 旧 RLS 策略（锚 org） ===
     op.execute("DROP POLICY IF EXISTS tenant_isolation ON provenance_edge")
 
-    # === 3. CREATE 新 RLS 策略（锚 dept，B 类层级） ===
+    # === 8. CREATE 新 RLS 策略（锚 dept，B 类层级） ===
     op.execute(
         """
         CREATE POLICY tenant_isolation ON provenance_edge USING (
@@ -63,7 +87,7 @@ def upgrade() -> None:
         """
     )
 
-    # === 4. 删除 organization_id 列 ===
+    # === 9. 删除 organization_id 列 ===
     # 阶段3 已删除 org 概念，此列已无用
     op.execute("ALTER TABLE provenance_edge DROP COLUMN IF EXISTS organization_id")
 
@@ -72,9 +96,7 @@ def downgrade() -> None:
     """回滚：恢复 organization_id 列 + 旧 RLS 策略。"""
 
     # 恢复 organization_id 列
-    op.execute(
-        "ALTER TABLE provenance_edge ADD COLUMN organization_id uuid"
-    )
+    op.execute("ALTER TABLE provenance_edge ADD COLUMN organization_id uuid")
 
     # 删除新策略
     op.execute("DROP POLICY IF EXISTS tenant_isolation ON provenance_edge")

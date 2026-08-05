@@ -204,11 +204,6 @@ async def refresh(
     重放攻击时抛出 AppError(refresh_replayed) → 401。
     """
     refresh_token: str | None = request.cookies.get(REFRESH_COOKIE_NAME)
-    # 临时调试：打印 cookie 和请求头
-    import logging
-    logger = logging.getLogger("uvicorn.error")
-    logger.warning("REFRESH DEBUG: cookies=%s, headers=%s, cookie_names=%s",
-                   bool(refresh_token), dict(request.headers), list(request.cookies.keys()))
     if not refresh_token:
         raise AppError(
             code="invalid_credentials",
@@ -271,6 +266,8 @@ async def me(
         roles=roles,
         permissions=permissions,
         avatar_url=user.avatar_url if user is not None else None,
-        department_id=str(user.department_id) if user is not None and user.department_id is not None else None,
+        department_id=str(user.department_id)
+        if user is not None and user.department_id is not None
+        else None,
         is_root_member=getattr(current_user, "is_root_member", False),
     )

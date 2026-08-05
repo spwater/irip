@@ -165,5 +165,3 @@ class IndustrialObject(Base):
             f"IndustrialObject(id={self.id!r}, code={self.code!r}, "
             f"object_type={self.object_type!r}, status={self.status!r})"
         )
-
-

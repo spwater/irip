@@ -13,13 +13,12 @@
 
 import asyncio
 import json
-
-import sqlalchemy as sa
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -326,6 +325,7 @@ async def get_job_detail(
     created_by_name = None
     if job.created_by is not None:
         from packages.auth.entities import AppUser
+
         async with service._scoped_session() as session:  # noqa: SLF001
             result = await session.execute(
                 sa.select(AppUser.display_name).where(AppUser.id == job.created_by)

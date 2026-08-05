@@ -533,15 +533,11 @@ async def update_component(
 
     async with session_scope(service.session_factory) as session:  # type: ignore[attr-defined]
         if body.department_id is not None:
-            comp = await session.scalar(
-                sa.select(Component).where(Component.id == comp.id)
-            )
+            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))
             if comp is not None:
                 comp.department_id = UUID(body.department_id)
         if body.visible_departments is not None:
-            comp = await session.scalar(
-                sa.select(Component).where(Component.id == comp.id)
-            )
+            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))
             if comp is not None:
                 comp.visible_departments = body.visible_departments
         await session.flush()

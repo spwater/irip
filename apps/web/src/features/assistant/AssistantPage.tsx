@@ -35,6 +35,7 @@ import {
   apiListConversations,
   apiListMessages,
   apiSendMessage,
+  apiSendMessageStream,
   apiTogglePin,
   apiToggleArchive,
   type AssistantMessage,
@@ -148,7 +149,6 @@ export function AssistantPage(): JSX.Element {
   const [streamingAnswer, setStreamingAnswer] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const streamingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // ---- 对话列表查询（支持关键词搜索 + 三栏筛选） ----
@@ -405,40 +405,41 @@ export function AssistantPage(): JSX.Element {
     // 创建 AbortController 用于中断请求
     abortControllerRef.current = new AbortController();
 
-    // 模拟流式输出（逐字显示）
-    // 实际 API 返回完整回答后，用定时器逐字追加
+    // 真实 SSE 流式输出
     try {
-      const res = await apiSendMessage(convId, { question: trimmed, thinking_enabled: thinkingEnabled, system_context: factContext ?? undefined, mentions: currentMentions.length > 0 ? currentMentions : undefined }, abortControllerRef.current.signal);
-      const fullAnswer = res.answer || '(无回答)';
+      const stream = apiSendMessageStream(
+        convId,
+        {
+          question: trimmed,
+          thinking_enabled: thinkingEnabled,
+          system_context: factContext ?? undefined,
+          mentions: currentMentions.length > 0 ? currentMentions : undefined,
+        },
+        abortControllerRef.current.signal,
+      );
 
-      // 逐字流式显示
-      let charIndex = 0;
-      if (streamingTimerRef.current) {
-        clearInterval(streamingTimerRef.current);
-      }
-      streamingTimerRef.current = setInterval(() => {
-        charIndex += 3; // 每次显示 3 个字符
-        if (charIndex >= fullAnswer.length) {
-          if (streamingTimerRef.current) {
-            clearInterval(streamingTimerRef.current);
-            streamingTimerRef.current = null;
-          }
-          setStreamingAnswer(fullAnswer);
-          // 流式结束后，刷新数据库消息（不清空 localMessages，等 DB 数据到达后由 useEffect 清）
+      for await (const event of stream) {
+        if (event.type === 'chunk') {
+          setStreamingAnswer((prev) => (prev ?? '') + event.content);
+        } else if (event.type === 'done') {
+          // 设置最终 answer（含工具调用后的完整回答）
+          setStreamingAnswer(event.answer || '(无回答)');
+          // invalidate 拉取 DB 消息
+          void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
+          void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
+          // 延迟 100ms 让 DB 消息先到达，再清 streamingAnswer，避免中间空白闪烁
           setTimeout(() => {
-            // 先 invalidate 拉取 DB 消息，等数据到达后再清 streamingAnswer
-            void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
-            void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
-            // 延迟 100ms 让 DB 消息先到达，再清 streamingAnswer，避免中间空白闪烁
-            setTimeout(() => {
-              setStreamingAnswer(null);
-              setIsSending(false);
-            }, 100);
-          }, 300);
-        } else {
-          setStreamingAnswer(fullAnswer.slice(0, charIndex));
+            setStreamingAnswer(null);
+            setIsSending(false);
+          }, 100);
+        } else if (event.type === 'error') {
+          setStreamingAnswer(null);
+          message.error(event.message);
+          setIsSending(false);
+          abortControllerRef.current = null;
+          void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
         }
-      }, 20); // 每 20ms 显示 3 个字符
+      }
     } catch (err) {
       // 如果是用户主动中断，不报错
       if (err instanceof DOMException && err.name === 'AbortError') {
@@ -455,15 +456,6 @@ export function AssistantPage(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
     }
   }, [inputText, isSending, selectedConvId, thinkingEnabled, factContext, queryClient, mentions, currentUser, isCollaborative]);
-
-  // 清理定时器
-  useEffect(() => {
-    return () => {
-      if (streamingTimerRef.current) {
-        clearInterval(streamingTimerRef.current);
-      }
-    };
-  }, []);
 
   // 切换对话时清空本地消息，恢复该对话关联的实验数据上下文
   // 注意：依赖项含 conversationList，确保对话列表加载完成后也能恢复 system_context
@@ -899,17 +891,12 @@ export function AssistantPage(): JSX.Element {
                     if (selectedConvId) {
                       void apiCancelRequest(selectedConvId);
                     }
-                    // 2. 中断前端 HTTP 请求
+                    // 2. 中断前端 fetch 流式请求
                     if (abortControllerRef.current) {
                       abortControllerRef.current.abort();
                       abortControllerRef.current = null;
                     }
-                    // 3. 清除流式定时器
-                    if (streamingTimerRef.current) {
-                      clearInterval(streamingTimerRef.current);
-                      streamingTimerRef.current = null;
-                    }
-                    // 4. 重置状态
+                    // 3. 重置状态
                     setStreamingAnswer(null);
                     setIsSending(false);
                     void queryClient.invalidateQueries({ queryKey: ['assistant-messages', selectedConvId] });

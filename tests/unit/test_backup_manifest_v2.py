@@ -11,17 +11,16 @@
 对应 docs/arch-db-backup-pitr-upgrade.md §3.2 / §1.7。
 """
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from deployments.compose.backup_manifest import (
+    BASE_TAR_GZ_FILENAME,
     MANIFEST_FORMAT_VERSION,
     MINIO_MIRROR_DIRNAME,
     PG_BASEBACKUP_DIRNAME,
-    BASE_TAR_GZ_FILENAME,
     PG_WAL_TAR_GZ_FILENAME,
     BackupManifest,
     BackupManifestValidator,
@@ -30,7 +29,6 @@ from deployments.compose.backup_manifest import (
     load_manifest,
     save_manifest,
 )
-
 
 # ============================================================
 # 常量验证
@@ -309,12 +307,13 @@ class TestV1BackwardCompat:
 
     def test_v1_manifest_validates_successfully(self, tmp_path: Path) -> None:
         """v1 格式备份目录可通过完整性校验。"""
+        import hashlib
+
         from deployments.compose.backup_manifest import (
             DATABASE_DUMP_FILENAME,
             OBJECTS_DIRNAME,
             compute_objects_aggregate_sha256,
         )
-        import hashlib
 
         dump_path = tmp_path / DATABASE_DUMP_FILENAME
         dump_content = b"v1-database-dump"
@@ -371,7 +370,9 @@ class TestV1BackwardCompat:
         with pytest.raises(ManifestValidationError) as exc_info:
             validator.validate(manifest_v1, tmp_path)
 
-        assert "database" in exc_info.value.component.lower() or "sha" in str(exc_info.value).lower()
+        assert (
+            "database" in exc_info.value.component.lower() or "sha" in str(exc_info.value).lower()
+        )
 
 
 # ============================================================

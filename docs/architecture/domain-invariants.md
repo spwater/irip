@@ -1,6 +1,6 @@
 # IRIP 领域不变量
 
-> 版本：0.1.0 · 覆盖 Phase V0–V3
+> 版本：0.2.0 · 覆盖 Phase V0–V3
 > 关联文档：`docs/architecture/system-overview.md`
 
 本文档定义 IRIP 平台在演进过程中必须始终满足的约束基线。这些不变量是系统正确性的基石——任何变更不得违反。

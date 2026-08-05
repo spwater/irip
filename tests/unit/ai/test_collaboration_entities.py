@@ -10,8 +10,6 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import sqlalchemy as sa
-
 from packages.ai.collaboration_entities import (
     ConversationParticipant,
     MentionableUserRef,
@@ -108,7 +106,7 @@ class TestParticipantRef:
         )
         try:
             ref.role = "owner"  # type: ignore[misc]
-            assert False, "应抛出 FrozenInstanceError"
+            raise AssertionError("应抛出 FrozenInstanceError")
         except Exception:
             pass  # dataclass(frozen=True) 会抛 FrozenInstanceError
 
@@ -148,6 +146,6 @@ class TestMentionableUserRef:
         ref = MentionableUserRef(id=uuid4(), display_name="a")
         try:
             ref.display_name = "b"  # type: ignore[misc]
-            assert False, "应抛出 FrozenInstanceError"
+            raise AssertionError("应抛出 FrozenInstanceError")
         except Exception:
             pass

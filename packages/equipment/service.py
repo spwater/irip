@@ -145,7 +145,9 @@ class EquipmentService(ScopedSessionMixin):
             AppError: code="conflict"，当编码已存在时。
         """
         async with self._scoped_session() as session:
-            existing = await EquipmentRepository.select_by_org_and_code(session, self._dept_id, code)
+            existing = await EquipmentRepository.select_by_org_and_code(
+                session, self._dept_id, code
+            )
             if existing is not None:
                 raise AppError(
                     code="conflict",
@@ -163,7 +165,7 @@ class EquipmentService(ScopedSessionMixin):
                 description=description,
                 visible_departments=visible_departments or [],
                 owner_user_id=self._actor_id or new_id(),  # 设备归部门不归个人，owner 填创建者
-                visibility_scope='tree',
+                visibility_scope="tree",
                 status=EquipmentStatus.ACTIVE.value,
                 sort_order=sort_order,
                 created_at=now,

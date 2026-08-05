@@ -128,15 +128,16 @@ def test_every_published_parameter_has_complete_raw_path(
     for parameter in published:
         paths = acceptance_db.raw_evidence_paths(parameter["id"])
         if not paths or all(p["fact_id"] is None for p in paths):
-            pytest.skip(f"Parameter {parameter['code']} has no fact data (fact table may have been cleared); run seed first")
+            pytest.skip(
+                f"Parameter {parameter['code']} has no fact data "
+                "(fact table may have been cleared); run seed first"
+            )
         assert paths, f"Parameter {parameter['code']} has no raw evidence paths"
         for path in paths:
             assert path["derivation_succeeded"], (
                 f"Parameter {parameter['code']}: derivation not succeeded"
             )
-            assert path["fact_id"], (
-                f"Parameter {parameter['code']}: invalid fact reference"
-            )
+            assert path["fact_id"], f"Parameter {parameter['code']}: invalid fact reference"
             assert path["raw_artifact_id"], f"Parameter {parameter['code']}: missing raw artifact"
 
 

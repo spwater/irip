@@ -61,7 +61,8 @@ class ExperimentProjectListResult:
     """实验项目分页列表结果。
 
     Attributes:
-        items: (ExperimentProject, department_name, task_count, owner_display_name, fact_count) 元组列表。
+        items: (ExperimentProject, department_name, task_count,
+            owner_display_name, fact_count) 元组列表。
         next_cursor: 下一页游标（base64url 字符串），无更多数据时为 None。
         has_more: 是否还有更多数据。
     """
@@ -81,7 +82,8 @@ class ExperimentProjectListResult:
 class ExperimentProjectService(ScopedSessionMixin):
     """实验项目业务编排服务。
 
-    依赖注入 session_factory（事务管理）、department_id（当前部门）、clock（时钟）、actor_id（操作者）。
+    依赖注入 session_factory（事务管理）、department_id（当前部门）、
+    clock（时钟）、actor_id（操作者）。
     仓库方法为静态调用，无需注入实例。
 
     Attributes:
@@ -238,17 +240,13 @@ class ExperimentProjectService(ScopedSessionMixin):
             )
             from packages.auth.entities import AppUser  # noqa: F401
 
-            owner_map = await ExperimentProjectRepository.batch_owner_names(
-                session, owner_ids
-            )
+            owner_map = await ExperimentProjectRepository.batch_owner_names(session, owner_ids)
 
         result_items: list[tuple[ExperimentProject, str, int, str | None, int]] = []
         for project, dept_name in page_items:
             task_count, fact_count = stats_map.get(project.id, (0, 0))
             owner_name = owner_map.get(project.owner_user_id)
-            result_items.append(
-                (project, dept_name, task_count, owner_name, fact_count)
-            )
+            result_items.append((project, dept_name, task_count, owner_name, fact_count))
 
         next_cursor: str | None = None
         if has_more and page_items:
@@ -463,10 +461,17 @@ class ExperimentProjectService(ScopedSessionMixin):
             # 级联删除项目下的所有任务及其关联数据
             from packages.components.flow.flow_runtime import (
                 FlowDefinition as FD,
+            )
+            from packages.components.flow.flow_runtime import (
                 FlowDefinitionVersionORM as FV,
-                FlowRun as FR,
+            )
+            from packages.components.flow.flow_runtime import (
                 FlowNodeExecution as FNE,
             )
+            from packages.components.flow.flow_runtime import (
+                FlowRun as FR,
+            )
+
             # 查出所有 flow_definition 的 id
             fd_ids_result = await session.execute(
                 sa.select(FD.id).where(FD.project_id == project_id)
@@ -486,27 +491,49 @@ class ExperimentProjectService(ScopedSessionMixin):
                     fr_ids = [row[0] for row in fr_ids_result]
                     if fr_ids:
                         # 删 node_execution
-                        await session.execute(
-                            sa.delete(FNE).where(FNE.flow_run_id.in_(fr_ids))
-                        )
+                        await session.execute(sa.delete(FNE).where(FNE.flow_run_id.in_(fr_ids)))
                         # 删 flow_run
-                        await session.execute(
-                            sa.delete(FR).where(FR.id.in_(fr_ids))
-                        )
+                        await session.execute(sa.delete(FR).where(FR.id.in_(fr_ids)))
             # 用 superuser 连接删除 versions + flow_definition（绕过不可变触发器）
             import os as _os
-            from sqlalchemy.ext.asyncio import create_async_engine as _cae, async_sessionmaker as _asm
+
+            from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
+            from sqlalchemy.ext.asyncio import create_async_engine as _cae
+
             _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "")
             if _alembic_url and fd_ids:
-                _eng = _cae(_alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1))
+                _eng = _cae(
+                    _alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+                )
                 _fac = _asm(_eng, expire_on_commit=False)
                 async with _fac() as _sess:
-                    await _sess.execute(sa.text("ALTER TABLE flow_definition_version DISABLE TRIGGER prevent_modify_flow_version"))
+                    await _sess.execute(
+                        sa.text(
+                            "ALTER TABLE flow_definition_version "
+                            "DISABLE TRIGGER prevent_modify_flow_version"
+                        )
+                    )
                     # 删 versions
-                    await _sess.execute(sa.text(f"DELETE FROM flow_definition_version WHERE flow_definition_id = ANY(ARRAY[{','.join(repr(str(v)) for v in fd_ids)}]::uuid[])"))
+                    await _sess.execute(
+                        sa.text(
+                            f"DELETE FROM flow_definition_version "
+                            f"WHERE flow_definition_id = "
+                            f"ANY(ARRAY[{','.join(repr(str(v)) for v in fd_ids)}]::uuid[])"
+                        )
+                    )
                     # 删 flow_definition
-                    await _sess.execute(sa.text(f"DELETE FROM flow_definition WHERE id = ANY(ARRAY[{','.join(repr(str(v)) for v in fd_ids)}]::uuid[])"))
-                    await _sess.execute(sa.text("ALTER TABLE flow_definition_version ENABLE TRIGGER prevent_modify_flow_version"))
+                    await _sess.execute(
+                        sa.text(
+                            f"DELETE FROM flow_definition WHERE id = "
+                            f"ANY(ARRAY[{','.join(repr(str(v)) for v in fd_ids)}]::uuid[])"
+                        )
+                    )
+                    await _sess.execute(
+                        sa.text(
+                            "ALTER TABLE flow_definition_version "
+                            "ENABLE TRIGGER prevent_modify_flow_version"
+                        )
+                    )
                     await _sess.commit()
                 await _eng.dispose()
             await ExperimentProjectRepository.delete(session, project_id)

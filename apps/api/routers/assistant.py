@@ -14,12 +14,15 @@
 - AI 回答经凭据脱敏，不泄露密钥。
 """
 
+import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
@@ -502,6 +505,95 @@ async def send_message(
     )
 
 
+@assistant_router.post(
+    "/conversations/{conversation_id}/messages/stream",
+)
+async def send_message_stream(
+    conversation_id: UUID,
+    body: SendMessageRequest,
+    current_user: AssistantUserDep,
+    service: AIServiceDep,
+) -> StreamingResponse:
+    """流式发送消息并获取 AI 回答（SSE）。
+
+    使用 Server-Sent Events 协议，逐 chunk 推送文本增量，流结束后
+    推送包含完整回答、工具调用和引用的 done 事件。
+
+    SSE 事件格式：
+        - ``data: {"type": "chunk", "content": "文本增量"}\\n\\n`` — 文本块
+        - ``data: {"type": "done", "answer": "...", "tool_calls": [...],
+          "citations": [...], "uncertainty": ...}\\n\\n`` — 完成
+        - ``data: {"type": "error", "message": "错误信息"}\\n\\n`` — 错误
+        - ``data: [DONE]\\n\\n`` — 结束信号
+
+    Args:
+        conversation_id: 对话 ID。
+        body: 发送请求（问题、provider 名称）。
+        current_user: 当前用户。
+        service: AI 编排服务。
+
+    Returns:
+        StreamingResponse: text/event-stream 响应。
+    """
+
+    async def event_stream() -> AsyncIterator[str]:
+        """SSE 事件流生成器。"""
+        try:
+            async for event in service.stream_ask(
+                user=current_user,
+                question=body.question,
+                conversation_id=conversation_id,
+                provider_name=body.provider_name,
+                thinking_enabled=body.thinking_enabled,
+                system_context=body.system_context,
+                mentions=body.mentions,
+            ):
+                event_type = event.get("type", "")
+                if event_type == "chunk":
+                    data = json.dumps(
+                        {"type": "chunk", "content": event.get("content", "")},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                elif event_type == "done":
+                    data = json.dumps(
+                        {
+                            "type": "done",
+                            "answer": event.get("answer", ""),
+                            "tool_calls": event.get("tool_calls", []),
+                            "citations": event.get("citations", []),
+                            "uncertainty": event.get("uncertainty"),
+                        },
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                    yield "data: [DONE]\n\n"
+                elif event_type == "error":
+                    data = json.dumps(
+                        {"type": "error", "message": event.get("message", "")},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                    yield "data: [DONE]\n\n"
+        except Exception as exc:
+            error_data = json.dumps(
+                {"type": "error", "message": str(exc)},
+                ensure_ascii=False,
+            )
+            yield f"data: {error_data}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @assistant_router.get(
     "/conversations/{conversation_id}/messages",
     response_model=MessageListResponse,
@@ -557,8 +649,12 @@ async def list_messages(
                 ],
                 uncertainty=r.uncertainty,
                 created_at=r.created_at,
-                mentions=getattr(r, "mentions", []) if isinstance(getattr(r, "mentions", None), list) else [],
-                sender_user_id=str(r.sender_user_id) if getattr(r, "sender_user_id", None) is not None else None,
+                mentions=getattr(r, "mentions", [])
+                if isinstance(getattr(r, "mentions", None), list)
+                else [],
+                sender_user_id=str(r.sender_user_id)
+                if getattr(r, "sender_user_id", None) is not None
+                else None,
                 sender_display_name=getattr(r, "sender_display_name", None),
                 sender_avatar_url=getattr(r, "sender_avatar_url", None),
             )

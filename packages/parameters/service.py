@@ -34,7 +34,6 @@ from packages.parameters.entities import (
 )
 from packages.provenance.entities import (
     DerivationRun,
-    EvidenceSetVersion,
     ProvenanceEdge,
 )
 

@@ -56,7 +56,7 @@
 
 ### 2.4 迁移
 
-- Alembic 管理，当前 revision 链：`0001_squashed → 0062 → ... → 0068`
+- Alembic 管理，当前 revision 链：`0001_squashed → 0062 → ... → 0073`
 - 新迁移按编号递增，`down_revision` 指向上一个
 - 大批量删除旧迁移时做 squash（基线用 raw SQL 保留 RLS/角色/触发器）
 

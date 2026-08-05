@@ -218,9 +218,7 @@ async def _record_audit(
         payload: 审计载荷（before/after/diff 等）。
     """
     event = AuditEventData(
-        department_id=actor.department_id
-        if actor.department_id is not None
-        else actor.user_id,
+        department_id=actor.department_id if actor.department_id is not None else actor.user_id,
         action=action,
         actor_user_id=actor.user_id,
         resource_type="ai_tool",

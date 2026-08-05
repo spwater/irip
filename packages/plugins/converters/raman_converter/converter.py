@@ -211,7 +211,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         print(
-            "用法: python -m packages.plugins.converters.raman_converter.converter <拉曼光谱 TXT 文件路径>"
+            "用法: python -m packages.plugins.converters.raman_converter.converter"
+            " <拉曼光谱 TXT 文件路径>"
         )
         sys.exit(1)
 

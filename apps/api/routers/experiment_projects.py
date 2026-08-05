@@ -34,14 +34,10 @@ experiment_projects_router = APIRouter(
 )
 
 #: 需 experiment_project:manage 权限的当前用户依赖。
-ManageUserDep = Annotated[
-    CurrentUser, Depends(require_permission("experiment_project:manage"))
-]
+ManageUserDep = Annotated[CurrentUser, Depends(require_permission("experiment_project:manage"))]
 
 #: 需 experiment_project:read 权限的当前用户依赖。
-ReadUserDep = Annotated[
-    CurrentUser, Depends(require_permission("experiment_project:read"))
-]
+ReadUserDep = Annotated[CurrentUser, Depends(require_permission("experiment_project:read"))]
 
 
 def get_experiment_project_service() -> ExperimentProjectService:
@@ -71,9 +67,7 @@ class CreateProjectBody(BaseModel):
     code: str = Field(..., min_length=1, max_length=200, description="项目编码")
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
-    visible_departments: list[str] = Field(
-        default_factory=list, description="可见单位 UUID 列表"
-    )
+    visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")
     owner_user_id: str = Field(..., description="项目负责人 UUID")
 
 
@@ -211,9 +205,7 @@ async def _check_ownership(
 # ---- 端点 ----
 
 
-@experiment_projects_router.post(
-    "", response_model=ExperimentProjectResponse, status_code=201
-)
+@experiment_projects_router.post("", response_model=ExperimentProjectResponse, status_code=201)
 async def create_project(
     body: CreateProjectBody,
     current_user: ManageUserDep,
@@ -301,9 +293,7 @@ async def list_projects(
     )
 
 
-@experiment_projects_router.get(
-    "/{project_id}", response_model=ExperimentProjectDetailResponse
-)
+@experiment_projects_router.get("/{project_id}", response_model=ExperimentProjectDetailResponse)
 async def get_project(
     project_id: UUID,
     current_user: ReadUserDep,
@@ -351,9 +341,7 @@ async def get_project(
     )
 
 
-@experiment_projects_router.patch(
-    "/{project_id}", response_model=ExperimentProjectResponse
-)
+@experiment_projects_router.patch("/{project_id}", response_model=ExperimentProjectResponse)
 async def update_project(
     project_id: UUID,
     body: UpdateProjectBody,
@@ -378,9 +366,7 @@ async def update_project(
     # 先查询当前项目以获取 department_id 和 owner_user_id
     existing = await service.get(project_id)
     # 归属检查：所有者+上级模型
-    await _check_ownership(
-        current_user, existing.department_id, existing.owner_user_id, service
-    )
+    await _check_ownership(current_user, existing.department_id, existing.owner_user_id, service)
 
     project = await service.update(
         project_id=project_id,
@@ -393,9 +379,7 @@ async def update_project(
     return _to_response(project)
 
 
-@experiment_projects_router.patch(
-    "/{project_id}/status", response_model=ExperimentProjectResponse
-)
+@experiment_projects_router.patch("/{project_id}/status", response_model=ExperimentProjectResponse)
 async def update_project_status(
     project_id: UUID,
     body: UpdateProjectStatusBody,
@@ -419,9 +403,7 @@ async def update_project_status(
     """
     # 归属检查：所有者+上级模型
     project = await service.get(project_id)
-    await _check_ownership(
-        current_user, project.department_id, project.owner_user_id, service
-    )
+    await _check_ownership(current_user, project.department_id, project.owner_user_id, service)
 
     updated = await service.set_status(
         project_id=project_id,
@@ -448,7 +430,5 @@ async def delete_project(
         AppError: code="conflict"，当项目未归档或仍有任务时。
     """
     project = await service.get(project_id)
-    await _check_ownership(
-        current_user, project.department_id, project.owner_user_id, service
-    )
+    await _check_ownership(current_user, project.department_id, project.owner_user_id, service)
     await service.delete(project_id)

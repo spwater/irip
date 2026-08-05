@@ -7,6 +7,10 @@
 """
 
 from apps.api.composition import CompositionContext
+from apps.api.routers.account import (
+    get_account_session_factory,
+    get_s3_repo,
+)
 from apps.api.routers.ai_config import (
     get_active_ai_config,
 )
@@ -24,10 +28,6 @@ from apps.api.routers.assistant import (
 )
 from apps.api.routers.collaboration import (
     get_ai_service as get_collaboration_ai_service,
-)
-from apps.api.routers.account import (
-    get_account_session_factory,
-    get_s3_repo,
 )
 from apps.api.routers.object_types import (
     set_session_factory as set_object_types_session_factory,

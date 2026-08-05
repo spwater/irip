@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Divider,
@@ -62,7 +62,11 @@ const STATUS_LABEL: Record<string, string> = {
  * - 候选版本抽屉（ApprovalPanel）
  * - 弃用操作（Popconfirm）
  */
-export function ParameterPage(): JSX.Element {
+export function ParameterPage({
+  initialProvenanceRunId,
+}: {
+  initialProvenanceRunId?: string;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
@@ -70,6 +74,18 @@ export function ParameterPage(): JSX.Element {
   const [form] = Form.useForm();
   const [versionsDrawerParam, setVersionsDrawerParam] = useState<ParameterSummary | null>(null);
   const [candidatesDrawerParam, setCandidatesDrawerParam] = useState<ParameterSummary | null>(null);
+
+  // 如果有 provenance_run_id 深链参数，默认切换到「溯源链路」Tab
+  const [activeTab, setActiveTab] = useState<string>(
+    initialProvenanceRunId ? 'provenance' : 'list',
+  );
+
+  // 当 provenance_run_id 深链参数变化时（同页面导航），自动切换到溯源链路 Tab
+  useEffect(() => {
+    if (initialProvenanceRunId) {
+      setActiveTab('provenance');
+    }
+  }, [initialProvenanceRunId]);
 
   // ---- 数据查询 ----
   const { data, isLoading } = useQuery({
@@ -217,7 +233,8 @@ export function ParameterPage(): JSX.Element {
   return (
     <div>
       <Tabs
-        defaultActiveKey="list"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={[
           {
             key: 'list',
@@ -370,7 +387,7 @@ export function ParameterPage(): JSX.Element {
           {
             key: 'provenance',
             label: '溯源链路',
-            children: <ProvenancePage />,
+            children: <ProvenancePage initialRunId={initialProvenanceRunId} />,
           },
         ]}
       />

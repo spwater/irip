@@ -290,7 +290,9 @@ async def update_object(
     """
     # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
+    await _check_object_ownership(
+        current_user, existing.department_id, existing.owner_user_id, service
+    )
 
     obj = await service.update_object(
         object_id=object_id,
@@ -325,7 +327,9 @@ async def update_object_status(
     """
     # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
+    await _check_object_ownership(
+        current_user, existing.department_id, existing.owner_user_id, service
+    )
 
     obj = await service.set_object_status(
         object_id=object_id,
@@ -350,12 +354,16 @@ async def delete_object(
     """
     # 归属检查：所有者+上级模型
     existing = await service.get_object(object_id)
-    await _check_object_ownership(current_user, existing.department_id, existing.owner_user_id, service)
+    await _check_object_ownership(
+        current_user, existing.department_id, existing.owner_user_id, service
+    )
 
     # 检查是否有关联的 fact 数据（外键约束保护）
     async with service._scoped_session() as session:  # noqa: SLF001
         import sqlalchemy as sa
+
         from packages.facts.entities import Fact
+
         count_result = await session.execute(
             sa.select(sa.func.count(Fact.id)).where(Fact.object_id == object_id)
         )
@@ -363,7 +371,10 @@ async def delete_object(
         if fact_count > 0:
             raise AppError(
                 code="conflict",
-                message=f"无法删除该实验对象，仍有 {fact_count} 条原始数据关联。请先删除或转移关联数据后再操作。",
+                message=(
+                    f"无法删除该实验对象，仍有 {fact_count} 条原始数据关联。"
+                    "请先删除或转移关联数据后再操作。"
+                ),
                 retryable=False,
                 fields={"object_id": str(object_id), "fact_count": fact_count},
             )

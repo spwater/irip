@@ -14,7 +14,6 @@
 图片文件通过 PaddleOCR 转为文本，避免依赖多模态 LLM。
 """
 
-import base64
 import logging
 from pathlib import Path
 
@@ -23,9 +22,7 @@ from packages.common.errors import AppError
 logger = logging.getLogger(__name__)
 
 
-def extract_text(
-    file_path: Path, engine: str = "auto", image_dpi: int = 200
-) -> str:
+def extract_text(file_path: Path, engine: str = "auto", image_dpi: int = 200) -> str:
     """从文件中提取文本内容。
 
     所有文件类型均返回 str（纯文本）。图片和扫描件 PDF 通过 PaddleOCR
@@ -101,9 +98,10 @@ def _extract_pdf(file_path: Path, image_dpi: int = 200) -> str:
 def _extract_pdf_with_ocr(file_path: Path, image_dpi: int = 200) -> str:
     """用 PaddleOCR 对 PDF 每页做 OCR，返回纯文本。"""
     try:
-        import fitz
-        import tempfile
         import os
+        import tempfile
+
+        import fitz
     except ImportError:
         return file_path.read_text(encoding="utf-8", errors="ignore")
 

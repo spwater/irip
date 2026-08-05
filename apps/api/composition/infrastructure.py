@@ -39,7 +39,6 @@ def register(ctx: CompositionContext) -> None:
         ctx: 组合根共享上下文。
     """
     from apps.api.dependencies.dept_scope import get_rls_dept_id
-    from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.common.artifacts import ArtifactService
     from packages.connectors.mapping import IngestionService
     from packages.parameters.service import ParameterService

@@ -14,10 +14,9 @@ Run: uv run pytest tests/test_object_graph_regression.py -v
 
 import inspect
 import os
-from uuid import UUID, uuid4
-
 
 # ---- Test 1: Module Import & Type Definitions ----
+
 
 def test_module_imports_cleanly():
     """Verify package can be imported without errors."""
@@ -42,6 +41,7 @@ def test_module_syntax_is_valid_python312():
 
 
 # ---- Test 2: ORM Column Verification ----
+
 
 def test_industrial_object_has_no_parent_id_column():
     """parent_id must NOT be a column on IndustrialObject (the bug being fixed)."""
@@ -105,6 +105,7 @@ def test_industrial_object_optional_columns():
 
 
 # ---- Test 3: add_object Constructor Fields ----
+
 
 def test_add_object_constructs_with_visibility_scope():
     """add_object must pass visibility_scope='tree' to IndustrialObject constructor."""
@@ -221,6 +222,7 @@ def test_add_object_has_all_constructor_fields():
 
 # ---- Test 4: Project-wide Scan for parent_id in IndustrialObject Construction ----
 
+
 def test_no_other_file_passes_parent_id_to_industrial_object():
     """No other file in the project should pass parent_id= to IndustrialObject constructor.
 
@@ -254,6 +256,7 @@ def test_no_other_file_passes_parent_id_to_industrial_object():
 
         # Parse with AST to find IndustrialObject constructor calls
         import ast
+
         try:
             tree = ast.parse(content, filename=filepath)
         except SyntaxError:
@@ -262,12 +265,8 @@ def test_no_other_file_passes_parent_id_to_industrial_object():
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 is_ind_obj = (
-                    (isinstance(node.func, ast.Name) and node.func.id == "IndustrialObject")
-                    or (
-                        isinstance(node.func, ast.Attribute)
-                        and node.func.attr == "IndustrialObject"
-                    )
-                )
+                    isinstance(node.func, ast.Name) and node.func.id == "IndustrialObject"
+                ) or (isinstance(node.func, ast.Attribute) and node.func.attr == "IndustrialObject")
                 if is_ind_obj:
                     for kw in node.keywords:
                         if kw.arg == "parent_id":
@@ -286,15 +285,18 @@ def test_service_class_init_has_actor_id():
 
     sig = inspect.signature(ObjectGraphService.__init__)
     params = list(sig.parameters.keys())
-    assert "actor_id" in params or "self" in params and "actor_id" in ["self"] + list(sig.parameters.keys()), (
-        "ObjectGraphService must accept actor_id"
-    )
+    assert (
+        "actor_id" in params
+        or "self" in params
+        and "actor_id" in ["self"] + list(sig.parameters.keys())
+    ), "ObjectGraphService must accept actor_id"
 
     source = inspect.getsource(ObjectGraphService.__init__)
     assert "self._actor_id" in source, "actor_id must be stored as self._actor_id"
 
 
 # ---- Test 5: Edge Cases & Type Consistency ----
+
 
 def test_visibility_scope_default_value():
     """visibility_scope must default to 'tree' per A-class requirements."""
@@ -319,8 +321,8 @@ def test_department_id_is_not_nullable():
 
 def test_id_is_uuid_type():
     """id column must be UUID type."""
+
     from packages.standards.objects import IndustrialObject
-    from uuid import UUID as UUIDType
 
     col = IndustrialObject.__table__.columns["id"]
     col_type = col.type

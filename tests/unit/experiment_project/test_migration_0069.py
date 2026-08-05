@@ -15,8 +15,6 @@
 import glob
 from pathlib import Path
 
-import pytest
-
 #: 迁移脚本目录
 MIGRATIONS_DIR = Path(__file__).parents[3] / "migrations" / "versions"
 
@@ -55,9 +53,7 @@ class TestMigrationChain:
     def test_migration_0069_revision(self):
         """0069.revision == '0069'"""
         mod = _load_migration_module("0069_experiment_project")
-        assert mod.revision == "0069", (
-            f"0069.revision 应为 '0069'，实际为 {mod.revision!r}"
-        )
+        assert mod.revision == "0069", f"0069.revision 应为 '0069'，实际为 {mod.revision!r}"
 
 
 # ===========================================================================
@@ -79,9 +75,7 @@ class TestCreateTable:
         """experiment_project 表含 A 类 4 列"""
         source = _glob_migration_source("0069")
         for col in ["department_id", "visible_departments", "visibility_scope", "owner_user_id"]:
-            assert col in source, (
-                f"experiment_project 表应包含 A 类列 '{col}'"
-            )
+            assert col in source, f"experiment_project 表应包含 A 类列 '{col}'"
 
     def test_department_id_not_null_with_fk(self):
         """department_id 为 NOT NULL 且有 FK→department.id"""
@@ -118,9 +112,7 @@ class TestCreateTable:
         assert "uq_experiment_project_dept_code" in source, (
             "应有唯一约束 uq_experiment_project_dept_code"
         )
-        assert "UNIQUE (department_id, code)" in source, (
-            "唯一约束应为 (department_id, code)"
-        )
+        assert "UNIQUE (department_id, code)" in source, "唯一约束应为 (department_id, code)"
 
     def test_gin_index_on_visible_departments(self):
         """GIN 索引在 visible_departments 列上"""
@@ -128,9 +120,7 @@ class TestCreateTable:
         assert "ix_experiment_project_visible_depts_gin" in source, (
             "应有 GIN 索引 ix_experiment_project_visible_depts_gin"
         )
-        assert "USING GIN (visible_departments)" in source, (
-            "GIN 索引应在 visible_departments 列上"
-        )
+        assert "USING GIN (visible_departments)" in source, "GIN 索引应在 visible_departments 列上"
 
     def test_business_columns(self):
         """业务字段：code, display_name, description, status, lock_version"""
@@ -163,9 +153,7 @@ class TestRLSPolicy:
     def test_rls_has_private_branch(self):
         """RLS 策略含私有分支（visibility_scope = 'private'）"""
         source = _glob_migration_source("0069")
-        assert "visibility_scope = 'private'" in source, (
-            "RLS 策略应含私有分支"
-        )
+        assert "visibility_scope = 'private'" in source, "RLS 策略应含私有分支"
 
     def test_rls_private_branch_checks_owner(self):
         """私有分支检查 owner_user_id = current_user_id"""
@@ -177,30 +165,22 @@ class TestRLSPolicy:
     def test_rls_has_tree_branch(self):
         """RLS 策略含层级分支（visibility_scope = 'tree'）"""
         source = _glob_migration_source("0069")
-        assert "visibility_scope = 'tree'" in source, (
-            "RLS 策略应含层级分支"
-        )
+        assert "visibility_scope = 'tree'" in source, "RLS 策略应含层级分支"
 
     def test_rls_tree_branch_uses_current_visible_dept_ids(self):
         """层级分支使用 current_visible_dept_ids()"""
         source = _glob_migration_source("0069")
-        assert "current_visible_dept_ids()" in source, (
-            "层级分支应使用 current_visible_dept_ids()"
-        )
+        assert "current_visible_dept_ids()" in source, "层级分支应使用 current_visible_dept_ids()"
 
     def test_rls_has_explicit_branch(self):
         """RLS 策略含白名单分支（visibility_scope = 'explicit'）"""
         source = _glob_migration_source("0069")
-        assert "visibility_scope = 'explicit'" in source, (
-            "RLS 策略应含白名单分支"
-        )
+        assert "visibility_scope = 'explicit'" in source, "RLS 策略应含白名单分支"
 
     def test_rls_has_all_branch(self):
         """RLS 策略含全可见分支（visibility_scope = 'all'）"""
         source = _glob_migration_source("0069")
-        assert "visibility_scope = 'all'" in source, (
-            "RLS 策略应含全可见分支"
-        )
+        assert "visibility_scope = 'all'" in source, "RLS 策略应含全可见分支"
 
     def test_rls_uses_jsonb_contains(self):
         """白名单分支使用 JSONB @> 操作符"""
@@ -217,7 +197,7 @@ class TestRLSPolicy:
         assert start != -1, "应包含 CREATE POLICY 语句"
         # 找到该 SQL 语句的结束（以 ) 结尾的行）
         end = source.find(")", source.find("visibility_scope = 'all'", start))
-        policy_sql = source[start:end + 1]
+        policy_sql = source[start : end + 1]
 
         # 验证括号配平
         open_count = policy_sql.count("(")
@@ -239,16 +219,12 @@ class TestForbidReprivatizeTrigger:
     def test_creates_trigger(self):
         """0069 创建 forbid_reprivatize 触发器"""
         source = _glob_migration_source("0069")
-        assert "trg_forbid_reprivatize" in source, (
-            "应创建 trg_forbid_reprivatize 触发器"
-        )
+        assert "trg_forbid_reprivatize" in source, "应创建 trg_forbid_reprivatize 触发器"
 
     def test_trigger_is_before_update(self):
         """触发器为 BEFORE UPDATE"""
         source = _glob_migration_source("0069")
-        assert "BEFORE UPDATE ON experiment_project" in source, (
-            "触发器应为 BEFORE UPDATE"
-        )
+        assert "BEFORE UPDATE ON experiment_project" in source, "触发器应为 BEFORE UPDATE"
 
     def test_trigger_executes_forbid_reprivatize_function(self):
         """触发器执行 forbid_reprivatize() 函数"""
@@ -294,17 +270,16 @@ class TestFlowDefinitionProjectId:
     def test_fk_uses_do_block_for_idempotency(self):
         """FK 约束使用 DO $$ BEGIN ... END $$ 块保证幂等"""
         source = _glob_migration_source("0069")
-        assert "DO $$" in source, (
-            "FK 约束应使用 DO $$ 块保证幂等"
-        )
+        assert "DO $$" in source, "FK 约束应使用 DO $$ 块保证幂等"
         assert "IF NOT EXISTS" in source
 
     def test_project_name_deprecated_comment(self):
         """flow_definition.project_name 加 DEPRECATED COMMENT"""
         source = _glob_migration_source("0069")
-        assert "COMMENT ON COLUMN flow_definition.project_name IS 'DEPRECATED: replaced by project_id'" in source, (
-            "project_name 应加 DEPRECATED COMMENT"
-        )
+        assert (
+            "COMMENT ON COLUMN flow_definition.project_name IS 'DEPRECATED: replaced by project_id'"
+            in source
+        ), "project_name 应加 DEPRECATED COMMENT"
 
 
 # ===========================================================================
@@ -325,54 +300,42 @@ class TestDataMigration:
     def test_migration_uses_gen_random_uuid_for_id(self):
         """存量迁移使用 gen_random_uuid() 生成 id"""
         source = _glob_migration_source("0069")
-        insert_section = source[source.find("INSERT INTO experiment_project"):]
-        assert "gen_random_uuid()" in insert_section, (
-            "存量迁移应使用 gen_random_uuid() 生成 id"
-        )
+        insert_section = source[source.find("INSERT INTO experiment_project") :]
+        assert "gen_random_uuid()" in insert_section, "存量迁移应使用 gen_random_uuid() 生成 id"
 
     def test_migration_generates_proj_code(self):
         """存量迁移生成 'proj_' 前缀编码"""
         source = _glob_migration_source("0069")
-        insert_section = source[source.find("INSERT INTO experiment_project"):]
-        assert "'proj_'" in insert_section, (
-            "存量迁移应生成 'proj_' 前缀编码"
-        )
+        insert_section = source[source.find("INSERT INTO experiment_project") :]
+        assert "'proj_'" in insert_section, "存量迁移应生成 'proj_' 前缀编码"
 
     def test_migration_takes_earliest_owner(self):
         """owner_user_id 取该 project_name 下最早创建任务的 owner"""
         source = _glob_migration_source("0069")
-        assert "ORDER BY fd2.created_at ASC" in source, (
-            "应按 created_at ASC 取最早创建任务的 owner"
-        )
+        assert "ORDER BY fd2.created_at ASC" in source, "应按 created_at ASC 取最早创建任务的 owner"
         assert "LIMIT 1" in source
 
     def test_migration_is_idempotent(self):
         """存量迁移幂等（NOT EXISTS 检查）"""
         source = _glob_migration_source("0069")
-        assert "WHERE NOT EXISTS" in source, (
-            "存量迁移应使用 WHERE NOT EXISTS 保证幂等"
-        )
+        assert "WHERE NOT EXISTS" in source, "存量迁移应使用 WHERE NOT EXISTS 保证幂等"
 
     def test_migration_filters_non_empty_project_name(self):
         """迁移过滤 project_name 非空"""
         source = _glob_migration_source("0069")
         assert "fd.project_name IS NOT NULL" in source
-        assert "fd.project_name <> ''" in source, (
-            "应过滤 project_name 非空"
-        )
+        assert "fd.project_name <> ''" in source, "应过滤 project_name 非空"
 
     def test_backfill_flow_definition_project_id(self):
         """回填 flow_definition.project_id"""
         source = _glob_migration_source("0069")
         assert "UPDATE flow_definition fd" in source
-        assert "SET project_id = ep.id" in source, (
-            "应回填 flow_definition.project_id"
-        )
+        assert "SET project_id = ep.id" in source, "应回填 flow_definition.project_id"
 
     def test_backfill_joins_on_dept_and_project_name(self):
         """回填按 department_id + project_name 关联"""
         source = _glob_migration_source("0069")
-        update_section = source[source.find("UPDATE flow_definition fd"):]
+        update_section = source[source.find("UPDATE flow_definition fd") :]
         assert "ep.department_id = fd.department_id" in update_section
         assert "ep.display_name = fd.project_name" in update_section
 
@@ -393,15 +356,24 @@ class TestExperimentProjectORM:
 
     def test_has_all_columns(self):
         """ORM 含全部必要列"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables.get("experiment_project")
         assert table is not None, "experiment_project 表应注册到 Base.metadata"
         expected_cols = {
-            "id", "department_id", "code", "display_name", "description",
-            "status", "visible_departments", "visibility_scope", "owner_user_id",
-            "created_at", "updated_at", "lock_version",
+            "id",
+            "department_id",
+            "code",
+            "display_name",
+            "description",
+            "status",
+            "visible_departments",
+            "visibility_scope",
+            "owner_user_id",
+            "created_at",
+            "updated_at",
+            "lock_version",
         }
         actual_cols = set(table.columns.keys())
         missing = expected_cols - actual_cols
@@ -409,8 +381,8 @@ class TestExperimentProjectORM:
 
     def test_department_id_not_null_with_fk(self):
         """department_id 为 NOT NULL 且有 FK→department.id"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["experiment_project"]
         col = table.columns["department_id"]
@@ -422,8 +394,8 @@ class TestExperimentProjectORM:
 
     def test_owner_user_id_not_null_with_fk(self):
         """owner_user_id 为 NOT NULL 且有 FK→app_user.id"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["experiment_project"]
         col = table.columns["owner_user_id"]
@@ -435,8 +407,8 @@ class TestExperimentProjectORM:
 
     def test_visible_departments_not_null(self):
         """visible_departments 为 NOT NULL"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["experiment_project"]
         col = table.columns["visible_departments"]
@@ -444,8 +416,8 @@ class TestExperimentProjectORM:
 
     def test_visibility_scope_not_null(self):
         """visibility_scope 为 NOT NULL"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["experiment_project"]
         col = table.columns["visibility_scope"]
@@ -453,8 +425,8 @@ class TestExperimentProjectORM:
 
     def test_unique_constraint(self):
         """UniqueConstraint (department_id, code)"""
-        from packages.common.database import Base
         import packages.experiment_project.entities  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["experiment_project"]
         constraint_names = [c.name for c in table.constraints if hasattr(c, "name")]
@@ -475,18 +447,16 @@ class TestFlowDefinitionProjectIdColumn:
 
     def test_flow_definition_has_project_id(self):
         """FlowDefinition ORM 含 project_id 列"""
-        from packages.common.database import Base
         import packages.components.flow_runtime  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["flow_definition"]
-        assert "project_id" in table.columns, (
-            "flow_definition 应包含 project_id 列"
-        )
+        assert "project_id" in table.columns, "flow_definition 应包含 project_id 列"
 
     def test_project_id_nullable_with_fk(self):
         """project_id 为 nullable 且有 FK→experiment_project.id"""
-        from packages.common.database import Base
         import packages.components.flow_runtime  # noqa: F401
+        from packages.common.database import Base
 
         table = Base.metadata.tables["flow_definition"]
         col = table.columns["project_id"]

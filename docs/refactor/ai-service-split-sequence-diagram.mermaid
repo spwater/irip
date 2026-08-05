@@ -1,0 +1,43 @@
+sequenceDiagram
+    participant Router as AssistantRouter
+    participant Facade as AIService (Facade)
+    participant Ask as AskService
+    participant Conv as ConversationService
+    participant Tool as ToolExecutor
+    participant Persist as MessagePersistence
+    participant Cancel as CancellationRegistry
+    participant Provider as AIProvider
+
+    Router->>Facade: ask(user, question, conversation_id, ...)
+    Facade->>Ask: ask(user, question, conversation_id, ...)
+
+    Note over Ask: _prepare_ask phase
+    Ask->>Ask: _prepare_ask(user, question, ...)
+    Ask->>Conv: create_conversation / list_messages
+    Conv-->>Ask: ConversationRef / list[MessageRef]
+    Ask->>Cancel: register(conversation_id)
+    Cancel-->>Ask: cancel_event
+    Ask->>Ask: build _AskContext
+
+    Note over Ask: mention_only branch
+    alt mention_only
+        Ask->>Persist: persist_user_message_only(...)
+        Ask->>Persist: auto_generate_title(...)
+        Ask-->>Facade: AIResponse(answer="")
+        Facade-->>Router: AIResponse
+    else normal flow
+        Ask->>Provider: complete(ai_request, cancel_event)
+        Provider-->>Ask: AIResponse
+
+        Note over Ask: _execute_and_finalize phase
+        Ask->>Tool: execute_tool(tool_name, args, user, org_id)
+        Tool->>Tool: check_role_permission(user, permission)
+        Tool-->>Ask: {summary, data}
+        Ask->>Provider: complete(second_request, cancel_event)
+        Provider-->>Ask: AIResponse
+        Ask->>Persist: persist_messages(...)
+        Ask->>Persist: auto_generate_title(...)
+        Ask->>Cancel: unregister(conversation_id)
+        Ask-->>Facade: AIResponse
+        Facade-->>Router: AIResponse
+    end

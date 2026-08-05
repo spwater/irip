@@ -193,9 +193,7 @@ class ProvenanceGraphService(ScopedSessionMixin):
 
             # 加载 fact 节点
             if fact_ids:
-                f_result = await session.execute(
-                    sa.select(Fact).where(Fact.id.in_(fact_ids))
-                )
+                f_result = await session.execute(sa.select(Fact).where(Fact.id.in_(fact_ids)))
                 facts = f_result.scalars().all()
 
                 for f in facts:
@@ -276,9 +274,7 @@ class ProvenanceGraphService(ScopedSessionMixin):
                 # 加载当前节点信息
                 current_node: ProvenanceNode | None = None
                 if current_type == "fact":
-                    f = await session.scalar(
-                        sa.select(Fact).where(Fact.id == current_id)
-                    )
+                    f = await session.scalar(sa.select(Fact).where(Fact.id == current_id))
                     if f is not None:
                         current_node = ProvenanceNode(
                             id=f.id,

@@ -299,7 +299,9 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """预测结果写入 model_execution 事实。"""
-        model = await model_service.create_model(code=f"fact_test_{uuid4().hex[:8]}", display_name="事实测试模型")
+        model = await model_service.create_model(
+            code=f"fact_test_{uuid4().hex[:8]}", display_name="事实测试模型"
+        )
         model_id = model.id
         artifact_id = UUID("00000000-0000-0000-0000-000000000001")
         version = await model_service.create_version(
@@ -337,7 +339,9 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """废弃模型。"""
-        model = await model_service.create_model(code=f"deprecate_test_{uuid4().hex[:8]}", display_name="废弃测试模型")
+        model = await model_service.create_model(
+            code=f"deprecate_test_{uuid4().hex[:8]}", display_name="废弃测试模型"
+        )
         model_id = model.id
         deprecated = await model_service.deprecate(model_id)
         assert deprecated.status == "deprecated"
@@ -349,7 +353,9 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """列表查询与版本列表。"""
-        model = await model_service.create_model(code=f"list_test_{uuid4().hex[:8]}", display_name="列表测试模型")
+        model = await model_service.create_model(
+            code=f"list_test_{uuid4().hex[:8]}", display_name="列表测试模型"
+        )
         model_id = model.id
 
         # 创建两个版本
@@ -375,7 +381,9 @@ class TestModelLifecycle:
         test_contract: ModelContract,
     ) -> None:
         """非法状态转换被拒绝。"""
-        model = await model_service.create_model(code=f"state_test_{uuid4().hex[:8]}", display_name="状态测试模型")
+        model = await model_service.create_model(
+            code=f"state_test_{uuid4().hex[:8]}", display_name="状态测试模型"
+        )
         model_id = model.id
         version = await model_service.create_version(model_id=model_id, contract=test_contract)
         version_id = version.id

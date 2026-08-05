@@ -11,8 +11,6 @@
 对应 docs/arch-db-backup-pitr-upgrade.md T03 / §4.1 / §4.2。
 """
 
-import asyncio
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -20,7 +18,6 @@ from uuid import uuid4
 import pytest
 
 from deployments.compose.backup_manifest import BackupManifest
-
 
 # ============================================================
 # _backup_handler PITR 元数据测试
@@ -72,7 +69,7 @@ class TestBackupHandlerPitrMetadata:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    result = await _backup_handler(job)
+                    await _backup_handler(job)
 
         # 验证 mark_succeeded 被调用且传入 PITR 元数据
         mock_service.mark_succeeded.assert_called_once()
@@ -120,7 +117,7 @@ class TestBackupHandlerPitrMetadata:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    result = await _backup_handler(job)
+                    await _backup_handler(job)
 
         # mark_succeeded 应被调用（但 PITR 元数据为 None）
         mock_service.mark_succeeded.assert_called_once()
@@ -189,8 +186,11 @@ class TestRestoreHandlerRecoveryTargetTime:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    with patch("apps.worker.tasks._resolve_backup_dir_by_id", return_value=Path("/backups/test")):
-                        result = await _restore_handler(job)
+                    with patch(
+                        "apps.worker.tasks._resolve_backup_dir_by_id",
+                        return_value=Path("/backups/test"),
+                    ):
+                        await _restore_handler(job)
 
         # 验证 run_restore 被调用且传入 recovery_target_time
         mock_run_restore.assert_called_once()
@@ -225,7 +225,10 @@ class TestRestoreHandlerRecoveryTargetTime:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    with patch("apps.worker.tasks._resolve_backup_dir_by_id", return_value=Path("/backups/test")):
+                    with patch(
+                        "apps.worker.tasks._resolve_backup_dir_by_id",
+                        return_value=Path("/backups/test"),
+                    ):
                         await _restore_handler(job)
 
         mock_run_restore.assert_called_once()
@@ -260,7 +263,10 @@ class TestRestoreHandlerRecoveryTargetTime:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    with patch("apps.worker.tasks._resolve_backup_dir_by_id", return_value=Path("/backups/test")):
+                    with patch(
+                        "apps.worker.tasks._resolve_backup_dir_by_id",
+                        return_value=Path("/backups/test"),
+                    ):
                         await _restore_handler(job)
 
         # 验证 mark_restored 被调用
@@ -295,7 +301,10 @@ class TestRestoreHandlerRecoveryTargetTime:
             with patch("packages.backups.service.BackupRecordService") as mock_service_cls:
                 mock_service_cls.return_value = mock_service
                 with patch("apps.worker.tasks.build_session_factory"):
-                    with patch("apps.worker.tasks._resolve_backup_dir_by_id", return_value=Path("/backups/test")):
+                    with patch(
+                        "apps.worker.tasks._resolve_backup_dir_by_id",
+                        return_value=Path("/backups/test"),
+                    ):
                         await _restore_handler(job)
 
         # mark_restored 的第二个参数应为解析后的 recovery_target_time
@@ -307,6 +316,7 @@ class TestRestoreHandlerRecoveryTargetTime:
         assert rtt is not None
         # 应解析为 datetime
         from datetime import datetime as dt
+
         if isinstance(rtt, dt):
             assert rtt.isoformat().startswith("2026-08-16T10:30:00")
 
@@ -340,15 +350,21 @@ class TestDailyBackupPayload:
         """daily_backup 任务的 Job payload 含 backup_method='pitr'。"""
         # 读取 celery_app.py 源码验证 payload 含 backup_method
         import inspect
+
         from apps.worker.celery_app import daily_backup
 
         source = inspect.getsource(daily_backup)
-        assert '"backup_method": "pitr"' in source or "'backup_method': 'pitr'" in source or \
-               '"backup_method"' in source and "'pitr'" in source
+        assert (
+            '"backup_method": "pitr"' in source
+            or "'backup_method': 'pitr'" in source
+            or '"backup_method"' in source
+            and "'pitr'" in source
+        )
 
     def test_daily_backup_record_backup_method_pitr(self) -> None:
         """daily_backup 创建的 BackupRecord 含 backup_method='pitr'。"""
         import inspect
+
         from apps.worker.celery_app import daily_backup
 
         source = inspect.getsource(daily_backup)

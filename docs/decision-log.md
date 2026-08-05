@@ -106,7 +106,7 @@
 
 ### D-015 迁移 Squashing（68 → 8）
 
-**决策**：0001-0061 压缩为单个 `0001_squashed_baseline`，保留 0062-0068 增量。
+**决策**：0001-0061 压缩为单个 `0001_squashed_baseline`，保留 0062-0073 增量。
 **理由**：68 个迁移文件导致空库建库极慢。squash 后基线用 raw SQL 保留 RLS/角色/触发器。
 **影响**：空库 `alembic upgrade head` 快 10 倍；`_split_sql()` 处理 psycopg3 async 多语句限制。
 

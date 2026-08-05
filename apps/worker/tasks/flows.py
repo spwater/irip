@@ -127,8 +127,8 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     await service.execute(run_uuid)
 
     # 获取最终状态
-    from packages.components.flow_runtime import FlowRun
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
+    from packages.components.flow_runtime import FlowRun
 
     async with session_scope(factory) as session:
         # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC
@@ -199,9 +199,8 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
 
     factory = build_session_factory(async_url)
     # RLS 通电：job 表有 B 类 RLS，使用 system GUC 跨部门更新
-    from packages.common.tenant_guc import set_dept_guc, set_user_guc
-
     from apps.worker.tasks import get_system_guc
+    from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
     sys_dept, sys_user = get_system_guc()
     async with session_scope(factory) as session:
@@ -342,7 +341,6 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     await service.resume(run_uuid)
 
     # 获取最终状态
-    from packages.components.flow_runtime import FlowRun
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
     async with session_scope(factory) as session:

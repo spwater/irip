@@ -47,8 +47,10 @@ async def fact_service(
     # 清理：删除该组织下的全部事实相关数据
     with sync_engine.connect() as conn:
         conn.execute(
-            sa.text("DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE department_id = :oid)"),
+            sa.text(
+                "DELETE FROM fact_data_index WHERE fact_id IN ("
+                "SELECT id FROM fact WHERE department_id = :oid)"
+            ),
             {"oid": org_id},
         )
         conn.execute(
@@ -111,8 +113,10 @@ async def fact_setup(
     # 清理事实数据 + 工业对象
     with sync_engine.connect() as conn:
         conn.execute(
-            sa.text("DELETE FROM fact_data_index WHERE fact_id IN ("
-                "SELECT id FROM fact WHERE department_id = :oid)"),
+            sa.text(
+                "DELETE FROM fact_data_index WHERE fact_id IN ("
+                "SELECT id FROM fact WHERE department_id = :oid)"
+            ),
             {"oid": org_id},
         )
         conn.execute(

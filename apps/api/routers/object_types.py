@@ -4,15 +4,14 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.common.database import session_scope
-from packages.common.errors import AppError
 from packages.standards.object_type_dict import ObjectTypeDict
+from packages.standards.object_type_service import ObjectTypeService
 
 object_types_router = APIRouter(prefix="/api/v1/object-types", tags=["object-types"])
 
@@ -66,16 +65,23 @@ def _to_response(obj: ObjectTypeDict) -> ObjectTypeResponse:
     )
 
 
+def _make_service(current_user: CurrentUser) -> ObjectTypeService:
+    """构建 ObjectTypeService 实例。"""
+    factory: async_sessionmaker[AsyncSession] = _get_session_factory()
+    return ObjectTypeService(
+        session_factory=factory,
+        department_id=current_user.department_id,
+        actor_id=current_user.user_id,
+    )
+
+
 @object_types_router.get("", response_model=list[ObjectTypeResponse])
 async def list_object_types(
     current_user: ReadUserDep,
 ) -> list[ObjectTypeResponse]:
-    async with session_scope(_get_session_factory()) as session:
-        result = await session.execute(
-            sa.select(ObjectTypeDict).order_by(ObjectTypeDict.sort_order.asc())
-        )
-        items = result.scalars().all()
-        return [_to_response(o) for o in items]
+    service = _make_service(current_user)
+    items = await service.list_object_types()
+    return [_to_response(o) for o in items]
 
 
 @object_types_router.post("", response_model=ObjectTypeResponse, status_code=201)
@@ -83,26 +89,12 @@ async def create_object_type(
     body: CreateObjectTypeRequest,
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
-    from packages.common.ids import gen_code
-
-    code = gen_code("obtype")
-    async with session_scope(_get_session_factory()) as session:
-        existing = await session.execute(
-            sa.select(ObjectTypeDict).where(ObjectTypeDict.display_name == body.display_name)
-        )
-        if existing.scalar_one_or_none() is not None:
-            raise AppError(code="conflict", message="类型名称已存在", retryable=False)
-        max_order = await session.execute(sa.select(sa.func.max(ObjectTypeDict.sort_order)))
-        sort_order = (max_order.scalar() or 0) + 1
-        obj = ObjectTypeDict(
-            code=code,
-            display_name=body.display_name,
-            description=body.description,
-            sort_order=sort_order,
-        )
-        session.add(obj)
-        await session.flush()
-        return _to_response(obj)
+    service = _make_service(current_user)
+    obj = await service.create_object_type(
+        display_name=body.display_name,
+        description=body.description,
+    )
+    return _to_response(obj)
 
 
 @object_types_router.patch("/{type_id}", response_model=ObjectTypeResponse)
@@ -111,23 +103,13 @@ async def update_object_type(
     body: UpdateObjectTypeRequest,
     current_user: WriteUserDep,
 ) -> ObjectTypeResponse:
-    from datetime import UTC
-    from datetime import datetime as dt
-
-    async with session_scope(_get_session_factory()) as session:
-        result = await session.execute(
-            sa.select(ObjectTypeDict).where(ObjectTypeDict.id == type_id)
-        )
-        obj = result.scalar_one_or_none()
-        if obj is None:
-            raise AppError(code="not_found", message="类型不存在", retryable=False)
-        if body.display_name is not None:
-            obj.display_name = body.display_name
-        if body.description is not None:
-            obj.description = body.description
-        obj.updated_at = dt.now(UTC)
-        await session.flush()
-        return _to_response(obj)
+    service = _make_service(current_user)
+    obj = await service.update_object_type(
+        type_id=type_id,
+        display_name=body.display_name,
+        description=body.description,
+    )
+    return _to_response(obj)
 
 
 @object_types_router.delete("/{type_id}", status_code=204)
@@ -135,26 +117,5 @@ async def delete_object_type(
     type_id: UUID,
     current_user: WriteUserDep,
 ) -> None:
-    async with session_scope(_get_session_factory()) as session:
-        result = await session.execute(
-            sa.select(ObjectTypeDict).where(ObjectTypeDict.id == type_id)
-        )
-        obj = result.scalar_one_or_none()
-        if obj is None:
-            raise AppError(code="not_found", message="类型不存在", retryable=False)
-        # 检查是否有对象在用这个类型
-        from packages.standards.objects import IndustrialObject
-
-        count_result = await session.execute(
-            sa.select(sa.func.count())
-            .select_from(IndustrialObject)
-            .where(IndustrialObject.object_type == obj.code)
-        )
-        obj_count = int(count_result.scalar() or 0)
-        if obj_count > 0:
-            raise AppError(
-                code="conflict",
-                message=f"该类型正在使用中（{obj_count} 个实验对象），无法删除",
-                retryable=False,
-            )
-        await session.delete(obj)
+    service = _make_service(current_user)
+    await service.delete_object_type(type_id)

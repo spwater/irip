@@ -83,18 +83,14 @@ async def get_system_service_user_id() -> UUID:
         "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
     )
     if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         async_url = db_url
 
     factory = build_session_factory(async_url)
     async with session_scope(factory) as session:
         result = await session.execute(
-            sa.text(
-                "SELECT id FROM app_user WHERE email = :email LIMIT 1"
-            ),
+            sa.text("SELECT id FROM app_user WHERE email = :email LIMIT 1"),
             {"email": _SYSTEM_SERVICE_EMAIL},
         )
         row = result.first()

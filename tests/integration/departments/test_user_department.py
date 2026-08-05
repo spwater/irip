@@ -74,9 +74,7 @@ async def _cleanup_departments(session_factory: object, org_id: object, codes: l
                 {"org": org_id, "codes": codes},
             )
             await session.execute(
-                sa.text(
-                    "DELETE FROM department WHERE department_id = :org AND code = ANY(:codes)"
-                ),
+                sa.text("DELETE FROM department WHERE department_id = :org AND code = ANY(:codes)"),
                 {"org": org_id, "codes": codes},
             )
 
@@ -173,9 +171,7 @@ async def test_get_department_users(
     finally:
         await _cleanup_test_user(async_session_factory, user1)
         await _cleanup_test_user(async_session_factory, user2)
-        await _cleanup_departments(
-            async_session_factory, test_user.department_id, ["ud_users_lab"]
-        )
+        await _cleanup_departments(async_session_factory, test_user.department_id, ["ud_users_lab"])
 
 
 @pytest.mark.integration
@@ -329,6 +325,4 @@ async def test_member_count_aggregation(
     finally:
         await _cleanup_test_user(async_session_factory, user1)
         await _cleanup_test_user(async_session_factory, user2)
-        await _cleanup_departments(
-            async_session_factory, test_user.department_id, ["ud_count_lab"]
-        )
+        await _cleanup_departments(async_session_factory, test_user.department_id, ["ud_count_lab"])

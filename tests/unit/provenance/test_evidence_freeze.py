@@ -17,7 +17,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.errors import AppError
-from packages.common.ids import new_id
 from packages.facts.service import CreateFactCommand, FactService
 from packages.provenance.evidence import EvidenceService
 from packages.provenance.recipes import RecipeService

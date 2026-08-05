@@ -8,7 +8,7 @@
 对应架构设计 §4 时序图 + §7.3 错误码约定。
 """
 
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -16,27 +16,25 @@ import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.routers.experiment_projects import (
     CreateProjectBody,
     ExperimentProjectDetailResponse,
     ExperimentProjectListItem,
-    ExperimentProjectListResponse,
-    ExperimentProjectResponse,
     UpdateProjectBody,
     UpdateProjectStatusBody,
     experiment_projects_router,
     get_experiment_project_service,
 )
-from packages.common.errors import AppError
 from packages.common.error_codes import ErrorCode
+from packages.common.errors import AppError
 from packages.experiment_project.entities import ExperimentProject
 from packages.experiment_project.service import (
     ExperimentProjectListResult,
     ExperimentProjectService,
 )
-
 
 # ===========================================================================
 # 测试 fixtures
@@ -534,9 +532,7 @@ class TestArchivedProjectCreateTask:
 
             # 模拟 flows 路由调用 check_not_archived
             with pytest.raises(AppError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(
-                    mock_check(uuid4())
-                )
+                asyncio.get_event_loop().run_until_complete(mock_check(uuid4()))
 
             assert exc_info.value.code == "conflict"
             assert "归档" in exc_info.value.message
@@ -565,7 +561,7 @@ class TestRequestResponseModels:
 
     def test_create_project_body_code_min_length(self):
         """code 最小长度 1"""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CreateProjectBody(
                 department_id=str(uuid4()),
                 code="",  # 空字符串
@@ -591,7 +587,7 @@ class TestRequestResponseModels:
 
     def test_update_project_status_body_rejects_invalid(self):
         """UpdateProjectStatusBody 拒绝非法 status"""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             UpdateProjectStatusBody(status="deleted", lock_version=0)
 
     def test_experiment_project_response_model(self):

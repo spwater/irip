@@ -202,17 +202,29 @@ async def list_facts(
                 .outerjoin(_FR, Fact.flow_run_id == _FR.id)
                 .outerjoin(_FV, _FR.flow_version_id == _FV.id)
                 # 备选路径：无 flow_run 时通过 task_code 直接 JOIN flow_definition
-                .outerjoin(_FD, sa.or_(
-                    _FV.flow_definition_id == _FD.id,
-                    Fact.task_code == _FD.code,
-                ))
+                .outerjoin(
+                    _FD,
+                    sa.or_(
+                        _FV.flow_definition_id == _FD.id,
+                        Fact.task_code == _FD.code,
+                    ),
+                )
                 .outerjoin(_EP, _FD.project_id == _EP.id)
                 .where(Fact.id.in_(fact_ids))
             )
             snap_result = await session.execute(snap_stmt)
             snap_map: dict[str, tuple[str | None, ...]] = {}
             for row in snap_result:
-                snap_map[str(row[0])] = (row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8])
+                snap_map[str(row[0])] = (
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    row[5],
+                    row[6],
+                    row[7],
+                    row[8],
+                )
             for item in items:
                 snap = snap_map.get(item.fact_id)
                 if snap:
@@ -227,9 +239,7 @@ async def list_facts(
 
             # 查每个 task_code 的总数（不受分页限制）
             count_stmt = (
-                sa.select(
-                    Fact.task_code, func.count(func.distinct(Fact.id))
-                )
+                sa.select(Fact.task_code, func.count(func.distinct(Fact.id)))
                 .where(Fact.task_code.isnot(None))
                 .group_by(Fact.task_code)
             )
@@ -281,8 +291,7 @@ async def list_facts(
                                 sa.select(Artifact.id, Artifact.media_type, Artifact.filename)
                                 .where(
                                     Artifact.media_type == "application/json",
-                                    Artifact.filename
-                                    == f"extract_{flow_run_id_row}.json",
+                                    Artifact.filename == f"extract_{flow_run_id_row}.json",
                                 )
                                 .order_by(Artifact.created_at.desc())
                                 .limit(1)
@@ -432,7 +441,7 @@ async def search_facts_by_data(
     """
     import sqlalchemy as sa
 
-    from packages.facts.entities import FactDataIndex, Fact
+    from packages.facts.entities import Fact, FactDataIndex
 
     # 构建 WHERE 条件
     conditions = []
@@ -463,10 +472,7 @@ async def search_facts_by_data(
     async with service._scoped_session() as session:  # noqa: SLF001
         # 查匹配的 fact_id（去重）
         stmt = (
-            sa.select(FactDataIndex.fact_id)
-            .where(sa.and_(*conditions))
-            .distinct()
-            .limit(page_size)
+            sa.select(FactDataIndex.fact_id).where(sa.and_(*conditions)).distinct().limit(page_size)
         )
         result = await session.execute(stmt)
         fact_ids = [row[0] for row in result]
@@ -577,8 +583,7 @@ async def search_facts_by_data(
                             sa.select(Artifact.id)
                             .where(
                                 Artifact.media_type == "application/json",
-                                Artifact.filename
-                                == f"extract_{flow_run_id_row}.json",
+                                Artifact.filename == f"extract_{flow_run_id_row}.json",
                             )
                             .order_by(Artifact.created_at.desc())
                             .limit(1)
@@ -620,8 +625,11 @@ async def get_fact(
 ) -> FactResponse:
     """获取事实（含 JOIN 快照字段）。"""
     import sqlalchemy as sa
+
+    from packages.components.flow_runtime import FlowDefinition as _FD
+    from packages.components.flow_runtime import FlowDefinitionVersionORM as _FV
+    from packages.components.flow_runtime import FlowRun as _FR
     from packages.facts.entities import Fact
-    from packages.components.flow_runtime import FlowDefinition as _FD, FlowDefinitionVersionORM as _FV, FlowRun as _FR
 
     ref = await service.get(fact_id)
     resp = _ref_to_response(ref)
@@ -690,9 +698,7 @@ async def get_fact_data(
             sa.select(Artifact)
             .where(
                 Artifact.id
-                == sa.select(Fact.source_artifact_id)
-                .where(Fact.id == fact_id)
-                .scalar_subquery(),
+                == sa.select(Fact.source_artifact_id).where(Fact.id == fact_id).scalar_subquery(),
                 Artifact.media_type == "application/json",
             )
             .limit(1)
@@ -702,9 +708,9 @@ async def get_fact_data(
         # 如果 source_artifact_id 指向的不是 JSON（指向原始文件），
         # 通过 flow_run_id 查找 JSON 结果 artifact
         if art_record is None:
-            flow_run_id_row = (await session.execute(
-                sa.select(Fact.flow_run_id).where(Fact.id == fact_id)
-            )).scalar_one_or_none()
+            flow_run_id_row = (
+                await session.execute(sa.select(Fact.flow_run_id).where(Fact.id == fact_id))
+            ).scalar_one_or_none()
             if flow_run_id_row is not None:
                 result = await session.execute(
                     sa.select(Artifact)
@@ -765,25 +771,35 @@ async def get_fact_data(
                     "data_interface": None,
                     "created_at": None,
                 }
-                # 通过 flow_run_id 外键补查 project_name, data_interface 和 created_at
-                # 用独立 session + flow_run 的 department_id 设 GUC，绕过 fact vs run 部门不一致的 RLS 问题
+                # 通过 flow_run_id 外键补查 project_name, data_interface
+                # 用独立 session + flow_run 的 department_id 设 GUC，
+                # 绕过 fact vs run 部门不一致的 RLS 问题
                 if fact_record.flow_run_id:
+                    import os as _os
+
+                    from packages.common.tenant_guc import set_dept_guc, set_user_guc
                     from packages.components.flow_runtime import (
                         FlowDefinition,
                         FlowDefinitionVersionORM,
                         FlowRun,
                     )
-                    from packages.common.tenant_guc import set_dept_guc, set_user_guc
-                    import os as _os
 
                     # 用 alembic URL (superuser) 开 session 绕过 RLS，仅用于补查元数据
                     _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "")
                     if _alembic_url:
-                        from sqlalchemy.ext.asyncio import async_sessionmaker as _asm, create_async_engine as _cae
-                        _engine = _cae(_alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1))
+                        from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
+                        from sqlalchemy.ext.asyncio import create_async_engine as _cae
+
+                        _engine = _cae(
+                            _alembic_url.replace(
+                                "postgresql+psycopg://", "postgresql+psycopg_async://", 1
+                            )
+                        )
                         _factory = _asm(_engine, expire_on_commit=False)
                         async with _factory() as sess:
-                            run_stmt = sa.select(FlowRun).where(FlowRun.id == fact_record.flow_run_id)
+                            run_stmt = sa.select(FlowRun).where(
+                                FlowRun.id == fact_record.flow_run_id
+                            )
                         run_record = (await sess.execute(run_stmt)).scalar_one_or_none()
                         if run_record:
                             fv_stmt = sa.select(FlowDefinitionVersionORM).where(
@@ -808,8 +824,10 @@ async def get_fact_data(
                                     project_name = None
                                     owner_display_name = None
                                     if fd.project_id:
-                                        from packages.experiment_project.entities import ExperimentProject
                                         from packages.auth.entities import AppUser
+                                        from packages.experiment_project.entities import (
+                                            ExperimentProject,
+                                        )
 
                                         ep_stmt = sa.select(ExperimentProject).where(
                                             ExperimentProject.id == fd.project_id
@@ -817,12 +835,18 @@ async def get_fact_data(
                                         ep = (await sess.execute(ep_stmt)).scalar_one_or_none()
                                         if ep:
                                             project_name = ep.display_name
-                                            owner_stmt = sa.select(AppUser.display_name).where(AppUser.id == ep.owner_user_id)
-                                            owner_row = (await sess.execute(owner_stmt)).scalar_one_or_none()
+                                            owner_stmt = sa.select(AppUser.display_name).where(
+                                                AppUser.id == ep.owner_user_id
+                                            )
+                                            owner_row = (
+                                                await sess.execute(owner_stmt)
+                                            ).scalar_one_or_none()
                                             owner_display_name = owner_row
                                 task_info["owner_name"] = owner_display_name
                                 task_info["project_name"] = project_name
-                                task_info["job_id"] = str(run_record.job_id) if run_record.job_id else None
+                                task_info["job_id"] = (
+                                    str(run_record.job_id) if run_record.job_id else None
+                                )
                                 task_info["created_at"] = (
                                     fd.created_at.isoformat() if fd.created_at else None
                                 )
@@ -927,7 +951,9 @@ async def get_fact_data(
                 )
 
                 # 用 flow_run_id 外键反查
-                fr_stmt = sa.select(Fact.flow_run_id, Fact.department_id, Fact.owner_user_id).where(Fact.id == fact_id)
+                fr_stmt = sa.select(Fact.flow_run_id, Fact.department_id, Fact.owner_user_id).where(
+                    Fact.id == fact_id
+                )
                 fr_result = (await session.execute(fr_stmt)).first()
                 flow_run_id = fr_result[0] if fr_result else None
 
@@ -977,7 +1003,9 @@ async def get_fact_data(
                                 # 查 experiment_project 取项目名
                                 project_name = None
                                 if fd.project_id:
-                                    from packages.experiment_project.entities import ExperimentProject
+                                    from packages.experiment_project.entities import (
+                                        ExperimentProject,
+                                    )
 
                                     ep_stmt = sa.select(ExperimentProject).where(
                                         ExperimentProject.id == fd.project_id
@@ -997,7 +1025,9 @@ async def get_fact_data(
                                     else None,
                                     "project_name": project_name,
                                     "owner_name": None,
-                                    "job_id": str(run_record.job_id) if run_record and run_record.job_id else None,
+                                    "job_id": str(run_record.job_id)
+                                    if run_record and run_record.job_id
+                                    else None,
                                     "department_name": dept_name,
                                     "data_interface": ", ".join(comp_names) if comp_names else None,
                                     "created_at": fd.created_at.isoformat()
@@ -1100,18 +1130,25 @@ async def delete_fact(
 
     from apps.api.main import _build_s3_repo
     from packages.common.artifacts import ArtifactService
-    from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
     # 先查出关联的 source_artifact_id + flow_run_id + 归属信息
     async with service._scoped_session() as session:  # noqa: SLF001
         art_result = await session.execute(
-            sa.select(Fact.source_artifact_id, Fact.department_id, Fact.owner_user_id, Fact.flow_run_id).where(Fact.id == fact_id)
+            sa.select(
+                Fact.source_artifact_id, Fact.department_id, Fact.owner_user_id, Fact.flow_run_id
+            ).where(Fact.id == fact_id)
         )
         row = art_result.first()
         if row is None:
             from packages.common.errors import AppError
-            raise AppError(code="not_found", message="事实不存在", retryable=False, fields={"fact_id": str(fact_id)})
+
+            raise AppError(
+                code="not_found",
+                message="事实不存在",
+                retryable=False,
+                fields={"fact_id": str(fact_id)},
+            )
         source_artifact_id = row[0]
         fact_dept_id = row[1]
         fact_owner_id = row[2]
@@ -1149,6 +1186,7 @@ async def delete_fact(
     # 同时删除关联的 FlowRun（导入历史）
     if flow_run_id is not None:
         from packages.components.flow_runtime import FlowRun
+
         async with service._scoped_session() as session:  # noqa: SLF001
             await session.execute(sa.delete(FlowRun).where(FlowRun.id == flow_run_id))
             await session.flush()
@@ -1165,7 +1203,6 @@ async def delete_facts_by_task(
 
     from apps.api.main import _build_s3_repo
     from packages.common.artifacts import ArtifactService
-    from packages.common.database import session_scope
     from packages.facts.entities import Fact
 
     # 先查出关联的 fact_id、source_artifact_id 和 flow_run_id
@@ -1203,6 +1240,7 @@ async def delete_facts_by_task(
     # 同时删除关联的 FlowRun（导入历史）
     if flow_run_ids:
         from packages.components.flow_runtime import FlowRun
+
         async with service._scoped_session() as session:  # noqa: SLF001
             await session.execute(sa.delete(FlowRun).where(FlowRun.id.in_(flow_run_ids)))
             await session.flush()

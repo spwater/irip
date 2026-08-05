@@ -1,7 +1,7 @@
 /**
  * V2 Models + Files + AI Assistant API
  */
-import { http } from './client';
+import { http, getAccessToken } from './client';
 import type { CursorPage } from './types';
 
 // ============================================================
@@ -162,6 +162,107 @@ export async function apiSendMessage(
     mentions: body.mentions ?? [],
   }, { signal });
   return res.data;
+}
+
+/** SSE 流式事件类型 */
+export type StreamEvent =
+  | { type: 'chunk'; content: string }
+  | { type: 'done'; answer: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null }
+  | { type: 'error'; message: string };
+
+/**
+ * 流式发送消息并获取 AI 回答（SSE）。
+ *
+ * 使用 fetch() 直接读取 ReadableStream，解析 SSE 事件。
+ * 返回 AsyncGenerator，调用方用 `for await...of` 迭代。
+ *
+ * @param conversationId 对话 ID
+ * @param body 请求体（问题、provider、thinking 等）
+ * @param signal AbortSignal，用于中断流式请求
+ */
+export async function* apiSendMessageStream(
+  conversationId: string,
+  body: {
+    question: string;
+    provider_name?: string;
+    thinking_enabled?: boolean;
+    system_context?: string;
+    mentions?: string[];
+  },
+  signal?: AbortSignal,
+): AsyncGenerator<StreamEvent> {
+  const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1';
+  const token = getAccessToken();
+
+  const res = await fetch(
+    `${baseURL}/assistant/conversations/${conversationId}/messages/stream`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        question: body.question,
+        provider_name: body.provider_name ?? 'openai_compatible',
+        thinking_enabled: body.thinking_enabled ?? false,
+        system_context: body.system_context ?? null,
+        mentions: body.mentions ?? [],
+      }),
+      signal,
+    },
+  );
+
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => '');
+    throw new Error(`Stream request failed: ${res.status}${errorText ? ` - ${errorText}` : ''}`);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error('No response body for stream');
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    // SSE 事件以 \n\n 分隔
+    const events = buffer.split('\n\n');
+    buffer = events.pop() ?? '';
+
+    for (const eventStr of events) {
+      for (const line of eventStr.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        const dataStr = line.slice(6);
+        if (dataStr === '[DONE]') return;
+        try {
+          yield JSON.parse(dataStr) as StreamEvent;
+        } catch {
+          // 跳过无效 JSON 行
+        }
+      }
+    }
+  }
+
+  // 处理缓冲区中剩余的未完成事件
+  if (buffer.trim()) {
+    for (const line of buffer.split('\n')) {
+      if (!line.startsWith('data: ')) continue;
+      const dataStr = line.slice(6);
+      if (dataStr === '[DONE]') return;
+      try {
+        yield JSON.parse(dataStr) as StreamEvent;
+      } catch {
+        // 跳过无效 JSON 行
+      }
+    }
+  }
 }
 
 export async function apiListMessages(conversationId: string): Promise<AssistantMessage[]> {

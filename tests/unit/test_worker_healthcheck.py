@@ -18,7 +18,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # 辅助函数
 # ---------------------------------------------------------------------------
@@ -76,12 +75,8 @@ class TestWorkerProcessInitSignal:
         from apps.worker.celery_app import _start_healthcheck_on_worker_init
 
         source = inspect.getsource(_start_healthcheck_on_worker_init)
-        assert "OSError" in source, (
-            "_start_healthcheck_on_worker_init 应捕获 OSError 处理端口冲突"
-        )
-        assert "except OSError" in source, (
-            "应使用 except OSError 捕获端口绑定异常"
-        )
+        assert "OSError" in source, "_start_healthcheck_on_worker_init 应捕获 OSError 处理端口冲突"
+        assert "except OSError" in source, "应使用 except OSError 捕获端口绑定异常"
 
     def test_signal_handler_registered_with_celery(self) -> None:
         """signal handler 通过 ``@worker_process_init.connect`` 注册。"""
@@ -151,9 +146,7 @@ class TestHealthcheckHandler:
             time.sleep(0.1)  # 等待线程启动
             status, body = _http_get(port, "/health")
             assert status == 200, f"/health 应返回 200，实际为 {status}"
-            assert b'"status": "ok"' in body, (
-                f"响应体应包含 status: ok，实际为 {body!r}"
-            )
+            assert b'"status": "ok"' in body, f"响应体应包含 status: ok，实际为 {body!r}"
         finally:
             server.shutdown()
             server.server_close()
@@ -182,12 +175,9 @@ class TestHealthcheckHandler:
             time.sleep(0.1)
             # 检查是否有名为 worker-healthcheck 的守护线程
             daemon_threads = [
-                t for t in threading.enumerate()
-                if t.name == "worker-healthcheck" and t.daemon
+                t for t in threading.enumerate() if t.name == "worker-healthcheck" and t.daemon
             ]
-            assert len(daemon_threads) >= 1, (
-                "应存在名为 'worker-healthcheck' 的守护线程"
-            )
+            assert len(daemon_threads) >= 1, "应存在名为 'worker-healthcheck' 的守护线程"
         finally:
             server.shutdown()
             server.server_close()
@@ -206,9 +196,7 @@ class TestHealthcheckHandler:
             time.sleep(0.1)
             status1, _ = _http_get(port1, "/health")
             status2, _ = _http_get(port2, "/health")
-            assert status1 == 200 and status2 == 200, (
-                "两个端口的 healthcheck 都应返回 200"
-            )
+            assert status1 == 200 and status2 == 200, "两个端口的 healthcheck 都应返回 200"
         finally:
             server1.shutdown()
             server1.server_close()

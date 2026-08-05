@@ -152,9 +152,11 @@ export function createAppRouter() {
     getParentRoute: () => protectedLayoutRoute,
     path: '/lab-ops',
     component: LabOpsPage,
-    validateSearch: (search: Record<string, unknown>): { tab?: string; project?: string } => ({
+    validateSearch: (search: Record<string, unknown>): { tab?: string; project?: string; param?: string; provenance_run_id?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
       project: typeof search.project === 'string' ? search.project : undefined,
+      param: typeof search.param === 'string' ? search.param : undefined,
+      provenance_run_id: typeof search.provenance_run_id === 'string' ? search.provenance_run_id : undefined,
     }),
   });
 

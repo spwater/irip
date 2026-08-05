@@ -8,6 +8,7 @@ import {
   message,
 } from 'antd';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from '@tanstack/react-router';
 import { type CurrentUser } from '@/api/client';
 import { apiApproveCandidate, apiRejectCandidate } from '@/api/facts-provenance';
 import { extractApiError, type ParameterCandidate } from '@/api/types';
@@ -63,6 +64,7 @@ export function ApprovalPanel({
   parameterId: string;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   /** 当前用户是否为提交者 */
   const isSubmitter = currentUser.id === candidate.submitted_by;
@@ -150,12 +152,24 @@ export function ApprovalPanel({
       <Space direction="vertical" style={{ width: '100%' }}>
         <Button
           type="link"
-          href={
-            candidate.derivation_run_id
-              ? `/provenance?run_id=${candidate.derivation_run_id}`
-              : '/provenance'
-          }
           style={{ padding: 0 }}
+          onClick={() => {
+            if (candidate.derivation_run_id) {
+              navigate({
+                to: '/lab-ops',
+                search: {
+                  tab: 'parameters',
+                  param: parameterId,
+                  provenance_run_id: candidate.derivation_run_id,
+                },
+              });
+            } else {
+              navigate({
+                to: '/lab-ops',
+                search: { tab: 'parameters', param: parameterId },
+              });
+            }
+          }}
         >
           查看完整来源
         </Button>

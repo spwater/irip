@@ -106,9 +106,7 @@ async def lookup_root_dept_id(
     from packages.departments.entities import Department
 
     async with session_factory() as session:
-        result = await session.execute(
-            sa.select(Department.id).where(Department.code == "root")
-        )
+        result = await session.execute(sa.select(Department.id).where(Department.code == "root"))
         row = result.first()
         return row[0] if row is not None else None
 

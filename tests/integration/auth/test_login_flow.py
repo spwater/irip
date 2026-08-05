@@ -131,10 +131,17 @@ def test_logout_invalidates_session(api_client, seeded_user) -> None:
 
 def test_me_with_access_token(api_client, sync_engine) -> None:
     """有效 access token 访问 /me：返回当前用户信息。"""
-    from tests.integration.conftest import SeededUser, _insert_user, _cleanup_user
+    from tests.integration.conftest import SeededUser, _cleanup_user, _insert_user
 
-    user_id = _insert_user(sync_engine, "me-test@irip.local", "Me Test User", "Correct-Horse-2026!", "active")
-    seeded = SeededUser(user_id=user_id, email="me-test@irip.local", password="Correct-Horse-2026!", display_name="Me Test User")
+    user_id = _insert_user(
+        sync_engine, "me-test@irip.local", "Me Test User", "Correct-Horse-2026!", "active"
+    )
+    seeded = SeededUser(
+        user_id=user_id,
+        email="me-test@irip.local",
+        password="Correct-Horse-2026!",
+        display_name="Me Test User",
+    )
     try:
         login = api_client.post(
             "/api/v1/auth/login",

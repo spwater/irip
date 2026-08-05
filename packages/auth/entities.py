@@ -62,8 +62,10 @@ class AppUser(Base):
         default=list,
     )
     department_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("department.id"), nullable=False,
-        comment="所属实验室 ID（FK→department.id，阶段1 NOT NULL）"
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属实验室 ID（FK→department.id，阶段1 NOT NULL）",
     )
     token_version: Mapped[int] = mapped_column(
         sa.Integer,

@@ -1,11 +1,11 @@
 """协作 API 路由：参与者 CRUD、@人列表、退出对话。
 
-端点（irip-ai-collab）：
-  POST   /api/v1/collaboration/conversations/{id}/participants       — 邀请成员（conversation:invite）
-  GET    /api/v1/collaboration/conversations/{id}/participants       — 列出参与者（assistant:use）
-  DELETE /api/v1/collaboration/conversations/{id}/participants/{uid} — 移除成员（conversation:remove_member）
-  POST   /api/v1/collaboration/conversations/{id}/leave             — 退出对话（assistant:use）
-  GET    /api/v1/collaboration/mentionable-users                    — 可 @ 用户列表（assistant:use）
+端点（irip-ai-collab，基础路径 /api/v1）：
+  POST   /collaboration/conversations/{id}/participants — 邀请成员
+  GET    /collaboration/conversations/{id}/participants — 列出参与者
+  DELETE /collaboration/conversations/{id}/participants/{uid} — 移除成员
+  POST   /collaboration/conversations/{id}/leave — 退出对话
+  GET    /collaboration/mentionable-users — 可 @ 用户列表
 
 安全约定：
 - 协作端点需 require_permission("conversation:invite" / "conversation:remove_member")；
@@ -14,7 +14,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends

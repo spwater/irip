@@ -61,7 +61,7 @@ class BackupManifest:
     Attributes:
         format_version: manifest 格式版本（当前为 1）。
         created_at: 备份创建时间（UTC）。
-        application_version: 备份时的 IRIP 应用版本（如 ``"0.1.0"``）。
+        application_version: 备份时的 IRIP 应用版本（如 ``"0.2.0"``）。
         migration_version: 备份时的 Alembic 迁移版本（alembic_version 表的 head revision）。
         database_sha256: PostgreSQL dump 文件的 SHA-256 摘要（hex 小写）。
         object_count: MinIO 对象总数。
@@ -226,7 +226,7 @@ def compute_manifest(
     Args:
         database_dump_path: PostgreSQL custom 格式 dump 文件路径。
         objects_dir: MinIO 对象目录路径。
-        application_version: IRIP 应用版本（如 ``"0.1.0"``）。
+        application_version: IRIP 应用版本（如 ``"0.2.0"``）。
         migration_version: Alembic 迁移版本（alembic_version head revision）。
         backup_id: 备份唯一标识（UUID 字符串）。
         encrypted: 备份包是否已加密。

@@ -16,7 +16,6 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -25,15 +24,10 @@ from apps.api.composition import lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.dept_scope import get_visible_department_ids
-from packages.audit.events import AuditEventData
-from packages.audit.redaction import redact
-from packages.audit.repository import AuditRecorder
 from packages.auth.entities import AppUser
-from packages.auth.passwords import hash_password
 from packages.auth.permissions import BUILTIN_ROLES
-from packages.common.database import session_scope, scoped_session
 from packages.common.errors import AppError
-from packages.departments.entities import AppUserDepartment
+from packages.governance.governance_service import GovernanceService
 
 #: 路由实例。
 governance_router = APIRouter(prefix="/api/v1/governance", tags=["governance"])
@@ -225,36 +219,16 @@ def _validate_assignable_roles(user: CurrentUser, roles: list[str]) -> None:
             )
 
 
-async def _record_audit(
-    session: AsyncSession,
-    actor: CurrentUser,
-    action: str,
-    resource_type: str | None,
-    resource_id: UUID | None,
-    payload: dict[str, Any] | None = None,
-) -> None:
-    """在当前事务中记录审计事件（脱敏后 INSERT）。
-
-    Args:
-        session: 数据库异步会话（由调用方管理事务）。
-        actor: 当前操作用户。
-        action: 审计动作字符串。
-        resource_type: 资源类型。
-        resource_id: 资源 ID。
-        payload: 事件载荷（将被脱敏）。
-    """
-    redacted = redact(payload) if payload is not None else None
-    event = AuditEventData(
-        department_id=actor.department_id
-        if actor.department_id is not None
-        else actor.user_id,
-        action=action,
-        actor_user_id=actor.user_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        payload=redacted,
+def _make_service(
+    current_user: CurrentUser,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> GovernanceService:
+    """构建 GovernanceService 实例。"""
+    return GovernanceService(
+        session_factory=session_factory,
+        department_id=current_user.department_id,
+        actor_id=current_user.user_id,
     )
-    await AuditRecorder.record(session, event)
 
 
 # ---- 用户管理端点 ----
@@ -283,7 +257,9 @@ async def list_users(
     Returns:
         UserListResponse: 分页用户列表。
     """
-    is_lab_director_only: bool = _is_lab_director(current_user) and not _is_platform_admin(current_user)
+    is_lab_director_only: bool = _is_lab_director(current_user) and not _is_platform_admin(
+        current_user
+    )
 
     # irip-ai-collab: lab_director 只能查看可见部门（含下级）的用户
     # 使用 get_visible_department_ids 做向下遍历，而非硬编码精确 department_id 匹配
@@ -294,49 +270,14 @@ async def list_users(
             return UserListResponse(items=[], next_cursor=None, has_more=False)
         visible_dept_ids = await get_visible_department_ids(current_user, session_factory)
 
-    async with session_factory() as session:
-        stmt = sa.select(AppUser).order_by(AppUser.created_at.desc())
-
-        # irip-ai-collab: lab_director 只能查看可见部门（含下级）的用户
-        if is_lab_director_only:
-            stmt = stmt.where(AppUser.department_id.in_(visible_dept_ids))
-
-        if status is not None:
-            stmt = stmt.where(AppUser.status == status)
-
-        if cursor is not None:
-            try:
-                cursor_dt = datetime.fromisoformat(cursor)
-            except ValueError as exc:
-                raise AppError(
-                    code="invalid_cursor",
-                    message="无效的分页游标",
-                    retryable=False,
-                    fields={"cursor": cursor},
-                ) from exc
-            stmt = stmt.where(AppUser.created_at < cursor_dt)
-
-        # lab_director 需要额外过滤掉平台级角色用户，所以多取一些行再过滤
-        fetch_limit = limit + 1 if not is_lab_director_only else limit * 10 + 1
-        stmt = stmt.limit(fetch_limit)
-        result = await session.execute(stmt)
-        rows: list[AppUser] = list(result.scalars().all())
-
-    # irip-ai-collab: lab_director 不应看到平台管理员/监督员用户
-    if is_lab_director_only:
-        rows = [
-            u for u in rows
-            if not any(
-                r in ("platform_administrator", "platform_auditor")
-                for r in (u.roles if u.roles else [])
-            )
-        ]
-
-    has_more: bool = len(rows) > limit
-    page_items: list[AppUser] = rows[:limit]
-    next_cursor: str | None = None
-    if has_more and page_items:
-        next_cursor = page_items[-1].created_at.isoformat()
+    service = _make_service(current_user, session_factory)
+    page_items, has_more, next_cursor = await service.list_users(
+        status=status,
+        cursor=cursor,
+        limit=limit,
+        visible_dept_ids=visible_dept_ids if is_lab_director_only else None,
+        filter_platform_users=is_lab_director_only,
+    )
 
     return UserListResponse(
         items=[_to_user_response(u) for u in page_items],
@@ -381,64 +322,20 @@ async def create_user(
                 fields={"department_id": body.department_id},
             ) from exc
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        # 检查邮箱唯一性
-        existing = await session.execute(sa.select(AppUser).where(AppUser.email == body.email))
-        if existing.scalar_one_or_none() is not None:
-            raise AppError(
-                code="conflict",
-                message=f"邮箱已存在: {body.email}",
-                retryable=False,
-                fields={"email": body.email},
-            )
+    # 确定 department_id：优先从所选实验室获取，未选实验室则查当前管理员的
+    admin_dept_id = await lookup_dept_id(session_factory, current_user.user_id)
 
-        # 确定 department_id：优先从所选实验室获取，未选实验室则查当前管理员的
-        admin_dept_id = await lookup_dept_id(session_factory, current_user.user_id)
-        dept_id = admin_dept_id
-        if department_uuid is not None:
-            dept = await session.execute(
-                sa.text("SELECT id FROM department WHERE id = :dept_id"),
-                {"dept_id": str(department_uuid)},
-            )
-            dept_row = dept.fetchone()
-            if dept_row is not None and dept_row[0] is not None:
-                dept_id = UUID(str(dept_row[0]))
+    service = _make_service(current_user, session_factory)
+    user = await service.create_user(
+        email=body.email,
+        display_name=body.display_name,
+        password=body.password,
+        roles=body.roles,
+        department_uuid=department_uuid,
+        admin_dept_id=admin_dept_id,
+    )
 
-        # 创建用户
-        user = AppUser(
-            email=body.email,
-            display_name=body.display_name,
-            password_hash=hash_password(body.password),
-            status="active",
-            roles=list(body.roles),
-            department_id=dept_id,
-        )
-        session.add(user)
-        await session.flush()
-
-        # 同步写入 app_user_department 关联表（is_primary=True）
-        # 确保"成员管理"抽屉（查 app_user_department）能看到该用户
-        if department_uuid is not None:
-            session.add(
-                AppUserDepartment(
-                    user_id=user.id,
-                    department_id=department_uuid,
-                    is_primary=True,
-                )
-            )
-            await session.flush()
-
-        # 记录审计
-        await _record_audit(
-            session,
-            current_user,
-            action="user.create",
-            resource_type="user",
-            resource_id=user.id,
-            payload={"email": body.email, "display_name": body.display_name, "roles": body.roles},
-        )
-
-        return _to_user_response(user)
+    return _to_user_response(user)
 
 
 @governance_router.patch("/users/{user_id}", response_model=UserResponse)
@@ -474,53 +371,34 @@ async def update_user(
         if not _is_platform_admin(current_user):
             _validate_assignable_roles(current_user, body.roles)
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        user = await session.get(AppUser, user_id)
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message="用户不存在",
-                retryable=False,
-                fields={"user_id": str(user_id)},
-            )
+    service = _make_service(current_user, session_factory)
 
-        # irip-ai-collab: lab_director 只能操作同 org 用户
-        if not _is_platform_admin(current_user):
-            if current_user.department_id is None or user.department_id != current_user.department_id:
-                raise AppError(
-                    code="forbidden",
-                    message="只能管理本组织用户",
-                    retryable=False,
-                    fields={},
-                )
+    # lab_director 只能操作同 org 用户 — 需要先查用户再校验
+    if not _is_platform_admin(current_user):
+        # 先用 service 查用户做同 org 校验
+        async with session_factory() as check_session:
+            target = await check_session.get(AppUser, user_id)
+            if target is not None:
+                if (
+                    current_user.department_id is None
+                    or target.department_id != current_user.department_id
+                ):
+                    raise AppError(
+                        code="forbidden",
+                        message="只能管理本组织用户",
+                        retryable=False,
+                        fields={},
+                    )
 
-        if body.display_name is not None:
-            user.display_name = body.display_name
-        if body.password is not None:
-            user.password_hash = hash_password(body.password)
-        if body.roles is not None:
-            user.roles = list(body.roles)
-        if body.department_id is not None:
-            user.department_id = UUID(body.department_id)
+    user = await service.update_user(
+        user_id=user_id,
+        display_name=body.display_name,
+        password=body.password,
+        roles=body.roles,
+        department_id=body.department_id,
+    )
 
-        await session.flush()
-
-        # 记录审计
-        await _record_audit(
-            session,
-            actor=current_user,
-            action="user.update",
-            resource_type="user",
-            resource_id=user.id,
-            payload={
-                "display_name": body.display_name,
-                "roles": body.roles,
-                "department_id": body.department_id,
-                "password_changed": body.password is not None,
-            },
-        )
-
-        return _to_user_response(user)
+    return _to_user_response(user)
 
 
 @governance_router.post("/users/{user_id}/roles", response_model=UserResponse)
@@ -554,51 +432,28 @@ async def assign_roles(
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, body.roles)
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message=f"用户不存在: {user_id}",
-                retryable=False,
-                fields={"user_id": str(user_id)},
-            )
+    service = _make_service(current_user, session_factory)
 
-        # irip-ai-collab: lab_director 只能操作同 org 用户
-        if not _is_platform_admin(current_user):
-            if current_user.department_id is None or user.department_id != current_user.department_id:
-                raise AppError(
-                    code="forbidden",
-                    message="只能管理本组织用户",
-                    retryable=False,
-                    fields={},
-                )
+    # lab_director 只能操作同 org 用户
+    if not _is_platform_admin(current_user):
+        async with session_factory() as check_session:
+            target = await check_session.get(AppUser, user_id)
+            if target is not None:
+                if (
+                    current_user.department_id is None
+                    or target.department_id != current_user.department_id
+                ):
+                    raise AppError(
+                        code="forbidden",
+                        message="只能管理本组织用户",
+                        retryable=False,
+                        fields={},
+                    )
 
-        existing_roles: set[str] = set(user.roles) if user.roles else set()
-        new_roles_set: set[str] = existing_roles | set(body.roles)
-        merged_roles: list[str] = sorted(new_roles_set)
-
-        await session.execute(
-            sa.update(AppUser)
-            .values(
-                roles=merged_roles,
-                updated_at=sa.func.now(),
-                lock_version=AppUser.lock_version + 1,
-            )
-            .where(AppUser.id == user_id)
-        )
-
-        await _record_audit(
-            session,
-            current_user,
-            action="governance.user.assign_roles",
-            resource_type="app_user",
-            resource_id=user_id,
-            payload={"roles_added": body.roles, "roles_after": merged_roles},
-        )
-
-        # 重新获取更新后的用户
-        await session.refresh(user)
+    user = await service.assign_roles(
+        user_id=user_id,
+        roles_to_add=body.roles,
+    )
 
     return _to_user_response(user)
 
@@ -632,49 +487,28 @@ async def remove_role(
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, [role])
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message=f"用户不存在: {user_id}",
-                retryable=False,
-                fields={"user_id": str(user_id)},
-            )
+    service = _make_service(current_user, session_factory)
 
-        # irip-ai-collab: lab_director 只能操作同 org 用户
-        if not _is_platform_admin(current_user):
-            if current_user.department_id is None or user.department_id != current_user.department_id:
-                raise AppError(
-                    code="forbidden",
-                    message="只能管理本组织用户",
-                    retryable=False,
-                    fields={},
-                )
+    # lab_director 只能操作同 org 用户
+    if not _is_platform_admin(current_user):
+        async with session_factory() as check_session:
+            target = await check_session.get(AppUser, user_id)
+            if target is not None:
+                if (
+                    current_user.department_id is None
+                    or target.department_id != current_user.department_id
+                ):
+                    raise AppError(
+                        code="forbidden",
+                        message="只能管理本组织用户",
+                        retryable=False,
+                        fields={},
+                    )
 
-        existing_roles: list[str] = list(user.roles) if user.roles else []
-        updated_roles: list[str] = [r for r in existing_roles if r != role]
-
-        await session.execute(
-            sa.update(AppUser)
-            .values(
-                roles=updated_roles,
-                updated_at=sa.func.now(),
-                lock_version=AppUser.lock_version + 1,
-            )
-            .where(AppUser.id == user_id)
-        )
-
-        await _record_audit(
-            session,
-            current_user,
-            action="governance.user.remove_role",
-            resource_type="app_user",
-            resource_id=user_id,
-            payload={"role_removed": role, "roles_after": updated_roles},
-        )
-
-        await session.refresh(user)
+    user = await service.remove_role(
+        user_id=user_id,
+        role=role,
+    )
 
     return _to_user_response(user)
 
@@ -709,36 +543,11 @@ async def update_user_status(
             fields={"status": body.status},
         )
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message=f"用户不存在: {user_id}",
-                retryable=False,
-                fields={"user_id": str(user_id)},
-            )
-
-        await session.execute(
-            sa.update(AppUser)
-            .values(
-                status=body.status,
-                updated_at=sa.func.now(),
-                lock_version=AppUser.lock_version + 1,
-            )
-            .where(AppUser.id == user_id)
-        )
-
-        await _record_audit(
-            session,
-            current_user,
-            action="governance.user.update_status",
-            resource_type="app_user",
-            resource_id=user_id,
-            payload={"status": body.status},
-        )
-
-        await session.refresh(user)
+    service = _make_service(current_user, session_factory)
+    user = await service.update_user_status(
+        user_id=user_id,
+        status=body.status,
+    )
 
     return _to_user_response(user)
 
@@ -769,48 +578,13 @@ async def delete_user(
             fields={},
         )
 
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        user = await session.get(AppUser, user_id)
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message="用户不存在",
-                retryable=False,
-                fields={"user_id": str(user_id)},
-            )
-
-        # 记录审计（删除前记录）
-        await _record_audit(
-            session,
-            actor=current_user,
-            action="user.delete",
-            resource_type="app_user",
-            resource_id=user_id,
-            payload={"email": user.email, "display_name": user.display_name},
-        )
-
-        # 先删除关联的 refresh_session（避免外键约束报错）
-        await session.execute(
-            sa.text("DELETE FROM refresh_session WHERE user_id = :uid"),
-            {"uid": str(user_id)},
-        )
-
-        await session.delete(user)
+    service = _make_service(current_user, session_factory)
+    await service.delete_user(user_id)
 
 
 # ============================================================
 # P1-T1-03: 数据移交工具
 # ============================================================
-
-#: 允许移交的表白名单（均含 department_id 列）。
-_TRANSFERABLE_TABLES: dict[str, str] = {
-    "fact": "实验事实",
-    "parameter": "参数",
-    "model": "模型",
-    "flow_definition": "流程定义",
-    "flow_run": "流程运行",
-    "equipment": "设备仪器",
-}
 
 
 class DataTransferRequest(BaseModel):
@@ -823,7 +597,9 @@ class DataTransferRequest(BaseModel):
         dry_run: True 时只返回影响行数，不执行 UPDATE。
     """
 
-    table: str = Field(..., description="目标表名（fact/parameter/model/flow_definition/flow_run/equipment）")
+    table: str = Field(
+        ..., description="目标表名（fact/parameter/model/flow_definition/flow_run/equipment）"
+    )
     from_dept_id: str = Field(..., description="源部门 UUID")
     to_dept_id: str = Field(..., description="目标部门 UUID")
     dry_run: bool = Field(False, description="True 时只返回影响行数，不执行")
@@ -861,15 +637,6 @@ async def data_transfer(
     Raises:
         AppError: code="validation_failed"，当表名不在白名单或部门 ID 无效时。
     """
-    # 验证表名
-    if body.table not in _TRANSFERABLE_TABLES:
-        raise AppError(
-            code="validation_failed",
-            message=f"不支持的数据表: {body.table}（允许: {', '.join(_TRANSFERABLE_TABLES.keys())}）",
-            retryable=False,
-            fields={"table": body.table},
-        )
-
     # 验证 UUID
     try:
         from_uuid = UUID(body.from_dept_id)
@@ -882,48 +649,13 @@ async def data_transfer(
             fields={"from_dept_id": body.from_dept_id, "to_dept_id": body.to_dept_id},
         ) from exc
 
-    # 不允许源和目标相同
-    if from_uuid == to_uuid:
-        raise AppError(
-            code="validation_failed",
-            message="源部门和目标部门不能相同",
-            retryable=False,
-            fields={},
-        )
-
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        # 统计影响行数
-        count_stmt = sa.text(
-            f"SELECT COUNT(*) FROM {body.table} WHERE department_id = :from_dept_id"
-        )
-        count_result = await session.execute(count_stmt, {"from_dept_id": str(from_uuid)})
-        affected_rows: int = count_result.scalar() or 0
-
-        if not body.dry_run and affected_rows > 0:
-            # 执行 UPDATE
-            update_stmt = sa.text(
-                f"UPDATE {body.table} SET department_id = :to_dept_id "
-                f"WHERE department_id = :from_dept_id"
-            )
-            await session.execute(
-                update_stmt,
-                {"to_dept_id": str(to_uuid), "from_dept_id": str(from_uuid)},
-            )
-
-            # 记录审计日志
-            await _record_audit(
-                session,
-                current_user,
-                action="governance.data_transfer",
-                resource_type=body.table,
-                resource_id=None,
-                payload={
-                    "table": body.table,
-                    "from_dept_id": str(from_uuid),
-                    "to_dept_id": str(to_uuid),
-                    "affected_rows": affected_rows,
-                },
-            )
+    service = _make_service(current_user, session_factory)
+    affected_rows = await service.transfer_data(
+        table=body.table,
+        from_dept_id=from_uuid,
+        to_dept_id=to_uuid,
+        dry_run=body.dry_run,
+    )
 
     return DataTransferResponse(
         table=body.table,
@@ -937,16 +669,6 @@ async def data_transfer(
 # ============================================================
 # P1-T1-05: root 部门数据量监控
 # ============================================================
-
-#: 需统计 root 归属的表列表（表名 → 中文显示名）。
-_ROOT_STATS_TABLES: dict[str, str] = {
-    "fact": "实验事实",
-    "parameter": "参数",
-    "model": "模型",
-    "flow_definition": "流程定义",
-    "flow_run": "流程运行",
-    "equipment": "设备仪器",
-}
 
 
 class RootDataStatsResponse(BaseModel):
@@ -977,38 +699,8 @@ async def get_root_data_stats(
     Raises:
         AppError: code="not_found"，当 root 部门不存在时。
     """
-    from packages.departments.entities import Department
-
-    async with scoped_session(session_factory, current_user.department_id, current_user.user_id) as session:
-        # 查找 root 部门
-        dept_result = await session.execute(
-            sa.select(Department).where(Department.code == "root")
-        )
-        root_dept = dept_result.scalar_one_or_none()
-        if root_dept is None:
-            raise AppError(
-                code="not_found",
-                message="root 部门不存在",
-                retryable=False,
-                fields={},
-            )
-
-        root_id = str(root_dept.id)
-        root_name = root_dept.display_name
-
-        # 统计各表行数
-        stats: list[dict[str, Any]] = []
-        for table_name, display_name in _ROOT_STATS_TABLES.items():
-            count_stmt = sa.text(
-                f"SELECT COUNT(*) FROM {table_name} WHERE department_id = :root_id"
-            )
-            count_result = await session.execute(count_stmt, {"root_id": root_id})
-            count = count_result.scalar() or 0
-            stats.append({
-                "table": table_name,
-                "display_name": display_name,
-                "count": count,
-            })
+    service = _make_service(current_user, session_factory)
+    root_id, root_name, stats = await service.get_root_data_stats()
 
     return RootDataStatsResponse(
         root_department_id=root_id,

@@ -19,16 +19,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from apps.api.routers.account import account_router
 from apps.api.routers.ai_config import ai_config_router
 from apps.api.routers.ai_tools import ai_tools_router
 from apps.api.routers.assistant import assistant_router
 from apps.api.routers.audit import audit_router
 from apps.api.routers.auth import auth_router, me_router
 from apps.api.routers.backups import backups_router
+from apps.api.routers.collaboration import collaboration_router
 from apps.api.routers.component_preview import component_preview_router
 from apps.api.routers.components import components_router
-from apps.api.routers.collaboration import collaboration_router
-from apps.api.routers.account import account_router
 from apps.api.routers.departments import departments_router
 from apps.api.routers.equipment import equipment_router
 from apps.api.routers.experiment_projects import experiment_projects_router
@@ -103,6 +103,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async_url = _to_async_url(db_url)
     session_factory = build_session_factory(async_url)
 
+    # ---- 1b. 安全断言：拒绝 superuser/bypassrls 运行时连接 ----
+    # RLS 是唯一隔离层，运行时连接角色不能是 superuser 或 bypassrls，
+    # 否则 RLS 将被绕过，纵深归零。
+    from sqlalchemy import text as _sa_text
+
+    async with session_factory() as _assert_session:
+        _result = await _assert_session.execute(
+            _sa_text(
+                "SELECT rolsuper, rolbypassrls, current_user "
+                "FROM pg_roles WHERE rolname = current_user"
+            )
+        )
+        _row = _result.fetchone()
+        if _row and (_row[0] or _row[1]):
+            raise RuntimeError(
+                f"安全断言失败：运行时连接角色 {_row[2]} 是 superuser 或 bypassrls，"
+                "RLS 将被绕过。请检查 IRIP_DATABASE_APP_USER 配置。"
+            )
+
     # ---- 2. S3 / MinIO ----
     s3_repo = _build_s3_repo()
     s3_repo.ensure_bucket()
@@ -148,7 +167,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="IRIP",
         description="Industrial Research Intelligence Platform — API",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
     )
 
@@ -178,7 +197,7 @@ def create_app() -> FastAPI:
     from starlette.middleware.base import BaseHTTPMiddleware
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=metrics_middleware)
-    set_app_info(version="0.1.0", environment=os.getenv("IRIP_ENV", "development"))
+    set_app_info(version="0.2.0", environment=os.getenv("IRIP_ENV", "development"))
 
     # ---- 路由 ----
     @app.get("/", include_in_schema=False)
@@ -246,12 +265,20 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-        """捕获未预期异常并打印 traceback（开发环境）。"""
+        """捕获未预期异常：服务端记录完整 traceback，客户端始终返回脱敏消息。"""
         import logging
-        logging.getLogger("api").exception("Unhandled exception on %s %s", request.method, request.url.path)
+
+        logging.getLogger("api").exception(
+            "Unhandled exception on %s %s", request.method, request.url.path
+        )
         return JSONResponse(
             status_code=500,
-            content={"error": {"code": "internal_error", "message": str(exc)}},
+            content={
+                "error": {
+                    "code": "internal_error",
+                    "message": "服务器内部错误，请联系管理员",
+                }
+            },
         )
 
     return app

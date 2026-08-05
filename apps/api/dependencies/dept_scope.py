@@ -119,8 +119,7 @@ async def get_visible_department_ids(
             sa.text("SELECT current_visible_dept_ids FROM current_visible_dept_ids()")
         )
         return [
-            row[0] if isinstance(row[0], UUID) else UUID(str(row[0]))
-            for row in result.fetchall()
+            row[0] if isinstance(row[0], UUID) else UUID(str(row[0])) for row in result.fetchall()
         ]
 
 
@@ -162,9 +161,7 @@ async def can_reparent_department(
     from packages.departments.entities import Department
 
     async with session_factory() as session:
-        result = await session.execute(
-            sa.select(Department.code).where(Department.id == dept_id)
-        )
+        result = await session.execute(sa.select(Department.code).where(Department.id == dept_id))
         row = result.first()
         if row is None:
             return True  # 部门不存在，允许（后续会报 not_found）
@@ -234,7 +231,10 @@ async def check_management_permission(
 
     if entity_department_id not in descendants:
         # 5. 实验室负责人可管本部门成员的数据
-        if entity_department_id == current_user.department_id and "lab_director" in current_user.roles:
+        if (
+            entity_department_id == current_user.department_id
+            and "lab_director" in current_user.roles
+        ):
             return
         raise AppError(
             code="forbidden",

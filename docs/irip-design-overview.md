@@ -96,7 +96,7 @@ entities.py (ORM 层) → repository.py (数据访问层) → service.py (业务
 - 值对象（dataclass frozen）在服务层与 API 层之间传递
 - Composition Root 依赖注入（ApplicationContainer）
 - 每模块独立 packages/<domain>/，遵循 entities → repository → service 模式
-- 迁移管理：Alembic，当前 8 个文件（squash 后 0001 基线 + 0062-0068 增量）
+- 迁移管理：Alembic，当前 13 个文件（squash 后 0001 基线 + 0062-0073 增量）
 
 ### 2.4 前端四层 UI 架构
 
@@ -255,7 +255,7 @@ IngestionWizard 5 步流程（从 7 步精简），支持：
 
 ### 3.8 迁移 Squashing
 
-68 个迁移文件压缩到 8 个（0001_squashed_baseline + 0062-0068），空库重建速度快 10 倍。基线 1511 行包含：
+68 个迁移文件压缩后当前 13 个（0001_squashed_baseline + 0062-0073），空库重建速度快 10 倍。基线 1511 行包含：
 - 40 表 / 65 索引 / 3 扩展（citext, pgcrypto, vector）/ 4 角色
 - 62 RLS 策略配置 / 89 GRANT 语句 / 1 触发器函数
 

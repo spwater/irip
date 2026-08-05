@@ -23,7 +23,6 @@ from pydantic import BaseModel, Field
 
 from apps.api.routers.assistant import AIServiceDep, AssistantUserDep
 
-
 #: 路由实例（前缀与 assistant_router 一致）。
 showcase_router = APIRouter(prefix="/api/v1/assistant", tags=["assistant"])
 
@@ -58,9 +57,7 @@ class UpdateShowcaseItemRequest(BaseModel):
 class ReorderShowcaseRequest(BaseModel):
     """重排序请求。"""
 
-    item_ids: list[str] = Field(
-        ..., min_length=1, description="按新顺序排列的卡片 ID 列表"
-    )
+    item_ids: list[str] = Field(..., min_length=1, description="按新顺序排列的卡片 ID 列表")
 
 
 class ShowcaseItemResponse(BaseModel):

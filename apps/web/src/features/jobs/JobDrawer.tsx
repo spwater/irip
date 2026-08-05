@@ -48,6 +48,15 @@ export function JobDrawer(): JSX.Element {
 
   const activeCount = jobs.filter((j) => ACTIVE_STATUSES.includes(j.status)).length;
 
+  // 有活跃作业时每 5 秒轮询刷新状态
+  useEffect(() => {
+    if (activeCount === 0) return;
+    const interval = setInterval(() => {
+      void loadJobs();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [activeCount, loadJobs]);
+
   return (
     <Drawer
       title="作业进度"

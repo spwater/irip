@@ -1131,9 +1131,9 @@ def build_restore_config_from_env(backup_dir: Path) -> RestoreConfig:
     Returns:
         RestoreConfig: 恢复配置。
     """
-    db_url: str = os.getenv("IRIP_DATABASE_URL", "")
+    db_url: str = os.getenv("IRIP_DATABASE_ADMIN_URL", "") or os.getenv("IRIP_DATABASE_URL", "")
     if not db_url:
-        raise RuntimeError("IRIP_DATABASE_URL environment variable is required")
+        raise RuntimeError("IRIP_DATABASE_URL or IRIP_DATABASE_ADMIN_URL environment variable is required")
 
     endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
     if not endpoint.startswith("http"):

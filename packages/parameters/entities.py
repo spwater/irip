@@ -266,5 +266,3 @@ class ParameterCandidate(Base):
             f"derivation_run_id={self.derivation_run_id!r}, "
             f"status={self.status!r})"
         )
-
-

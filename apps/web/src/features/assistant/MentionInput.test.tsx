@@ -1,20 +1,9 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MentionInput } from './MentionInput';
 import type { MentionableUser } from '@/api/collaboration';
-
-// Mock apiListMentionableUsers
-vi.mock('@/api/collaboration', async () => {
-  const actual = await vi.importActual<typeof import('@/api/collaboration')>('@/api/collaboration');
-  return {
-    ...actual,
-    apiListMentionableUsers: vi.fn(),
-  };
-});
-
-import { apiListMentionableUsers } from '@/api/collaboration';
 
 const mockUsers: MentionableUser[] = [
   { id: 'u-001', display_name: '张三', avatar_url: null, roles: ['lab_member'] },
@@ -38,11 +27,17 @@ function StatefulMentionInput({
   onChangeSpy,
   initialValue = '',
   initialMentions = [] as string[],
+  participants = mockUsers.map((u) => ({
+    user_id: u.id,
+    display_name: u.display_name,
+    avatar_url: u.avatar_url,
+  })),
 }: {
   onMentionsChangeSpy?: (m: string[]) => void;
   onChangeSpy?: (v: string) => void;
   initialValue?: string;
   initialMentions?: string[];
+  participants?: Array<{ user_id: string; display_name: string; avatar_url: string | null }>;
 }): React.ReactElement {
   const [value, setValue] = useState(initialValue);
   const [mentions, setMentions] = useState(initialMentions);
@@ -58,15 +53,12 @@ function StatefulMentionInput({
         setMentions(m);
         onMentionsChangeSpy?.(m);
       }}
+      participants={participants}
     />
   );
 }
 
 describe('MentionInput', () => {
-  beforeEach(() => {
-    vi.mocked(apiListMentionableUsers).mockResolvedValue(mockUsers);
-  });
-
   it('renders a textarea with placeholder', () => {
     renderWithClient(
       <MentionInput

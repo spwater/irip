@@ -307,7 +307,13 @@ async def update_ai_config(
             )
 
     # 返回时用已保存密钥的掩码值（如果是 __use_saved__ 的话）
-    masked_key = _mask_key(body.api_key) if body.api_key != "__use_saved__" else _mask_key(existing["api_key"]) if existing else "***"
+    masked_key = (
+        _mask_key(body.api_key)
+        if body.api_key != "__use_saved__"
+        else _mask_key(existing["api_key"])
+        if existing
+        else "***"
+    )
 
     return AIConfigResponse(
         base_url=body.base_url,

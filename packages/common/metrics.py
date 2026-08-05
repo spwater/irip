@@ -122,7 +122,7 @@ COMPONENT_EXECUTION_DURATION: Histogram = Histogram(
 )
 
 
-def set_app_info(version: str = "0.1.0", environment: str = "development") -> None:
+def set_app_info(version: str = "0.2.0", environment: str = "development") -> None:
     """设置应用元信息指标。
 
     Args:

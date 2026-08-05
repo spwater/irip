@@ -17,7 +17,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
-from apps.api.composition import CompositionContext, lookup_dept_id
+from apps.api.composition import CompositionContext
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.dependencies.departments import (
     get_department_service,
@@ -119,4 +119,6 @@ def register(ctx: CompositionContext) -> None:
             service._rls_dept_id = rls_dept_id
         return service
 
-    ctx.app.dependency_overrides[get_experiment_project_service] = _get_experiment_project_service_dep
+    ctx.app.dependency_overrides[get_experiment_project_service] = (
+        _get_experiment_project_service_dep
+    )
