@@ -16,6 +16,10 @@ export type CurrentUser = {
   avatarUrl?: string;
   /** root 部门成员，管理权限不受部门限制 */
   isRootMember?: boolean;
+  /** 功能开关状态（由后端 /me feature_flags 映射） */
+  featureFlags?: {
+    researchModule: boolean;
+  };
 };
 
 export type JobStatus =
@@ -64,6 +68,10 @@ type MeApiResponse = {
   avatar_url?: string;
   /** root 部门成员标记 */
   is_root_member?: boolean;
+  /** 功能开关 */
+  feature_flags?: {
+    research_module?: boolean;
+  };
 };
 
 /**
@@ -203,6 +211,9 @@ export async function apiGetMe(): Promise<CurrentUser> {
     departmentId: res.data.department_id,
     avatarUrl: res.data.avatar_url,
     isRootMember: res.data.is_root_member ?? false,
+    featureFlags: {
+      researchModule: res.data.feature_flags?.research_module ?? false,
+    },
   };
 }
 

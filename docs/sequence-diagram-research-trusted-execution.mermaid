@@ -1,0 +1,274 @@
+%% 序列图 1：计划生成与确认
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRunRouter
+    participant PS as PlanService
+    participant MG as ModelGateway
+    participant CR as ContextRouter
+    participant FP as CoreFactProvider
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    Note over C,PS: 前提：用户已冻结证据快照
+    C->>R: POST /workspaces/{id}/plans {snapshot_id}
+    R->>R: require_permission("research:use") 校验
+    R->>PS: generate_plan(workspace_id, snapshot_id)
+    PS->>PS: _scoped_session()
+
+    Note over PS,FP: 阶段1：构建数据 Profile
+    PS->>Rep: get_latest_snapshot(session, workspace_id)
+    Rep->>DB: SELECT FROM research_evidence_snapshot
+    Rep-->>PS: ResearchEvidenceSnapshot
+    PS->>FP: get_fact_fields(source_id) 逐条获取字段
+    FP-->>PS: list[str] 字段列表
+    PS->>PS: _build_data_profile(snapshot) → DataProfile
+
+    Note over PS,MG: 阶段2：AI 检查数据 + 生成计划
+    PS->>MG: call(task_type=PLANNING, system_prompt, data_context=DataProfile, research_context=主研究问题)
+    MG->>MG: _select_model(PLANNING, data_size)
+    MG->>MG: _calculate_budget(model_context_limit, ...)
+    MG-->>PS: ModelResponse(计划 JSON)
+
+    Note over PS,CR: 阶段3：ContextRouter 预分析每步
+    loop 对每个 step in DAG
+        PS->>CR: analyze_step(step, data_profile)
+        CR-->>PS: AnalysisMode + mode_reason
+        PS->>CR: calculate_budget(model_limit, ...)
+        CR-->>PS: effective_data_budget
+    end
+
+    Note over PS,Rep: 阶段4：保存不可变计划版本
+    PS->>Rep: get_latest_plan_version(session, workspace_id) 获取版本号
+    Rep-->>PS: latest_version or None
+    PS->>Rep: insert_plan_version(session, workspace_id, version_number, dag_structure, coverage_declaration)
+    Rep->>DB: INSERT INTO research_analysis_plan_version
+    Rep-->>PS: ResearchAnalysisPlanVersion
+
+    PS->>A: AuditRecorder.record(session, "research.plan.generate", ...)
+    A->>DB: INSERT INTO audit_event
+
+    PS-->>R: PlanVersionRef(plan_id, version_number, dag_structure, status="draft")
+    R-->>C: 201 Created {plan_id, version_number, steps, coverage}
+
+    Note over C,R: 用户查看计划并确认
+    C->>R: POST /workspaces/{id}/plans/{plan_id}/confirm
+    R->>PS: confirm_plan(workspace_id, plan_id)
+    PS->>Rep: update_plan_status(session, plan_id, "confirmed", confirmed_at=now, confirmed_by=actor)
+    Rep->>DB: UPDATE research_analysis_plan_version SET status='confirmed'
+    PS->>A: AuditRecorder.record(session, "research.plan.confirm", ...)
+    PS-->>R: PlanVersionRef(status="confirmed")
+    R-->>C: 200 OK {status: "confirmed"}
+
+%% 序列图 2：Run 提交 → 调度 → DAG 执行 → 沙箱运行 → 结果收集
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRunRouter
+    participant RS as AnalysisRunService
+    participant Sched as ResearchScheduler
+    participant Q as Celery Queue
+    participant W as Celery Worker
+    participant Orch as ResearchOrchestrator
+    participant CR as ContextRouter
+    participant MG as ModelGateway
+    participant SB as SandboxRuntime
+    participant Art as RunArtifactService
+    participant Mem as ResearchMemoryService
+    participant Rep as ResearchRepository
+    participant Redis as Redis
+    participant DB as Database
+
+    Note over C,RS: 阶段1：提交 Run
+    C->>R: POST /workspaces/{id}/runs {plan_version_id, snapshot_id}
+    R->>RS: submit_run(workspace_id, plan_version_id, snapshot_id)
+    RS->>Rep: 校验计划已确认 + 无活跃 Run
+    RS->>Rep: insert_run(session, workspace_id, plan_version_id, snapshot_id, run_number, status="queued")
+    Rep->>DB: INSERT INTO research_analysis_run
+
+    RS->>Sched: acquire_slot(user_id, run_id)
+    alt 槽位可用 (<20 用户)
+        Sched-->>RS: (True, 0)
+        RS->>Rep: update_run_status(session, run_id, "running", started_at=now)
+        RS->>Q: send_task("research.run.execute", run_id=run_id)
+        RS-->>R: RunRef(run_id, status="running")
+        R-->>C: 201 Created {run_id, status: "running"}
+    else 槽位已满
+        Sched-->>RS: (False, position=3)
+        RS->>Rep: update_run_queue_position(session, run_id, 3)
+        RS-->>R: RunRef(run_id, status="queued", queue_position=3)
+        R-->>C: 201 Created {run_id, status: "queued", queue_position: 3}
+    end
+
+    Note over Q,W: 阶段2：Celery Worker 拾取执行
+    Q->>W: execute_analysis_run(run_id)
+    W->>Orch: execute_run(run_id)
+    Orch->>Rep: get_run + get_plan + get_snapshot
+    Rep-->>Orch: run + plan + snapshot
+
+    Orch->>Mem: update_from_event(workspace_id, "run.started", {run_id})
+    Orch->>Redis: PUBLISH research:run:{run_id}:events {"type": "run.status_changed", "status": "running"}
+
+    Note over Orch: 阶段3：DAG 拓扑排序 + 逐步执行
+    Orch->>Orch: topological_sort(plan.dag_structure.steps)
+
+    loop 对每个 step（拓扑序）
+        Orch->>Rep: get_step_dependencies_status(run_id, step.depends_on)
+        alt 依赖步骤全部成功
+            Orch->>Rep: update_step_status(session, step.id, "running", started_at=now)
+            Orch->>Redis: PUBLISH step.status_changed
+
+            alt method = "python"
+                Orch->>Orch: _prepare_input_package(snapshot) → 生成受控输入包
+                Orch->>SB: create_container(input_path, image_digest, ResourceLimits)
+                SB-->>Orch: container_id
+                Orch->>MG: call(task_type=CODE_GEN, system_prompt, research_context)
+                MG-->>Orch: python_script
+                Orch->>SB: execute(container_id, python_script, timeout=1200)
+                SB-->>Orch: ExecutionResult(exit_code, stdout, stderr)
+
+                alt 执行成功
+                    Orch->>SB: collect_output(container_id, whitelist)
+                    SB-->>Orch: list[OutputFile]
+                    loop 对每个输出文件
+                        Orch->>Art: collect_artifact(run_id, step_id, type, content)
+                        Art->>Art: _scan_and_persist(content, whitelist) → MinIO
+                        Art->>Rep: insert_artifact(session, ...)
+                    end
+                    Orch->>SB: keep_warm(container_id, 180) 或 destroy_container
+                    Orch->>Rep: update_step_status(session, step.id, "succeeded", coverage_rate, ...)
+                else 执行失败 + 自动修错 (P1-4)
+                    Orch->>MG: call(task_type=CODE_GEN, error_context=stderr, ...)
+                    MG-->>Orch: fixed_script
+                    Orch->>SB: execute(container_id, fixed_script, ...)
+                    alt 修错成功
+                        Orch->>Rep: update_step_status(session, step.id, "succeeded", attempt_count+1)
+                    else 修错失败（超过重试上限）
+                        Orch->>Rep: update_step_status(session, step.id, "failed", error_message, error_classification)
+                    end
+                end
+            else method = "llm" or "mixed"
+                Orch->>CR: analyze_step(step, data_profile) → AnalysisMode
+                Orch->>CR: calculate_budget(model_limit, ...) → effective_budget
+                alt 数据超预算 → 分块全量扫描
+                    Orch->>CR: chunk_data(data, budget) → list[Chunk]
+                    loop 对每个 chunk
+                        Orch->>MG: call(task_type=LONG_CONTEXT, data_context=chunk, ...)
+                        MG-->>Orch: ModelResponse
+                    end
+                    Orch->>Orch: 归并分块结果
+                else 数据在预算内 → 直接全量上下文
+                    Orch->>MG: call(task_type=LONG_CONTEXT, data_context=data, ...)
+                    MG-->>Orch: ModelResponse
+                end
+                Orch->>CR: compute_coverage(step, chunks, total_records) → CoverageDeclaration
+                Orch->>Art: collect_artifact(run_id, step_id, "data", result)
+                Orch->>Rep: update_step_status(session, step.id, "succeeded", coverage_rate, llm_read_rate, ...)
+            end
+
+            Orch->>Redis: PUBLISH step.status_changed {step_key, status, coverage}
+        else 依赖步骤失败 → 跳过
+            Orch->>Rep: update_step_status(session, step.id, "skipped")
+            Orch->>Redis: PUBLISH step.status_changed {step_key, status: "skipped"}
+        end
+    end
+
+    Note over Orch: 阶段4：确定 Run 最终状态
+    Orch->>Rep: get_all_step_statuses(run_id)
+    Rep-->>Orch: list of step statuses
+    alt 全部成功
+        Orch->>Rep: update_run_status(session, run_id, "succeeded", completed_at=now, coverage_summary)
+    else 部分成功
+        Orch->>Rep: update_run_status(session, run_id, "partially_succeeded", completed_at=now, coverage_summary)
+    else 全部失败
+        Orch->>Rep: update_run_status(session, run_id, "failed", completed_at=now, error_summary)
+    end
+
+    Orch->>Sched: release_slot(user_id, run_id)
+    Orch->>Mem: update_from_event(workspace_id, "run.completed", {run_id, status, coverage})
+    Orch->>Redis: PUBLISH run.status_changed {run_id, final_status}
+
+    Note over C: 前端通过 SSE 实时收到所有事件
+
+%% 序列图 3：排队与调度流程
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRunRouter
+    participant RS as AnalysisRunService
+    participant Sched as ResearchScheduler
+    participant Redis as Redis
+    participant Beat as Celery Beat
+    participant W as Celery Worker
+
+    Note over C,Sched: 第 21 个用户提交 Run
+    C->>R: POST /workspaces/{id}/runs
+    R->>RS: submit_run(...)
+    RS->>Sched: acquire_slot(user_id, run_id)
+    Sched->>Redis: GET active_users_count
+    Redis-->>Sched: 20 (已满)
+    Sched->>Redis: ZADD research:queue {run_id: timestamp} (入等待队列)
+    Sched-->>RS: (False, position=1)
+    RS-->>R: RunRef(status="queued", queue_position=1)
+    R-->>C: 201 {status: "queued", queue_position: 1}
+
+    Note over C,Sched: 前端轮询队列位置
+    C->>R: GET /workspaces/{id}/runs/{run_id}/queue-status
+    R->>RS: get_queue_position(run_id)
+    RS->>Sched: get_queue_position(run_id)
+    Sched->>Redis: ZRANK research:queue run_id
+    Redis-->>Sched: rank=0 (第1位)
+    Sched->>Redis: 估算等待时间（历史平均 × 前方人数）
+    Sched-->>RS: QueuePosition(position=1, ahead=0, estimated_wait=300)
+    R-->>C: 200 {position: 1, ahead: 0, estimated_wait_seconds: 300}
+
+    Note over Beat,W: 某用户 Run 完成 → 释放槽位
+    Beat->>W: scheduled task: check_queued_runs (每 5 秒)
+    W->>Sched: check_and_promote_queued()
+    Sched->>Redis: GET active_users_count
+    Redis-->>Sched: 19 (有空位)
+    Sched->>Redis: ZPOPMIN research:queue → 取出等待最久的 run_id
+    Sched->>Redis: SET active_user:{user_id} {run_id} (占位)
+    Sched-->>W: promoted_run_id
+    W->>W: send_task("research.run.execute", run_id=promoted_run_id)
+
+    Note over C: 排队用户通过 SSE/轮询感知到状态变化
+    C->>R: GET /workspaces/{id}/runs/{run_id}/queue-status (轮询)
+    R-->>C: 200 {status: "running"} (已提升)
+
+%% 序列图 4：AI 对话流程
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRunRouter
+    participant CS as AIConversationService
+    participant MG as ModelGateway
+    participant Rep as ResearchRepository
+    participant DB as Database
+
+    C->>R: POST /workspaces/{id}/conversation {message, run_id?}
+    R->>CS: send_message(workspace_id, message, run_id)
+    CS->>CS: _scoped_session()
+
+    Note over CS,Rep: 持久化用户消息
+    CS->>Rep: insert_conversation_message(session, workspace_id, role="user", content={"text": message}, run_id)
+    Rep->>DB: INSERT INTO research_ai_conversation
+
+    Note over CS,MG: 加载历史 + 调用 AI
+    CS->>Rep: list_messages(session, workspace_id, run_id, limit=50)
+    Rep->>DB: SELECT FROM research_ai_conversation ORDER BY created_at DESC LIMIT 50
+    Rep-->>CS: list[ResearchAiConversation]
+    CS->>CS: _truncate_history(messages, max_count=50) → 反转回时间序
+
+    CS->>MG: call(task_type=CONVERSATION, system_prompt, data_context="", research_context=历史消息+研究问题+计划)
+    MG->>MG: _select_model(CONVERSATION, data_size=0)
+    MG->>MG: _calculate_budget(...)
+    MG-->>CS: ModelResponse(answer, tool_calls, uncertainty)
+
+    Note over CS,Rep: 持久化 AI 回复
+    CS->>Rep: insert_conversation_message(session, workspace_id, role="assistant", content={"text": answer, "code_blocks": [...]}, run_id)
+    Rep->>DB: INSERT INTO research_ai_conversation
+
+    CS-->>R: ConversationMessage(role="assistant", content={"text": answer, ...})
+    R-->>C: 200 OK {role: "assistant", content: {...}}

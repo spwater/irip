@@ -1,0 +1,201 @@
+%% 研究域基础 — 类图
+%% 对应文档: docs/arch-research-foundation.md §3
+
+classDiagram
+    direction TB
+
+    %% ===== ORM 实体 =====
+
+    class ResearchWorkspace {
+        +UUID id
+        +UUID owner_user_id
+        +UUID department_id
+        +str name
+        +str status
+        +int current_question_version
+        +UUID forked_from_id
+        +datetime created_at
+        +datetime updated_at
+        +int lock_version
+    }
+
+    class ResearchQuestionVersion {
+        +UUID id
+        +UUID workspace_id
+        +int version_number
+        +str question_text
+        +list sub_questions
+        +datetime created_at
+        +UUID created_by
+    }
+
+    class WorkspaceEvidenceRef {
+        +UUID id
+        +UUID workspace_id
+        +str source_namespace
+        +UUID source_id
+        +str source_version
+        +str source_name
+        +datetime added_at
+        +UUID added_by
+        +str status
+    }
+
+    class ResearchEvidenceSnapshot {
+        +UUID id
+        +UUID workspace_id
+        +int snapshot_number
+        +str content_hash
+        +datetime captured_at
+        +dict permission_envelope
+        +dict field_manifest
+        +list source_refs
+        +UUID created_by
+    }
+
+    ResearchWorkspace "1" --> "many" ResearchQuestionVersion : workspace_id
+    ResearchWorkspace "1" --> "many" WorkspaceEvidenceRef : workspace_id
+    ResearchWorkspace "1" --> "many" ResearchEvidenceSnapshot : workspace_id
+    ResearchWorkspace --> ResearchWorkspace : forked_from_id (nullable)
+
+    %% ===== Repository =====
+
+    class ResearchRepository {
+        <<static>>
+        +insert_workspace(session, **kwargs) ResearchWorkspace
+        +get_workspace(session, workspace_id, owner_user_id) ResearchWorkspace
+        +list_workspaces(session, owner_user_id, status, cursor, page_size) tuple
+        +update_workspace_status(session, workspace_id, status) void
+        +delete_workspace(session, workspace_id) void
+        +insert_question_version(session, **kwargs) ResearchQuestionVersion
+        +get_latest_question_version(session, workspace_id) ResearchQuestionVersion
+        +list_question_versions(session, workspace_id) list
+        +insert_evidence_ref(session, **kwargs) WorkspaceEvidenceRef
+        +list_evidence_refs(session, workspace_id, status) list
+        +update_evidence_ref_status(session, ref_id, status) void
+        +count_active_evidence_refs(session, workspace_id) int
+        +insert_snapshot(session, **kwargs) ResearchEvidenceSnapshot
+        +list_snapshots(session, workspace_id) list
+        +get_latest_snapshot(session, workspace_id) ResearchEvidenceSnapshot
+    }
+
+    %% ===== Service 层 =====
+
+    class WorkspaceService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +CoreFactProvider _fact_provider
+        +__init__(session_factory, department_id, actor_id, fact_provider)
+        +create_workspace(name, question_text) WorkspaceRef
+        +list_workspaces(status, cursor, page_size) tuple
+        +get_workspace(workspace_id) WorkspaceDetail
+        +archive_workspace(workspace_id) void
+        +delete_workspace(workspace_id) void
+        +fork_workspace(workspace_id, new_name) WorkspaceRef
+        +update_question(workspace_id, question_text, sub_questions) QuestionVersionRef
+        +add_evidence(workspace_id, source_namespace, source_id) EvidenceRefDTO
+        +remove_evidence(workspace_id, ref_id) void
+        +list_evidence(workspace_id) list
+        +search_facts(query, filters, cursor, page_size) tuple
+    }
+
+    class EvidenceSnapshotService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +CoreFactProvider _fact_provider
+        +__init__(session_factory, department_id, actor_id, fact_provider)
+        +freeze_snapshot(workspace_id) SnapshotRef
+        +list_snapshots(workspace_id) list
+        +_compute_content_hash(refs, fact_provider) str
+        +_build_permission_envelope(refs, fact_provider) dict
+        +_build_field_manifest(refs, fact_provider) dict
+    }
+
+    %% ===== 适配器接口 =====
+
+    class CoreFactProvider {
+        <<interface>>
+        +search_facts(query, filters, cursor, page_size) tuple
+        +get_fact_summary(fact_id) FactSummary
+        +get_fact_fields(fact_id) list
+    }
+
+    class CoreFactProviderImpl {
+        +FactQueryService _query_service
+        +__init__(query_service)
+        +search_facts(query, filters, cursor, page_size) tuple
+        +get_fact_summary(fact_id) FactSummary
+        +get_fact_fields(fact_id) list
+    }
+
+    class ResearchCatalog {
+        <<interface>>
+        +search_derived_data(query, filters) list
+    }
+
+    class ResearchCatalogStub {
+        +search_derived_data(query, filters) list
+    }
+
+    CoreFactProviderImpl ..|> CoreFactProvider
+    ResearchCatalogStub ..|> ResearchCatalog
+    WorkspaceService --> CoreFactProvider : 使用
+    EvidenceSnapshotService --> CoreFactProvider : 使用
+    WorkspaceService --> ResearchRepository : 调用
+    EvidenceSnapshotService --> ResearchRepository : 调用
+
+    %% ===== 请求/响应模型 =====
+
+    class CreateWorkspaceCommand {
+        +str name
+        +str question_text
+    }
+
+    class WorkspaceRef {
+        +UUID workspace_id
+        +str name
+        +str status
+        +int current_question_version
+    }
+
+    class WorkspaceDetail {
+        +UUID workspace_id
+        +str name
+        +str status
+        +QuestionVersionRef current_question
+        +int evidence_count
+        +list snapshots
+    }
+
+    class EvidenceRefDTO {
+        +UUID ref_id
+        +str source_namespace
+        +UUID source_id
+        +str source_version
+        +str source_name
+        +str status
+    }
+
+    class SnapshotRef {
+        +UUID snapshot_id
+        +int snapshot_number
+        +str content_hash
+        +datetime captured_at
+    }
+
+    class FactSummary {
+        +UUID fact_id
+        +str fact_type
+        +str subject_id
+        +str status
+        +str department_name
+    }
+
+    CreateWorkspaceCommand --> WorkspaceService : create_workspace
+    WorkspaceService ..> WorkspaceRef : 返回
+    WorkspaceService ..> WorkspaceDetail : 返回
+    WorkspaceService ..> EvidenceRefDTO : 返回
+    EvidenceSnapshotService ..> SnapshotRef : 返回
+    CoreFactProvider ..> FactSummary : 返回

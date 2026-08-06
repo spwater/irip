@@ -1,0 +1,179 @@
+%% 研究域基础 — 时序图
+%% 对应文档: docs/arch-research-foundation.md §4
+
+%% ===== 4.1 创建 Workspace + 研究问题 =====
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRouter
+    participant S as WorkspaceService
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: POST /api/research/workspaces {name, question_text}
+    R->>R: require_permission("research:use") 校验
+    R->>S: create_workspace(name, question_text)
+    S->>S: _scoped_session() 获取带 GUC 的事务会话
+
+    S->>Rep: insert_workspace(session, owner_user_id, dept_id, name, status="draft")
+    Rep->>DB: INSERT INTO research_workspace
+    Rep-->>S: ResearchWorkspace(id, ...)
+
+    S->>Rep: insert_question_version(session, workspace_id, version_number=1, question_text, sub_questions=[])
+    Rep->>DB: INSERT INTO research_question_version
+    Rep-->>S: ResearchQuestionVersion(id, ...)
+
+    S->>Rep: update_workspace_current_version(session, workspace_id, 1)
+    Rep->>DB: UPDATE research_workspace SET current_question_version=1
+
+    S->>A: AuditRecorder.record(session, AuditEventData(action="research.workspace.create", ...))
+    A->>DB: INSERT INTO audit_event
+
+    S-->>R: WorkspaceRef(workspace_id, name, status, version=1)
+    R-->>C: 201 Created {workspace_id, name, status, current_question_version}
+
+%% ===== 4.2 搜索并加入证据 =====
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRouter
+    participant S as WorkspaceService
+    participant FP as CoreFactProvider
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    Note over C,FP: 阶段1: 搜索 Fact
+    C->>R: GET /api/research/facts/search?q=Na2O
+    R->>R: require_permission("research:use") 校验
+    R->>S: search_facts(query="Na2O")
+    S->>FP: search_facts("Na2O", filters, cursor, page_size)
+    FP->>FP: FactQueryService.search_facts_detail (内部 RLS 隔离)
+    FP-->>S: list[FactSummary], next_cursor
+    S-->>R: 搜索结果列表
+    R-->>C: 200 {items: [...], next_cursor}
+
+    Note over C,Rep: 阶段2: 加入证据引用
+    C->>R: POST /api/research/workspaces/{id}/evidence {source_namespace, source_id}
+    R->>R: require_permission("research:use") 校验
+    R->>S: add_evidence(workspace_id, "core:fact", fact_id)
+    S->>S: _scoped_session()
+
+    S->>S: 校验 workspace 属于当前用户
+    S->>FP: get_fact_summary(fact_id) 权限运行期校验 (P1-5)
+    FP-->>S: FactSummary(fact_type, subject_id, status)
+    Note over S,FP: 无权访问时 raise AppError(forbidden), 不泄露内容
+
+    S->>Rep: insert_evidence_ref(session, workspace_id, "core:fact", fact_id, source_name, ...)
+    Rep->>DB: INSERT INTO research_workspace_evidence_ref
+    Rep-->>S: WorkspaceEvidenceRef(id, ...)
+
+    S->>A: AuditRecorder.record(session, AuditEventData(action="research.evidence.add", ...))
+    A->>DB: INSERT INTO audit_event
+
+    S-->>R: EvidenceRefDTO(ref_id, source_namespace, source_id, ...)
+    R-->>C: 201 Created {ref_id, source_namespace, source_id, status: "active"}
+
+%% ===== 4.3 冻结证据快照 =====
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRouter
+    participant SS as EvidenceSnapshotService
+    participant FP as CoreFactProvider
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: POST /api/research/workspaces/{id}/snapshot
+    R->>R: require_permission("research:use") 校验
+    R->>SS: freeze_snapshot(workspace_id)
+    SS->>SS: _scoped_session()
+
+    SS->>Rep: list_evidence_refs(session, workspace_id, status="active")
+    Rep->>DB: SELECT FROM research_workspace_evidence_ref
+    Rep-->>SS: list[WorkspaceEvidenceRef]
+
+    Note over SS,FP: 逐条校验权限 + 收集字段清单
+    loop 对每个 evidence_ref
+        SS->>FP: get_fact_summary(source_id) 权限运行期校验
+        FP-->>SS: FactSummary
+        SS->>FP: get_fact_fields(source_id) 获取字段清单
+        FP-->>SS: list[str] (字段名)
+    end
+
+    Note over SS: 计算内容哈希 (Q3: 实际引用字段清单对应数据的 SHA-256)
+    SS->>SS: _compute_content_hash(refs, fact_provider)
+    Note over SS: 1. 对每个 ref 获取 fact_data 2. 提取 field_manifest 中的字段值 3. 按 (namespace, id, field_name) 排序 4. 序列化为 JSON (sort_keys=True) 5. hashlib.sha256(json_bytes).hexdigest()
+
+    SS->>SS: _build_permission_envelope(refs, fact_provider)
+    SS->>SS: _build_field_manifest(refs, fact_provider)
+
+    SS->>Rep: get_latest_snapshot(session, workspace_id) 获取当前快照编号
+    Rep-->>SS: latest_snapshot or None
+    SS->>SS: snapshot_number = (latest.number + 1) if latest else 1
+
+    SS->>Rep: insert_snapshot(session, workspace_id, snapshot_number, content_hash, permission_envelope, field_manifest, source_refs)
+    Rep->>DB: INSERT INTO research_evidence_snapshot
+    Rep-->>SS: ResearchEvidenceSnapshot(id, ...)
+
+    SS->>A: AuditRecorder.record(session, AuditEventData(action="research.snapshot.freeze", ...))
+    A->>DB: INSERT INTO audit_event
+
+    SS-->>R: SnapshotRef(snapshot_id, snapshot_number, content_hash, captured_at)
+    R-->>C: 201 Created {snapshot_id, snapshot_number, content_hash, captured_at}
+
+%% ===== 4.4 分叉 Workspace =====
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchRouter
+    participant S as WorkspaceService
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: POST /api/research/workspaces/{id}/fork {new_name}
+    R->>R: require_permission("research:use") 校验
+    R->>S: fork_workspace(workspace_id, new_name)
+    S->>S: _scoped_session()
+
+    Note over S,Rep: 阶段1: 读取源 Workspace
+    S->>Rep: get_workspace(session, workspace_id, owner_user_id=current_user)
+    Rep->>DB: SELECT FROM research_workspace WHERE id=?
+    Rep-->>S: ResearchWorkspace(source)
+
+    Note over S,Rep: 阶段2: 读取源最新问题版本 (Q5: 仅继承最新版本)
+    S->>Rep: get_latest_question_version(session, workspace_id)
+    Rep->>DB: SELECT FROM research_question_version ORDER BY version_number DESC LIMIT 1
+    Rep-->>S: ResearchQuestionVersion(latest)
+
+    Note over S,Rep: 阶段3: 读取源证据引用列表 (Q5: 继承证据引用列表)
+    S->>Rep: list_evidence_refs(session, workspace_id, status="active")
+    Rep->>DB: SELECT FROM research_workspace_evidence_ref WHERE status='active'
+    Rep-->>S: list[WorkspaceEvidenceRef]
+
+    Note over S,Rep: 阶段4: 创建新 Workspace
+    S->>Rep: insert_workspace(session, owner_user_id=current_user, dept_id, name=new_name, status="draft", forked_from_id=source.id)
+    Rep->>DB: INSERT INTO research_workspace
+    Rep-->>S: ResearchWorkspace(new_ws)
+
+    Note over S,Rep: 阶段5: 创建问题版本 v1 (继承源最新问题文本)
+    S->>Rep: insert_question_version(session, new_ws.id, version_number=1, question_text=latest.question_text, sub_questions=latest.sub_questions)
+    Rep->>DB: INSERT INTO research_question_version
+
+    S->>Rep: update_workspace_current_version(session, new_ws.id, 1)
+    Rep->>DB: UPDATE research_workspace SET current_question_version=1
+
+    Note over S,Rep: 阶段6: 复制证据引用 (副本而非共享引用)
+    loop 对每个 evidence_ref
+        S->>Rep: insert_evidence_ref(session, new_ws.id, ref.source_namespace, ref.source_id, ref.source_version, ref.source_name, ...)
+        Rep->>DB: INSERT INTO research_workspace_evidence_ref
+    end
+
+    S->>A: AuditRecorder.record(session, AuditEventData(action="research.workspace.fork", payload={"forked_from": source.id}))
+    A->>DB: INSERT INTO audit_event
+
+    S-->>R: WorkspaceRef(new_ws.id, new_name, status="draft", current_question_version=1)
+    R-->>C: 201 Created {workspace_id, name, status, forked_from_id}

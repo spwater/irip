@@ -64,7 +64,7 @@ class CreateProjectBody(BaseModel):
     """创建实验项目请求。"""
 
     department_id: str = Field(..., description="所属部门 UUID")
-    code: str = Field(..., min_length=1, max_length=200, description="项目编码")
+    code: str | None = Field(None, max_length=200, description="项目编码（留空则自动生成）")
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")

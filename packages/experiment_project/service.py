@@ -131,7 +131,7 @@ class ExperimentProjectService(ScopedSessionMixin):
     async def create(
         self,
         department_id: UUID,
-        code: str,
+        code: str | None,
         display_name: str,
         description: str | None,
         visible_departments: list[str] | None = None,
@@ -140,12 +140,13 @@ class ExperimentProjectService(ScopedSessionMixin):
         """创建实验项目。
 
         流程：
-        1. 检查编码唯一性（department_id + code）→ 已存在抛 AppError(conflict)；
-        2. 生成 UUID，INSERT experiment_project。
+        1. 如果 code 为空则自动生成（PRJ-YYYYMMDD-NNNN）；
+        2. 检查编码唯一性（department_id + code）→ 已存在抛 AppError(conflict)；
+        3. 生成 UUID，INSERT experiment_project。
 
         Args:
             department_id: 所属部门 UUID。
-            code: 项目编码（部门内唯一，创建后锁定）。
+            code: 项目编码（部门内唯一，None 时自动生成）。
             display_name: 中文显示名。
             description: 描述（可选）。
             visible_departments: 可见单位 ID 列表（可选，默认空数组）。
@@ -157,6 +158,10 @@ class ExperimentProjectService(ScopedSessionMixin):
             AppError: code="conflict"，当编码已存在时。
         """
         async with self._scoped_session() as session:
+            # 自动生成编码（和现有项目格式一致：proj_ + UUID 短码）
+            if not code or not code.strip():
+                from packages.common.ids import new_id
+                code = f"proj_{str(new_id())[:8]}"
             existing = await ExperimentProjectRepository.select_by_dept_and_code(
                 session, department_id, code
             )

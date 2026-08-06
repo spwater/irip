@@ -1,0 +1,301 @@
+classDiagram
+    direction TB
+
+    %% ===== 新增 ORM 实体 =====
+
+    class ResearchAnalysisPlanVersion {
+        +UUID id
+        +UUID workspace_id
+        +int version_number
+        +dict dag_structure
+        +dict coverage_declaration
+        +str status
+        +datetime confirmed_at
+        +UUID confirmed_by
+        +datetime created_at
+        +UUID created_by
+    }
+
+    class ResearchAnalysisRun {
+        +UUID id
+        +UUID workspace_id
+        +UUID plan_version_id
+        +UUID snapshot_id
+        +int run_number
+        +str status
+        +int queue_position
+        +datetime submitted_at
+        +datetime started_at
+        +datetime completed_at
+        +datetime cancelled_at
+        +UUID cancelled_by
+        +str error_summary
+        +dict coverage_summary
+        +str image_digest
+        +UUID created_by
+    }
+
+    class ResearchAnalysisStep {
+        +UUID id
+        +UUID run_id
+        +str step_key
+        +int step_index
+        +str status
+        +str method
+        +str analysis_mode
+        +int data_budget_tokens
+        +float coverage_rate
+        +float llm_read_rate
+        +bool is_sampled
+        +str mode_reason
+        +int attempt_count
+        +datetime started_at
+        +datetime completed_at
+        +str error_message
+        +str error_classification
+        +list depends_on
+    }
+
+    class ResearchRunArtifact {
+        +UUID id
+        +UUID run_id
+        +UUID step_id
+        +str artifact_type
+        +str artifact_key
+        +str storage_path
+        +str content_hash
+        +int size_bytes
+        +bool is_publishable
+    }
+
+    class ResearchAiConversation {
+        +UUID id
+        +UUID workspace_id
+        +str role
+        +dict content
+        +UUID run_id
+        +datetime created_at
+        +UUID created_by
+    }
+
+    class ResearchMemoryDocument {
+        +UUID id
+        +UUID workspace_id
+        +dict document
+        +int version
+        +datetime updated_at
+    }
+
+    ResearchAnalysisPlanVersion "1" --> "many" ResearchAnalysisRun : plan_version_id
+    ResearchAnalysisRun "1" --> "many" ResearchAnalysisStep : run_id
+    ResearchAnalysisRun "1" --> "many" ResearchRunArtifact : run_id
+    ResearchAnalysisStep "1" --> "many" ResearchRunArtifact : step_id
+    ResearchAnalysisRun "1" --> "many" ResearchAiConversation : run_id (nullable)
+
+    %% ===== Service 层 =====
+
+    class PlanService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +ModelGateway _model_gateway
+        +ContextRouter _context_router
+        +CoreFactProvider _fact_provider
+        +__init__(factory, dept_id, actor_id, model_gateway, context_router, fact_provider)
+        +generate_plan(workspace_id, snapshot_id) PlanVersionRef
+        +confirm_plan(workspace_id, plan_id) PlanVersionRef
+        +list_plans(workspace_id) list~PlanVersionRef~
+        +get_plan(workspace_id, plan_id) PlanDetail
+        +_build_data_profile(snapshot) DataProfile
+    }
+
+    class AnalysisRunService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +ResearchScheduler _scheduler
+        +__init__(factory, dept_id, actor_id, scheduler)
+        +submit_run(workspace_id, plan_version_id, snapshot_id) RunRef
+        +cancel_run(run_id) void
+        +get_run_status(run_id) RunStatus
+        +get_run_progress(run_id) RunProgress
+        +list_runs(workspace_id) list~RunRef~
+        +get_queue_position(run_id) QueuePosition
+        +check_publish_eligibility(run_id, step_keys) EligibilityResult
+    }
+
+    class ResearchOrchestrator {
+        +ResearchRepository _repo
+        +ModelGateway _model_gateway
+        +SandboxRuntime _sandbox
+        +ContextRouter _context_router
+        +RunArtifactService _artifact_service
+        +ResearchMemoryService _memory_service
+        +__init__(repo, model_gateway, sandbox, context_router, artifact_service, memory_service)
+        +execute_run(run_id) void
+        +cancel_run(run_id) void
+        +_execute_step(run_id, step) StepResult
+        +_check_scope(plan, current_state) ScopeCheckResult
+        +_prepare_input_package(snapshot) str
+        +_publish_event(run_id, event_type, payload) void
+    }
+
+    class ResearchScheduler {
+        +Redis _redis
+        +int _max_concurrent_users
+        +int _warm_pool_limit
+        +__init__(redis_client, max_users=20, warm_limit=5)
+        +acquire_slot(user_id, run_id) tuple~bool, int~
+        +release_slot(user_id, run_id) void
+        +get_queue_position(run_id) QueuePosition
+        +register_heartbeat(run_id) void
+        +check_heartbeats() list~str~
+        +acquire_warm_slot(container_id) bool
+        +release_warm_slot(container_id) void
+    }
+
+    class ContextRouter {
+        +analyze_step(step, data_profile) AnalysisMode
+        +calculate_budget(model_limit, system_tokens, research_tokens, output_tokens, safety_margin) int
+        +chunk_data(data, budget, strategy) list~Chunk~
+        +compute_coverage(step, chunks, total_records) CoverageDeclaration
+        +_select_mode(requires_full, per_record_semantic, cross_record_reasoning, allows_sampling, budget) AnalysisMode
+    }
+
+    class ModelGateway {
+        +AIProvider _provider
+        +AuditRecorder _audit
+        +dict _model_registry
+        +__init__(provider, audit_recorder, model_registry)
+        +call(task_type, system_prompt, data_context, research_context, tools) ModelResponse
+        +call_with_failover(task_type, ...) ModelResponse
+        +_select_model(task_type, data_size) ModelConfig
+        +_calculate_budget(model_config, system_tokens, research_tokens, output_tokens) int
+        +_record_call(metadata) void
+        +_get_backup_model(task_type) ModelConfig
+    }
+
+    class RunArtifactService {
+        +async_sessionmaker _factory
+        +S3Repository _s3_repo
+        +__init__(factory, s3_repo)
+        +collect_artifact(run_id, step_id, artifact_type, content) ArtifactRef
+        +list_artifacts(run_id, step_id, type) list~ArtifactRef~
+        +get_artifact(artifact_id) ArtifactContent
+        +_scan_and_persist(content, whitelist) str
+    }
+
+    class ResearchMemoryService {
+        +async_sessionmaker _factory
+        +__init__(factory)
+        +get_or_create(workspace_id) MemoryDocument
+        +update_from_event(workspace_id, event_type, event_data) void
+        +rebuild_from_events(workspace_id) MemoryDocument
+    }
+
+    class AIConversationService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +ModelGateway _model_gateway
+        +__init__(factory, dept_id, actor_id, model_gateway)
+        +send_message(workspace_id, message, run_id) ConversationMessage
+        +list_messages(workspace_id, run_id) list~ConversationMessage~
+        +_truncate_history(messages, max_count=50) list~ConversationMessage~
+    }
+
+    %% ===== 接口 =====
+
+    class SandboxRuntime {
+        <<interface>>
+        +create_container(input_package_path, image_digest, resource_limits) str
+        +execute(container_id, script_content, timeout_seconds) ExecutionResult
+        +cancel(container_id) void
+        +collect_output(container_id, whitelist) list~OutputFile~
+        +destroy_container(container_id) void
+        +keep_warm(container_id, duration_seconds) void
+    }
+
+    class DockerSandboxRuntime {
+        +DockerClient _client
+        +WarmPoolManager _warm_pool
+        +__init__(docker_url, warm_pool)
+        +create_container(input_package_path, image_digest, resource_limits) str
+        +execute(container_id, script_content, timeout_seconds) ExecutionResult
+        +cancel(container_id) void
+        +collect_output(container_id, whitelist) list~OutputFile~
+        +destroy_container(container_id) void
+        +keep_warm(container_id, duration_seconds) void
+        +_build_container_config(input_path, image, limits) dict
+    }
+
+    DockerSandboxRuntime ..|> SandboxRuntime
+    ResearchOrchestrator --> SandboxRuntime : 使用
+    ResearchOrchestrator --> ModelGateway : 使用
+    ResearchOrchestrator --> ContextRouter : 使用
+    ResearchOrchestrator --> RunArtifactService : 使用
+    ResearchOrchestrator --> ResearchMemoryService : 使用
+    PlanService --> ModelGateway : 使用
+    PlanService --> ContextRouter : 使用
+    AnalysisRunService --> ResearchScheduler : 使用
+    AIConversationService --> ModelGateway : 使用
+
+    %% ===== 值对象 =====
+
+    class PlanStep {
+        +str step_key
+        +str question
+        +list evidence_refs
+        +str method
+        +str strategy
+        +str expected_output
+        +list risks
+        +list dependencies
+        +bool requires_full
+        +bool per_record_semantic
+        +bool cross_record_reasoning
+        +bool allows_sampling
+        +int estimated_tokens
+        +str resource_tier
+    }
+
+    class CoverageDeclaration {
+        +AnalysisMode mode
+        +float data_coverage_rate
+        +float llm_read_rate
+        +bool is_sampled
+        +int batch_count
+        +int batch_progress
+        +str mode_reason
+        +to_display_string() str
+    }
+
+    class ResourceLimits {
+        +float cpu_count
+        +int memory_mb
+        +int timeout_seconds
+        +int disk_gb
+        +int output_size_mb
+    }
+
+    class ExecutionResult {
+        +int exit_code
+        +str stdout
+        +str stderr
+        +bool timed_out
+        +int duration_seconds
+    }
+
+    class ScopeBoundary {
+        +UUID snapshot_id
+        +int question_version
+        +set methods_allowed
+        +str resource_tier
+        +bool knowledge_base_used
+    }
+
+    class QueuePosition {
+        +int position
+        +int ahead_count
+        +int estimated_wait_seconds
+    }

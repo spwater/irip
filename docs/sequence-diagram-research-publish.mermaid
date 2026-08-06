@@ -1,0 +1,268 @@
+%% 成果包发布流程
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchPublishRouter
+    participant PS as PublicationService
+    participant Prod as ProductService
+    participant Env as PermissionEnvelopeCalculator
+    participant LES as LineageEdgeService
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    Note over C,PS: 阶段1：发布确认页预览（权限包络计算）
+    C->>R: GET /workspaces/{id}/results/preview {dataset_ids, view_ids, insight_ids}
+    R->>PS: _validate_publish_eligibility(workspace_id, preview_request)
+    PS->>Prod: 获取选定产物详情和当前版本
+    Prod->>Rep: get_dataset / get_view / get_insight
+    Rep->>DB: SELECT FROM research_derived_dataset / view / insight
+    Rep-->>Prod: 产物详情 + current_version
+    Prod-->>PS: 产物版本引用列表
+
+    PS->>PS: _collect_product_refs(workspace_id, request)
+    PS->>PS: _collect_snapshot_and_run_ids(product_refs) 去重收集
+    PS->>Env: calculate_envelope(source_snapshot_ids, session)
+    Env->>Rep: get_snapshot(session, snapshot_id) 获取 permission_envelope
+    Rep->>DB: SELECT FROM research_evidence_snapshot WHERE id=?
+    Rep-->>Env: ResearchEvidenceSnapshot.permission_envelope
+    Env->>Env: 动态校验源数据当前权限
+    Env->>Env: _intersect_acl_types(envelopes) 取交集
+    Env-->>PS: PermissionEnvelope(acl_type, explicit_user_ids, source_details)
+
+    PS->>Env: validate_requested_acl(requested_acl, explicit_user_ids, envelope)
+    Env-->>PS: EnvelopeValidationResult(valid, effective_acl, limiting_sources)
+    PS-->>R: PublishPreviewResult(product_refs, envelope, validation)
+    R-->>C: 200 {preview: {...}, envelope: {...}, validation: {...}}
+
+    Note over C,PS: 阶段2：确认发布
+    C->>R: POST /workspaces/{id}/results {title, summary, tags, release_notes, dataset_ids, view_ids, insight_ids, requested_acl, is_declassify, declassify_reason}
+    R->>R: require_permission("research:publish") 校验
+    R->>PS: publish_result(workspace_id, request)
+    PS->>PS: _scoped_session()
+
+    PS->>Prod: 获取选定产物详情（校验 status=confirmed）
+    Prod-->>PS: 产物版本引用
+
+    PS->>PS: _collect_product_refs(workspace_id, request) 收集引用
+    PS->>PS: _collect_snapshot_and_run_ids(product_refs) 去重
+    PS->>PS: 校验 Analysis Run 状态（succeeded / partially_succeeded）
+
+    PS->>Env: calculate_envelope(source_snapshot_ids, session) 重新计算权限包络
+    Env-->>PS: PermissionEnvelope
+
+    PS->>Env: validate_requested_acl(requested_acl, explicit_user_ids, envelope)
+    Env-->>PS: EnvelopeValidationResult
+
+    alt 超出包络且 is_declassify=true
+        PS->>R: require_permission("research:declassify") 校验
+        PS->>PS: 校验 declassify_reason 非空
+    else 超出包络且无 declassify
+        PS-->>R: 校验失败 + 包络详情
+        R-->>C: 422 {error: {code: "acl_exceeds_envelope", ...}}
+    end
+
+    PS->>PS: _compute_content_hash(product_refs) 计算内容哈希
+    Note over PS: 收集全部产物版本 content_hash → 排序 → 拼接 → SHA-256
+
+    PS->>Rep: insert_result(session, workspace_id, owner_user_id, name=title, status="published", current_version=0, current_acl_type=requested_acl, current_explicit_user_ids)
+    Rep->>DB: INSERT INTO research_result
+    Rep-->>PS: ResearchResult(id)
+
+    PS->>Rep: insert_result_version(session, result_id, version_number=1, title, summary, tags, release_notes, dataset_version_refs, view_version_refs, insight_version_refs, evidence_snapshot_ids, analysis_run_ids, source_run_statuses, publisher, content_hash, published_permission_envelope, status="active")
+    Rep->>DB: INSERT INTO research_result_version
+    Rep-->>PS: ResearchResultVersion(id)
+
+    PS->>Rep: insert_acl_revision(session, result_id, revision_number=1, acl_type=requested_acl, explicit_user_ids, previous_acl_type=null, previous_explicit_user_ids=null, changed_by, is_declassify, declassify_reason)
+    Rep->>DB: INSERT INTO research_result_acl_revision
+
+    PS->>LES: record_publication_edges(result_id, version_number=1, workspace_id, product_refs)
+    LES->>Rep: insert_lineage_edge(session, "research:workspace", workspace_id, "research:result_version", result_id, "workspace_to_result", target_version=1)
+    LES->>Rep: insert_lineage_edge(session, "research:dataset_version", dataset_id, "research:result_version", result_id, "dataset_to_result", source_version, target_version=1)
+    LES->>Rep: insert_lineage_edge(session, "research:view_version", view_id, "research:result_version", result_id, "view_to_result", source_version, target_version=1)
+    LES->>Rep: insert_lineage_edge(session, "research:insight_version", insight_id, "research:result_version", result_id, "insight_to_result", source_version, target_version=1)
+    Rep->>DB: INSERT INTO research_lineage_edge (多条)
+
+    PS->>Rep: update_result_current_version(session, result_id, 1)
+    Rep->>DB: UPDATE research_result SET current_version=1, current_acl_type=?, current_explicit_user_ids=?
+
+    PS->>A: AuditRecorder.record(session, "research.result.publish", resource_type="research_result_version", resource_id=version_id)
+    A->>DB: INSERT INTO audit_event
+
+    PS-->>R: ResultVersionRef(result_id, version_number=1, title, status="active")
+    R-->>C: 201 Created {result_id, version_number, title, status}
+
+%% ACL 修改与 declassify 流程
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchPublishRouter
+    participant PS as PublicationService
+    participant Env as PermissionEnvelopeCalculator
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: POST /results/{result_id}/acl {acl_type: "all", reason: "开放给全部门", is_declassify: true, declassify_reason: "经主任批准公开"}
+    R->>R: 校验调用者为 owner 或持有 research:manage
+    R->>PS: update_acl(result_id, acl_type="all", explicit_user_ids=[], reason, is_declassify=true, declassify_reason)
+    PS->>PS: _scoped_session()
+
+    PS->>Rep: get_result(session, result_id)
+    Rep->>DB: SELECT FROM research_result WHERE id=?
+    Rep-->>PS: ResearchResult
+
+    PS->>Rep: get_latest_version(session, result_id)
+    Rep->>DB: SELECT FROM research_result_version WHERE result_id=? ORDER BY version_number DESC LIMIT 1
+    Rep-->>PS: ResearchResultVersion(evidence_snapshot_ids)
+
+    PS->>Env: calculate_envelope(evidence_snapshot_ids, session) 重新计算当前权限包络
+    Env-->>PS: PermissionEnvelope(acl_type="tree", ...)
+
+    PS->>Env: validate_requested_acl("all", [], envelope)
+    Env-->>PS: EnvelopeValidationResult(valid=false, reason="requested 'all' exceeds envelope 'tree'")
+
+    alt 超出包络
+        PS->>R: require_permission("research:declassify") 校验
+        Note over PS: declassify_reason 必填，已在请求参数中提供
+    end
+
+    PS->>Rep: get_latest_acl_revision(session, result_id) 获取当前 ACL
+    Rep->>DB: SELECT FROM research_result_acl_revision WHERE result_id=? ORDER BY revision_number DESC LIMIT 1
+    Rep-->>PS: ResearchResultAclRevision(acl_type="private", explicit_user_ids=[])
+
+    PS->>Rep: insert_acl_revision(session, result_id, revision_number=2, acl_type="all", explicit_user_ids=[], previous_acl_type="private", previous_explicit_user_ids=[], changed_by=actor_id, is_declassify=true, declassify_reason="经主任批准公开")
+    Rep->>DB: INSERT INTO research_result_acl_revision
+    Rep-->>PS: ResearchResultAclRevision
+
+    PS->>Rep: update_result_acl(session, result_id, acl_type="all", explicit_user_ids=[])
+    Rep->>DB: UPDATE research_result SET current_acl_type='all', current_explicit_user_ids='[]'
+
+    PS->>A: AuditRecorder.record(session, "research.result.declassify", resource_type="research_result_acl_revision", resource_id=revision_id, payload={previous_acl, new_acl, declassify_reason})
+    A->>DB: INSERT INTO audit_event
+
+    PS-->>R: AclRevisionRef(revision_number=2, acl_type="all", previous_acl_type="private", is_declassify=true, declassify_reason)
+    R-->>C: 201 Created {revision_number, acl_type, previous_acl_type, is_declassify}
+
+%% 成果包搜索与复用流程
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchPublishRouter
+    participant SS as ResultSearchService
+    participant Cat as ResearchCatalogImpl
+    participant WS as WorkspaceService
+    participant Rep as ResearchRepository
+    participant Env as PermissionEnvelopeCalculator
+    participant DB as Database
+
+    Note over C,SS: 阶段1：搜索成果包
+    C->>R: GET /results/search?query=批次峰值&filters={publisher, tags}&view_mode=all&page=1
+    R->>R: require_permission("research:use") 校验
+    R->>SS: search(query="批次峰值", filters, view_mode="all", page=1, page_size=20)
+    SS->>SS: _scoped_session()
+
+    SS->>Rep: search_results(session, query, filters) 全文索引查询
+    Rep->>DB: SELECT FROM research_result_version WHERE tsvector(title, summary, tags) @@ plainto_tsquery('批次峰值')
+    Rep-->>SS: list[ResearchResultVersion]
+
+    SS->>Rep: get_results_by_ids(session, result_ids) 获取 Result + ACL
+    Rep->>DB: SELECT FROM research_result WHERE id IN (...)
+    Rep-->>SS: list[ResearchResult]
+
+    loop 对每个成果包
+        SS->>SS: _check_result_visible(result, principal_id, principal_dept_id) ACL 过滤
+        alt private: 仅 owner 可见
+            SS->>SS: result.owner_user_id == principal_id ? 可见 : 排除
+        else tree: 部门树内可见
+            SS->>SS: principal_dept_id in owner_dept_tree ? 可见 : 排除
+        else explicit: 指定用户可见
+            SS->>SS: principal_id in result.current_explicit_user_ids ? 可见 : 排除
+        else all: 全部可见
+            SS->>SS: 可见
+        end
+
+        SS->>Env: 动态校验源数据当前权限
+        Env->>Rep: get_snapshot_envelope(snapshot_id)
+        Env->>Env: 校验源数据当前权限是否收紧
+        Note over SS: 权限收紧的成果包从结果中排除
+    end
+
+    SS->>SS: 应用筛选器（发布者/时间/来源任务/数据类型/标签）
+    SS->>SS: 分页
+    SS-->>R: SearchResultPage(items, total, page, page_size)
+    R-->>C: 200 {items: [...], total, page, page_size}
+
+    Note over C,WS: 阶段2：搜索已发布 DerivedDataset（跨用户 ACL 过滤）
+    C->>R: GET /catalog/search-published?query=批次特征
+    R->>Cat: search_published_derived_data(query="批次特征", filters)
+    Cat->>Rep: search_published_datasets(session, query) 查询已发布成果包中的 DerivedDataset
+    Rep->>DB: SELECT rv.dataset_version_refs, r.current_acl_type, r.current_explicit_user_ids FROM research_result_version rv JOIN research_result r ON rv.result_id = r.id WHERE rv.status='active' AND ...
+    Rep-->>Cat: list[(dataset_ref, result_acl)]
+
+    Cat->>Cat: 按当前用户 ACL 过滤（跨用户）
+    Cat-->>R: [{result_id, dataset_id, version_number, result_title, publisher, published_at}]
+    R-->>C: 200 {items: [...]}
+
+    Note over C,WS: 阶段3：将已发布 DerivedDataset 加入新 Workspace 证据集
+    C->>R: POST /results/{result_id}/add-to-workspace {workspace_id, dataset_id, version_number}
+    R->>PS: PublicationService.add_to_workspace(result_id, workspace_id, dataset_id, version_number)
+    PS->>Rep: get_result_version(session, result_id) 校验 dataset_id 在 dataset_version_refs 中
+    PS->>WS: add_evidence(workspace_id, "research:published_derived", dataset_id, source_version=version_number, result_id=result_id)
+    WS->>Cat: 校验 ACL 和版本
+    WS->>Rep: insert_evidence_ref(session, workspace_id, "research:published_derived", dataset_id, source_version, source_name, result_id)
+    Rep->>DB: INSERT INTO research_workspace_evidence_ref
+    WS-->>PS: EvidenceRefDTO
+    PS->>A: 审计 research.result.add_to_workspace
+    PS-->>R: EvidenceRefDTO
+    R-->>C: 201 Created {ref_id, source_namespace, source_id, status}
+
+%% 成果包详情与内部对象引用流程
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchPublishRouter
+    participant PS as PublicationService
+    participant Prod as ProductService
+    participant Rep as ResearchRepository
+    participant DB as Database
+
+    Note over C,PS: 成果包详情
+    C->>R: GET /results/{result_id}
+    R->>R: require_permission("research:use") 校验
+    R->>PS: get_result_detail(result_id)
+    PS->>PS: _scoped_session()
+
+    PS->>Rep: get_result(session, result_id)
+    Rep->>DB: SELECT FROM research_result WHERE id=?
+    Rep-->>PS: ResearchResult
+
+    PS->>Rep: get_latest_version(session, result_id)
+    Rep->>DB: SELECT FROM research_result_version WHERE result_id=? ORDER BY version_number DESC LIMIT 1
+    Rep-->>PS: ResearchResultVersion
+
+    PS->>Rep: list_versions(session, result_id)
+    Rep->>DB: SELECT FROM research_result_version WHERE result_id=? ORDER BY version_number
+    Rep-->>PS: list[ResearchResultVersion]
+
+    PS->>Rep: list_acl_revisions(session, result_id)
+    Rep->>DB: SELECT FROM research_result_acl_revision WHERE result_id=? ORDER BY revision_number
+    Rep-->>PS: list[ResearchResultAclRevision]
+
+    PS->>Rep: check_favorite(session, result_id, user_id)
+    Rep->>DB: SELECT FROM research_result_favorite WHERE result_id=? AND user_id=?
+    Rep-->>PS: bool
+
+    PS-->>R: ResultDetail(result_ref, current_version, version_history, acl_revisions, is_favorited)
+    R-->>C: 200 {result: {...}, current_version: {...}, versions: [...], acl_revisions: [...], is_favorited}
+
+    Note over C,PS: 成果包内部对象独立引用
+    C->>R: GET /results/{result_id}/datasets/{dataset_id}
+    R->>PS: get_result_internal_object(result_id, "dataset", dataset_id)
+    PS->>Rep: get_result_version(session, result_id) 校验 dataset_id 在 dataset_version_refs 中
+    PS->>PS: 校验调用者对成果包的 ACL
+
+    PS->>Prod: get_dataset_version(workspace_id, dataset_id, version_number)
+    Prod->>Rep: get_dataset_version(session, dataset_id, version_number)
+    Rep->>DB: SELECT FROM research_derived_dataset_version WHERE dataset_id=? AND version_number=?
+    Rep-->>Prod: ResearchDerivedDatasetVersion
+    Prod-->>PS: DatasetVersionDetail
+
+    PS-->>R: {dataset_id, version_number, metadata, points, series, field_manifest, content_hash}
+    R-->>C: 200 {dataset: {...}}

@@ -381,6 +381,15 @@ class OpenAICompatibleProvider:
 
             logging.getLogger("irip.ai").info(f"system_context 已拼接, 长度={len(system_context)}")
 
+        # 如果调用方传了 system message，使用调用方的 system content（覆盖默认）
+        caller_system_content = None
+        for m in request.messages:
+            if m.get("role") == "system":
+                caller_system_content = str(m.get("content", ""))
+                break
+        if caller_system_content:
+            system_content = caller_system_content
+
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
         # 加入历史消息和当前问题（不含 system role）
         # 第二轮 completion 时，messages 中可能包含 assistant 的 tool_calls

@@ -186,10 +186,10 @@ async def persist_run_as_fact_handler(
         input_snapshot=run.input_snapshot or {},
     )
 
-    # 7. 创建事实
+    # 7. 创建事实（使用任务所属部门，而非当前用户部门）
     fact_service = FactService(
         session_factory=service.session_factory,
-        department_id=service.department_id,
+        department_id=run.department_id,
         actor_id=current_user.user_id,
     )
 
@@ -203,7 +203,7 @@ async def persist_run_as_fact_handler(
 
     command = CreateFactCommand(
         fact_type="experiment_run",
-        department_id=service.department_id,
+        department_id=run.department_id,
         object_id=body.object_id,
         subject_id=subject_id,
         started_at=run.started_at or run.created_at,

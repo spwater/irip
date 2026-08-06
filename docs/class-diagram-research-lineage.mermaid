@@ -1,0 +1,355 @@
+classDiagram
+    direction TB
+
+    %% ===== 新增 ORM 实体 =====
+
+    class ResearchKnowledgeReference {
+        +UUID id
+        +UUID workspace_id
+        +UUID run_id
+        +UUID step_id
+        +UUID insight_id
+        +str document_id
+        +str document_version
+        +str title
+        +str section
+        +int page
+        +str chunk_id
+        +str snippet_text
+        +str snippet_storage_path
+        +str content_hash
+        +str source_uri
+        +datetime retrieval_time
+        +str provider_name
+        +str research_question_context
+        +datetime created_at
+    }
+
+    %% ===== 阶段 4 已有实体（引用） =====
+
+    class ResearchLineageEdge {
+        +UUID id
+        +str source_namespace
+        +UUID source_id
+        +int source_version
+        +str target_namespace
+        +UUID target_id
+        +int target_version
+        +str edge_type
+        +datetime created_at
+    }
+
+    class ResearchWorkspace {
+        +UUID id
+        +UUID owner_user_id
+        +str status
+    }
+
+    class ResearchAnalysisRun {
+        +UUID id
+        +str status
+    }
+
+    class ResearchAnalysisStep {
+        +UUID id
+        +UUID run_id
+        +str step_key
+    }
+
+    class ResearchInsight {
+        +UUID id
+        +UUID workspace_id
+        +int current_version
+    }
+
+    class ResearchEvidenceSnapshot {
+        +UUID id
+        +str content_hash
+        +dict permission_envelope
+        +list source_refs
+    }
+
+    class ResearchResultVersion {
+        +UUID id
+        +UUID result_id
+        +int version_number
+        +str title
+    }
+
+    ResearchKnowledgeReference --> ResearchWorkspace : workspace_id
+    ResearchKnowledgeReference --> ResearchAnalysisRun : run_id
+    ResearchKnowledgeReference --> ResearchAnalysisStep : step_id (nullable)
+    ResearchKnowledgeReference --> ResearchInsight : insight_id (nullable, 逻辑引用)
+    ResearchLineageEdge --> ResearchKnowledgeReference : source_id (source_namespace=research:knowledge_reference, edge_type=knowledge_ref_to_insight)
+
+    %% ===== Protocol 接口 =====
+
+    class KnowledgeProvider {
+        <<interface>>
+        +search(query, options) list~KnowledgeSearchResult~
+        +get_document(document_id) KnowledgeDocument
+        +health_check() bool
+    }
+
+    class CoreProvenanceAdapter {
+        <<interface>>
+        +query_node(namespace, node_id) ProvenanceNode
+        +query_incoming_edges(namespace, node_id) list~ProvenanceEdge~
+        +check_permission(namespace, node_id, principal) bool
+    }
+
+    class ResearchLineageAdapter {
+        <<interface>>
+        +query_node(namespace, node_id) ProvenanceNode
+        +query_incoming_edges(namespace, node_id) list~ProvenanceEdge~
+        +check_permission(namespace, node_id, principal) bool
+    }
+
+    %% ===== Service 层 =====
+
+    class UnifiedProvenanceQueryService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +CoreProvenanceAdapter _core_adapter
+        +ResearchLineageAdapter _research_adapter
+        +NodeDisplayLabelGenerator _label_gen
+        +__init__(factory, dept_id, actor_id, core_adapter, research_adapter)
+        +query_provenance_graph(target_namespace, target_id, options) ProvenanceGraph
+        +query_node_detail(namespace, node_id) ProvenanceNode
+        +_route_adapter(namespace) CoreProvenanceAdapter|ResearchLineageAdapter
+        +_bfs_traverse(target_namespace, target_id, max_depth) tuple
+        +_prune_permissions(nodes, edges, principal) tuple
+        +_generate_display_labels(nodes) list
+        +_compute_stats(nodes, edges) ProvenanceGraphStats
+        +_create_restricted_node(index) RestrictedNode
+    }
+
+    class CoreProvenanceAdapterImpl {
+        +async_sessionmaker _factory
+        +__init__(factory)
+        +query_node(namespace, node_id) ProvenanceNode
+        +query_incoming_edges(namespace, node_id) list~ProvenanceEdge~
+        +check_permission(namespace, node_id, principal) bool
+        +_query_fact(fact_id) ProvenanceNode
+        +_query_derivation_run(run_id) ProvenanceNode
+        +_query_evidence_set(evidence_set_id) ProvenanceNode
+        +_query_fact_incoming_edges(fact_id) list~ProvenanceEdge~
+        +_query_derivation_run_incoming_edges(run_id) list~ProvenanceEdge~
+        +_check_fact_permission(fact_id, principal) bool
+        +_check_derivation_run_permission(run_id, principal) bool
+    }
+
+    class ResearchLineageAdapterImpl {
+        +async_sessionmaker _factory
+        +__init__(factory)
+        +query_node(namespace, node_id) ProvenanceNode
+        +query_incoming_edges(namespace, node_id) list~ProvenanceEdge~
+        +check_permission(namespace, node_id, principal) bool
+        +_query_evidence_snapshot(snapshot_id) ProvenanceNode
+        +_query_analysis_run(run_id) ProvenanceNode
+        +_query_analysis_step(step_id) ProvenanceNode
+        +_query_derived_dataset(dataset_id) ProvenanceNode
+        +_query_derived_dataset_version(dataset_id, version_number) ProvenanceNode
+        +_query_view(view_id) ProvenanceNode
+        +_query_view_version(view_id, version_number) ProvenanceNode
+        +_query_insight(insight_id) ProvenanceNode
+        +_query_insight_version(insight_id, version_number) ProvenanceNode
+        +_query_result_version(result_id, version_number) ProvenanceNode
+        +_query_workspace(workspace_id) ProvenanceNode
+        +_query_knowledge_reference(reference_id) ProvenanceNode
+        +_check_evidence_snapshot_permission(snapshot_id, principal) bool
+        +_check_analysis_run_permission(run_id, principal) bool
+        +_check_product_permission(namespace, node_id, principal) bool
+        +_check_result_version_permission(result_id, version_number, principal) bool
+        +_check_knowledge_reference_permission(reference_id, principal) bool
+    }
+
+    class KnowledgeProviderService {
+        +dict _providers
+        +async_sessionmaker _factory
+        +__init__(factory, providers)
+        +search(query, options, provider_names) list~KnowledgeSearchResult~
+        +search_all(query, options) list~KnowledgeSearchResult~
+        +get_document(document_id, provider_name) KnowledgeDocument
+        +health_check_all() dict
+        +_merge_and_deduplicate(results) list~KnowledgeSearchResult~
+        +_handle_provider_error(provider_name, error, is_required) KnowledgeSearchResult
+    }
+
+    class MockKnowledgeProvider {
+        +str provider_name
+        +__init__(provider_name)
+        +search(query, options) list~KnowledgeSearchResult~
+        +get_document(document_id) KnowledgeDocument
+        +health_check() bool
+    }
+
+    class KnowledgeReferenceService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +LineageWriterService _lineage_writer
+        +S3Repository _s3
+        +__init__(factory, dept_id, actor_id, lineage_writer, s3)
+        +save_reference(workspace_id, run_id, step_id, search_result, research_question_context) KnowledgeReferenceRef
+        +list_references_by_insight(insight_id, include_full_content) list~KnowledgeReferenceDetail~
+        +list_references_by_run(run_id, step_id) list~KnowledgeReferenceRef~
+        +get_reference(reference_id, include_full_content) KnowledgeReferenceDetail
+        +_store_snippet(reference_id, snippet_text, workspace_id, run_id) str
+        +_retrieve_snippet(snippet_storage_path) str
+        +_truncate_snippet(snippet_text) str
+    }
+
+    class LineageWriterService {
+        +async_sessionmaker _factory
+        +__init__(factory)
+        +on_snapshot_frozen(snapshot_id, source_refs) void
+        +on_run_started(run_id, snapshot_ids) void
+        +on_step_completed(run_id, step_id) void
+        +on_product_confirmed(run_id, product_namespace, product_id, product_type) void
+        +on_knowledge_referenced(reference_id, insight_id) void
+        +record_edge(source_namespace, source_id, target_namespace, target_id, edge_type, source_version, target_version) void
+        +list_edges_by_source(source_namespace, source_id) list~LineageEdgeRef~
+        +list_edges_by_target(target_namespace, target_id) list~LineageEdgeRef~
+    }
+
+    class NodeDisplayLabelGenerator {
+        <<static>>
+        +generate(namespace, node_data) NodeDisplayLabel
+        +get_type_label(namespace) str
+        +get_icon(namespace) str
+        +get_jump_target(namespace, node_id) str
+        +restricted_label() NodeDisplayLabel
+    }
+
+    %% ===== 关系 =====
+
+    CoreProvenanceAdapterImpl ..|> CoreProvenanceAdapter
+    ResearchLineageAdapterImpl ..|> ResearchLineageAdapter
+    MockKnowledgeProvider ..|> KnowledgeProvider
+    UnifiedProvenanceQueryService --> CoreProvenanceAdapter : 协调核心域
+    UnifiedProvenanceQueryService --> ResearchLineageAdapter : 协调研究域
+    UnifiedProvenanceQueryService --> NodeDisplayLabelGenerator : 生成展示标签
+    KnowledgeProviderService --> KnowledgeProvider : 编排多 Provider
+    KnowledgeReferenceService --> LineageWriterService : 创建溯源边
+    KnowledgeReferenceService --> S3Repository : 长文本快照存储
+    LineageWriterService --> ResearchRepository : 写入 research_lineage_edge
+
+    %% ===== 值对象 =====
+
+    class ProvenanceNode {
+        +str namespace
+        +UUID node_id
+        +int version
+        +str node_type
+        +NodeDisplayLabel display_label
+        +dict attributes
+        +bool is_restricted
+    }
+
+    class ProvenanceEdge {
+        +str source_namespace
+        +UUID source_id
+        +int source_version
+        +str target_namespace
+        +UUID target_id
+        +int target_version
+        +str edge_type
+        +str edge_type_label
+    }
+
+    class ProvenanceGraph {
+        +list~ProvenanceNode~ nodes
+        +list~ProvenanceEdge~ edges
+        +ProvenanceGraphStats stats
+    }
+
+    class RestrictedNode {
+        +str node_type
+        +str display_label
+        +dict attributes
+        +str temp_id
+    }
+
+    class ProvenanceGraphStats {
+        +int total_nodes
+        +dict nodes_by_type
+        +int restricted_nodes_count
+        +int truncated_count
+    }
+
+    class ProvenanceQueryOptions {
+        +int max_depth
+        +bool truncate_branch
+        +str layout
+    }
+
+    class NodeDisplayLabel {
+        +str display_label
+        +str node_type_label
+        +str version_summary
+        +str namespace
+        +str icon
+        +str jump_target
+    }
+
+    class KnowledgeSearchResult {
+        +str document_id
+        +str document_version
+        +str title
+        +str section
+        +int page
+        +str chunk_id
+        +float relevance_score
+        +str source_uri
+        +str content_hash
+        +str snippet
+    }
+
+    class KnowledgeDocument {
+        +str document_id
+        +str document_version
+        +str title
+        +str source_uri
+    }
+
+    class KnowledgeSearchOptions {
+        +int max_results
+        +list filter_tags
+        +int timeout
+    }
+
+    class KnowledgeReferenceRef {
+        +UUID reference_id
+        +UUID workspace_id
+        +UUID run_id
+        +UUID step_id
+        +UUID insight_id
+        +str document_id
+        +str document_version
+        +str title
+        +str content_hash
+        +str source_uri
+        +datetime retrieval_time
+        +str provider_name
+    }
+
+    class KnowledgeReferenceDetail {
+        +KnowledgeReferenceRef ref
+        +str snippet_text
+        +str section
+        +int page
+        +str chunk_id
+        +str research_question_context
+    }
+
+    class LineageEdgeRef {
+        +str source_namespace
+        +UUID source_id
+        +int source_version
+        +str target_namespace
+        +UUID target_id
+        +int target_version
+        +str edge_type
+    }

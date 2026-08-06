@@ -253,6 +253,18 @@ def create_app() -> FastAPI:
     app.include_router(collaboration_router)
     app.include_router(account_router)
 
+    # ---- 研究域（功能开关控制） ----
+    from packages.common.feature_flags import RESEARCH_MODULE_ENABLED
+
+    if RESEARCH_MODULE_ENABLED:
+        from apps.api.routers.research import research_router
+        from apps.api.routers.research_run import research_run_router
+        from apps.api.routers.research_products import research_products_router
+
+        app.include_router(research_router)
+        app.include_router(research_run_router)
+        app.include_router(research_products_router)
+
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:

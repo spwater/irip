@@ -1,0 +1,332 @@
+classDiagram
+    direction TB
+
+    %% ===== 新增 ORM 实体 =====
+
+    class ResearchResult {
+        +UUID id
+        +UUID workspace_id
+        +UUID owner_user_id
+        +str name
+        +str status
+        +int current_version
+        +str current_acl_type
+        +list current_explicit_user_ids
+        +datetime created_at
+        +datetime updated_at
+        +int lock_version
+    }
+
+    class ResearchResultVersion {
+        +UUID id
+        +UUID result_id
+        +int version_number
+        +str title
+        +str summary
+        +list tags
+        +str release_notes
+        +list dataset_version_refs
+        +list view_version_refs
+        +list insight_version_refs
+        +list evidence_snapshot_ids
+        +list analysis_run_ids
+        +dict source_run_statuses
+        +UUID publisher
+        +datetime published_at
+        +str content_hash
+        +dict published_permission_envelope
+        +str status
+        +datetime created_at
+    }
+
+    class ResearchResultAclRevision {
+        +UUID id
+        +UUID result_id
+        +int revision_number
+        +str acl_type
+        +list explicit_user_ids
+        +str previous_acl_type
+        +list previous_explicit_user_ids
+        +UUID changed_by
+        +datetime changed_at
+        +str change_reason
+        +bool is_declassify
+        +str declassify_reason
+    }
+
+    class ResearchLineageEdge {
+        +UUID id
+        +str source_namespace
+        +UUID source_id
+        +int source_version
+        +str target_namespace
+        +UUID target_id
+        +int target_version
+        +str edge_type
+        +datetime created_at
+    }
+
+    class ResearchResultFavorite {
+        +UUID id
+        +UUID result_id
+        +UUID user_id
+        +datetime created_at
+    }
+
+    %% ===== 与阶段 1-3 实体的关系 =====
+
+    class ResearchWorkspace {
+        +UUID id
+        +UUID owner_user_id
+        +str name
+        +str status
+    }
+
+    class ResearchDerivedDatasetVersion {
+        +UUID id
+        +UUID dataset_id
+        +int version_number
+        +str content_hash
+    }
+
+    class ResearchViewVersion {
+        +UUID id
+        +UUID view_id
+        +int version_number
+        +str image_content_hash
+    }
+
+    class ResearchInsightVersion {
+        +UUID id
+        +UUID insight_id
+        +int version_number
+    }
+
+    class ResearchEvidenceSnapshot {
+        +UUID id
+        +dict permission_envelope
+    }
+
+    class ResearchAnalysisRun {
+        +UUID id
+        +str status
+    }
+
+    ResearchResult "1" --> "many" ResearchResultVersion : result_id
+    ResearchResult "1" --> "many" ResearchResultAclRevision : result_id
+    ResearchResult "1" --> "many" ResearchResultFavorite : result_id
+    ResearchResult --> ResearchWorkspace : workspace_id
+    ResearchResultVersion --> ResearchResult : result_id (逻辑引用 dataset/view/insight version refs)
+    ResearchResultVersion --> ResearchEvidenceSnapshot : evidence_snapshot_ids (JSONB 逻辑引用)
+    ResearchResultVersion --> ResearchAnalysisRun : analysis_run_ids (JSONB 逻辑引用)
+    ResearchLineageEdge --> ResearchResultVersion : target_id (target_namespace=research:result_version)
+    ResearchLineageEdge --> ResearchWorkspace : source_id (source_namespace=research:workspace)
+    ResearchLineageEdge --> ResearchDerivedDatasetVersion : source_id (source_namespace=research:dataset_version)
+    ResearchLineageEdge --> ResearchViewVersion : source_id (source_namespace=research:view_version)
+    ResearchLineageEdge --> ResearchInsightVersion : source_id (source_namespace=research:insight_version)
+
+    %% ===== Service 层 =====
+
+    class PublicationService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +ProductService _product_service
+        +LineageEdgeService _lineage_service
+        +__init__(factory, dept_id, actor_id, product_service, lineage_service)
+        +publish_result(workspace_id, request) ResultVersionRef
+        +publish_new_version(result_id, workspace_id, request) ResultVersionRef
+        +update_acl(result_id, acl_type, explicit_user_ids, reason, is_declassify, declassify_reason) AclRevisionRef
+        +withdraw_result(result_id, version_number) void
+        +update_result_metadata(result_id, name) ResultRef
+        +add_to_workspace(result_id, workspace_id, dataset_id, version_number) EvidenceRefDTO
+        +new_workspace_from_result(result_id, workspace_name, question_text) WorkspaceRef
+        +toggle_favorite(result_id, is_favorite) void
+        +get_result_detail(result_id) ResultDetail
+        +get_version_detail(result_id, version_number) ResultVersionDetail
+        +list_versions(result_id) list~ResultVersionRef~
+        +list_acl_revisions(result_id) list~AclRevisionRef~
+        +get_result_internal_object(result_id, object_type, object_id) dict
+        +_validate_publish_eligibility(workspace_id, request) ValidationResult
+        +_collect_product_refs(workspace_id, request) ProductRefCollection
+        +_collect_snapshot_and_run_ids(product_refs) tuple
+        +_compute_content_hash(product_refs) str
+        +_validate_acl_against_envelope(requested_acl, envelope, is_declassify) EnvelopeValidationResult
+    }
+
+    class ResultSearchService {
+        +async_sessionmaker _factory
+        +UUID _dept_id
+        +UUID _actor_id
+        +__init__(factory, dept_id, actor_id)
+        +search(query, filters, view_mode, page, page_size) SearchResultPage
+        +list_results(view_mode, page, page_size) SearchResultPage
+        +_filter_by_acl(results, principal) list
+        +_filter_by_source_permission(results) list
+        +_apply_filters(query, filters) Query
+        +_check_result_visible(result, principal) bool
+    }
+
+    class PermissionEnvelopeCalculator {
+        <<static>>
+        +calculate_envelope(source_snapshot_ids, session) PermissionEnvelope
+        +validate_requested_acl(requested_acl, explicit_user_ids, envelope) EnvelopeValidationResult
+        +intersect_envelopes(envelopes) PermissionEnvelope
+        +_get_snapshot_envelope(snapshot_id, session) dict
+        +_dynamically_validate_source(snapshot_id, session) bool
+        +_acl_rank(acl_type) int
+        +_intersect_acl_types(types) str
+    }
+
+    class LineageEdgeService {
+        +async_sessionmaker _factory
+        +__init__(factory)
+        +record_publication_edges(result_id, version_number, workspace_id, product_refs) void
+        +record_edge(source_namespace, source_id, target_namespace, target_id, edge_type, source_version, target_version) void
+        +list_edges_by_source(source_namespace, source_id) list~LineageEdgeRef~
+        +list_edges_by_target(target_namespace, target_id) list~LineageEdgeRef~
+    }
+
+    %% ===== 值对象 =====
+
+    class PublishRequest {
+        +str title
+        +str summary
+        +list tags
+        +str release_notes
+        +list dataset_ids
+        +list view_ids
+        +list insight_ids
+        +str requested_acl
+        +list explicit_user_ids
+        +bool is_declassify
+        +str declassify_reason
+    }
+
+    class PermissionEnvelope {
+        +str acl_type
+        +list explicit_user_ids
+        +list source_details
+    }
+
+    class EnvelopeValidationResult {
+        +bool valid
+        +str effective_acl
+        +str reason
+        +list limiting_sources
+    }
+
+    class ProductRefCollection {
+        +list dataset_version_refs
+        +list view_version_refs
+        +list insight_version_refs
+        +list evidence_snapshot_ids
+        +list analysis_run_ids
+        +dict source_run_statuses
+    }
+
+    class ResultRef {
+        +UUID result_id
+        +str name
+        +str status
+        +int current_version
+        +str current_acl_type
+    }
+
+    class ResultVersionRef {
+        +UUID result_id
+        +int version_number
+        +str title
+        +str status
+        +datetime published_at
+    }
+
+    class ResultDetail {
+        +ResultRef result_ref
+        +ResultVersionDetail current_version
+        +list version_history
+        +list acl_revisions
+        +bool is_favorited
+    }
+
+    class ResultVersionDetail {
+        +UUID result_id
+        +int version_number
+        +str title
+        +str summary
+        +list tags
+        +str release_notes
+        +list dataset_version_refs
+        +list view_version_refs
+        +list insight_version_refs
+        +list evidence_snapshot_ids
+        +list analysis_run_ids
+        +dict source_run_statuses
+        +UUID publisher
+        +datetime published_at
+        +str content_hash
+        +dict published_permission_envelope
+        +str status
+    }
+
+    class AclRevisionRef {
+        +int revision_number
+        +str acl_type
+        +list explicit_user_ids
+        +str previous_acl_type
+        +list previous_explicit_user_ids
+        +UUID changed_by
+        +datetime changed_at
+        +str change_reason
+        +bool is_declassify
+        +str declassify_reason
+    }
+
+    class SearchResultItem {
+        +UUID result_id
+        +str name
+        +str title
+        +str summary
+        +list tags
+        +UUID publisher
+        +datetime published_at
+        +int current_version
+        +str current_acl_type
+        +int dataset_count
+        +int view_count
+        +int insight_count
+    }
+
+    class SearchResultPage {
+        +list items
+        +int total
+        +int page
+        +int page_size
+    }
+
+    class LineageEdgeRef {
+        +str source_namespace
+        +UUID source_id
+        +int source_version
+        +str target_namespace
+        +UUID target_id
+        +int target_version
+        +str edge_type
+    }
+
+    %% ===== 关系 =====
+
+    PublicationService --> ProductService : 获取产物详情和版本
+    PublicationService --> PermissionEnvelopeCalculator : 权限包络校验
+    PublicationService --> LineageEdgeService : 溯源边记录
+    PublicationService --> ResearchRepository : 调用
+    ResultSearchService --> PermissionEnvelopeCalculator : 动态权限校验
+    ResultSearchService --> ResearchRepository : 调用
+    LineageEdgeService --> ResearchRepository : 调用
+    PublicationService ..> PublishRequest : 接收
+    PublicationService ..> ProductRefCollection : 内部组装
+    PublicationService ..> ResultVersionRef : 返回
+    PublicationService ..> ResultDetail : 返回
+    ResultSearchService ..> SearchResultPage : 返回
+    PermissionEnvelopeCalculator ..> PermissionEnvelope : 返回
+    PermissionEnvelopeCalculator ..> EnvelopeValidationResult : 返回

@@ -32,7 +32,7 @@ celery_app: Celery = Celery(
     "irip",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["apps.worker.tasks"],
+    include=["apps.worker.tasks", "apps.worker.research_tasks"],
 )
 
 #: Celery 配置。
@@ -85,6 +85,22 @@ celery_app.conf.update(
         "backup-retention-cleanup": {
             "task": "backup.retention_cleanup",
             "schedule": crontab(hour=3, minute=0),
+        },
+        # ---- 研究域可信执行（阶段 2 新增） ----
+        # 研究域心跳检查：每 30 秒扫描活跃 Run 心跳
+        "research-heartbeat": {
+            "task": "research.heartbeat",
+            "schedule": 30.0,
+        },
+        # 研究域保温容器清理：每 60 秒清理过期保温容器
+        "research-cleanup-warm": {
+            "task": "research.cleanup_warm",
+            "schedule": 60.0,
+        },
+        # 研究域队列提升：每 5 秒检查队列并提升等待 Run
+        "research-promote-queued": {
+            "task": "research.promote_queued",
+            "schedule": 5.0,
         },
     },
 )

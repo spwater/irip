@@ -59,7 +59,7 @@ export function CreateProjectModal({
       const values = await form.validateFields();
       createMutation.mutate({
         department_id: values.department_id as string,
-        code: values.code as string,
+        code: (values.code as string) || null,
         display_name: values.display_name as string,
         description: (values.description as string) ?? null,
         visible_departments: (values.visible_departments as string[]) ?? [],
@@ -111,13 +111,6 @@ export function CreateProjectModal({
             options={userOptions}
             allowClear
           />
-        </Form.Item>
-        <Form.Item
-          name="code"
-          label="项目编码"
-          rules={[{ required: true, message: '请输入项目编码' }]}
-        >
-          <Input placeholder="如：cement_research" maxLength={200} />
         </Form.Item>
         <Form.Item
           name="display_name"

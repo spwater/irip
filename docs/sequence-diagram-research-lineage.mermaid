@@ -1,0 +1,268 @@
+%% 4.1 联邦溯源图查询流程
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchLineageRouter
+    participant UQS as UnifiedProvenanceQueryService
+    participant CA as CoreProvenanceAdapter
+    participant RA as ResearchLineageAdapter
+    participant NLG as NodeDisplayLabelGenerator
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: GET /provenance/graph?target_namespace=research:result_version&target_id={id}&max_depth=20
+    R->>R: require_permission("research:use") 校验
+    R->>UQS: query_provenance_graph("research:result_version", result_id, options)
+    UQS->>UQS: _scoped_session()
+
+    Note over UQS: 阶段1：BFS 从 target 向上游追溯
+    UQS->>UQS: _bfs_traverse("research:result_version", result_id, max_depth=20)
+    UQS->>UQS: 队列=[("research:result_version", result_id, 0)], visited={}, nodes=[], edges=[]
+
+    loop BFS 循环
+        UQS->>UQS: 出队 (ns, id, depth)
+        UQS->>UQS: 若 (ns, id) 已在 visited → 跳过（循环保护）
+        UQS->>UQS: visited.add((ns, id))
+        UQS->>UQS: adapter = _route_adapter(ns) 路由到对应 Adapter
+
+        alt ns 以 core: 开头
+            UQS->>CA: query_node(ns, id)
+            CA->>DB: SELECT FROM fact / derivation_run / evidence_set WHERE id=?
+            CA-->>UQS: ProvenanceNode(namespace, node_id, node_type, attributes)
+            UQS->>CA: query_incoming_edges(ns, id)
+            CA->>DB: SELECT FROM provenance_edge WHERE target_id=?
+            CA-->>UQS: list[ProvenanceEdge]（核心侧入边）
+        else ns 以 research: 开头
+            UQS->>RA: query_node(ns, id)
+            RA->>Rep: 查询对应研究域实体
+            Rep->>DB: SELECT FROM research_evidence_snapshot / analysis_run / ...
+            Rep-->>RA: 研究域实体
+            RA-->>UQS: ProvenanceNode(namespace, node_id, node_type, attributes)
+            UQS->>RA: query_incoming_edges(ns, id)
+            RA->>Rep: list_edges_by_target(session, ns, id)
+            Rep->>DB: SELECT FROM research_lineage_edge WHERE target_namespace=? AND target_id=?
+            Rep-->>RA: list[ResearchLineageEdge]（含跨边界边，source_namespace 可能为 core:*）
+            RA-->>UQS: list[ProvenanceEdge]（研究域入边 + 跨边界边）
+        end
+
+        UQS->>UQS: 将 node 和 edges 加入结果
+
+        loop 对每条入边的 source 节点
+            UQS->>UQS: 若 depth+1 > max_depth → 标记 truncated，不入队
+            UQS->>UQS: 否则入队 (source_ns, source_id, depth+1)
+            Note over UQS: source_ns 为 core:* 时，下轮 BFS 会路由到 CoreProvenanceAdapter
+        end
+    end
+
+    Note over UQS: 阶段2：权限裁剪（图拼接后统一执行）
+    UQS->>UQS: _prune_permissions(nodes, edges, truncate_branch=False)
+
+    loop 对每个节点
+        UQS->>UQS: adapter = _route_adapter(node.namespace)
+        alt node.namespace 以 core: 开头
+            UQS->>CA: check_permission(ns, id, principal)
+            CA->>CA: 复用核心权限校验逻辑
+            CA-->>UQS: bool
+        else node.namespace 以 research: 开头
+            UQS->>RA: check_permission(ns, id, principal)
+            RA->>RA: 复用阶段 1-4 权限校验逻辑
+            RA-->>UQS: bool
+        end
+
+        alt 无权限
+            UQS->>UQS: 替换为 _create_restricted_node(index)
+            Note over UQS: 临时 ID: restricted_{index}，不含名称/ID/属性/内容
+            UQS->>UQS: 涉及被替换节点的边 target 端更新为受限临时 ID
+        end
+    end
+
+    Note over UQS: 阶段3：生成展示标签
+    UQS->>NLG: generate(namespace, node_data) 对每个可见节点
+    NLG-->>UQS: NodeDisplayLabel(display_label, node_type_label, version_summary, icon, jump_target)
+    UQS->>NLG: restricted_label() 对受限节点
+    NLG-->>UQS: NodeDisplayLabel(display_label="受限来源", node_type_label="受限来源")
+
+    Note over UQS: 阶段4：统计信息
+    UQS->>UQS: _compute_stats(nodes, edges)
+    UQS-->>UQS: ProvenanceGraphStats(total_nodes, nodes_by_type, restricted_nodes_count, truncated_count)
+
+    UQS->>A: AuditRecorder.record(session, "research.provenance.query", resource_type="research_provenance_graph", payload={target, depth, node_count, restricted_count})
+    A->>DB: INSERT INTO audit_event
+
+    UQS-->>R: ProvenanceGraph(nodes, edges, stats)
+    R-->>C: 200 {nodes: [...], edges: [...], stats: {...}}
+
+%% ============
+
+%% 4.2 溯源边补充创建流程（事件驱动 Hook）
+
+sequenceDiagram
+    participant Orch as ResearchOrchestrator
+    participant Snap as EvidenceSnapshotService
+    participant Prod as ProductService
+    participant KRS as KnowledgeReferenceService
+    participant LWS as LineageWriterService
+    participant Rep as ResearchRepository
+    participant DB as Database
+
+    Note over Snap,LWS: 事件1：证据快照冻结
+    Snap->>Snap: freeze_snapshot(workspace_id)
+    Snap->>Rep: insert_snapshot(session, ...) 创建快照记录
+    Rep->>DB: INSERT INTO research_evidence_snapshot
+    Snap->>LWS: on_snapshot_frozen(snapshot_id, source_refs)
+    Note over LWS: source_refs = [{namespace:"core:fact", id:fact_id}, {namespace:"core:fact", id:fact_id2}]
+    loop 对每个 source_ref
+        LWS->>Rep: insert_lineage_edge(session, source_namespace, source_id, "research:evidence_snapshot", snapshot_id, "fact_to_snapshot")
+        Rep->>DB: INSERT INTO research_lineage_edge
+    end
+    Note over LWS: Hook 失败不阻断主流程，记录告警日志
+
+    Note over Orch,LWS: 事件2：Analysis Run 启动
+    Orch->>Orch: start_run(workspace_id, plan_id, snapshot_id)
+    Orch->>LWS: on_run_started(run_id, [snapshot_id])
+    LWS->>Rep: insert_lineage_edge(session, "research:evidence_snapshot", snapshot_id, "research:analysis_run", run_id, "snapshot_to_run")
+    Rep->>DB: INSERT INTO research_lineage_edge
+
+    Note over Orch,LWS: 事件3：Analysis Step 完成
+    Orch->>Orch: _execute_step(run_id, step)
+    Orch->>LWS: on_step_completed(run_id, step_id)
+    LWS->>Rep: insert_lineage_edge(session, "research:analysis_run", run_id, "research:analysis_step", step_id, "run_to_step")
+    Rep->>DB: INSERT INTO research_lineage_edge
+
+    Note over Prod,LWS: 事件4：产物确认
+    Prod->>Prod: create_derived_dataset(workspace_id, artifact_id, name)
+    Prod->>Rep: insert_derived_dataset + insert_derived_dataset_version
+    Rep->>DB: INSERT INTO research_derived_dataset + research_derived_dataset_version
+    Prod->>LWS: on_product_confirmed(run_id, "research:derived_dataset", dataset_id, "dataset")
+    LWS->>Rep: insert_lineage_edge(session, "research:analysis_run", run_id, "research:derived_dataset", dataset_id, "run_to_dataset")
+    Rep->>DB: INSERT INTO research_lineage_edge
+
+    Note over KRS,LWS: 事件5：知识引用保存
+    KRS->>KRS: save_reference(workspace_id, run_id, step_id, search_result)
+    KRS->>Rep: insert_knowledge_reference(session, ...)
+    Rep->>DB: INSERT INTO research_knowledge_reference
+    KRS->>LWS: on_knowledge_referenced(reference_id, insight_id)
+    LWS->>Rep: insert_lineage_edge(session, "research:knowledge_reference", reference_id, "research:insight", insight_id, "knowledge_ref_to_insight")
+    Rep->>DB: INSERT INTO research_lineage_edge
+
+    Note over LWS: 所有边仅追加（append-only），创建后不可修改或删除
+
+%% ============
+
+%% 4.3 知识库检索与引用快照保存流程
+
+sequenceDiagram
+    participant Orch as ResearchOrchestrator
+    participant KPS as KnowledgeProviderService
+    participant KP as KnowledgeProvider
+    participant KRS as KnowledgeReferenceService
+    participant LWS as LineageWriterService
+    participant S3 as MinIO
+    participant Rep as ResearchRepository
+    participant A as AuditRecorder
+    participant DB as Database
+
+    Note over Orch: 知识库检索步骤（ContextRouter 标记 keyword_only 模式）
+    Orch->>Orch: _execute_step(run_id, step) method=knowledge_search
+    Note over Orch: query 仅包含研究问题和用户确认的关键词（不含 Fact 原始数据）
+
+    Orch->>KPS: search(query=research_question + keywords, options, provider_names)
+    KPS->>KPS: 确定参与的 providers
+
+    par 并行调用各 Provider
+        KPS->>KP: provider.search(query, options)
+        KP-->>KPS: list[KnowledgeSearchResult]
+    and
+        KPS->>KP: provider2.search(query, options)
+        KP-->>KPS: list[KnowledgeSearchResult]
+    end
+
+    alt Provider 检索失败
+        KPS->>KPS: _handle_provider_error(provider_name, error, is_required)
+        alt 非必要步骤
+            KPS->>KPS: 降级为仅数据分析并标注"知识库不可用，已降级"
+            KPS->>A: AuditRecorder.record("research.knowledge.provider_degraded")
+        else 必要步骤
+            KPS-->>Orch: 步骤标记为 failed
+        end
+    end
+
+    KPS->>KPS: _merge_and_deduplicate(results) 按 relevance_score 排序，按 content_hash 去重
+    KPS-->>Orch: list[KnowledgeSearchResult]
+
+    Note over Orch: 将检索结果传递给后续 LLM 步骤作为上下文
+
+    Note over Orch,KRS: 模型引用知识库段落时保存引用快照
+    Orch->>KRS: save_reference(workspace_id, run_id, step_id, search_result, research_question_context)
+    KRS->>KRS: _scoped_session()
+
+    KRS->>KRS: 判断 snippet_text 长度
+    alt snippet_text ≤ 4KB
+        KRS->>KRS: 直接存 snippet_text 字段
+    else snippet_text > 4KB 且 ≤ 64KB
+        KRS->>S3: put_object("research/knowledge_refs/{ws_id}/{run_id}/{ref_id}.json", snippet_text)
+        S3-->>KRS: 存储成功
+        KRS->>KRS: snippet_storage_path = "research/knowledge_refs/..."
+    else snippet_text > 64KB
+        KRS->>KRS: _truncate_snippet(snippet_text) 截断至 64KB + 标注"[已截断]"
+        KRS->>S3: put_object(...) 存储截断后文本
+    end
+
+    KRS->>KRS: 计算 content_hash = SHA-256(snippet_text)
+    KRS->>Rep: insert_knowledge_reference(session, workspace_id, run_id, step_id, document_id, document_version, title, snippet_text, snippet_storage_path, content_hash, source_uri, retrieval_time, provider_name, research_question_context)
+    Rep->>DB: INSERT INTO research_knowledge_reference
+    Rep-->>KRS: ResearchKnowledgeReference(id)
+
+    KRS->>LWS: on_knowledge_referenced(reference_id, insight_id)
+    LWS->>Rep: insert_lineage_edge(session, "research:knowledge_reference", reference_id, "research:insight", insight_id, "knowledge_ref_to_insight")
+    Rep->>DB: INSERT INTO research_lineage_edge
+
+    KRS->>A: AuditRecorder.record(session, "research.knowledge.reference_saved", resource_type="research_knowledge_reference", resource_id=reference_id)
+    A->>DB: INSERT INTO audit_event
+
+    KRS-->>Orch: KnowledgeReferenceRef(reference_id, ...)
+
+%% ============
+
+%% 4.4 知识引用快照查看流程
+
+sequenceDiagram
+    participant C as Client
+    participant R as ResearchLineageRouter
+    participant KRS as KnowledgeReferenceService
+    participant Rep as ResearchRepository
+    participant S3 as MinIO
+    participant A as AuditRecorder
+    participant DB as Database
+
+    C->>R: GET /knowledge/references/{insight_id}
+    R->>R: require_permission("research:use") 校验
+    R->>R: 检查是否持有 research:manage 权限
+    R->>KRS: list_references_by_insight(insight_id, include_full_content=has_manage_permission)
+    KRS->>KRS: _scoped_session()
+
+    KRS->>Rep: list_knowledge_references_by_insight(session, insight_id)
+    Rep->>DB: SELECT FROM research_knowledge_reference WHERE insight_id=? ORDER BY retrieval_time
+    Rep-->>KRS: list[ResearchKnowledgeReference]
+
+    alt include_full_content=True（持有 research:manage 权限）
+        loop 对每条引用快照
+            KRS->>KRS: 检查 snippet_storage_path
+            alt snippet_storage_path 非空（长文本存 MinIO）
+                KRS->>S3: get_object(snippet_storage_path)
+                S3-->>KRS: snippet_text
+            else snippet_text 直接存在表中
+                KRS->>KRS: 直接使用 snippet_text 字段
+            end
+            KRS->>KRS: 组装 KnowledgeReferenceDetail（含完整 snippet_text + section + page + chunk_id）
+        end
+    else include_full_content=False（普通用户）
+        KRS->>KRS: 组装 KnowledgeReferenceDetail（仅含 title + document_id + document_version + source_uri，不含 snippet_text）
+    end
+
+    KRS->>A: AuditRecorder.record(session, "research.knowledge.reference.view", resource_type="research_knowledge_reference", resource_id=insight_id)
+    A->>DB: INSERT INTO audit_event
+
+    KRS-->>R: list[KnowledgeReferenceDetail]
+    R-->>C: 200 {references: [...]}

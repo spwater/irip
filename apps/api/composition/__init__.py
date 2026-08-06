@@ -140,3 +140,17 @@ def register_all(ctx: CompositionContext) -> None:
     register_flows(ctx)
     register_models(ctx)
     register_ai(ctx)
+
+    # ---- 研究域（功能开关控制） ----
+    from packages.common.feature_flags import RESEARCH_MODULE_ENABLED
+
+    if RESEARCH_MODULE_ENABLED:
+        from apps.api.composition.research import register as register_research
+        from apps.api.composition.research_run import register as register_research_run
+        from apps.api.composition.research_products import (
+            register as register_research_products,
+        )
+
+        register_research(ctx)
+        register_research_run(ctx)
+        register_research_products(ctx)

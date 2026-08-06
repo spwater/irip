@@ -133,6 +133,9 @@ class Permission:
     ACCOUNT_PROFILE: str = "account:profile"
     ACCOUNT_PASSWORD: str = "account:password"
 
+    # 研究域（IRIP 研究域基础）
+    RESEARCH_USE: str = "research:use"
+
     @classmethod
     def all(cls) -> list[str]:
         """返回所有权限常量列表。"""
@@ -188,6 +191,7 @@ class Permission:
             cls.CONVERSATION_MANAGE,
             cls.ACCOUNT_PROFILE,
             cls.ACCOUNT_PASSWORD,
+            cls.RESEARCH_USE,
         ]
 
 
@@ -270,6 +274,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.CONVERSATION_DELETE,
             Permission.CONVERSATION_MANAGE,
             Permission.ROLE_ASSIGN,
+            Permission.RESEARCH_USE,
         ],
     },
     RoleCode.LAB_MEMBER.value: {
@@ -306,6 +311,7 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.CONVERSATION_CREATE,
             Permission.CONVERSATION_INVITE,
             Permission.CONVERSATION_DELETE,
+            Permission.RESEARCH_USE,
         ],
     },
     RoleCode.LAB_VIEWER.value: {

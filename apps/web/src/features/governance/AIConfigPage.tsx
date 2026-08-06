@@ -19,6 +19,7 @@ type AIConfig = {
   api_key_masked: string;
   model_name: string;
   assistant_model_name: string;
+  research_model_name: string;
   enabled: boolean;
   meta_prompt: string | null;
   updated_at: string | null;
@@ -40,6 +41,7 @@ export function AIConfigPage(): JSX.Element {
   const [promptForm] = Form.useForm();
   const [testExtractLoading, setTestExtractLoading] = useState(false);
   const [testAssistantLoading, setTestAssistantLoading] = useState(false);
+  const [testResearchLoading, setTestResearchLoading] = useState(false);
 
   const { data: config } = useQuery({
     queryKey: ['ai-config'],
@@ -47,6 +49,7 @@ export function AIConfigPage(): JSX.Element {
       const res = await http.get<AIConfig>('/ai-config');
       return res.data;
     },
+    staleTime: 0,
   });
 
   // 大模型配置表单回填
@@ -58,7 +61,8 @@ export function AIConfigPage(): JSX.Element {
         base_url: config.base_url,
         api_key: config.api_key_masked || '',
         model_name: config.model_name,
-        assistant_model_name: config.assistant_model_name || '',
+        assistant_model_name: config.assistant_model_name || config.model_name || '',
+        research_model_name: config.research_model_name || config.model_name || '',
       });
     }
   }, [config, form]);
@@ -79,6 +83,7 @@ export function AIConfigPage(): JSX.Element {
       api_key: string;
       model_name: string;
       assistant_model_name: string;
+      research_model_name: string;
       enabled: boolean;
       meta_prompt: string;
     }) => {
@@ -105,19 +110,21 @@ export function AIConfigPage(): JSX.Element {
     onError: (err: unknown) => message.error(extractApiError(err)),
   });
 
-  const handleTestModel = async (modelType: 'extract' | 'assistant'): Promise<void> => {
+  const handleTestModel = async (modelType: 'extract' | 'assistant' | 'research'): Promise<void> => {
     if (!config || !config.base_url) {
       message.warning('请先保存配置后再测试连接');
       return;
     }
     const modelName = modelType === 'extract'
       ? config.model_name
+      : modelType === 'research'
+      ? (config.research_model_name || config.model_name)
       : (config.assistant_model_name || config.model_name);
     if (!modelName) {
       message.warning('请先保存模型名称');
       return;
     }
-    const setLoading = modelType === 'extract' ? setTestExtractLoading : setTestAssistantLoading;
+    const setLoading = modelType === 'extract' ? setTestExtractLoading : modelType === 'research' ? setTestResearchLoading : setTestAssistantLoading;
     try {
       setLoading(true);
       const res = await http.post<AITestResult>('/ai-config/test', {
@@ -126,7 +133,8 @@ export function AIConfigPage(): JSX.Element {
         model_name: modelName,
       });
       if (res.data.success) {
-        message.success(`连接成功！${modelType === 'extract' ? '数据提取' : 'AI助手'}模型回复: ${res.data.model_response ?? 'OK'}`);
+        const label = modelType === 'extract' ? '数据提取' : modelType === 'research' ? '研发助手' : 'AI助手';
+        message.success(`连接成功！${label}模型回复: ${res.data.model_response ?? 'OK'}`);
       } else {
         message.error(`连接失败: ${res.data.message}`);
       }
@@ -152,6 +160,7 @@ export function AIConfigPage(): JSX.Element {
         api_key: apiKeyToSend,
         model_name: values.model_name,
         assistant_model_name: values.assistant_model_name,
+        research_model_name: values.research_model_name,
         enabled: true,
         meta_prompt: existingPrompt,
       });
@@ -192,13 +201,15 @@ export function AIConfigPage(): JSX.Element {
         >
           <Input.Password placeholder="sk-..." />
         </Form.Item>
-        <Form.Item
-          name="model_name"
-          label="数据提取模型"
-          rules={[{ required: true, message: '请输入模型名称' }]}
-        >
+        <Form.Item label="数据提取模型">
           <Space.Compact style={{ width: '100%' }}>
-            <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
+            <Form.Item
+              name="model_name"
+              noStyle
+              rules={[{ required: true, message: '请输入模型名称' }]}
+            >
+              <Input placeholder="gpt-4o / qwen-plus / deepseek-chat" />
+            </Form.Item>
             <Button
               onClick={() => void handleTestModel('extract')}
               loading={testExtractLoading}
@@ -207,16 +218,27 @@ export function AIConfigPage(): JSX.Element {
             </Button>
           </Space.Compact>
         </Form.Item>
-        <Form.Item
-          name="assistant_model_name"
-          label="AI助手模型"
-          extra="AI 助手对话使用的模型，留空则与数据提取模型相同"
-        >
+        <Form.Item label="AI助手模型">
           <Space.Compact style={{ width: '100%' }}>
-            <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
+            <Form.Item name="assistant_model_name" noStyle>
+              <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
+            </Form.Item>
             <Button
               onClick={() => void handleTestModel('assistant')}
               loading={testAssistantLoading}
+            >
+              测试
+            </Button>
+          </Space.Compact>
+        </Form.Item>
+        <Form.Item label="研发助手模型">
+          <Space.Compact style={{ width: '100%' }}>
+            <Form.Item name="research_model_name" noStyle>
+              <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
+            </Form.Item>
+            <Button
+              onClick={() => void handleTestModel('research')}
+              loading={testResearchLoading}
             >
               测试
             </Button>
