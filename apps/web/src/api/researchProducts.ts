@@ -516,11 +516,37 @@ export async function apiRejectCandidate(
   );
 }
 
+export async function apiRejectAnyCandidate(
+  workspaceId: string,
+  runId: string,
+  candidateId: string,
+  reason?: string,
+): Promise<void> {
+  await http.post(
+    `/research/workspaces/${workspaceId}/runs/${runId}/candidates/${candidateId}/reject`,
+    { reason: reason ?? null },
+  );
+}
+
 export async function apiDeleteInsight(
   workspaceId: string,
   insightId: string,
 ): Promise<void> {
   await http.delete(`/research/workspaces/${workspaceId}/insights/${insightId}`);
+}
+
+export async function apiDeleteDataset(
+  workspaceId: string,
+  datasetId: string,
+): Promise<void> {
+  await http.delete(`/research/workspaces/${workspaceId}/derived-datasets/${datasetId}`);
+}
+
+export async function apiDeleteView(
+  workspaceId: string,
+  viewId: string,
+): Promise<void> {
+  await http.delete(`/research/workspaces/${workspaceId}/views/${viewId}`);
 }
 
 // ============================================================

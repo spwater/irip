@@ -21,6 +21,7 @@ EvidenceSnapshotService 负责证据快照的冻结逻辑：
 
 import hashlib
 import json
+import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -32,6 +33,8 @@ from packages.common.errors import AppError
 from packages.research.models import FactSummary, SnapshotRef
 from packages.research.repository import ResearchRepository
 from packages.research.service import CoreFactProviderProtocol
+
+logger = logging.getLogger("research.snapshots")
 
 
 class EvidenceSnapshotService(ScopedSessionMixin):
@@ -53,6 +56,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         department_id: UUID,
         actor_id: UUID | None,
         fact_provider: CoreFactProviderProtocol,
+        lineage_writer: object | None = None,
     ) -> None:
         """初始化证据快照服务。
 
@@ -61,11 +65,13 @@ class EvidenceSnapshotService(ScopedSessionMixin):
             department_id: 当前部门 ID。
             actor_id: 当前操作人 ID。
             fact_provider: CoreFactProvider 只读适配器。
+            lineage_writer: LineageWriterService 实例（可选，阶段 5 新增）。
         """
         self._factory = session_factory
         self._dept_id = department_id
         self._actor_id = actor_id
         self._fact_provider = fact_provider
+        self._lineage_writer = lineage_writer
         self._rls_dept_id: UUID | None = None
 
     def _require_actor(self) -> UUID:
@@ -169,6 +175,24 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                             "field_names", []
                         )
 
+                elif ref.source_namespace == "research:published_derived":
+                    # 阶段 4：从已发布成果包的 DerivedDatasetVersion 获取 content_hash
+                    published_data = await self._get_published_derived_data_for_hash(
+                        ref.source_id, ref.source_version
+                    )
+                    if published_data is not None:
+                        derived_data_map[ref.source_id] = published_data
+                        fact_summaries[ref.source_id] = FactSummary(
+                            fact_id=ref.source_id,
+                            fact_type="research:published_derived",
+                            subject_id=published_data.get("name", ""),
+                            status="published",
+                            department_name=None,
+                        )
+                        fact_fields_map[ref.source_id] = published_data.get(
+                            "field_names", []
+                        )
+
             # 3. 计算内容哈希
             content_hash = self._compute_content_hash(
                 refs, fact_fields_map, fact_data_map, derived_data_map
@@ -225,12 +249,25 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                 ),
             )
 
-            return SnapshotRef(
+            result = SnapshotRef(
                 snapshot_id=snapshot.id,
                 snapshot_number=snapshot_number,
                 content_hash=content_hash,
                 captured_at=snapshot.captured_at,
             )
+            _hook_snapshot_id = snapshot.id
+            _hook_source_refs = source_refs
+
+        # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+        if self._lineage_writer is not None:
+            try:
+                await self._lineage_writer.on_snapshot_frozen(
+                    _hook_snapshot_id, _hook_source_refs
+                )
+            except Exception as exc:
+                logger.warning("on_snapshot_frozen hook failed: %s", exc)
+
+        return result
 
     async def list_snapshots(self, workspace_id: UUID) -> list[SnapshotRef]:
         """列出工作空间的全部快照。
@@ -350,6 +387,29 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                 "series": version.series_content,
             }
 
+    async def _get_published_derived_data_for_hash(
+        self,
+        dataset_id: UUID,
+        source_version: str | None,
+    ) -> dict | None:
+        """获取已发布 DerivedDatasetVersion 数据用于哈希计算（阶段 4 新增）。
+
+        从 research:published_derived 引用中获取 DerivedDatasetVersion 的三段式数据
+        和 content_hash。逻辑与 _get_derived_data_for_hash 相同，因为已发布
+        DerivedDataset 的版本内容在 DerivedDatasetVersion 表中依然存在。
+
+        Args:
+            dataset_id: DerivedDataset UUID。
+            source_version: 版本号字符串（如 "1"）。
+
+        Returns:
+            dict | None: 数据字典（含 name/field_names/content_hash/metadata/points/series），
+                不存在时返回 None。
+        """
+        # 已发布 DerivedDataset 的版本数据仍在 DerivedDatasetVersion 表中，
+        # 复用 _get_derived_data_for_hash 的逻辑即可。
+        return await self._get_derived_data_for_hash(dataset_id, source_version)
+
     def _compute_content_hash(
         self,
         refs: list,
@@ -376,7 +436,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         for ref in refs:
             fact_id = ref.source_id
 
-            if ref.source_namespace == "research:derived":
+            if ref.source_namespace == "research:derived" or ref.source_namespace == "research:published_derived":
                 # 阶段 3：DerivedDataset 数据纳入哈希
                 derived_data = (derived_data_map or {}).get(fact_id, {})
                 fields = derived_data.get("field_names", [])

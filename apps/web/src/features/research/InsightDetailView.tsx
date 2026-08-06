@@ -5,6 +5,8 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Spin, Tag, Typography, Space, Button, Input, List, message } from 'antd';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { EditOutlined } from '@ant-design/icons';
 import {
   apiGetInsight,
@@ -13,9 +15,9 @@ import {
   type InsightDetail,
   type InsightVersion,
 } from '@/api/researchProducts';
+import { KnowledgeReferenceList } from './KnowledgeReferenceList';
 
-const { Text, Paragraph } = Typography;
-const { TextArea } = Input;
+const { Text } = Typography;
 
 const SOURCE_LABEL_MAP: Record<string, { label: string; color: string }> = {
   experimental_data: { label: '实验数据', color: 'blue' },
@@ -119,11 +121,15 @@ export function InsightDetailView({ workspaceId, insightId }: InsightDetailViewP
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>结论:</Text>
-            <Paragraph style={{ margin: 0, fontSize: 13 }}>{conclusion}</Paragraph>
+            <div className="research-markdown" style={{ fontSize: 13, marginTop: 2 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{conclusion}</ReactMarkdown>
+            </div>
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>适用范围:</Text>
-            <Paragraph style={{ margin: 0, fontSize: 13 }}>{scope}</Paragraph>
+            <div className="research-markdown" style={{ fontSize: 13, marginTop: 2 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{scope}</ReactMarkdown>
+            </div>
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>置信度:</Text>
@@ -131,7 +137,9 @@ export function InsightDetailView({ workspaceId, insightId }: InsightDetailViewP
           </div>
           <div>
             <Text type="secondary" style={{ fontSize: 11 }}>限制条件:</Text>
-            <Paragraph style={{ margin: 0, fontSize: 13 }}>{limitations}</Paragraph>
+            <div className="research-markdown" style={{ fontSize: 13, marginTop: 2 }}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{limitations}</ReactMarkdown>
+            </div>
           </div>
           {evidenceRefs.length > 0 && (
             <div>
@@ -162,18 +170,18 @@ export function InsightDetailView({ workspaceId, insightId }: InsightDetailViewP
           {aiOriginalText && (
             <div style={{ marginBottom: 8 }}>
               <Text type="secondary" style={{ fontSize: 11 }}>AI 原稿:</Text>
-              <Paragraph
+              <div
+                className="research-markdown"
                 style={{
                   background: '#f5f5f5',
                   padding: 12,
                   borderRadius: 4,
                   marginTop: 4,
-                  whiteSpace: 'pre-wrap',
                   fontSize: 13,
                 }}
               >
-                {aiOriginalText}
-              </Paragraph>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{aiOriginalText}</ReactMarkdown>
+              </div>
             </div>
           )}
           {isModified && (
@@ -209,6 +217,13 @@ export function InsightDetailView({ workspaceId, insightId }: InsightDetailViewP
           />
         </Card>
       )}
+
+      {/* 知识库引用快照（阶段 5 新增） */}
+      {/* 仅当证据来源为知识库时展示，否则也尝试展示（后端会返回空列表） */}
+      <KnowledgeReferenceList
+        insightId={insightId}
+        hasManagePermission={false}
+      />
     </div>
   );
 }

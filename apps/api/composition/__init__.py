@@ -146,11 +146,21 @@ def register_all(ctx: CompositionContext) -> None:
 
     if RESEARCH_MODULE_ENABLED:
         from apps.api.composition.research import register as register_research
-        from apps.api.composition.research_run import register as register_research_run
+        from apps.api.composition.research_lineage import (
+            register as register_research_lineage,
+        )
         from apps.api.composition.research_products import (
             register as register_research_products,
+        )
+        from apps.api.composition.research_publish import (
+            register as register_research_publish,
+        )
+        from apps.api.composition.research_run import (
+            register as register_research_run,
         )
 
         register_research(ctx)
         register_research_run(ctx)
         register_research_products(ctx)
+        register_research_publish(ctx)
+        register_research_lineage(ctx)

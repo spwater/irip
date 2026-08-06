@@ -136,6 +136,11 @@ class Permission:
     # 研究域（IRIP 研究域基础）
     RESEARCH_USE: str = "research:use"
 
+    # 研究域 — 发布与复用（IRIP Research Module - 子项目4）
+    RESEARCH_PUBLISH: str = "research:publish"
+    RESEARCH_DECLASSIFY: str = "research:declassify"
+    RESEARCH_MANAGE: str = "research:manage"
+
     @classmethod
     def all(cls) -> list[str]:
         """返回所有权限常量列表。"""
@@ -192,6 +197,9 @@ class Permission:
             cls.ACCOUNT_PROFILE,
             cls.ACCOUNT_PASSWORD,
             cls.RESEARCH_USE,
+            cls.RESEARCH_PUBLISH,
+            cls.RESEARCH_DECLASSIFY,
+            cls.RESEARCH_MANAGE,
         ]
 
 
@@ -275,6 +283,10 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.CONVERSATION_MANAGE,
             Permission.ROLE_ASSIGN,
             Permission.RESEARCH_USE,
+            # 研究域 — 发布与复用（阶段 4）
+            Permission.RESEARCH_PUBLISH,
+            Permission.RESEARCH_DECLASSIFY,
+            Permission.RESEARCH_MANAGE,
         ],
     },
     RoleCode.LAB_MEMBER.value: {
@@ -312,6 +324,8 @@ BUILTIN_ROLES: dict[str, dict[str, object]] = {
             Permission.CONVERSATION_INVITE,
             Permission.CONVERSATION_DELETE,
             Permission.RESEARCH_USE,
+            # 研究域 — 发布与复用（阶段 4）
+            Permission.RESEARCH_PUBLISH,
         ],
     },
     RoleCode.LAB_VIEWER.value: {

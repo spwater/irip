@@ -92,12 +92,13 @@ function parseSamplesFromContext(systemContext: string | null | undefined): Map<
 
   // 按 "### 样品: XXX" 分割
   const blocks = systemContext.split(/### 样品:\s*/);
+  const labelCount = new Map<string, number>();
   for (let i = 1; i < blocks.length; i++) {
     const block = blocks[i];
     // 标签是第一行（到换行或 ``` 之前）
     const labelMatch = block.match(/^([^\n`]+)/);
     if (!labelMatch) continue;
-    const label = labelMatch[1].trim();
+    const rawLabel = labelMatch[1].trim();
 
     // 提取 JSON 块
     const jsonMatch = block.match(/```json\n([\s\S]*?)```/);
@@ -105,6 +106,10 @@ function parseSamplesFromContext(systemContext: string | null | undefined): Map<
 
     try {
       const data = JSON.parse(jsonMatch[1]);
+      // 同名样品用索引区分（如 "样品A" → "样品A" / "样品A (#2)" / "样品A (#3)"）
+      const count = (labelCount.get(rawLabel) ?? 0) + 1;
+      labelCount.set(rawLabel, count);
+      const label = count > 1 ? `${rawLabel} (#${count})` : rawLabel;
       samples.set(label, {
         label,
         metadata: data.metadata ?? {},
@@ -218,13 +223,19 @@ export function ChartRefBlock({
       title: spec.title ? { text: spec.title, left: 'center' } : undefined,
       tooltip: { trigger: chartType === 'scatter' ? 'item' : 'axis' },
       legend: echartsSeries.length > 1 ? { bottom: 0 } : undefined,
-      grid: { left: '8%', right: '5%', bottom: echartsSeries.length > 1 ? '12%' : '5%', containLabel: true },
+      grid: { left: '8%', right: '5%', bottom: echartsSeries.length > 1 ? '15%' : '12%', containLabel: true },
       xAxis: {
         type: chartType === 'scatter' ? 'value' : 'category',
         name: xAxisName,
         nameLocation: 'middle',
         nameGap: 30,
         data: chartType === 'scatter' ? undefined : xData,
+        axisLabel: {
+          interval: 'auto',
+          rotate: xData.length > 20 ? 45 : 0,
+          fontSize: 10,
+          hideOverlap: true,
+        },
       },
       yAxis: {
         type: 'value',
@@ -239,7 +250,7 @@ export function ChartRefBlock({
           const d = (s as { data?: unknown[] }).data;
           return sum + (Array.isArray(d) ? d.length : 0);
         }, 0);
-        if (totalPoints > 200) {
+        if (totalPoints > 50) {
           return {
             dataZoom: [
               { type: 'inside', xAxisIndex: 0 },
@@ -259,18 +270,30 @@ export function ChartRefBlock({
     let cancelled = false;
     let resizeObserver: ResizeObserver | null = null;
 
-    import('echarts').then((echarts) => {
+    const initChart = (echarts: typeof import('echarts')) => {
       if (cancelled || !chartRef.current) return;
-
-      // dispose 旧实例
+      const w = chartRef.current.offsetWidth;
+      if (w === 0) return false; // 容器还没布局好，等 ResizeObserver
       chartInstanceRef.current?.dispose();
-
       const chart = echarts.init(chartRef.current);
       chart.setOption(option);
       chartInstanceRef.current = chart;
+      return true;
+    };
 
-      // 响应容器大小变化
-      resizeObserver = new ResizeObserver(() => chart.resize());
+    import('echarts').then((echarts) => {
+      if (cancelled || !chartRef.current) return;
+      if (initChart(echarts)) return; // 成功初始化
+
+      // 容器宽度为 0，等 ResizeObserver 第一次回调
+      resizeObserver = new ResizeObserver(() => {
+        if (cancelled || !chartRef.current) return;
+        if (initChart(echarts)) {
+          resizeObserver?.disconnect();
+          resizeObserver = new ResizeObserver(() => chartInstanceRef.current?.resize());
+          resizeObserver.observe(chartRef.current);
+        }
+      });
       resizeObserver.observe(chartRef.current);
     });
 

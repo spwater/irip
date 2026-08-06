@@ -105,6 +105,10 @@ class TestRolePermissionMatrix:
             "conversation:delete",
             "conversation:manage",
             "role:assign",
+            "research:use",
+            "research:publish",
+            "research:declassify",
+            "research:manage",
         }
 
     def test_lab_member_permissions(self) -> None:
@@ -141,6 +145,8 @@ class TestRolePermissionMatrix:
             "conversation:create",
             "conversation:invite",
             "conversation:delete",
+            "research:use",
+            "research:publish",
         }
 
     def test_lab_viewer_permissions(self) -> None:

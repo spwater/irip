@@ -657,3 +657,360 @@ class ResearchInsightCandidate(Base):
             f"ResearchInsightCandidate(id={self.id!r}, run_id={self.run_id!r}, "
             f"status={self.status!r})"
         )
+
+
+# ============================================================
+# 阶段 4：研究发布与复用 ORM 实体（5 张表）
+# ============================================================
+
+
+class ResearchResult(Base):
+    """研究成果包稳定身份实体（对应 research_result 表）。
+
+    一个 Workspace 可有多个成果包。ResearchResult 为稳定身份，
+    可变字段为 status 和 current_version。版本内容不可变。
+
+    Attributes:
+        id: 成果包 UUID（PK）。
+        workspace_id: 来源工作空间 ID（FK→research_workspace CASCADE）。
+        owner_user_id: 所有者用户 ID（FK→app_user）。
+        name: 成果包名称。
+        status: 状态（published / archived）。
+        current_version: 当前版本号（0 表示尚未发布版本）。
+        current_acl_type: 当前 ACL 类型（private / tree / explicit / all）。
+        current_explicit_user_ids: explicit 模式下指定用户列表（JSONB）。
+        created_at: 创建时间。
+        updated_at: 更新时间。
+        lock_version: 乐观锁版本号。
+    """
+
+    __tablename__ = "research_result"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    workspace_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("app_user.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        sa.Text, nullable=False, server_default=sa.text("'published'")
+    )
+    current_version: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, server_default=sa.text("0")
+    )
+    current_acl_type: Mapped[str] = mapped_column(
+        sa.Text, nullable=False, server_default=sa.text("'private'")
+    )
+    current_explicit_user_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    lock_version: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, server_default=sa.text("0")
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchResult(id={self.id!r}, name={self.name!r}, "
+            f"current_version={self.current_version!r})"
+        )
+
+
+class ResearchResultVersion(Base):
+    """研究成果包版本实体（对应 research_result_version 表）。
+
+    不可变：创建后不允许 UPDATE / DELETE（status 字段由专用 API 操作除外）。
+    包含标题/摘要/标签/发布说明 + 产物版本引用 + Snapshot/Run 引用 + 发布者/时间/内容哈希。
+
+    Attributes:
+        id: 版本 UUID（PK）。
+        result_id: 成果包 ID（FK→research_result CASCADE）。
+        version_number: 版本号（从 1 开始递增）。
+        title: 标题。
+        summary: 摘要（可空）。
+        tags: 标签列表（JSONB）。
+        release_notes: 发布说明（可空）。
+        dataset_version_refs: DerivedDataset 版本引用列表（JSONB [{dataset_id, version_number}]）。
+        view_version_refs: ResearchView 版本引用列表（JSONB [{view_id, version_number}]）。
+        insight_version_refs: Insight 版本引用列表（JSONB [{insight_id, version_number}]）。
+        evidence_snapshot_ids: Evidence Snapshot ID 列表（JSONB UUID list）。
+        analysis_run_ids: Analysis Run ID 列表（JSONB UUID list）。
+        source_run_statuses: Run 状态映射（JSONB {run_id: status}）。
+        publisher: 发布者 ID（FK→app_user）。
+        published_at: 发布时间。
+        content_hash: 内容哈希（SHA-256）。
+        published_permission_envelope: 发布时权限包络快照（JSONB）。
+        status: 版本状态（active / superseded / withdrawn）。
+        created_at: 创建时间。
+    """
+
+    __tablename__ = "research_result_version"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    result_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_result.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    title: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    tags: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    release_notes: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    dataset_version_refs: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    view_version_refs: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    insight_version_refs: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    evidence_snapshot_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    analysis_run_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    source_run_statuses: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+    )
+    publisher: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("app_user.id"), nullable=False
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    content_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    published_permission_envelope: Mapped[dict] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+    )
+    status: Mapped[str] = mapped_column(
+        sa.Text, nullable=False, server_default=sa.text("'active'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchResultVersion(id={self.id!r}, "
+            f"result_id={self.result_id!r}, "
+            f"version_number={self.version_number!r})"
+        )
+
+
+class ResearchResultAclRevision(Base):
+    """成果包 ACL 修订记录实体（对应 research_result_acl_revision 表）。
+
+    仅追加：创建后不允许 UPDATE / DELETE。每次 ACL 修改创建新 Revision，
+    记录变更前后值、操作者、时间、原因。
+
+    Attributes:
+        id: 修订 UUID（PK）。
+        result_id: 成果包 ID（FK→research_result CASCADE）。
+        revision_number: 修订号（从 1 开始递增）。
+        acl_type: ACL 类型（private / tree / explicit / all）。
+        explicit_user_ids: explicit 模式下指定用户列表（JSONB）。
+        previous_acl_type: 变更前 ACL 类型（首个 Revision 为 null）。
+        previous_explicit_user_ids: 变更前指定用户列表（可空）。
+        changed_by: 变更者 ID（FK→app_user）。
+        changed_at: 变更时间。
+        change_reason: 变更原因（可空）。
+        is_declassify: 是否为 declassify 操作。
+        declassify_reason: declassify 理由（is_declassify=true 时必填）。
+    """
+
+    __tablename__ = "research_result_acl_revision"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    result_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_result.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revision_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    acl_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    explicit_user_ids: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+    previous_acl_type: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    previous_explicit_user_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    changed_by: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("app_user.id"), nullable=False
+    )
+    changed_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    change_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    is_declassify: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, server_default=sa.text("false")
+    )
+    declassify_reason: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchResultAclRevision(id={self.id!r}, "
+            f"result_id={self.result_id!r}, "
+            f"revision_number={self.revision_number!r})"
+        )
+
+
+class ResearchLineageEdge(Base):
+    """研究溯源边实体（对应 research_lineage_edge 表）。
+
+    仅追加：创建后不允许 UPDATE / DELETE。
+    为阶段 5 ResearchLineageAdapter 提供数据源。
+
+    Attributes:
+        id: 边 UUID（PK）。
+        source_namespace: 源命名空间（如 research:workspace / research:dataset_version）。
+        source_id: 源对象 UUID。
+        source_version: 源版本号（可空）。
+        target_namespace: 目标命名空间（如 research:result_version）。
+        target_id: 目标对象 UUID。
+        target_version: 目标版本号（可空）。
+        edge_type: 边类型（workspace_to_result / dataset_to_result 等）。
+        created_at: 创建时间。
+    """
+
+    __tablename__ = "research_lineage_edge"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    source_namespace: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    source_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    source_version: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    target_namespace: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    target_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
+    target_version: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    edge_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchLineageEdge(id={self.id!r}, "
+            f"edge_type={self.edge_type!r})"
+        )
+
+
+class ResearchResultFavorite(Base):
+    """成果包收藏实体（对应 research_result_favorite 表）。
+
+    Attributes:
+        id: 收藏 UUID（PK）。
+        result_id: 成果包 ID（FK→research_result CASCADE）。
+        user_id: 用户 ID（FK→app_user）。
+        created_at: 创建时间。
+    """
+
+    __tablename__ = "research_result_favorite"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    result_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_result.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("app_user.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchResultFavorite(id={self.id!r}, "
+            f"result_id={self.result_id!r}, "
+            f"user_id={self.user_id!r})"
+        )
+
+
+# ============================================================
+# 阶段 5：统一溯源与知识接口 ORM 实体（1 张表）
+# ============================================================
+
+
+class ResearchKnowledgeReference(Base):
+    """知识引用快照实体（对应 research_knowledge_reference 表）。
+
+    仅追加：创建后不允许 UPDATE / DELETE（应用层保证）。
+    保存 AI 引用知识库时的段落快照、文档版本和哈希，
+    确保外部知识库更新后已发布 Insight 仍能解释当时依据。
+
+    Attributes:
+        id: 引用快照 UUID（PK）。
+        workspace_id: 工作空间 ID（FK→research_workspace ON DELETE CASCADE）。
+        run_id: Run ID（FK→research_analysis_run）。
+        step_id: 步骤 ID（FK→research_analysis_step，可空）。
+        insight_id: Insight ID（逻辑引用 research_insight，不建 FK，可空）。
+        document_id: 文档 ID。
+        document_version: 文档版本。
+        title: 文档标题。
+        section: 段落/章节（可空）。
+        page: 页码（可空）。
+        chunk_id: 分块 ID（可空）。
+        snippet_text: 引用段落文本（≤4KB 直接存储，可空）。
+        snippet_storage_path: MinIO 存储路径（>4KB 时存储，可空）。
+        content_hash: snippet_text 的 SHA-256 哈希（64 字符十六进制）。
+        source_uri: 来源 URI。
+        retrieval_time: 检索时间。
+        provider_name: Provider 名称。
+        research_question_context: 检索时的研究问题上下文（可空）。
+        created_at: 创建时间。
+    """
+
+    __tablename__ = "research_knowledge_reference"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    workspace_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+    )
+    step_id: Mapped[UUID | None] = mapped_column(
+        GUID, sa.ForeignKey("research_analysis_step.id"), nullable=True
+    )
+    insight_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    document_id: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    document_version: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    title: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    section: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    page: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    chunk_id: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    snippet_text: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    snippet_storage_path: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    content_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    source_uri: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    retrieval_time: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    provider_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    research_question_context: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchKnowledgeReference(id={self.id!r}, "
+            f"workspace_id={self.workspace_id!r}, "
+            f"document_id={self.document_id!r}, "
+            f"title={self.title!r})"
+        )

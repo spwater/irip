@@ -351,7 +351,7 @@ class RunArtifactService(ScopedSessionMixin):
         """
         get_method = getattr(self._s3_repo, "get_object", None)
         if get_method is not None:
-            result = await get_method(storage_path)
+            result = get_method(storage_path)
             return result if isinstance(result, bytes) else result
         sync_get = getattr(self._s3_repo, "get_object_sync", None)
         if sync_get is not None:

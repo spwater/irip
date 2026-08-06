@@ -16,23 +16,19 @@ import { Card, Tag, Space, Button, Empty, Spin, Typography, Modal, Input, messag
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChartBlock } from '../assistant/message-thread/components/ChartBlock';
+import { ChartRefBlock } from '../assistant/ChartRefBlock';
 import {
   PlayCircleOutlined,
   EditOutlined,
   PlusOutlined,
   UpOutlined,
   DownOutlined,
-  CheckOutlined,
-  CloseOutlined,
   BulbOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import {
   apiGeneratePlan,
-  apiConfirmPlan,
-  apiSubmitRun,
   apiGetRun,
-  apiListRunArtifacts,
-  apiCancelRun,
   apiUpdateQuestion,
   type PlanDetail,
   type RunProgress,
@@ -40,24 +36,30 @@ import {
   type CoverageDeclaration,
   type WorkspaceDetail as WorkspaceDetailType,
 } from '../../api/research';
-import { RunProgressPanel } from './RunProgressPanel';
-import { QueueStatus } from './QueueStatus';
 import { PlanReviewCard } from './PlanReviewCard';
-import { useRunSSE } from './useRunSSE';
-import { CandidatePreviewPanel } from './CandidatePreviewPanel';
-import { ConfirmedProductsPanel } from './ConfirmedProductsPanel';
-import { ProductDetailView } from './ProductDetailView';
+import { PublishButton } from './PublishButton';
+import { KnowledgeSearchPanel } from './KnowledgeSearchPanel';
 
 export type ResearchCanvasProps = {
   workspaceId: string;
   detail: WorkspaceDetailType;
   onQuestionUpdated?: () => void;
+  insightCandidate: any | null;
+  insightCandidateId: string | null;
+  insightRunId: string | null;
+  onInsightCandidateChange: (candidate: any | null, candidateId: string | null, runId: string | null) => void;
+  onProductsRefresh: () => void;
 };
 
 export function ResearchCanvas({
   workspaceId,
   detail,
   onQuestionUpdated,
+  insightCandidate: _insightCandidate,
+  insightCandidateId: _insightCandidateId,
+  insightRunId: _insightRunId,
+  onInsightCandidateChange,
+  onProductsRefresh,
 }: ResearchCanvasProps) {
   // 从 detail 提取字段（防御 null/undefined）
   const snapshotId =
@@ -74,13 +76,8 @@ export function ResearchCanvas({
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [productsRefresh, setProductsRefresh] = useState(0);
-  const [selectedProduct, setSelectedProduct] = useState<{ type: string; id: string } | null>(null);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
-  const [insightCandidate, setInsightCandidate] = useState<any | null>(null);
-  const [insightCandidateId, setInsightCandidateId] = useState<string | null>(null);
-  const [insightRunId, setInsightRunId] = useState<string | null>(null);
-  const [accepting, setAccepting] = useState(false);
+  const [dataContext, setDataContext] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [extractingInsight, setExtractingInsight] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(true);
@@ -103,14 +100,11 @@ export function ResearchCanvas({
               if (steps[0].analysis_result) {
                 setAnalysisResult(steps[0].analysis_result);
               }
+              if (steps[0].data_context) {
+                setDataContext(steps[0].data_context);
+              }
               if (steps[0].insight_candidate) {
-                setInsightCandidate(steps[0].insight_candidate);
-              }
-              if (steps[0].insight_candidate_id) {
-                setInsightCandidateId(steps[0].insight_candidate_id);
-              }
-              if (steps[0].insight_run_id) {
-                setInsightRunId(steps[0].insight_run_id);
+                onInsightCandidateChange(steps[0].insight_candidate, steps[0].insight_candidate_id || null, steps[0].insight_run_id || null);
               }
             }
           }
@@ -144,41 +138,7 @@ export function ResearchCanvas({
   const [editSubQuestions, setEditSubQuestions] = useState<string[]>([]);
   const [savingQuestion, setSavingQuestion] = useState(false);
 
-  // 接受 Insight 候选
-  const handleAcceptInsight = useCallback(async () => {
-    if (!insightCandidateId || !workspaceId) return;
-    setAccepting(true);
-    try {
-      const { apiAcceptCandidate } = await import('../../api/researchProducts');
-      await apiAcceptCandidate(workspaceId, insightRunId || '00000000-0000-0000-0000-000000000000', insightCandidateId);
-      message.success('Insight 已接受，已创建为正式产物');
-      setInsightCandidate(null);
-      setInsightCandidateId(null);
-      setInsightRunId(null);
-      setProductsRefresh((prev) => prev + 1);
-    } catch {
-      message.error('接受失败');
-    } finally {
-      setAccepting(false);
-    }
-  }, [insightCandidateId, workspaceId]);
-
-  // 拒绝 Insight 候选
-  const handleRejectInsight = useCallback(async () => {
-    if (!insightCandidateId || !workspaceId) return;
-    try {
-      const { apiRejectCandidate } = await import('../../api/researchProducts');
-      await apiRejectCandidate(workspaceId, insightRunId || '00000000-0000-0000-0000-000000000000', insightCandidateId, '用户拒绝');
-      message.success('已拒绝');
-      setInsightCandidate(null);
-      setInsightCandidateId(null);
-      setInsightRunId(null);
-    } catch {
-      message.error('操作失败');
-    }
-  }, [insightCandidateId, workspaceId]);
-
-  // 从问题卡片执行数据分析
+  // 编辑问题状态
   const handleExecuteFromCard = useCallback(async () => {
     if (!plan || !snapshotId) return;
     setExecuting(true);
@@ -190,6 +150,7 @@ export function ResearchCanvas({
         snapshotId,
       );
       setAnalysisResult(result.analysis_result);
+      setDataContext(result.data_context || null);
       message.success('数据分析完成');
     } catch {
       message.error('分析执行失败');
@@ -205,46 +166,17 @@ export function ResearchCanvas({
     try {
       const { apiExtractInsight } = await import('../../api/research');
       const result = await apiExtractInsight(workspaceId, plan.plan_id, snapshotId);
-      setInsightCandidate(result.insight_candidate);
-      setInsightCandidateId(result.insight_candidate_id || null);
-      setInsightRunId(result.run_id || null);
-      message.success('Insight 提取完成');
+      onInsightCandidateChange(result.insight_candidate, result.insight_candidate_id || null, result.run_id || null);
+      onProductsRefresh();
+      message.success('结论抽取完毕');
     } catch {
-      message.error('Insight 提取失败');
+      message.error('结论抽取失败');
     } finally {
       setExtractingInsight(false);
     }
-  }, [plan, snapshotId, workspaceId]);
+  }, [plan, snapshotId, workspaceId, onInsightCandidateChange, onProductsRefresh]);
 
   // SSE 事件处理
-  const handleSSEEvent = useCallback(
-    (eventType: string, data: string) => {
-      try {
-        const payload = JSON.parse(data);
-        if (eventType === 'run.status_changed' && run) {
-          // 刷新 Run 进度
-          apiGetRun(workspaceId, run.run_id).then(setRun).catch(() => {});
-        } else if (eventType === 'step.status_changed' && run) {
-          apiGetRun(workspaceId, run.run_id).then(setRun).catch(() => {});
-        } else if (eventType === 'step.progress' && run) {
-          apiGetRun(workspaceId, run.run_id).then(setRun).catch(() => {});
-        } else if (eventType === 'artifact.created' && run) {
-          apiListRunArtifacts(workspaceId, run.run_id).then((res) => setArtifacts(res?.items ?? [])).catch(() => {});
-        }
-      } catch {
-        // ignore
-      }
-    },
-    [workspaceId, run],
-  );
-
-  const { connected, fallbackToPolling } = useRunSSE({
-    workspaceId,
-    runId: run?.run_id ?? '',
-    onEvent: handleSSEEvent,
-    enabled: !!run && run.status !== 'succeeded' && run.status !== 'failed' && run.status !== 'cancelled',
-  });
-
   // 生成计划
   const handleGeneratePlan = useCallback(async () => {
     if (!snapshotId) return;
@@ -371,7 +303,7 @@ export function ResearchCanvas({
                 loading={generating}
                 onClick={handleGeneratePlan}
               >
-                生成分析计划
+                生成计划
               </Button>
             )}
           </Space>
@@ -403,6 +335,7 @@ export function ResearchCanvas({
           snapshotId={snapshotId || ''}
           onAnalysisComplete={(result) => {
             setAnalysisResult(result.analysis_result);
+      setDataContext(result.data_context || null);
           }}
         />
       )}
@@ -417,6 +350,7 @@ export function ResearchCanvas({
               onClick={() => setResultExpanded(!resultExpanded)}
               style={{ cursor: 'pointer' }}
             >
+              <BarChartOutlined style={{ color: '#1890ff' }} />
               <Typography.Text strong>分析结果</Typography.Text>
               {resultExpanded ? <UpOutlined style={{ fontSize: 11, color: '#8c8c8c' }} /> : <DownOutlined style={{ fontSize: 11, color: '#8c8c8c' }} />}
             </Space>
@@ -429,7 +363,7 @@ export function ResearchCanvas({
               loading={extractingInsight}
               onClick={handleExtractInsight}
             >
-              {insightCandidate ? '重新提炼' : '提炼 Insight'}
+              {_insightCandidate ? '重新抽取结论' : '抽取结论'}
             </Button>
           }
         >
@@ -444,6 +378,9 @@ export function ResearchCanvas({
                   code({ className, children, ...props }) {
                     const lang = className?.replace('language-', '') || '';
                     let codeStr = String(children || '').replace(/\n$/, '');
+                    if (lang === 'chart-ref' || lang === 'chart') {
+                      return <ChartRefBlock specStr={codeStr} systemContext={dataContext} />;
+                    }
                     if (lang === 'echarts') {
                       // 清洗 JS 函数为字符串模板（处理嵌套大括号）
                       codeStr = codeStr.replace(
@@ -462,6 +399,18 @@ export function ResearchCanvas({
                       }
                       return <ChartBlock optionStr={codeStr} />;
                     }
+                    if (lang === 'data') {
+                      return (
+                        <details style={{ margin: '8px 0' }}>
+                          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8c8c8c' }}>
+                            结构化数据（已提取，点击展开查看）
+                          </summary>
+                          <pre style={{ fontSize: 10, maxHeight: 300, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                            <code>{children}</code>
+                          </pre>
+                        </details>
+                      );
+                    }
                     return <code className={className} {...props}>{children}</code>;
                   },
                 }}
@@ -477,178 +426,8 @@ export function ResearchCanvas({
         </Card>
       )}
 
-      {/* Insight 候选区 */}
-      {insightCandidate && (
-        <Card
-          size="small"
-          title={
-            <Space>
-              <Typography.Text strong>Insight 候选</Typography.Text>
-              <Tag color={insightCandidate.confidence_level === 'high' ? 'green' : insightCandidate.confidence_level === 'medium' ? 'orange' : 'red'}>
-                {insightCandidate.confidence_level || 'unknown'}
-              </Tag>
-            </Space>
-          }
-          extra={
-            insightCandidateId && (
-              <Space size="small">
-                <Button
-                  size="small"
-                  type="primary"
-                  icon={<CheckOutlined />}
-                  loading={accepting}
-                  onClick={handleAcceptInsight}
-                >
-                  接受
-                </Button>
-                <Button
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => message.info('修改功能开发中')}
-                >
-                  修改
-                </Button>
-                <Popconfirm
-                  title="确定拒绝此候选？"
-                  onConfirm={handleRejectInsight}
-                  okText="拒绝"
-                  cancelText="取消"
-                >
-                  <Button size="small" danger icon={<CloseOutlined />}>
-                    拒绝
-                  </Button>
-                </Popconfirm>
-              </Space>
-            )
-          }
-          style={{ marginBottom: 12 }}
-        >
-          {insightCandidate.conclusion && (
-            <div style={{ marginBottom: 8 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>结论：</Typography.Text>
-              <div className="research-markdown" style={{ fontSize: 14, marginTop: 2 }}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{insightCandidate.conclusion}</ReactMarkdown>
-              </div>
-            </div>
-          )}
-          {insightCandidate.scope && (
-            <div style={{ marginBottom: 8 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>范围：</Typography.Text>
-              <Typography.Text style={{ fontSize: 13 }}>{insightCandidate.scope}</Typography.Text>
-            </div>
-          )}
-          {insightCandidate.limitations && (
-            <div style={{ marginBottom: 8 }}>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>局限：</Typography.Text>
-              <Typography.Text style={{ fontSize: 13 }}>{insightCandidate.limitations}</Typography.Text>
-            </div>
-          )}
-          {insightCandidate.evidence_source_label && (
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>证据来源：</Typography.Text>
-              <Tag>{insightCandidate.evidence_source_label}</Tag>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* ===== 以下多步执行流程暂时注释掉，后面再说 =====
-      {/ * Run 提交按钮 * /}
-      {plan && plan.status === 'confirmed' && !run && (
-        <Button
-          type="primary"
-          block
-          icon={<PlayCircleOutlined />}
-          loading={submitting}
-          onClick={handleSubmitRun}
-          style={{ marginBottom: 12 }}
-        >
-          执行计划
-        </Button>
-      )}
-
-      {/ * 排队状态 * /}
-      {isQueued && run && (
-        <QueueStatus
-          workspaceId={workspaceId}
-          runId={run.run_id}
-          onCancel={handleCancelRun}
-          onCancelLoading={cancelling}
-        />
-      )}
-
-      {/ * Run 进度面板 * /}
-      {run && !isQueued && (
-        <Card
-          size="small"
-          title={`Run #${run.run_number ?? ''}`}
-          style={{ marginBottom: 12 }}
-          extra={
-            ['succeeded', 'failed', 'cancelled', 'partially_succeeded'].includes(run.status) && (
-              <Button
-                size="small"
-                type="text"
-                onClick={() => {
-                  setRun(null);
-                  setPlan(null);
-                  setArtifacts([]);
-                }}
-              >
-                关闭 ✕
-              </Button>
-            )
-          }
-        >
-          {fallbackToPolling && (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              实时连接不可用，正在轮询...
-            </Typography.Text>
-          )}
-          <RunProgressPanel
-            runId={run.run_id}
-            runStatus={run.status}
-            steps={run.steps}
-            coverageDeclaration={run.coverage_declaration as CoverageDeclaration | null}
-            startedAt={run.started_at}
-            completedAt={run.completed_at}
-            onCancel={handleCancelRun}
-            onCancelLoading={cancelling}
-          />
-        </Card>
-      )}
-      ===== 结束注释 ===== */}
-
-      {/* 产物详情视图（选中产物时） */}
-      {selectedProduct && (
-        <ProductDetailView
-          workspaceId={workspaceId}
-          productType={selectedProduct.type}
-          productId={selectedProduct.id}
-          onBack={() => setSelectedProduct(null)}
-        />
-      )}
-
-      {/* ===== 候选产物预览区暂时注释掉 =====
-      {!selectedProduct && run && (run.status === 'succeeded' || run.status === 'partially_succeeded') && (
-        <CandidatePreviewPanel
-          workspaceId={workspaceId}
-          runId={run.run_id}
-          onProductsChanged={() => setProductsRefresh((prev) => prev + 1)}
-        />
-      )}
-      ===== 结束注释 ===== */}
-
-      {/* 已确认产物列表 */}
-      {!selectedProduct && (
-        <ConfirmedProductsPanel
-          workspaceId={workspaceId}
-          refreshTrigger={productsRefresh}
-          onSelectProduct={(type, id) => setSelectedProduct({ type, id })}
-        />
-      )}
-
       {/* 空状态 */}
-      {!selectedProduct && !plan && !run && !snapshotId && (
+      {!plan && !run && !snapshotId && (
         <Empty description="请先冻结证据快照" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       )}
 

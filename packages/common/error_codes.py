@@ -107,6 +107,9 @@ class ErrorCode(enum.Enum):
     INVALID_STATE = ("invalid_state", 409)
     OUTSIDE_APPLICABILITY_DOMAIN = ("outside_applicability_domain", 422)
 
+    # ---- 403 补充：研究发布权限 ----
+    ACL_EXCEEDS_ENVELOPE = ("acl_exceeds_envelope", 403)
+
     # ---- 500 服务器内部错误 ----
     INTERNAL_ERROR = ("internal_error", 500)
     INGESTION_ERROR = ("ingestion_error", 500)

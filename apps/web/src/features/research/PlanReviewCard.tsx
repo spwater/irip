@@ -119,7 +119,6 @@ export function PlanReviewCard({
         >
           <BulbOutlined style={{ color: '#1890ff' }} />
           <Typography.Text strong>分析建议</Typography.Text>
-          <Tag color="blue">v{plan.version_number}</Tag>
           {!editing && (
             expanded
               ? <UpOutlined style={{ fontSize: 11, color: '#8c8c8c' }} />

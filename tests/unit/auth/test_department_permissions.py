@@ -91,8 +91,8 @@ class TestDepartmentPermissions:
         assert Permission.DEPARTMENT_MANAGE not in perms
 
     def test_total_permission_count(self) -> None:
-        """权限总数 = 51（含实验项目 + 协作功能新增权限）。"""
-        assert len(Permission.all()) == 51
+        """权限总数 = 55（含实验项目 + 协作功能 + 研究域发布权限）。"""
+        assert len(Permission.all()) == 55
 
     def test_permission_all_includes_equipment_permissions(self) -> None:
         """Permission.all() 包含 EQUIPMENT_MANAGE 和 EQUIPMENT_READ。"""

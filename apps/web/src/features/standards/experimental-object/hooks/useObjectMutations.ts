@@ -91,8 +91,8 @@ export function useObjectMutations(
       setCompCreateModalOpen(false);
       compForm.resetFields();
       message.success('数据接口创建成功');
-      // 自动选中新建的接口
-      form.setFieldsValue({ component_id: data.id });
+      // 自动选中新建的接口（用 component_id 而非 version id）
+      form.setFieldsValue({ component_id: data.component_id });
     },
     onError: (err: unknown) => {
       message.error(extractApiError(err));

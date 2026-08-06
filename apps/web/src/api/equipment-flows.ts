@@ -33,7 +33,7 @@ export async function apiDeleteEquipment(id: string): Promise<void> { await http
 // V2 Components API
 // ============================================================
 
-export type ComponentSummary = { id: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; experimental_object_code: string; equipment_id: string | null; department_id: string | null; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; tool_type?: string | null; };
+export type ComponentSummary = { id: string; component_id?: string; name: string; display_name: string; description: string; version: string; kind: string; runtime: string; experimental_object_code: string; equipment_id: string | null; department_id: string | null; status: string; manifest_sha256: string; published_at: string | null; created_at: string; prompt?: string | null; tool_type?: string | null; };
 export type ComponentDetail = ComponentSummary & { manifest_yaml: string; active_version_id?: string | null; parameters?: Record<string, unknown>; inputs?: unknown[]; outputs?: unknown[]; visible_departments?: string[] };
 export type ComponentVersionItem = { id: string; version: string; status: string; manifest_sha256: string; created_at: string; };
 export type PersistFactResult = { fact_id: string; revision: number; subject_id: string; raw_count: number; artifact_id: string | null; };

@@ -197,6 +197,14 @@ class AskService:
         messages: tuple[dict[str, Any], ...] = tuple(msg_list)
 
         # 把 system_context 存到 user_context 和对话记录
+        # 如果前端没传 system_context，从对话记录恢复之前存储的
+        if not system_context:
+            async with scoped_session(self._factory, None, user_id) as session:
+                conv_obj = await session.scalar(
+                    sa.select(AIConversation).where(AIConversation.id == conversation_id)
+                )
+                if conv_obj and conv_obj.system_context:
+                    system_context = conv_obj.system_context
         if system_context:
             user_context["system_context"] = system_context
             async with scoped_session(self._factory, None, user_id) as session:

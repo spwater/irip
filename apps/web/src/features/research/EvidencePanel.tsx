@@ -20,6 +20,7 @@ import {
 } from '@/api/research';
 import { apiListFacts } from '@/api/facts-provenance';
 import { apiSearchCatalog, type CatalogSearchResult } from '@/api/researchProducts';
+import { apiSearchPublishedCatalog, type CatalogPublishedSearchResult } from '@/api/researchPublish';
 import type { FactSummary } from '@/api/types';
 
 const { Text } = Typography;
@@ -79,10 +80,13 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
-  const [evidenceType, setEvidenceType] = useState<'fact' | 'derived'>('fact');
+  const [evidenceType, setEvidenceType] = useState<'fact' | 'derived' | 'published'>('fact');
   const [derivedResults, setDerivedResults] = useState<CatalogSearchResult[]>([]);
   const [selectedDerivedIds, setSelectedDerivedIds] = useState<string[]>([]);
   const [loadingDerived, setLoadingDerived] = useState(false);
+  const [publishedResults, setPublishedResults] = useState<CatalogPublishedSearchResult[]>([]);
+  const [selectedPublishedIds, setSelectedPublishedIds] = useState<string[]>([]);
+  const [loadingPublished, setLoadingPublished] = useState(false);
 
   const fetchEvidence = useCallback(async () => {
     setLoadingEvidence(true);
@@ -116,6 +120,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
     setEvidenceType('fact');
     setSelectedFactIds([]);
     setSelectedDerivedIds([]);
+    setSelectedPublishedIds([]);
     setLoadingFacts(true);
     try {
       const res = await apiListFacts({ page_size: 100, status: 'active' });
@@ -146,6 +151,26 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       void handleSearchDerived('');
     }
   }, [evidenceType, derivedResults.length, handleSearchDerived]);
+
+  // 搜索已发布成果包中的 DerivedDataset
+  const handleSearchPublished = useCallback(async (query: string) => {
+    setLoadingPublished(true);
+    try {
+      const res = await apiSearchPublishedCatalog(query);
+      setPublishedResults(res?.items ?? []);
+    } catch {
+      message.error('搜索已发布数据失败');
+    } finally {
+      setLoadingPublished(false);
+    }
+  }, []);
+
+  // 切换到"已发布"时加载
+  useEffect(() => {
+    if (evidenceType === 'published' && publishedResults.length === 0) {
+      void handleSearchPublished('');
+    }
+  }, [evidenceType, publishedResults.length, handleSearchPublished]);
 
   const factGroups = useMemo(() => buildFactGroups(allFacts, searchText), [allFacts, searchText]);
   const allFilteredFactIds = useMemo(() => flattenFactIds(factGroups), [factGroups]);
@@ -197,7 +222,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       if (successCount > 0) message.success(`已加入 ${successCount} 条数据`);
       if (failCount > 0) message.warning(`${failCount} 条加入失败（可能已存在）`);
       setSelectedFactIds([]);
-    } else {
+    } else if (evidenceType === 'derived') {
       // 衍生数据
       if (selectedDerivedIds.length === 0) {
         message.warning('请至少选择一个衍生数据集');
@@ -207,7 +232,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       let successCount = 0;
       let failCount = 0;
       for (const dsId of selectedDerivedIds) {
-        const dsInfo = derivedResults.find((d) => d.id === dsId);
         try {
           await apiAddEvidence(workspaceId, {
             source_namespace: 'research:derived',
@@ -222,6 +246,31 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       if (successCount > 0) message.success(`已加入 ${successCount} 个衍生数据集`);
       if (failCount > 0) message.warning(`${failCount} 个加入失败`);
       setSelectedDerivedIds([]);
+    } else {
+      // 已发布成果包中的 DerivedDataset
+      if (selectedPublishedIds.length === 0) {
+        message.warning('请至少选择一个已发布数据集');
+        return;
+      }
+      setAdding(true);
+      let successCount = 0;
+      let failCount = 0;
+      for (const pubItem of publishedResults) {
+        if (!selectedPublishedIds.includes(pubItem.dataset_id)) continue;
+        try {
+          await apiAddEvidence(workspaceId, {
+            source_namespace: 'research:published_derived',
+            source_id: pubItem.dataset_id,
+          });
+          successCount++;
+        } catch {
+          failCount++;
+        }
+      }
+      setAdding(false);
+      if (successCount > 0) message.success(`已加入 ${successCount} 个已发布数据集`);
+      if (failCount > 0) message.warning(`${failCount} 个加入失败`);
+      setSelectedPublishedIds([]);
     }
     setModalOpen(false);
     void fetchEvidence();
@@ -292,13 +341,22 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                 ]}
               >
                 <List.Item.Meta
-                  title={ref.source_name || ref.source_namespace}
+                  title={
+                    ref.source_namespace === 'research:published_derived'
+                      ? `已发布: ${ref.source_name || ref.source_namespace}`
+                      : ref.source_namespace === 'research:derived'
+                        ? `衍生: ${ref.source_name || ref.source_namespace}`
+                        : ref.source_name || ref.source_namespace
+                  }
                   description={
                     <span>
                       <Tag color={ref.status === 'active' ? 'green' : 'default'}>
                         {ref.status}
                       </Tag>
                       {ref.source_version && <Tag>{ref.source_version}</Tag>}
+                      {ref.source_namespace === 'research:published_derived' && (
+                        <Tag color="purple" style={{ fontSize: 10 }}>已发布成果</Tag>
+                      )}
                     </span>
                   }
                 />
@@ -349,9 +407,9 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
         title="添加数据"
         open={modalOpen}
         onOk={handleConfirmAdd}
-        onCancel={() => { setModalOpen(false); setSelectedFactIds([]); setSelectedDerivedIds([]); }}
+        onCancel={() => { setModalOpen(false); setSelectedFactIds([]); setSelectedDerivedIds([]); setSelectedPublishedIds([]); }}
         confirmLoading={adding}
-        okText={`添加 ${(evidenceType === 'fact' ? selectedFactIds.length : selectedDerivedIds.length) > 0 ? `(${evidenceType === 'fact' ? selectedFactIds.length : selectedDerivedIds.length})` : ''}`}
+        okText={`添加 ${(evidenceType === 'fact' ? selectedFactIds.length : evidenceType === 'derived' ? selectedDerivedIds.length : selectedPublishedIds.length) > 0 ? `(${evidenceType === 'fact' ? selectedFactIds.length : evidenceType === 'derived' ? selectedDerivedIds.length : selectedPublishedIds.length})` : ''}`}
         cancelText="取消"
         width={700}
         styles={{ body: { padding: 0 } }}
@@ -366,6 +424,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
             >
               <Radio.Button value="fact">实验事实</Radio.Button>
               <Radio.Button value="derived">衍生数据</Radio.Button>
+              <Radio.Button value="published">已发布</Radio.Button>
             </Radio.Group>
 
             {evidenceType === 'fact' && (
@@ -404,6 +463,21 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                 />
                 <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
                   已选 {selectedDerivedIds.length} 个
+                </Text>
+              </>
+            )}
+
+            {evidenceType === 'published' && (
+              <>
+                <Input
+                  prefix={<SearchOutlined />}
+                  placeholder="搜索已发布成果包中的数据集..."
+                  onChange={(e) => handleSearchPublished(e.target.value)}
+                  allowClear
+                  size="middle"
+                />
+                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
+                  已选 {selectedPublishedIds.length} 个（跨用户 ACL 过滤）
                 </Text>
               </>
             )}
@@ -521,7 +595,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                   );
                 })
               )
-            ) : (
+            ) : evidenceType === 'derived' ? (
               // 衍生数据列表
               loadingDerived ? (
                 <div style={{ textAlign: 'center', padding: 40 }}>
@@ -564,6 +638,56 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                           <span style={{ fontSize: 12 }}>
                             {item.summary || '无摘要'}
                             {item.tags.length > 0 && ` | 标签: ${item.tags.join(', ')}`}
+                          </span>
+                        }
+                      />
+                    </List.Item>
+                  )}
+                />
+              )
+            ) : (
+              // 已发布成果包中的 DerivedDataset 列表（跨用户 ACL 过滤）
+              loadingPublished ? (
+                <div style={{ textAlign: 'center', padding: 40 }}>
+                  <Spin />
+                </div>
+              ) : publishedResults.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--ocean-text-muted)' }}>
+                  <Text type="secondary">暂无已发布数据集</Text>
+                </div>
+              ) : (
+                <List
+                  size="small"
+                  dataSource={publishedResults}
+                  renderItem={(item) => (
+                    <List.Item
+                      style={{ cursor: 'pointer', background: selectedPublishedIds.includes(item.dataset_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent' }}
+                      onClick={() => {
+                        setSelectedPublishedIds((prev) =>
+                          prev.includes(item.dataset_id) ? prev.filter((id) => id !== item.dataset_id) : [...prev, item.dataset_id]
+                        );
+                      }}
+                    >
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            <Checkbox
+                              checked={selectedPublishedIds.includes(item.dataset_id)}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={() => {
+                                setSelectedPublishedIds((prev) =>
+                                  prev.includes(item.dataset_id) ? prev.filter((id) => id !== item.dataset_id) : [...prev, item.dataset_id]
+                                );
+                              }}
+                            />
+                            <Text>已发布: {item.result_title}</Text>
+                            <Tag>v{item.version_number}</Tag>
+                          </Space>
+                        }
+                        description={
+                          <span style={{ fontSize: 12 }}>
+                            成果包: {item.result_id.substring(0, 8)}…
+                            {item.published_at && ` | 发布于 ${new Date(item.published_at).toLocaleDateString()}`}
                           </span>
                         }
                       />

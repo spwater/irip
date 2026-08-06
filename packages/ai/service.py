@@ -375,7 +375,7 @@ class AIService:
             mentions,
         )
 
-    async def stream_ask(
+    def stream_ask(
         self,
         user: Any,
         question: str,
@@ -385,7 +385,11 @@ class AIService:
         system_context: str | None = None,
         mentions: list[str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """流式处理用户问题（委托到 AskService）。"""
+        """流式处理用户问题（委托到 AskService）。
+
+        注意：不能用 async def，否则 return 会被包装为 coroutine，
+        调用方 async for 会报 'coroutine was never awaited'。
+        """
         return self._ask_svc.stream_ask(
             user,
             question,

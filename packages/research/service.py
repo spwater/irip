@@ -384,13 +384,14 @@ class WorkspaceService(ScopedSessionMixin):
     async def delete_workspace(self, workspace_id: UUID) -> None:
         """物理删除工作空间（CASCADE 级联删除子表）。
 
-        本期无发布成果引用检查，允许无限制删除（Q6）。
+        阶段 4 升级：有已发布成果包的 Workspace 只能归档不能删除。
 
         Args:
             workspace_id: 工作空间 ID。
 
         Raises:
             AppError: code="not_found"，当工作空间不存在时。
+            AppError: code="conflict"，当存在已发布成果包时。
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
@@ -403,6 +404,24 @@ class WorkspaceService(ScopedSessionMixin):
                     message="研究工作空间不存在",
                     retryable=False,
                     fields={"workspace_id": str(workspace_id)},
+                )
+
+            # 阶段 4：检查是否存在已发布成果包
+            published_count = await ResearchRepository.count_published_results_by_workspace(
+                session, workspace_id
+            )
+            if published_count > 0:
+                raise AppError(
+                    code="conflict",
+                    message=(
+                        f"工作空间存在 {published_count} 个已发布成果包，"
+                        f"无法删除，请改为归档"
+                    ),
+                    retryable=False,
+                    fields={
+                        "workspace_id": str(workspace_id),
+                        "published_count": published_count,
+                    },
                 )
 
             await ResearchRepository.delete_workspace(session, workspace_id)
@@ -667,6 +686,38 @@ class WorkspaceService(ScopedSessionMixin):
                 dataset_info = results[0]
                 source_name = dataset_info.get("name", "衍生数据")
                 source_version = str(dataset_info.get("current_version", "1"))
+
+            elif source_namespace == "research:published_derived":
+                # 阶段 4：从已发布成果包中添加 DerivedDataset 作为证据
+                if self._research_catalog is None:
+                    raise AppError(
+                        code="forbidden",
+                        message="ResearchCatalog 未配置，无法加入已发布衍生数据证据",
+                        retryable=False,
+                        fields={},
+                    )
+                # 通过跨用户 ACL 过滤搜索校验
+                results = await self._research_catalog.search_published_derived_data(
+                    query="",
+                    filters={"dataset_id_filter": str(source_id)},
+                )
+                # 手动过滤 dataset_id
+                matching = [
+                    r for r in results
+                    if r.get("dataset_id") == str(source_id)
+                ]
+                if not matching:
+                    raise AppError(
+                        code="forbidden",
+                        message="已发布数据集不存在或当前用户无权访问",
+                        retryable=False,
+                        fields={"source_id": str(source_id)},
+                    )
+                dataset_info = matching[0]
+                source_name = dataset_info.get("dataset_name", "已发布衍生数据")
+                source_version = str(
+                    dataset_info.get("dataset_version_number", "1")
+                )
 
             else:
                 raise AppError(

@@ -151,7 +151,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
         void queryClient.invalidateQueries({ queryKey: ['component', detailId] });
         void queryClient.refetchQueries({ queryKey: ['component-versions', detailId] });
       }
-      setDetailId(data.id);
+      setDetailId(data.component_id ?? data.id);
       setModalOpen(false);
       setEditModalOpen(false);
       setEditOriginalName(undefined);

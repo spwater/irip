@@ -67,6 +67,7 @@ class ProductService(ScopedSessionMixin):
         department_id: UUID,
         actor_id: UUID | None,
         artifact_service: object,
+        lineage_writer: object | None = None,
     ) -> None:
         """初始化产物服务。
 
@@ -75,11 +76,13 @@ class ProductService(ScopedSessionMixin):
             department_id: 当前部门 ID。
             actor_id: 当前操作人 ID。
             artifact_service: RunArtifactService 实例。
+            lineage_writer: LineageWriterService 实例（可选，阶段 5 新增）。
         """
         self._factory = session_factory
         self._dept_id = department_id
         self._actor_id = actor_id
         self._artifact_service = artifact_service
+        self._lineage_writer = lineage_writer
         self._rls_dept_id: UUID | None = None
 
     def _require_actor(self) -> UUID:
@@ -257,13 +260,29 @@ class ProductService(ScopedSessionMixin):
                 ),
             )
 
-            return DerivedDatasetRef(
+            result = DerivedDatasetRef(
                 dataset_id=dataset.id,
                 name=name,
                 status="confirmed",
                 current_version=1,
                 workspace_id=workspace_id,
             )
+            _hook_run_id = artifact.run_id
+            _hook_dataset_id = dataset.id
+
+        # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+        if self._lineage_writer is not None:
+            try:
+                await self._lineage_writer.on_product_confirmed(
+                    _hook_run_id,
+                    "research:derived_dataset",
+                    _hook_dataset_id,
+                    "dataset",
+                )
+            except Exception as exc:
+                logger.warning("on_product_confirmed hook failed: %s", exc)
+
+        return result
 
     async def list_datasets(self, workspace_id: UUID) -> list[DerivedDatasetRef]:
         """列出工作空间内的 DerivedDataset。
@@ -642,7 +661,7 @@ class ProductService(ScopedSessionMixin):
                 ),
             )
 
-            return ViewRef(
+            result = ViewRef(
                 view_id=view.id,
                 name=name,
                 status="confirmed",
@@ -650,6 +669,22 @@ class ProductService(ScopedSessionMixin):
                 caption=caption,
                 display_order=display_order,
             )
+            _hook_run_id = artifact.run_id
+            _hook_view_id = view.id
+
+        # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+        if self._lineage_writer is not None:
+            try:
+                await self._lineage_writer.on_product_confirmed(
+                    _hook_run_id,
+                    "research:view",
+                    _hook_view_id,
+                    "view",
+                )
+            except Exception as exc:
+                logger.warning("on_product_confirmed hook failed: %s", exc)
+
+        return result
 
     async def list_views(self, workspace_id: UUID) -> list[ViewRef]:
         """列出工作空间内的 ResearchView。
@@ -1011,12 +1046,64 @@ class ProductService(ScopedSessionMixin):
                 ),
             )
 
-            return InsightRef(
+            # 7. 清除 dag_structure 里的候选数据（避免刷新后重复显示）
+            try:
+                import json as _json
+                result = await session.execute(
+                    sa.text(
+                        "SELECT id, dag_structure FROM research_analysis_plan_version "
+                        "WHERE workspace_id = :wid ORDER BY created_at DESC LIMIT 1"
+                    ),
+                    {"wid": str(workspace_id)},
+                )
+                row = result.fetchone()
+                if row and row[1]:
+                    plan_id, dag = row[0], row[1]
+                    steps = dag.get("steps", []) if isinstance(dag, dict) else []
+                    changed = False
+                    for s in steps:
+                        if s.get("insight_candidate"):
+                            s.pop("insight_candidate", None)
+                            changed = True
+                        if s.get("insight_candidate_id"):
+                            s.pop("insight_candidate_id", None)
+                            changed = True
+                        if s.get("insight_run_id"):
+                            s.pop("insight_run_id", None)
+                            changed = True
+                    if changed:
+                        await session.execute(
+                            sa.text(
+                                "UPDATE research_analysis_plan_version "
+                                "SET dag_structure = :dag WHERE id = :pid"
+                            ),
+                            {"dag": _json.dumps(dag, ensure_ascii=False), "pid": str(plan_id)},
+                        )
+            except Exception as exc:
+                logger.warning("Failed to clear insight candidate from dag_structure: %s", exc)
+
+            result = InsightRef(
                 insight_id=insight.id,
                 name=insight_name,
                 status="confirmed",
                 current_version=1,
             )
+            _hook_run_id = candidate.run_id
+            _hook_insight_id = insight.id
+
+        # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+        if self._lineage_writer is not None:
+            try:
+                await self._lineage_writer.on_product_confirmed(
+                    _hook_run_id,
+                    "research:insight",
+                    _hook_insight_id,
+                    "insight",
+                )
+            except Exception as exc:
+                logger.warning("on_product_confirmed hook failed: %s", exc)
+
+        return result
 
     async def create_insight_from_modify(
         self,
@@ -1172,12 +1259,28 @@ class ProductService(ScopedSessionMixin):
                 ),
             )
 
-            return InsightRef(
+            result = InsightRef(
                 insight_id=insight.id,
                 name=insight_name,
                 status="confirmed",
                 current_version=1,
             )
+            _hook_run_id = candidate.run_id
+            _hook_insight_id = insight.id
+
+        # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+        if self._lineage_writer is not None:
+            try:
+                await self._lineage_writer.on_product_confirmed(
+                    _hook_run_id,
+                    "research:insight",
+                    _hook_insight_id,
+                    "insight",
+                )
+            except Exception as exc:
+                logger.warning("on_product_confirmed hook failed: %s", exc)
+
+        return result
 
     async def list_insights(self, workspace_id: UUID) -> list[InsightRef]:
         """列出工作空间内的 Insight。
@@ -1344,6 +1447,38 @@ class ProductService(ScopedSessionMixin):
                     "DELETE FROM research_insight WHERE id = :iid AND workspace_id = :wid"
                 ),
                 {"iid": str(insight_id), "wid": str(workspace_id)},
+            )
+
+    async def delete_dataset(
+        self,
+        workspace_id: UUID,
+        dataset_id: UUID,
+    ) -> None:
+        """删除 DerivedDataset（物理删除，连同版本）。"""
+        async with self._scoped_session() as session:
+            await session.execute(
+                sa.text("DELETE FROM research_derived_dataset_version WHERE dataset_id = :did"),
+                {"did": str(dataset_id)},
+            )
+            await session.execute(
+                sa.text("DELETE FROM research_derived_dataset WHERE id = :did AND workspace_id = :wid"),
+                {"did": str(dataset_id), "wid": str(workspace_id)},
+            )
+
+    async def delete_view(
+        self,
+        workspace_id: UUID,
+        view_id: UUID,
+    ) -> None:
+        """删除 ResearchView（物理删除，连同版本）。"""
+        async with self._scoped_session() as session:
+            await session.execute(
+                sa.text("DELETE FROM research_view_version WHERE view_id = :vid"),
+                {"vid": str(view_id)},
+            )
+            await session.execute(
+                sa.text("DELETE FROM research_view WHERE id = :vid AND workspace_id = :wid"),
+                {"vid": str(view_id), "wid": str(workspace_id)},
             )
 
     async def list_insight_versions(

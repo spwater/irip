@@ -695,6 +695,38 @@ async def delete_insight(
     )
 
 
+@research_products_router.delete(
+    "/workspaces/{workspace_id}/derived-datasets/{dataset_id}",
+)
+async def delete_dataset(
+    workspace_id: UUID,
+    dataset_id: UUID,
+    _user: ResearchUserDep,
+    product_service: ProductServiceDep,
+) -> None:
+    """删除数据集（物理删除，不可恢复）。"""
+    await product_service.delete_dataset(
+        workspace_id=workspace_id,
+        dataset_id=dataset_id,
+    )
+
+
+@research_products_router.delete(
+    "/workspaces/{workspace_id}/views/{view_id}",
+)
+async def delete_view(
+    workspace_id: UUID,
+    view_id: UUID,
+    _user: ResearchUserDep,
+    product_service: ProductServiceDep,
+) -> None:
+    """删除视图（物理删除，不可恢复）。"""
+    await product_service.delete_view(
+        workspace_id=workspace_id,
+        view_id=view_id,
+    )
+
+
 @research_products_router.get(
     "/workspaces/{workspace_id}/insights/{insight_id}/versions",
 )
@@ -843,6 +875,48 @@ async def modify_insight_candidate(
 
 
 @research_products_router.post(
+    "/workspaces/{workspace_id}/runs/{run_id}/candidates/{candidate_id}/reject",
+    status_code=204,
+)
+async def reject_candidate(
+    workspace_id: UUID,
+    run_id: UUID,
+    candidate_id: UUID,
+    body: RejectCandidateRequest,
+    _user: ResearchUserDep,
+    candidate_service: CandidateServiceDep,
+) -> None:
+    """拒绝任意类型候选 → 物理删除 artifact 或 insight 候选。"""
+    import os
+    from sqlalchemy import text as sa_text
+    from packages.common.database import build_session_factory, session_scope
+    url = os.getenv("IRIP_DATABASE_URL", "").replace("postgresql+psycopg://", "postgresql+psycopg_async://")
+    factory = build_session_factory(url)
+    # 先查是否为 insight 候选
+    async with session_scope(factory, principal=_user) as session:
+        result = await session.execute(
+            sa_text("SELECT 1 FROM research_insight_candidate WHERE id = :cid"),
+            {"cid": str(candidate_id)},
+        )
+        is_insight = result.fetchone() is not None
+
+    if is_insight:
+        await candidate_service.reject_insight_candidate(
+            workspace_id=workspace_id,
+            run_id=run_id,
+            candidate_id=candidate_id,
+            reason=body.reason,
+        )
+    else:
+        # dataset/view 候选 → 物理删除 artifact
+        async with session_scope(factory, principal=_user) as session:
+            await session.execute(
+                sa_text("DELETE FROM research_run_artifact WHERE id = :aid AND run_id = :rid"),
+                {"aid": str(candidate_id), "rid": str(run_id)},
+            )
+
+
+@research_products_router.post(
     "/workspaces/{workspace_id}/runs/{run_id}/insight-candidates/{candidate_id}/reject",
     status_code=204,
 )
@@ -854,7 +928,7 @@ async def reject_insight_candidate(
     _user: ResearchUserDep,
     candidate_service: CandidateServiceDep,
 ) -> None:
-    """拒绝候选。"""
+    """拒绝 Insight 候选 → 物理删除（幂等）。"""
     await candidate_service.reject_insight_candidate(
         workspace_id=workspace_id,
         run_id=run_id,

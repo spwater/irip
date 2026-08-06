@@ -30,6 +30,7 @@ import {
   type CoverageDeclaration,
 } from '../../api/research';
 import { PlanReviewCard } from './PlanReviewCard';
+import { KnowledgeSearchStatus } from './KnowledgeSearchStatus';
 
 const { TextArea } = Input;
 
@@ -228,6 +229,13 @@ export function AiAssistantPanel({
               批次 {batchProgress.current}/{batchProgress.total} 进行中
             </span>
           )}
+          {/* 知识库检索状态（阶段 5 新增） */}
+          <div style={{ marginTop: 4 }}>
+            <KnowledgeSearchStatus
+              status={coverageDeclaration?.knowledge_search_status ?? 'not_applicable'}
+              referenceCount={coverageDeclaration?.knowledge_reference_count ?? 0}
+            />
+          </div>
         </div>
       )}
 

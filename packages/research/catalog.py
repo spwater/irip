@@ -70,6 +70,9 @@ class ResearchCatalogImpl:
     从阶段 1 的空占位升级为可搜索（PRD P0-13）。
     搜索范围：当前用户拥有的全部 Workspace 中的已确认 DerivedDataset（跨 Workspace）。
 
+    阶段 4 升级：新增 search_published_derived_data() 方法，搜索已发布成果包中的
+    DerivedDataset（跨用户，ACL 过滤）。
+
     Attributes:
         _factory: 异步会话工厂。
         _actor_id: 当前用户 ID。
@@ -150,3 +153,95 @@ class ResearchCatalogImpl:
                 }
                 for ds in datasets
             ]
+
+    async def search_published_derived_data(
+        self,
+        query: str,
+        filters: dict | None = None,
+    ) -> list[dict]:
+        """搜索已发布成果包中的 DerivedDataset（跨用户，ACL 过滤）。
+
+        阶段 4 新增：搜索范围从当前用户已确认 DerivedDataset 扩展为已发布成果包
+        中的 DerivedDataset（跨用户）。搜索结果按当前用户权限动态过滤。
+
+        支持的 filters：
+        - result_id: 指定成果包 ID 筛选
+
+        Args:
+            query: 关键词搜索（匹配版本标题/摘要/数据集名称）。
+            filters: 过滤条件。
+
+        Returns:
+            list[dict]: 搜索结果列表，包含：
+                [{result_id, result_version_number, dataset_id, dataset_version_number,
+                  dataset_name, result_title, publisher, published_at, current_acl_type}]
+        """
+        from packages.research.repository import ResearchRepository
+
+        result_id: UUID | None = None
+        if filters is not None:
+            rid_str = filters.get("result_id")
+            if rid_str is not None:
+                try:
+                    result_id = UUID(str(rid_str))
+                except (ValueError, AttributeError):
+                    pass
+
+        async with self._factory() as session:
+            pairs = await ResearchRepository.search_published_datasets(
+                session,
+                query=query if query else None,
+                result_id=result_id,
+            )
+
+            results: list[dict] = []
+            for version, result_entity in pairs:
+                # ACL 过滤
+                if not self._check_visible(result_entity):
+                    continue
+
+                # 解析 dataset_version_refs
+                for ref in version.dataset_version_refs or []:
+                    dataset_id = ref.get("dataset_id", "")
+                    dataset_version = ref.get("version_number", 0)
+                    dataset_name = ref.get("name", "")
+                    results.append(
+                        {
+                            "result_id": str(result_entity.id),
+                            "result_version_number": version.version_number,
+                            "dataset_id": dataset_id,
+                            "dataset_version_number": dataset_version,
+                            "dataset_name": dataset_name,
+                            "result_title": version.title,
+                            "publisher": str(version.publisher),
+                            "published_at": version.published_at.isoformat()
+                            if version.published_at
+                            else "",
+                            "current_acl_type": result_entity.current_acl_type,
+                        }
+                    )
+
+            return results
+
+    def _check_visible(self, result_entity: object) -> bool:
+        """校验当前用户是否有权查看成果包（基于 ACL）。
+
+        Args:
+            result_entity: ResearchResult ORM 实体。
+
+        Returns:
+            bool: 是否有权查看。
+        """
+        if result_entity.current_acl_type == "private":
+            return result_entity.owner_user_id == self._actor_id
+        if result_entity.current_acl_type == "tree":
+            return True  # 首期简化：同部门用户可见（RLS 已过滤）
+        if result_entity.current_acl_type == "explicit":
+            explicit_ids = result_entity.current_explicit_user_ids or []
+            return (
+                str(self._actor_id) in [str(uid) for uid in explicit_ids]
+                or result_entity.owner_user_id == self._actor_id
+            )
+        if result_entity.current_acl_type == "all":
+            return True
+        return False

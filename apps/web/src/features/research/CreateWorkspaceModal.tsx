@@ -24,7 +24,7 @@ export function CreateWorkspaceModal({ open, onClose, onCreated }: CreateWorkspa
       setLoading(true);
       await apiCreateWorkspace({
         name: values.name,
-        question_text: '',
+        question_text: values.question_text,
       });
       message.success('工作空间已创建');
       form.resetFields();
@@ -60,6 +60,17 @@ export function CreateWorkspaceModal({ open, onClose, onCreated }: CreateWorkspa
           rules={[{ required: true, message: '请输入名称' }]}
         >
           <Input placeholder="如：Na2O 含量对烧结性能的影响研究" maxLength={256} />
+        </Form.Item>
+        <Form.Item
+          name="question_text"
+          label="研究问题"
+          rules={[{ required: true, message: '请输入研究问题' }]}
+        >
+          <Input.TextArea
+            placeholder="如：不同 Na2O 含量对烧结矿冶金性能有何影响？"
+            maxLength={4096}
+            autoSize={{ minRows: 2, maxRows: 6 }}
+          />
         </Form.Item>
       </Form>
     </Modal>

@@ -105,6 +105,7 @@ class ComponentVersionResponse(BaseModel):
     """组件版本响应（发布端点返回）。"""
 
     id: str
+    component_id: str
     name: str
     display_name: str
     version: str
@@ -288,6 +289,7 @@ async def publish_component(
 
     return ComponentVersionResponse(
         id=str(version.id),
+        component_id=str(version.component_id),
         name=manifest.name,
         display_name=manifest.display_name,
         version=version.version,

@@ -199,7 +199,7 @@ def _row_to_audit_payload(row: AIToolRow) -> dict[str, Any]:
 
 
 async def _record_audit(
-    session: Any,
+    factory: Any,
     action: str,
     actor: CurrentUser,
     resource_id: UUID,
@@ -207,25 +207,27 @@ async def _record_audit(
 ) -> None:
     """记录审计事件（ai_tool.* action）。
 
-    使用 actor.department_id 作为 organization 字段（M-01 整改）。
-    当 department_id 为空时回退到 user_id 以保持兼容性。
+    AI 工具管理是平台级操作，审计 department_id 使用 root 哨兵部门。
+    在独立 session 中执行，不影响主事务。
 
     Args:
-        session: 异步会话（与业务写操作同事务）。
+        factory: 异步会话工厂。
         action: 审计动作（ai_tool.create / ai_tool.update / ai_tool.toggle）。
         actor: 当前操作用户。
         resource_id: 工具 UUID。
         payload: 审计载荷（before/after/diff 等）。
     """
+    ROOT_DEPT_ID = UUID("11c57e83-a907-4a9b-a1cb-47a159737ccb")
     event = AuditEventData(
-        department_id=actor.department_id if actor.department_id is not None else actor.user_id,
+        department_id=ROOT_DEPT_ID,
         action=action,
         actor_user_id=actor.user_id,
         resource_type="ai_tool",
         resource_id=resource_id,
         payload=payload,
     )
-    await AuditRecorder.record(session, event)
+    async with session_scope(factory, principal=actor) as audit_session:
+        await AuditRecorder.record(audit_session, event)
 
 
 # ---- 端点 ----
@@ -344,7 +346,7 @@ async def create_ai_tool(
         data = body.model_dump()
         row = await ToolRepository.create(session, data, current_user.user_id)
         await _record_audit(
-            session,
+            _get_session_factory(),
             action="ai_tool.create",
             actor=current_user,
             resource_id=row.id,
@@ -379,7 +381,7 @@ async def update_ai_tool(
         )
         diff = _compute_diff(before, row)
         await _record_audit(
-            session,
+            _get_session_factory(),
             action="ai_tool.update",
             actor=current_user,
             resource_id=row.id,
@@ -419,7 +421,7 @@ async def toggle_ai_tool(
             updated_by=current_user.user_id,
         )
         await _record_audit(
-            session,
+            _get_session_factory(),
             action="ai_tool.toggle",
             actor=current_user,
             resource_id=row.id,

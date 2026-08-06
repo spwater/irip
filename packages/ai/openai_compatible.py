@@ -336,22 +336,16 @@ class OpenAICompatibleProvider:
             "仅当需要 ECharts 不支持的科研图表时才使用 Plotly。"
             "\n\n**引用式画图（chart-ref）：**"
             "当用户已通过「载入实验数据」加载了 system_context（含实验数据 JSON），"
-            "且需要画图时，**优先使用 ```chart-ref 代码块**，而不是 echarts/plotly。"
-            "chart-ref 只需输出轻量指令（指定用哪个样品的哪组数据），"
-            "前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点。"
-            "\nchart-ref 单系列示例："
+            "且需要画图时，根据数据特征选择画图方式："
+            "\n- **单个样品的连续数据**（如光谱、粒度分布、XRD 图谱）：用 ```chart-ref 代码块"
+            "  只需输出轻量指令，前端自动从已加载数据中提取完整数据画图"
+            "\n- **多样品对比、跨样品聚合统计**：用 ```echarts 代码块"
+            "  自己从数据中计算并写出完整 ECharts JSON 配置"
+            "\nchart-ref 适合单样品大数据量（省 token），echarts 适合跨样品计算（更可靠）"
+            "\nchart-ref 示例："
             "```chart-ref\n"
             '{"sample":"BL-18.txt","series_index":0,"chart_type":"line",'
             '"x_col":0,"y_col":1,"title":"拉曼光谱",'
-            '"x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
-            "```"
-            "\nchart-ref 多系列示例（多样品对比）："
-            "```chart-ref\n"
-            '{"series":[{"sample":"BL-18.txt","series_index":0,'
-            '"x_col":0,"y_col":1,"name":"BL-18"},'
-            '{"sample":"BL-19.txt","series_index":0,'
-            '"x_col":0,"y_col":1,"name":"BL-19"}],'
-            '"chart_type":"line","title":"拉曼光谱对比",'
             '"x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
             "```"
             "\n字段说明："
@@ -361,7 +355,7 @@ class OpenAICompatibleProvider:
             "- chart_type: line/bar/scatter（默认 line）"
             "- title/x_name/y_name: 可选的标题和轴名"
             "\n**选择规则：**"
-            "用户已加载实验数据（system_context 非空）时，画图必须用 chart-ref。"
+            "单个样品连续数据用 chart-ref，多样品对比/聚合统计用 echarts。"
             "没有实验数据时不要画图，用文字和表格回答。"
             "\n\n数学公式指引："
             "使用 Markdown 数学公式语法。行内公式用 $...$，"

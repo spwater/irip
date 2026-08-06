@@ -472,15 +472,25 @@ class PlanService(ScopedSessionMixin):
                 "1. 按建议中的分析路径逐步执行\n"
                 "2. 给出具体的数值结论（如 A 组分在样品1中 X%，在样品2中 Y%，差 Z%）\n"
                 "3. 识别关键差异和特征\n"
-                "4. 根据分析建议中的可视化方案，用 ECharts 配置画出对应图表\n"
-                "   - 用 ```echarts 代码块包裹 ECharts JSON 配置\n"
-                "   - 必须是合法的 JSON，不能用 JavaScript 函数（如 function、=> 等）\n"
-                "   - tooltip formatter 用字符串模板如 \"{b}: {c}%\"，不要用 function\n"
-                "   - 支持 bar/line/pie/scatter 类型\n"
-                "   - 数值用原始数字，不要用字符串\n"
-                "   - 柱状图用于成分对比，折线图用于趋势，散点图用于相关性\n"
+                "4. 根据分析建议中的可视化方案画出对应图表\n"
+                "   - 单个样品的连续数据（如光谱、粒度分布）用 ```chart-ref 代码块\n"
+                "     格式：{\"sample\":\"样品标签\",\"series_index\":0,\"x_col\":0,\"y_col\":1,\"chart_type\":\"line\",\"title\":\"标题\"}\n"
+                "     前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点\n"
+                "   - 多样品对比、聚合统计等需要跨样品计算的场景用 ```echarts 代码块\n"
+                "     必须是合法的 JSON，不能用 JavaScript 函数\n"
+                "     tooltip formatter 用字符串模板如 \"{b}: {c}%\"，不要用 function\n"
+                "     支持 bar/line/pie/scatter 类型，数值用原始数字\n"
+                "   - 柱状图用于成分对比，折线图用于趋势/累积分布，散点图用于相关性\n"
                 "5. 对比数据用 Markdown 表格\n"
-                "6. 用中文回答，给出有数据支撑的结论"
+                "6. 用中文回答，给出有数据支撑的结论\n"
+                "7. 请根据问题内容，判断合适的结构化输出数据。对每个问题和子问题都执行一次：\n"
+                "   - 在报告末尾为每个问题/子问题分别附加一个 ```data 代码块\n"
+                "   - 代码块内为三段式 JSON：{\"metadata\": {}, \"points\": [], \"series\": []}\n"
+                "   - metadata: 报告级单值信息（如分析范围、方法、时间等）\n"
+                "   - points: 独立单值指标 [{\"name\": \"指标名\", \"value\": 数值, \"unit\": \"单位\"}]\n"
+                "   - series: 表格/序列数据 [{\"name\": \"表名\", \"columns\": [\"列1\", \"列2\"], \"rows\": [[值1, 值2], ...]}]\n"
+                "   - 数据必须来自实际分析结果，不要臆造\n"
+                "   - 如果某个问题/子问题不适合结构化输出（如纯定性判断），可跳过该问题的 ```data 块\n"
                 f"{sub_q_instruction}"
             )
             analysis_context = (
@@ -525,6 +535,7 @@ class PlanService(ScopedSessionMixin):
                 stored_steps = plan.dag_structure.get("steps", []) if plan.dag_structure else []
                 if stored_steps:
                     stored_steps[0]["analysis_result"] = analysis_result
+                    stored_steps[0]["data_context"] = full_data_text
                     new_dag = dict(plan.dag_structure)
                     new_dag["steps"] = stored_steps
                     await session.execute(
@@ -537,7 +548,107 @@ class PlanService(ScopedSessionMixin):
             except Exception as exc:
                 logger.warning("Failed to persist analysis result: %s", exc)
 
-            return {"analysis_result": analysis_result}
+            # 8. 解析 ```data 块 → 存为 RunArtifact (type=data, is_publishable=true)
+            import re as _re2
+            data_blocks = _re2.findall(r'```data\s*\n([\s\S]*?)```', analysis_result)
+            echarts_blocks = _re2.findall(r'```echarts\s*\n([\s\S]*?)```', analysis_result)
+            run_id = None
+            if data_blocks or echarts_blocks:
+                from packages.research.validation import ThreeSegmentValidator
+                from packages.common.s3_repository import S3Repository
+                from packages.common.ids import new_id
+                import hashlib, os as _os
+                # 查找 run
+                runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
+                run_id = runs[0].id if runs else None
+                if run_id is None:
+                    run_id = await ResearchRepositoryTrusted.insert_run(
+                        session, workspace_id=workspace_id, plan_id=plan_id, status="succeeded",
+                    )
+                # 构建 S3 client
+                _endpoint = _os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+                if not _endpoint.startswith("http"):
+                    _endpoint = f"http://{_endpoint}"
+                _s3 = S3Repository(
+                    endpoint_url=_endpoint,
+                    access_key=_os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
+                    secret_key=_os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+                    bucket_name=_os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
+                    region=_os.getenv("IRIP_MINIO_REGION", "us-east-1"),
+                )
+                # 8a. 存 data 块
+                for idx, block in enumerate(data_blocks):
+                    try:
+                        result = ThreeSegmentValidator.validate(block.encode("utf-8"))
+                        if result.valid and result.data is not None:
+                            content_bytes = block.encode("utf-8")
+                            content_hash = hashlib.sha256(content_bytes).hexdigest()
+                            artifact_id = new_id()
+                            artifact_key = f"analysis_data_{idx+1}.json"
+                            s3_key = f"research/artifacts/{run_id}/{artifact_id}/{artifact_key}"
+                            _s3.put_object(s3_key, content_bytes, "application/json")
+                            await session.execute(
+                                sa.text(
+                                    "INSERT INTO research_run_artifact "
+                                    "(id, run_id, step_id, artifact_type, artifact_key, "
+                                    "storage_path, content_hash, size_bytes, is_publishable, created_at) "
+                                    "VALUES (:id, :run_id, NULL, 'data', :key, :path, :hash, :size, true, now())"
+                                ),
+                                {
+                                    "id": str(artifact_id),
+                                    "run_id": str(run_id),
+                                    "key": artifact_key,
+                                    "path": s3_key,
+                                    "hash": content_hash,
+                                    "size": len(content_bytes),
+                                },
+                            )
+                            logger.info("Inserted data artifact %s for run %s", artifact_id, run_id)
+                    except Exception as exc:
+                        logger.warning("Failed to save data block: %s", exc)
+
+                # 8b. 存 echarts 块
+                for idx, block in enumerate(echarts_blocks):
+                    try:
+                        title = f"图表 {idx+1}"
+                        try:
+                            import json as _json
+                            echarts_json = _json.loads(block.strip())
+                            t = echarts_json.get("title", {})
+                            if isinstance(t, dict):
+                                title = t.get("text", title)
+                            elif isinstance(t, str):
+                                title = t
+                        except Exception:
+                            pass
+
+                        content_bytes = block.encode("utf-8")
+                        content_hash = hashlib.sha256(content_bytes).hexdigest()
+                        artifact_id = new_id()
+                        artifact_key = f"analysis_chart_{idx+1}.json"
+                        s3_key = f"research/artifacts/{run_id}/{artifact_id}/{artifact_key}"
+                        _s3.put_object(s3_key, content_bytes, "application/json")
+                        await session.execute(
+                            sa.text(
+                                "INSERT INTO research_run_artifact "
+                                "(id, run_id, step_id, artifact_type, artifact_key, "
+                                "storage_path, content_hash, size_bytes, is_publishable, created_at) "
+                                "VALUES (:id, :run_id, NULL, 'chart', :key, :path, :hash, :size, true, now())"
+                            ),
+                            {
+                                "id": str(artifact_id),
+                                "run_id": str(run_id),
+                                "key": artifact_key,
+                                "path": s3_key,
+                                "hash": content_hash,
+                                "size": len(content_bytes),
+                            },
+                        )
+                        logger.info("Inserted chart artifact %s for run %s", artifact_id, run_id)
+                    except Exception as exc:
+                        logger.warning("Failed to save chart block: %s", exc)
+
+            return {"analysis_result": analysis_result, "data_context": full_data_text}
 
     async def extract_insight(
         self,
@@ -637,24 +748,15 @@ class PlanService(ScopedSessionMixin):
                     import json as _json
                     from packages.common.ids import new_id
                     insight_candidate_id = new_id()
-                    run_id = new_id()
+                    # 复用最新 run（analyze_data 已创建），不新建 run
+                    runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
+                    if runs:
+                        run_id = runs[0].id
+                    else:
+                        run_id = await ResearchRepositoryTrusted.insert_run(
+                            session, workspace_id=workspace_id, plan_id=plan_id, status="succeeded",
+                        )
                     insight_run_id = str(run_id)
-
-                    await session.execute(
-                        sa.text(
-                            "INSERT INTO research_analysis_run "
-                            "(id, workspace_id, plan_version_id, snapshot_id, "
-                            "run_number, status, image_digest, created_by) "
-                            "VALUES (:id, :wid, :pid, :sid, "
-                            "(SELECT COALESCE(MAX(run_number), 0) + 1 FROM research_analysis_run WHERE workspace_id = :wid), "
-                            "'succeeded', 'llm-analysis', :actor)"
-                        ),
-                        {
-                            "id": str(run_id), "wid": str(workspace_id),
-                            "pid": str(plan.id), "sid": str(snapshot_id),
-                            "actor": str(actor_id),
-                        },
-                    )
                     await session.execute(
                         sa.text(
                             "INSERT INTO research_insight_candidate "
@@ -681,6 +783,115 @@ class PlanService(ScopedSessionMixin):
                     logger.warning("Failed to save insight candidate: %s", exc)
                     insight_candidate_id = None
                     insight_run_id = None
+
+            # 4.5. 补建 data/chart 工件（如果不存在）
+            # analyze_data 步骤可能因清理等原因丢失工件，extract_insight 时自动补建
+            if insight_run_id:
+                try:
+                    import re as _re3
+                    import hashlib, os as _os3
+                    from packages.research.validation import ThreeSegmentValidator
+                    from packages.common.s3_repository import S3Repository
+                    from packages.common.ids import new_id as _new_id
+
+                    # 检查当前 run 已有的 data/chart 工件数量
+                    existing_result = await session.execute(
+                        sa.text(
+                            "SELECT count(*) FROM research_run_artifact "
+                            "WHERE run_id = :rid AND artifact_type IN ('data','chart')"
+                        ),
+                        {"rid": str(insight_run_id)},
+                    )
+                    existing_count = existing_result.scalar() or 0
+
+                    if existing_count == 0:
+                        # 重新解析 analysis_result 中的 ```data 和 ```echarts 块
+                        data_blocks = _re3.findall(r'```data\s*\n([\s\S]*?)```', analysis_result)
+                        echarts_blocks = _re3.findall(r'```echarts\s*\n([\s\S]*?)```', analysis_result)
+
+                        if data_blocks or echarts_blocks:
+                            _endpoint = _os3.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+                            if not _endpoint.startswith("http"):
+                                _endpoint = f"http://{_endpoint}"
+                            _s3 = S3Repository(
+                                endpoint_url=_endpoint,
+                                access_key=_os3.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
+                                secret_key=_os3.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+                                bucket_name=_os3.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
+                                region=_os3.getenv("IRIP_MINIO_REGION", "us-east-1"),
+                            )
+
+                            for idx, block in enumerate(data_blocks):
+                                try:
+                                    result = ThreeSegmentValidator.validate(block.encode("utf-8"))
+                                    if result.valid and result.data is not None:
+                                        content_bytes = block.encode("utf-8")
+                                        content_hash = hashlib.sha256(content_bytes).hexdigest()
+                                        artifact_id = _new_id()
+                                        artifact_key = f"analysis_data_{idx+1}.json"
+                                        s3_key = f"research/artifacts/{insight_run_id}/{artifact_id}/{artifact_key}"
+                                        _s3.put_object(s3_key, content_bytes, "application/json")
+                                        await session.execute(
+                                            sa.text(
+                                                "INSERT INTO research_run_artifact "
+                                                "(id, run_id, step_id, artifact_type, artifact_key, "
+                                                "storage_path, content_hash, size_bytes, is_publishable, created_at) "
+                                                "VALUES (:id, :run_id, NULL, 'data', :key, :path, :hash, :size, true, now())"
+                                            ),
+                                            {
+                                                "id": str(artifact_id),
+                                                "run_id": str(insight_run_id),
+                                                "key": artifact_key,
+                                                "path": s3_key,
+                                                "hash": content_hash,
+                                                "size": len(content_bytes),
+                                            },
+                                        )
+                                        logger.info("Rebuilt data artifact %s for run %s", artifact_id, insight_run_id)
+                                except Exception as exc:
+                                    logger.warning("Failed to rebuild data block: %s", exc)
+
+                            for idx, block in enumerate(echarts_blocks):
+                                try:
+                                    title = f"图表 {idx+1}"
+                                    try:
+                                        import json as _json3
+                                        echarts_json = _json3.loads(block.strip())
+                                        t = echarts_json.get("title", {})
+                                        if isinstance(t, dict):
+                                            title = t.get("text", title)
+                                        elif isinstance(t, str):
+                                            title = t
+                                    except Exception:
+                                        pass
+
+                                    content_bytes = block.encode("utf-8")
+                                    content_hash = hashlib.sha256(content_bytes).hexdigest()
+                                    artifact_id = _new_id()
+                                    artifact_key = f"analysis_chart_{idx+1}.json"
+                                    s3_key = f"research/artifacts/{insight_run_id}/{artifact_id}/{artifact_key}"
+                                    _s3.put_object(s3_key, content_bytes, "application/json")
+                                    await session.execute(
+                                        sa.text(
+                                            "INSERT INTO research_run_artifact "
+                                            "(id, run_id, step_id, artifact_type, artifact_key, "
+                                            "storage_path, content_hash, size_bytes, is_publishable, created_at) "
+                                            "VALUES (:id, :run_id, NULL, 'chart', :key, :path, :hash, :size, true, now())"
+                                        ),
+                                        {
+                                            "id": str(artifact_id),
+                                            "run_id": str(insight_run_id),
+                                            "key": title,
+                                            "path": s3_key,
+                                            "hash": content_hash,
+                                            "size": len(content_bytes),
+                                        },
+                                    )
+                                    logger.info("Rebuilt chart artifact %s for run %s", artifact_id, insight_run_id)
+                                except Exception as exc:
+                                    logger.warning("Failed to rebuild chart block: %s", exc)
+                except Exception as exc:
+                    logger.warning("Failed to rebuild artifacts: %s", exc)
 
             # 5. 持久化候选信息到 dag_structure
             try:

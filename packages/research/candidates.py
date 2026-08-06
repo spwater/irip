@@ -11,12 +11,14 @@ CandidateService 负责：
 import logging
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.entities import ResearchInsightCandidate
 from packages.research.models import (
     CandidateDetail,
     CandidateProductSummary,
@@ -421,52 +423,50 @@ class CandidateService(ScopedSessionMixin):
         candidate_id: UUID,
         reason: str | None = None,
     ) -> None:
-        """拒绝 Insight 候选 → 标记 status=rejected。
+        """拒绝 Insight 候选 → 物理删除 + 清除 dag_structure 中的候选信息。
+
+        幂等：候选不存在时静默返回（不报错），因为期望的终态就是"不存在"。
 
         Args:
             workspace_id: 工作空间 ID。
-            run_id: Run ID。
+            run_id: Run ID（用于审计日志）。
             candidate_id: 候选 ID。
             reason: 拒绝原因（可选）。
-
-        Raises:
-            AppError: code="not_found"，当候选不存在时。
-            AppError: code="validation_failed"，当候选状态不为 pending 时。
         """
+        import json as _json
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            candidate = await ResearchRepository.get_insight_candidate(
-                session, candidate_id
+            # 1. 物理删除候选（幂等：不存在则无操作）
+            await session.execute(
+                sa.delete(ResearchInsightCandidate)
+                .where(ResearchInsightCandidate.id == candidate_id)
             )
-            if candidate is None:
-                raise AppError(
-                    code="not_found",
-                    message="Insight 候选不存在",
-                    retryable=False,
-                    fields={"candidate_id": str(candidate_id)},
-                )
-            if candidate.run_id != run_id:
-                raise AppError(
-                    code="not_found",
-                    message="候选不属于指定 Run",
-                    retryable=False,
-                    fields={"candidate_id": str(candidate_id)},
-                )
-            if candidate.status != "pending":
-                raise AppError(
-                    code="validation_failed",
-                    message=f"候选状态不为 pending: {candidate.status}",
-                    retryable=False,
-                    fields={"candidate_id": str(candidate_id)},
-                )
 
-            await ResearchRepository.update_insight_candidate_status(
-                session,
-                candidate_id,
-                "rejected",
-                rejection_reason=reason,
-                reviewed_by=actor_id,
+            # 2. 清除 plan dag_structure 中的 insight_candidate 信息
+            #    防止刷新页面后从 dag_structure 恢复已拒绝的候选
+            from packages.research.entities_trusted import ResearchAnalysisPlanVersion
+            plan_result = await session.execute(
+                sa.select(ResearchAnalysisPlanVersion).where(
+                    ResearchAnalysisPlanVersion.workspace_id == workspace_id
+                ).order_by(ResearchAnalysisPlanVersion.created_at.desc()).limit(1)
             )
+            plan = plan_result.scalar_one_or_none()
+            if plan is not None and plan.dag_structure:
+                dag = dict(plan.dag_structure)
+                steps = list(dag.get("steps", []))
+                changed = False
+                for i, step in enumerate(steps):
+                    if step.get("insight_candidate_id") == str(candidate_id):
+                        steps[i] = {k: v for k, v in step.items()
+                                    if k not in ("insight_candidate", "insight_candidate_id", "insight_run_id")}
+                        changed = True
+                if changed:
+                    dag["steps"] = steps
+                    await session.execute(
+                        sa.update(ResearchAnalysisPlanVersion)
+                        .where(ResearchAnalysisPlanVersion.id == plan.id)
+                        .values(dag_structure=dag)
+                    )
 
             await AuditRecorder.record(
                 session,

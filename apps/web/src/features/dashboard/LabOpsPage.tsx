@@ -6,6 +6,7 @@ import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { FeedbackState } from '@/shared/ui';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { ResearchPage } from '@/features/research/ResearchPage';
+import { PublicationPage } from '@/features/research/PublicationPage';
 
 /**
  * 实验室运营页面
@@ -90,9 +91,7 @@ export function LabOpsPage(): JSX.Element {
         <FeedbackState state="empty" title="模型发布" description="开发中，待发布" style={{ padding: 80 }} />
       )}
       {activeTab === 'research' && <ResearchPage />}
-      {activeTab === 'publication' && (
-        <FeedbackState state="empty" title="发布成果" description="开发中" style={{ padding: 80 }} />
-      )}
+      {activeTab === 'publication' && <PublicationPage />}
     </div>
   );
 }

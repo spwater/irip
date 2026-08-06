@@ -1029,10 +1029,10 @@ class TestProductAPI:
             r for r in routes
             if "POST" in r.methods or "PATCH" in r.methods
         ]
-        # POST: create_dataset, create_view, accept, modify, reject = 5
+        # POST: create_dataset, create_view, accept, modify, reject(insight), reject(any) = 6
         # PATCH: update_dataset, update_view, update_insight = 3
-        assert len(write_routes) == 8, (
-            f"期望 8 个写端点，实际 {len(write_routes)}"
+        assert len(write_routes) == 9, (
+            f"期望 9 个写端点，实际 {len(write_routes)}"
         )
 
     def test_candidate_endpoints_exist(self):

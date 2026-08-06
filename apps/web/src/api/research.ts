@@ -164,6 +164,14 @@ export type CoverageDeclaration = {
   batch_count: number | null;
   batch_progress: number | null;
   mode_reason: string;
+  /** 阶段 5 新增：知识库检索状态 */
+  knowledge_search_status?: 'searched' | 'degraded' | 'not_applicable';
+  /** 阶段 5 新增：已检索到的知识库文献数 */
+  knowledge_reference_count?: number;
+  /** 阶段 5 新增：使用的知识库 Provider 名称 */
+  knowledge_provider_name?: string;
+  /** 阶段 5 新增：降级原因（knowledge_search_status=degraded 时） */
+  knowledge_degrade_reason?: string;
 };
 
 export type Run = {
@@ -318,6 +326,29 @@ export async function apiAddDerivedEvidence(
     source_id: datasetId,
   });
 }
+
+/**
+ * 加入已发布成果包中的 DerivedDataset 为证据（阶段 4 新增）
+ * source_namespace = "research:published_derived"
+ * 后端通过 ResearchCatalog 校验成果包 ACL 和版本，
+ * 快照冻结时从 ResearchResultVersion 的 dataset_version_refs
+ * 解析获取 DerivedDatasetVersion 的 content_hash 纳入哈希计算。
+ */
+export async function apiAddPublishedDerivedEvidence(
+  id: string,
+  datasetId: string,
+): Promise<EvidenceRef> {
+  return apiAddEvidence(id, {
+    source_namespace: 'research:published_derived',
+    source_id: datasetId,
+  });
+}
+
+/** 阶段 4 新增：EvidenceRef 支持的 source_namespace 枚举 */
+export type EvidenceNamespace =
+  | 'core:fact'
+  | 'research:derived'
+  | 'research:published_derived';
 
 export async function apiRemoveEvidence(
   id: string,

@@ -109,7 +109,7 @@ export function useFlowMutations(params: UseFlowMutationsParams) {
       compForm.resetFields();
       setCompAdvancedMode(false);
       message.success('数据接口创建成功');
-      newObjectForm.setFieldsValue({ component_id: data.id });
+      newObjectForm.setFieldsValue({ component_id: data.component_id ?? data.id });
     },
     onError: (err: unknown) => message.error(extractApiError(err)),
   });

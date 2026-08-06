@@ -2,8 +2,8 @@
  * Workspace 三栏布局容器
  *
  * 左栏：EvidencePanel（数据搜索 + 列表 + 冻结）
- * 中栏：ResearchCanvas（研究问题 + 子问题）
- * 右栏：AiAssistantPanel（占位）
+ * 中栏：ResearchCanvas（研究问题 + 分析建议 + 分析结果）
+ * 右栏：ResearchShowcasePanel（Insight候选 + 已确认产物）
  */
 import { useEffect, useState } from 'react';
 import { Button, Row, Col, Spin, Modal, Input, message, Popconfirm, Tag } from 'antd';
@@ -11,7 +11,7 @@ import { ArrowLeftOutlined, ForkOutlined, DeleteOutlined, InboxOutlined } from '
 import { apiGetWorkspace, apiForkWorkspace, apiDeleteWorkspace, apiArchiveWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
 import { EvidencePanel } from './EvidencePanel';
 import { ResearchCanvas } from './ResearchCanvas';
-import { AiAssistantPanel } from './AiAssistantPanel';
+import { ResearchShowcasePanel } from './ResearchShowcasePanel';
 
 interface WorkspaceDetailProps {
   workspaceId: string;
@@ -24,6 +24,13 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
   const [forkModalOpen, setForkModalOpen] = useState(false);
   const [forkName, setForkName] = useState('');
   const [forking, setForking] = useState(false);
+
+  // 共享状态：分析产物（中栏产生，右栏展示）
+  const [insightCandidate, setInsightCandidate] = useState<any | null>(null);
+  const [insightCandidateId, setInsightCandidateId] = useState<string | null>(null);
+  const [insightRunId, setInsightRunId] = useState<string | null>(null);
+  const [productsRefresh, setProductsRefresh] = useState(0);
+  const [latestRunId, setLatestRunId] = useState<string | null>(null);
 
   const fetchDetail = async () => {
     setLoading(true);
@@ -42,6 +49,22 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
     void fetchDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId]);
+
+  // 获取最新 run ID
+  useEffect(() => {
+    void (async () => {
+      try {
+        const { apiListRuns } = await import('@/api/research');
+        const res = await apiListRuns(workspaceId);
+        const runs = res?.items ?? [];
+        if (runs.length > 0) {
+          setLatestRunId(runs[0].run_id);
+        }
+      } catch {
+        // 静默
+      }
+    })();
+  }, [workspaceId, productsRefresh]);
 
   const handleFork = async () => {
     if (!forkName.trim()) {
@@ -146,18 +169,50 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         </div>
       </div>
       <Row gutter={16}>
-        <Col xs={24} lg={6}>
+        <Col xs={24} lg={5}>
           <EvidencePanel
             workspaceId={workspaceId}
             evidenceCount={detail.evidence_count}
             onEvidenceChanged={fetchDetail}
           />
         </Col>
-        <Col xs={24} lg={12}>
-          <ResearchCanvas workspaceId={workspaceId} detail={detail} onQuestionUpdated={fetchDetail} />
+        <Col xs={24} lg={11}>
+          <ResearchCanvas
+            workspaceId={workspaceId}
+            detail={detail}
+            onQuestionUpdated={fetchDetail}
+            insightCandidate={insightCandidate}
+            insightCandidateId={insightCandidateId}
+            insightRunId={insightRunId}
+            onInsightCandidateChange={(cand, cid, rid) => {
+              setInsightCandidate(cand);
+              setInsightCandidateId(cid);
+              setInsightRunId(rid);
+              if (rid) setLatestRunId(rid);
+            }}
+            onProductsRefresh={() => setProductsRefresh((prev) => prev + 1)}
+          />
         </Col>
-        <Col xs={24} lg={6}>
-          <AiAssistantPanel />
+        <Col xs={24} lg={8}>
+          <ResearchShowcasePanel
+            workspaceId={workspaceId}
+            insightCandidate={insightCandidate}
+            insightCandidateId={insightCandidateId}
+            insightRunId={insightRunId}
+            onInsightAccepted={() => {
+              setInsightCandidate(null);
+              setInsightCandidateId(null);
+              setInsightRunId(null);
+            }}
+            onInsightRejected={() => {
+              setInsightCandidate(null);
+              setInsightCandidateId(null);
+              setInsightRunId(null);
+            }}
+            productsRefresh={productsRefresh}
+            onProductsRefresh={() => setProductsRefresh((prev) => prev + 1)}
+            latestRunId={latestRunId}
+          />
         </Col>
       </Row>
 

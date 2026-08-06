@@ -90,6 +90,7 @@ class ResearchOrchestrator:
         scheduler: object | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         insight_extractor: object | None = None,
+        lineage_writer: object | None = None,
     ) -> None:
         """初始化编排器。
 
@@ -103,6 +104,7 @@ class ResearchOrchestrator:
             scheduler: 调度器（可选，Worker 中使用）。
             session_factory: 异步会话工厂（可选，Worker 中使用）。
             insight_extractor: Insight 提取器（可选，阶段 3 新增）。
+            lineage_writer: LineageWriterService 实例（可选，阶段 5 新增）。
         """
         self._repo = repo
         self._model_gateway = model_gateway
@@ -113,6 +115,7 @@ class ResearchOrchestrator:
         self._scheduler = scheduler
         self._factory = session_factory
         self._insight_extractor = insight_extractor
+        self._lineage_writer = lineage_writer
 
         # 包装 session_factory：退出时自动 commit（与 session_scope 行为一致）
         _original_factory = session_factory
@@ -188,6 +191,22 @@ class ResearchOrchestrator:
                 await self._memory_service.update_from_event(
                     workspace_id, "run.started", {"run_id": str(run_id)}
                 )
+
+            # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+            if self._lineage_writer is not None:
+                try:
+                    # 获取 Run 关联的 snapshot_id
+                    async with self._factory() as session:
+                        run_for_hook = await self._repo.get_run(session, run_id)
+                        snapshot_id_for_hook = (
+                            run_for_hook.snapshot_id if run_for_hook else None
+                        )
+                    if snapshot_id_for_hook is not None:
+                        await self._lineage_writer.on_run_started(
+                            run_id, [snapshot_id_for_hook]
+                        )
+                except Exception as exc:
+                    logger.warning("on_run_started hook failed: %s", exc)
 
             # 加载 Run + Plan
             async with self._factory() as session:
@@ -524,6 +543,16 @@ class ResearchOrchestrator:
                         "coverage": coverage,
                     },
                 )
+
+                # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
+                if self._lineage_writer is not None and step_id is not None:
+                    try:
+                        await self._lineage_writer.on_step_completed(
+                            run_id, step_id
+                        )
+                    except Exception as exc:
+                        logger.warning("on_step_completed hook failed: %s", exc)
+
                 return coverage
             else:
                 # 失败
