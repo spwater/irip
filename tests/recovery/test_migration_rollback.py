@@ -173,16 +173,27 @@ async def test_migration_roundtrip_preserves_data(monkeypatch) -> None:
 
         # 插入测试数据
         test_user_id = new_id()
+        test_dept_id = new_id()
         test_email = f"migration-test-{new_id().hex[:8]}@irip.local"
         with engine.connect() as conn:
+            # 先创建 department（FK 约束）
+            conn.execute(
+                sa.text("INSERT INTO department (id, name, code) VALUES (:id, :name, :code)"),
+                {
+                    "id": test_dept_id,
+                    "name": f"Test Dept {test_dept_id.hex[:8]}",
+                    "code": f"dept-{test_dept_id.hex[:8]}",
+                },
+            )
             conn.execute(
                 sa.text(
                     "INSERT INTO app_user "
-                    "(id, email, display_name, password_hash, status, lock_version) "
-                    "VALUES (:id, :email, :name, :hash, 'active', 0)"
+                    "(id, department_id, email, display_name, password_hash, status, lock_version) "
+                    "VALUES (:id, :dept, :email, :name, :hash, 'active', 0)"
                 ),
                 {
                     "id": test_user_id,
+                    "dept": test_dept_id,
                     "email": test_email,
                     "name": "Migration Test",
                     "hash": hash_password("Test-Password-2026!"),

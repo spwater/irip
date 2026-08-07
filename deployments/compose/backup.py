@@ -289,9 +289,11 @@ class BackupService:
 
         # 构建 pg_basebackup 命令
         pg_host: str = self._extract_pg_host()
+        pg_port: int = self._extract_pg_port()
         cmd: list[str] = [
             "pg_basebackup",
             "-h", pg_host,
+            "-p", str(pg_port),
             "-U", self._extract_pg_user(),
             "-D", str(target_dir),
             "-Ft",
@@ -461,6 +463,21 @@ class BackupService:
             return parsed.username or "irip"
         except Exception:
             return "irip"
+
+    def _extract_pg_port(self) -> int:
+        """从数据库 URL 中提取 PG 端口。
+
+        Returns:
+            int: PG 端口号（默认 5432）。
+        """
+        from urllib.parse import urlparse
+
+        try:
+            sync_url: str = _to_pg_dump_url(self._config.db_url)
+            parsed = urlparse(sync_url)
+            return parsed.port or 5432
+        except Exception:
+            return 5432
 
     def _dump_database(self, output_path: Path) -> None:
         """使用 pg_dump 以 custom 格式导出 PostgreSQL 数据库。
