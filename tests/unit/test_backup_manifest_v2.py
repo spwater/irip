@@ -237,7 +237,7 @@ class TestValidatorVersionRouting:
             application_version="0.1.0",
             migration_version="0060",
         )
-        # compute_manifest 使用 MANIFEST_FORMAT_VERSION=2，手动改为 1
+        # compute_manifest 生成 format_version=1 的 v1 manifest，直接使用
         manifest_v1 = BackupManifest(
             format_version=1,
             created_at=manifest.created_at,

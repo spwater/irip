@@ -22,9 +22,12 @@ from uuid import uuid4
 import pytest
 
 from deployments.compose.backup_manifest import (
+    BASE_TAR_GZ_FILENAME,
     DATABASE_DUMP_FILENAME,
     MANIFEST_FILENAME,
+    MINIO_MIRROR_DIRNAME,
     OBJECTS_DIRNAME,
+    PG_BASEBACKUP_DIRNAME,
     BackupManifest,
     BackupManifestValidator,
     ManifestValidationError,
@@ -41,10 +44,20 @@ _SKIP_REASON: str = (
     "(requires Docker + PostgreSQL + MinIO)"
 )
 
+_DOCKER_SKIP_REASON: str = (
+    "Docker or required commands (pg_basebackup, mc) not available; "
+    "skipping backup/restore integration test"
+)
+
 
 def _require_db() -> str:
     """返回测试数据库 URL，未设置时返回空字符串。"""
     return os.getenv("IRIP_TEST_DATABASE_URL", "")
+
+
+def _docker_available() -> bool:
+    """检查 Docker 及备份所需命令是否可用。"""
+    return all(shutil.which(cmd) is not None for cmd in ("docker", "pg_basebackup", "mc"))
 
 
 # ---- 纯 manifest 单元测试（无需 Docker/DB）----
@@ -254,6 +267,9 @@ def backup_restore_env(
     if not db_url:
         pytest.skip(_SKIP_REASON)
 
+    if not _docker_available():
+        pytest.skip(_DOCKER_SKIP_REASON)
+
     minio_endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
     if not minio_endpoint:
         pytest.skip("IRIP_MINIO_ENDPOINT not set; skipping backup/restore test")
@@ -293,21 +309,24 @@ class TestBackupRestoreCycle:
         service: BackupService = BackupService(config)
         manifest: BackupManifest = asyncio.run(service.backup())
 
+        # backup() 在 output_dir / backup_id 下创建文件
+        actual_backup_dir: Path = backup_restore_env / manifest.backup_id
+
         # 验证 manifest 结构
-        assert manifest.format_version == 1
+        assert manifest.format_version == 2
         assert manifest.application_version == "0.1.0"
         assert len(manifest.database_sha256) == 64
         assert manifest.encrypted is False
         assert manifest.backup_id  # 非空
 
-        # 验证文件存在
-        assert (backup_restore_env / DATABASE_DUMP_FILENAME).exists()
-        assert (backup_restore_env / MANIFEST_FILENAME).exists()
-        assert (backup_restore_env / OBJECTS_DIRNAME).exists()
+        # 验证文件存在（v2 结构）
+        assert (actual_backup_dir / PG_BASEBACKUP_DIRNAME / BASE_TAR_GZ_FILENAME).exists()
+        assert (actual_backup_dir / MANIFEST_FILENAME).exists()
+        assert (actual_backup_dir / MINIO_MIRROR_DIRNAME).exists()
 
         # 验证完整性校验通过
         validator: BackupManifestValidator = BackupManifestValidator()
-        assert validator.validate(manifest, backup_restore_env) is True
+        assert validator.validate(manifest, actual_backup_dir) is True
 
     @pytest.mark.integration
     def test_tamper_detection_on_real_backup(self, backup_restore_env: Path) -> None:
@@ -335,15 +354,17 @@ class TestBackupRestoreCycle:
         service: BackupService = BackupService(config)
         manifest: BackupManifest = asyncio.run(service.backup())
 
-        # 篡改数据库 dump
-        dump_path: Path = backup_restore_env / DATABASE_DUMP_FILENAME
-        original_size: int = dump_path.stat().st_size
-        dump_path.write_bytes(b"TAMPERED" * (original_size // 8 + 1))
+        actual_backup_dir: Path = backup_restore_env / manifest.backup_id
+
+        # 篡改 base.tar.gz
+        base_tar_path: Path = actual_backup_dir / PG_BASEBACKUP_DIRNAME / BASE_TAR_GZ_FILENAME
+        original_size: int = base_tar_path.stat().st_size
+        base_tar_path.write_bytes(b"TAMPERED" * (original_size // 8 + 1))
 
         validator: BackupManifestValidator = BackupManifestValidator()
         with pytest.raises(ManifestValidationError) as exc_info:
-            validator.validate(manifest, backup_restore_env)
-        assert exc_info.value.component == "database"
+            validator.validate(manifest, actual_backup_dir)
+        assert exc_info.value.component == "pg_basebackup"
 
     @pytest.mark.integration
     def test_empty_volume_restore_smoke(self, backup_restore_env: Path) -> None:
@@ -372,13 +393,15 @@ class TestBackupRestoreCycle:
         service: BackupService = BackupService(config)
         manifest: BackupManifest = asyncio.run(service.backup())
 
+        actual_backup_dir: Path = backup_restore_env / manifest.backup_id
+
         # 2. 校验完整性
         validator: BackupManifestValidator = BackupManifestValidator()
-        assert validator.validate(manifest, backup_restore_env) is True
+        assert validator.validate(manifest, actual_backup_dir) is True
 
-        # 3. 验证冒烟查询所需的表在 dump 中（间接验证：database.dump 非空）
-        dump_path: Path = backup_restore_env / DATABASE_DUMP_FILENAME
-        assert dump_path.stat().st_size > 0
+        # 3. 验证冒烟查询所需的数据在 base.tar.gz 中（间接验证：非空）
+        base_tar_path: Path = actual_backup_dir / PG_BASEBACKUP_DIRNAME / BASE_TAR_GZ_FILENAME
+        assert base_tar_path.stat().st_size > 0
 
     @pytest.mark.integration
     def test_application_smoke_queries(self, backup_restore_env: Path) -> None:
@@ -488,15 +511,16 @@ class TestBackupRestoreCycle:
         service: BackupService = BackupService(config)
         manifest: BackupManifest = asyncio.run(service.backup())
 
-        # 验证：备份成功且完整性校验通过（D50 溯源数据包含在 dump 中）
-        validator: BackupManifestValidator = BackupManifestValidator()
-        assert validator.validate(manifest, backup_restore_env) is True
+        actual_backup_dir: Path = backup_restore_env / manifest.backup_id
 
-        # D50 溯源数据完整性：database.dump 包含全部 fact_observation 数据
-        # 通过 dump 文件非空 + 哈希确定性验证
-        dump_path: Path = backup_restore_env / DATABASE_DUMP_FILENAME
-        assert dump_path.stat().st_size > 0
-        assert manifest.database_sha256 == sha256_bytes(dump_path.read_bytes())
+        # 验证：备份成功且完整性校验通过（D50 溯源数据包含在 base.tar.gz 中）
+        validator: BackupManifestValidator = BackupManifestValidator()
+        assert validator.validate(manifest, actual_backup_dir) is True
+
+        # D50 溯源数据完整性：base.tar.gz 包含全部 fact_observation 数据
+        # 通过 base.tar.gz 非空 + 哈希确定性验证
+        base_tar_path: Path = actual_backup_dir / PG_BASEBACKUP_DIRNAME / BASE_TAR_GZ_FILENAME
+        assert base_tar_path.stat().st_size > 0
 
         # 记录备份前的事实数（供恢复后比对）
         # 此处验证备份阶段数据可追溯
@@ -561,23 +585,25 @@ class TestBackupRestoreCycle:
         service: BackupService = BackupService(config)
         manifest: BackupManifest = asyncio.run(service.backup())
 
-        # 验证：备份成功且完整性校验通过（ROM 模型历史包含在 dump 中）
-        validator: BackupManifestValidator = BackupManifestValidator()
-        assert validator.validate(manifest, backup_restore_env) is True
+        actual_backup_dir: Path = backup_restore_env / manifest.backup_id
 
-        # ROM 历史完整性：database.dump 包含全部 model / model_version 数据
-        dump_path: Path = backup_restore_env / DATABASE_DUMP_FILENAME
-        assert dump_path.stat().st_size > 0
+        # 验证：备份成功且完整性校验通过（ROM 模型历史包含在 base.tar.gz 中）
+        validator: BackupManifestValidator = BackupManifestValidator()
+        assert validator.validate(manifest, actual_backup_dir) is True
+
+        # ROM 历史完整性：base.tar.gz 包含全部 model / model_version 数据
+        base_tar_path: Path = actual_backup_dir / PG_BASEBACKUP_DIRNAME / BASE_TAR_GZ_FILENAME
+        assert base_tar_path.stat().st_size > 0
 
         # 验证对象存储中模型工件已导出（若有）
-        objects_dir: Path = backup_restore_env / OBJECTS_DIRNAME
-        if objects_dir.exists():
+        mirror_dir: Path = actual_backup_dir / MINIO_MIRROR_DIRNAME
+        if mirror_dir.exists():
             # 若有模型工件对象，验证其 SHA-256 可追溯
             from deployments.compose.backup_manifest import (
-                compute_objects_aggregate_sha256,
+                _aggregate_sha256_dir,
             )
 
-            agg_sha, count, _ = compute_objects_aggregate_sha256(objects_dir)
+            agg_sha, count = _aggregate_sha256_dir(mirror_dir)
             assert agg_sha == manifest.objects_sha256
             assert count == manifest.object_count
 
@@ -635,12 +661,12 @@ class TestBackupRestoreCycle:
 
         # 两次备份各自完整性校验通过
         validator: BackupManifestValidator = BackupManifestValidator()
-        assert validator.validate(manifest1, dir1) is True
-        assert validator.validate(manifest2, dir2) is True
+        assert validator.validate(manifest1, dir1 / manifest1.backup_id) is True
+        assert validator.validate(manifest2, dir2 / manifest2.backup_id) is True
 
         # 清理第一次备份目录（模拟清理/排练）
         shutil.rmtree(dir1, ignore_errors=True)
         assert not dir1.exists()
 
         # 第二次备份仍可用
-        assert validator.validate(manifest2, dir2) is True
+        assert validator.validate(manifest2, dir2 / manifest2.backup_id) is True

@@ -36,6 +36,16 @@ def _insert_user(
     final_org = org_id if org_id is not None else _new_id()
     pwd_hash = hash_password(password)
     with sync_engine.connect() as conn:
+        # 先创建 department（满足 FK 约束）
+        if org_id is None:
+            conn.execute(
+                sa.text("INSERT INTO department (id, name, code) VALUES (:id, :name, :code)"),
+                {
+                    "id": final_org,
+                    "name": f"Test Dept {final_org.hex[:8]}",
+                    "code": f"dept-{final_org.hex[:8]}",
+                },
+            )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
@@ -59,7 +69,17 @@ def _insert_user(
 
 def _cleanup_user(sync_engine, user_id):
     with sync_engine.connect() as conn:
+        # 先查出 department_id
+        row = conn.execute(
+            sa.text("SELECT department_id FROM app_user WHERE id = :uid"),
+            {"uid": user_id},
+        ).fetchone()
         conn.execute(sa.text("DELETE FROM app_user WHERE id = :uid"), {"uid": user_id})
+        if row:
+            conn.execute(
+                sa.text("DELETE FROM department WHERE id = :did"),
+                {"did": row[0]},
+            )
         conn.commit()
 
 
