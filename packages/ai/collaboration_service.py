@@ -65,8 +65,9 @@ class CollaborationService:
 
         tab 分类逻辑（架构文档 §7.2）：
         - private: user_id == me AND 无其他参与者的对话
-        - same_org: (user_id == me OR participant) AND org == my_org
-        - cross_org: 返回空列表（二期实现）
+        - same_org: (user_id == me OR participant) — 同部门可见对话
+          （org 命名为历史遗留，实际按 department_id 隔离）
+        - cross_org: 返回空列表（已废弃，organization_id 已退役）
 
         结果附带参与者摘要（批量查询 conversation_participant JOIN app_user）。
 
