@@ -241,7 +241,7 @@ def compute_manifest(
     objects_sha, object_count, _ = compute_objects_aggregate_sha256(objects_dir)
 
     return BackupManifest(
-        format_version=MANIFEST_FORMAT_VERSION,
+        format_version=1,
         created_at=datetime.now(UTC),
         application_version=application_version,
         migration_version=migration_version,
@@ -471,13 +471,10 @@ class BackupManifestValidator:
         else:
             actual_objects_sha: str
             actual_count: int
-            actual_objects_sha, actual_count, _ = compute_objects_aggregate_sha256(
-                objects_dir
-            )
+            actual_objects_sha, actual_count, _ = compute_objects_aggregate_sha256(objects_dir)
             if actual_count != manifest.object_count:
                 raise ManifestValidationError(
-                    f"对象数量不匹配: expected={manifest.object_count}, "
-                    f"actual={actual_count}",
+                    f"对象数量不匹配: expected={manifest.object_count}, actual={actual_count}",
                     component="objects",
                     expected=str(manifest.object_count),
                     actual=str(actual_count),
@@ -562,9 +559,7 @@ class BackupManifestValidator:
         else:
             actual_mirror_sha: str
             actual_mirror_count: int
-            actual_mirror_sha, actual_mirror_count = _aggregate_sha256_dir(
-                minio_mirror_dir
-            )
+            actual_mirror_sha, actual_mirror_count = _aggregate_sha256_dir(minio_mirror_dir)
             if actual_mirror_count != expected_mirror_count:
                 raise ManifestValidationError(
                     f"minio_mirror 对象数量不匹配: expected={expected_mirror_count}, "
@@ -584,9 +579,7 @@ class BackupManifestValidator:
 
         return True
 
-    def verify_checksum(
-        self, component: str, file_path: Path, expected: str
-    ) -> bool:
+    def verify_checksum(self, component: str, file_path: Path, expected: str) -> bool:
         """校验单个文件的 SHA-256 是否与期望值一致。
 
         Args:
@@ -635,10 +628,7 @@ class ManifestValidationError(Exception):
         self.actual: str = actual
 
     def __repr__(self) -> str:
-        return (
-            f"ManifestValidationError(component={self.component!r}, "
-            f"message={self.message!r})"
-        )
+        return f"ManifestValidationError(component={self.component!r}, message={self.message!r})"
 
 
 def load_manifest(backup_dir: Path) -> BackupManifest:
