@@ -58,7 +58,6 @@ B_TABLES: list[str] = [
 
 #: C 类表（无租户列，无 RLS）
 C_TABLES: list[str] = [
-    "provenance_edge",
     "object_relation",
     "object_type_dict",
     "department",

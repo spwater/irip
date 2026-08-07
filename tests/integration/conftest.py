@@ -309,7 +309,7 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
 
         # ---- 删除引用 app_user 的子记录（避免 FK 约束冲突） ----
 
-        # flow 相关（flow_node_execution → flow_run → flow_definition_version → flow_definition）
+        # flow 相关（flow_definition_version 不可变，需禁用 trigger）
         conn.execute(
             sa.text(
                 "DELETE FROM flow_node_execution WHERE flow_run_id IN ("
@@ -321,6 +321,7 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             sa.text("DELETE FROM flow_run WHERE department_id = :did"),
             {"did": dept_id},
         )
+        conn.execute(sa.text("ALTER TABLE flow_definition_version DISABLE TRIGGER ALL"))
         conn.execute(
             sa.text(
                 "DELETE FROM flow_definition_version WHERE flow_definition_id IN ("
@@ -328,6 +329,7 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             ),
             {"uid": user_id},
         )
+        conn.execute(sa.text("ALTER TABLE flow_definition_version ENABLE TRIGGER ALL"))
         conn.execute(
             sa.text("DELETE FROM flow_definition WHERE owner_user_id = :uid"),
             {"uid": user_id},
