@@ -4,7 +4,8 @@
 DROP（migration 0057），对应 ORM 类（MappingProfile /
 MappingProfileVersion / ProfileStatus）已删除。本模块仅保留：
 
-- secret: 密钥表，按 id 引用存储外部数据源凭据（MVP 明文，TODO 加密）。
+- secret: 密钥表，按 id 引用存储外部数据源凭据。
+  凭据使用 AES-256-GCM 信封加密（EnvelopeCrypto），写入时加密、读取时解密。
 
 风格参考 packages/standards/objects：继承 Base，
 使用 GUID / UTCDateTime 自定义类型，Mapped[] + mapped_column()。
@@ -38,13 +39,14 @@ class Secret(Base):
     """密钥实体（对应 secret 表）。
 
     存储外部数据源凭据（PostgreSQL DSN / REST token），按 id 引用。
-    MVP 阶段 value 为明文（TODO 加密），组织内可见。
+    value 字段使用 AES-256-GCM 信封加密（EnvelopeCrypto），
+    写入时加密、读取时解密，绝不返回凭据给 API 层。
 
     Attributes:
         id: 密钥 UUID。
         department_id: 所属部门 ID。
         kind: 密钥种类（postgres_dsn / rest_token）。
-        value: 凭据明文（MVP，TODO 加密）。
+        value: 加密后的凭据密文（格式 v{version}:{nonce}:{ciphertext}）。
         created_at: 创建时间。
     """
 

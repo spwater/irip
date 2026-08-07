@@ -92,6 +92,43 @@ class SecretStore(ScopedSessionMixin):
             # 兼容旧版明文存储（迁移期间）
             return secret.value
 
+    async def create(self, kind: str, value: str) -> UUID:
+        """创建加密凭据（写入时加密）。
+
+        F-12: 使用 envelope encryption 加密密钥值后存储。
+
+        Args:
+            kind: 密钥种类（postgres_dsn / rest_token）。
+            value: 凭据明文。
+
+        Returns:
+            UUID: 新创建的密钥 ID。
+
+        Raises:
+            AppError: code="validation_failed"，当 value 为空时。
+        """
+        if not value:
+            raise AppError(
+                code="validation_failed",
+                message="凭据值不能为空",
+                retryable=False,
+                fields={},
+            )
+        from packages.common.crypto import EnvelopeCrypto
+
+        crypto = EnvelopeCrypto.from_env()
+        encrypted = crypto.encrypt(value)
+
+        secret = Secret(
+            department_id=self._dept_id,
+            kind=kind,
+            value=encrypted,
+        )
+        async with self._scoped_session() as session:
+            session.add(secret)
+            await session.flush()
+            return secret.id
+
 
 class IngestionService:
     """数据源预览服务：按 kind 构造连接器并预览。
