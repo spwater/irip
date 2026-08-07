@@ -29,6 +29,9 @@ class ErrorCode(enum.Enum):
     TOKEN_EXPIRED = ("token_expired", 401)
     REFRESH_REPLAYED = ("refresh_replayed", 401)
 
+    # ---- 429 限流 ----
+    RATE_LIMITED = ("rate_limited", 429)
+
     # ---- 403 禁止类 ----
     FORBIDDEN = ("forbidden", 403)
     SELF_APPROVAL_FORBIDDEN = ("self_approval_forbidden", 403)

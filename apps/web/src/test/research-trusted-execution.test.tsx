@@ -22,9 +22,9 @@ vi.mock('@/api/research', () => {
   };
 });
 
-vi.mock('antd', () => {
-  const ActualAntd = vi.importActual('antd');
-  return { ...ActualAntd };
+vi.mock('antd', async () => {
+  const ActualAntd = await vi.importActual('antd');
+  return { ...ActualAntd as Record<string, unknown> };
 });
 
 import { RunProgressPanel } from '@/features/research/RunProgressPanel';
