@@ -407,12 +407,10 @@ jobs:
           pip install -e ".[dev]"
       - name: Generate Python SBOM (CycloneDX)
         run: |
-          # setuptools 83+ 移除了 pkg_resources，cyclonedx-py v3 依赖它
-          pip install 'setuptools<81'
-          # Pin cyclonedx-bom to v3 — v4+ renamed `environment` subcommand to `env`
-          pip install 'cyclonedx-bom>=3,<4'
+          # cyclonedx-bom v4+ 使用 `env` 子命令，不再依赖 pkg_resources
+          pip install 'cyclonedx-bom>=4'
           # M-11: 从已安装的依赖环境生成 SBOM
-          cyclonedx-py environment --output-file sbom-python.json
+          cyclonedx-py env -o sbom-python.json
           # M-11: 验证 SBOM 非空且包含组件
           if [ ! -s sbom-python.json ]; then
             echo "ERROR: Python SBOM file is empty"
