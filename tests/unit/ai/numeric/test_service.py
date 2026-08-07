@@ -111,8 +111,8 @@ class TestAuditData:
         )
         audit = result.audit_data
         audit_str = str(audit)
-        # Should not contain the full array
-        assert "99" not in audit_str or audit_str.count("99") < 3
+        # Should not contain the full array (check for array markers, not individual values)
+        assert "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10," not in audit_str
         # Should contain count, unit, digest, expression
         assert "count" in audit_str or any("count" in str(s) for s in audit.get("sources", []))
 
@@ -518,8 +518,8 @@ class TestDescribeSeriesResult:
             }
         )
         audit_str = str(result.audit_data)
-        # Should not have raw array values
-        assert "99" not in audit_str or audit_str.count("99") < 3
+        # Should not have raw array values (check for array markers, not individual digits)
+        assert "[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10," not in audit_str
 
     def test_describe_citation_has_engine_version(self) -> None:
         result = run_describe(

@@ -132,15 +132,7 @@ class CollaborationService:
                 conditions.append(participant_or_owner)
                 conditions.append(other_participant_exists)
             elif tab == "same_org":
-                # 兼容旧 tab：等同于 collaborative
-                other_participant_exists = (
-                    sa.select(ConversationParticipant.conversation_id)
-                    .where(
-                        ConversationParticipant.conversation_id == AIConversation.id,
-                        ConversationParticipant.user_id != user_id,
-                    )
-                    .exists()
-                )
+                # 同部门对话：owner 或参与者，不要求有其他参与者
                 participant_or_owner = sa.or_(
                     AIConversation.user_id == user_id,
                     sa.select(ConversationParticipant.conversation_id)
@@ -151,7 +143,6 @@ class CollaborationService:
                     .exists(),
                 )
                 conditions.append(participant_or_owner)
-                conditions.append(other_participant_exists)
 
             # 关键词搜索
             if keyword and keyword.strip():
