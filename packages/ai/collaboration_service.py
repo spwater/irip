@@ -88,7 +88,7 @@ class CollaborationService:
 
         from packages.auth.entities import AppUser
 
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, department_id, user_id) as session:  # type: ignore[arg-type]
             # 构建 base 条件
             conditions: list[sa.ColumnElement[bool]] = []
 

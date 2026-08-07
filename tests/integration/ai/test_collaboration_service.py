@@ -477,7 +477,6 @@ class TestListConversationsWithTab:
             _cleanup_user(sync_engine, owner_id)
             _cleanup_user(sync_engine, member_id)
 
-    @pytest.mark.xfail(reason="既有逻辑问题: same_org tab 可能返回非参与者的对话")
     async def test_same_org_tab_returns_owned_and_participated(self, ai_service, sync_engine):
         owner_id, org_id = _insert_user(sync_engine, f"tab-org-{uuid4().hex[:8]}@irip.local")
         member_id, _ = _insert_user(
