@@ -43,6 +43,7 @@ async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
     """安全设置部门 GUC（SET LOCAL）。
 
     在事务内设置 app.current_dept_id，供 RLS 策略过滤。
+    同时设置 app.current_org_id 作为向后兼容（部分 RLS 策略仍用 organization_id）。
     None 时设为空串（fail-closed：RLS 返回空集）。
 
     Args:
@@ -51,6 +52,8 @@ async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
     """
     value = _safe_literal(str(dept_id)) if dept_id is not None else "''"
     await session.execute(sa.text(f"SET LOCAL {DEPT_GUC} = {value}"))
+    # 向后兼容：部分表的 RLS 策略仍用 organization_id = current_setting('app.current_org_id')
+    await session.execute(sa.text("SET LOCAL app.current_org_id = " + value))
 
 
 async def set_user_guc(session: AsyncSession, user_id: UUID | None) -> None:
