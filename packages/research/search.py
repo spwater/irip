@@ -145,8 +145,8 @@ class ResultSearchService(ScopedSessionMixin):
                 results, versions_map = await self._apply_filters(  # type: ignore[assignment]
                     session,
                     results,
-                    versions_map,
-                    filters,  # type: ignore[arg-type]
+                    versions_map,  # type: ignore[arg-type]
+                    filters,
                 )
 
             # 6. 构建搜索结果

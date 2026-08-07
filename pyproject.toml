@@ -129,6 +129,8 @@ module = [
   "scipy.*",
   "tabulate.*",
   "joblib.*",
+  "aiodocker.*",
+  "sse_starlette.*",
 ]
 ignore_missing_imports = true
 

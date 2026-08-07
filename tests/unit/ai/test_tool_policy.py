@@ -25,14 +25,14 @@ class TestToolWhitelist:
 
     def test_whitelist_has_eight_tools(self) -> None:
         """白名单包含 8 个只读工具。"""
-        assert len(WHITELIST_TOOLS) == 8
+        assert len(WHITELIST_TOOLS) == 10
 
         """候选工具包含 3 个需审批工具。"""
         assert len(CANDIDATE_TOOLS) == 3
 
     def test_all_tools_is_union(self) -> None:
         """全部工具 = 白名单 + 候选 + 插件。"""
-        assert len(ALL_TOOL_NAMES) == 15
+        assert len(ALL_TOOL_NAMES) == 17
 
     def test_whitelist_tool_names_match(self) -> None:
         """AI 工具名称集合正确。"""
@@ -45,6 +45,8 @@ class TestToolWhitelist:
             "run_published_model",
             "draft_report",
             "extract_data",
+            "evaluate_expression",
+            "describe_series",
             "suggest_mapping",
             "create_parameter_candidate",
             "create_model_publish_request",
@@ -90,7 +92,7 @@ class TestToolRegistryValidation:
     def test_default_registry_has_all_tools(self) -> None:
         """默认注册表包含全部 15 个工具。"""
         registry = ToolRegistry()
-        assert len(registry.list_tools()) == 15
+        assert len(registry.list_tools()) == 17
 
     def test_get_known_tool(self) -> None:
         """按名称获取已知工具。"""
@@ -169,7 +171,7 @@ class TestToolParametersRecord:
         """names() 返回全部工具名称元组。"""
         registry = ToolRegistry()
         names = registry.names()
-        assert len(names) == 15
+        assert len(names) == 17
         assert "search_standards" in names
         assert "suggest_mapping" in names
         assert "extract_data" in names

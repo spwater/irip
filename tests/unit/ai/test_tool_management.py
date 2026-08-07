@@ -85,8 +85,8 @@ class TestReloadFromDb:
         """reload_from_db 后 _tools 和 _enabled 从 DB 重建。"""
         registry = ToolRegistry()
         # 初始状态：15 个工具全部启用（11 AI + 4 插件）
-        assert len(registry.list_tools()) == 15
-        assert len(registry.enabled_names()) == 15
+        assert len(registry.list_tools()) == 17
+        assert len(registry.enabled_names()) == 17
 
         rows = [
             _make_row(name="tool_a", enabled=True),
@@ -107,7 +107,7 @@ class TestReloadFromDb:
     async def test_reload_replaces_previous_state(self) -> None:
         """reload_from_db 是全量替换，旧工具声明被清除。"""
         registry = ToolRegistry()
-        assert len(registry.list_tools()) == 15
+        assert len(registry.list_tools()) == 17
 
         rows = [_make_row(name="only_tool", enabled=True)]
         with patch.object(ToolRepository, "list_all", new_callable=AsyncMock, return_value=rows):
@@ -359,7 +359,7 @@ class TestSeedDataIntegrity:
 
     def test_all_tools_count_is_15(self) -> None:
         """ALL_TOOLS 包含 15 个工具（11 AI + 4 插件）。"""
-        assert len(ALL_TOOLS) == 15
+        assert len(ALL_TOOLS) == 17
 
     def test_all_tools_have_unique_names(self) -> None:
         """ALL_TOOLS 中工具名唯一。"""

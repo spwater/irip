@@ -151,8 +151,12 @@ class TestEndpointContracts:
         match = [r for r in routes if r[1] == "/api/v1/facts/{fact_id}/data"]
         assert len(match) == 1
         resp_model = match[0][3]
-        # response_model 是 dict（从 -> dict 推断），不是 FactResponse 等 Pydantic 模型
-        assert resp_model is dict or resp_model is None
+        # response_model 是 dict 或 dict[str, Any] 或 None
+        assert (
+            resp_model is None
+            or resp_model is dict
+            or (getattr(resp_model, "__origin__", None) is dict)
+        )
 
     def test_archive_fact_endpoint(self, router) -> None:
         """POST '/{fact_id}/archive' → 204。"""
