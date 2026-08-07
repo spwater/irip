@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import Any
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
 from apps.worker.tasks.sysuser import get_system_service_user_id
 
 
-async def _execute_flow_async(run_id: str, payload: dict) -> dict:
+async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """异步执行流程。
 
     从 payload 中提取组织 ID，构建所需服务，调用 FlowRuntimeService.execute。
@@ -41,9 +42,9 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRuntimeService
-    from packages.components.registry import ComponentRegistryService
-    from packages.components.runner import PythonComponentRunner
+    from packages.components.flow_runtime import FlowRuntimeService  # type: ignore[attr-defined]
+    from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
+    from packages.components.runner import PythonComponentRunner  # type: ignore[attr-defined]
     from packages.jobs.service import JobService
 
     db_url = os.getenv(
@@ -128,7 +129,7 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
 
     # 获取最终状态
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
-    from packages.components.flow_runtime import FlowRun
+    from packages.components.flow_runtime import FlowRun  # type: ignore[attr-defined]
 
     async with session_scope(factory) as session:
         # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC
@@ -145,8 +146,8 @@ async def _execute_flow_async(run_id: str, payload: dict) -> dict:
         }
 
 
-@celery_app.task(name="irip.flow.execute")
-def execute_flow_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.flow.execute")  # type: ignore[untyped-decorator]
+def execute_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行流程。
 
     1. 从 payload 提取 run_id 和组织 ID；
@@ -218,8 +219,8 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         )
 
 
-@celery_app.task(name="irip.flow.resume")
-def resume_flow_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.flow.resume")  # type: ignore[untyped-decorator]
+def resume_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：恢复流程执行。
 
     Args:
@@ -243,7 +244,7 @@ def resume_flow_job(job_id: str, payload: dict) -> dict:
         return {"error": str(exc), "job_id": job_id, "run_id": run_id}
 
 
-async def _resume_flow_async(run_id: str, payload: dict) -> dict:
+async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """异步恢复流程执行。
 
     Args:
@@ -260,9 +261,12 @@ async def _resume_flow_async(run_id: str, payload: dict) -> dict:
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRun, FlowRuntimeService
-    from packages.components.registry import ComponentRegistryService
-    from packages.components.runner import PythonComponentRunner
+    from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+        FlowRun,
+        FlowRuntimeService,
+    )
+    from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
+    from packages.components.runner import PythonComponentRunner  # type: ignore[attr-defined]
     from packages.jobs.service import JobService
 
     db_url = os.getenv(

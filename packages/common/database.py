@@ -180,5 +180,5 @@ class ScopedSessionMixin:
             rls_dept_id if rls_dept_id is not None else getattr(self, "_dept_id", None)
         )
         user_id: UUID | None = getattr(self, "_actor_id", None)
-        async with scoped_session(self._factory, dept_id, user_id) as session:
+        async with scoped_session(self._factory, dept_id, user_id) as session:  # type: ignore[attr-defined]
             yield session

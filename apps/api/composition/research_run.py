@@ -46,7 +46,7 @@ def register(ctx: CompositionContext) -> None:
     from packages.research.scheduler import ResearchScheduler
 
     # 构建共享单例
-    redis_client = redis_lib.from_url(ctx.redis_url)
+    redis_client = redis_lib.from_url(ctx.redis_url)  # type: ignore[no-untyped-call]
     context_router = ContextRouter()
     scheduler = ResearchScheduler(redis_client=redis_client)
 
@@ -64,8 +64,8 @@ def register(ctx: CompositionContext) -> None:
 
         set_session_factory(ctx.session_factory)
 
-        async def _load_config():
-            return await get_active_ai_config()
+        async def _load_config() -> None:
+            return await get_active_ai_config()  # type: ignore[return-value]
 
         # 在新事件循环中运行（composition register 在 uvicorn lifespan 中，可能已有 loop）
         try:
@@ -103,7 +103,7 @@ def register(ctx: CompositionContext) -> None:
         _logger.warning("Failed to load AI config for API PlanService: %s", exc)
 
     # 构建模型注册表：所有任务类型使用研发助手模型
-    from packages.research.model_gateway import ModelConfig, TaskType
+    from packages.research.model_gateway import ModelConfig, TaskType  # type: ignore[attr-defined]
 
     if research_model_name:
         model_registry = {

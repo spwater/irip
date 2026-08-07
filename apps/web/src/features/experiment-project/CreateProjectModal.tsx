@@ -59,7 +59,7 @@ export function CreateProjectModal({
       const values = await form.validateFields();
       createMutation.mutate({
         department_id: values.department_id as string,
-        code: (values.code as string) || null,
+        code: (values.code as string) || '',
         display_name: values.display_name as string,
         description: (values.description as string) ?? null,
         visible_departments: (values.visible_departments as string[]) ?? [],

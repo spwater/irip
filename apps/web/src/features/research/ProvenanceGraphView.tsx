@@ -307,7 +307,8 @@ export function ProvenanceGraphView({
     graphRef.current = g6;
 
     // 节点点击事件
-    g6.on('node:click', (evt: { target: { data: Record<string, unknown> } }) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    g6.on('node:click', (evt: any) => {
       const nodeData = evt?.target?.data;
       if (!nodeData) return;
       const isRestricted = nodeData._isRestricted as boolean;
@@ -366,7 +367,9 @@ export function ProvenanceGraphView({
       // 边也跟随高亮
       const allEdges = g6.getEdgeData();
       for (const edge of allEdges) {
-        g6.setElementState(edge.id, 'dimmed', true);
+        if (edge.id) {
+          g6.setElementState(edge.id, 'dimmed', true);
+        }
       }
     },
     [],

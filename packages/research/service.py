@@ -14,7 +14,7 @@ WorkspaceService 提供研究工作空间的创建、列表、详情、归档、
 参照 packages/facts/service.py 的 ScopedSessionMixin 模式。
 """
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -46,7 +46,7 @@ class CoreFactProviderProtocol(Protocol):
     async def search_facts(
         self,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactSummary], str | None]:
@@ -649,7 +649,7 @@ class WorkspaceService(ScopedSessionMixin):
                         fields={},
                     )
                 # 搜索校验归属（通过 owner_user_id 过滤）
-                results = await self._research_catalog.search_derived_data(
+                results = await self._research_catalog.search_derived_data(  # type: ignore[attr-defined]
                     query="",
                     filters={"dataset_id": str(source_id)},
                 )
@@ -674,7 +674,7 @@ class WorkspaceService(ScopedSessionMixin):
                         fields={},
                     )
                 # 通过跨用户 ACL 过滤搜索校验
-                results = await self._research_catalog.search_published_derived_data(
+                results = await self._research_catalog.search_published_derived_data(  # type: ignore[attr-defined]
                     query="",
                     filters={"dataset_id_filter": str(source_id)},
                 )
@@ -826,7 +826,7 @@ class WorkspaceService(ScopedSessionMixin):
     async def search_facts(
         self,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactSummary], str | None]:

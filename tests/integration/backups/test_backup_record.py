@@ -20,8 +20,6 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.backups.entities import (
-    DAILY_RETENTION_DAYS,
-    PRE_RESTORE_RETENTION_DAYS,
     BackupRecord,
     BackupStatus,
     BackupType,
@@ -52,9 +50,7 @@ async def _count_records(
 ) -> int:
     """统计当前 RLS 可见的 backup_record 数量。"""
     async with factory() as session:
-        result = await session.execute(
-            sa.select(sa.func.count()).select_from(BackupRecord)
-        )
+        result = await session.execute(sa.select(sa.func.count()).select_from(BackupRecord))
         return result.scalar() or 0
 
 

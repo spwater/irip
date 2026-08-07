@@ -9,6 +9,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 # ============================================================
@@ -179,8 +180,8 @@ class PlanDetail:
     workspace_id: UUID
     version_number: int
     status: str
-    dag_structure: dict
-    coverage_declaration: dict | None = None
+    dag_structure: dict[str, Any]
+    coverage_declaration: dict[str, Any] | None = None
     created_at: datetime | None = None
     confirmed_at: datetime | None = None
 
@@ -318,7 +319,7 @@ class CoverageDeclaration:
             f"是否抽样: {sampling_label}"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转为 JSONB 可存储的字典。"""
         return {
             "analysis_mode": self.analysis_mode,
@@ -405,7 +406,7 @@ class ConversationMessage:
     message_id: UUID
     workspace_id: UUID
     role: str
-    content: dict
+    content: dict[str, Any]
     run_id: UUID | None = None
     created_at: datetime | None = None
 
@@ -578,7 +579,7 @@ class ModelResponse:
     prompt_version: str = ""
     tool_version: str = ""
     tokens_used: int = 0
-    tool_calls: list[dict] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list[Any])
     uncertainty: str | None = None
     failover_used: bool = False
 
@@ -604,7 +605,7 @@ class DataProfile:
     snapshot_id: UUID
     total_records: int = 0
     total_tokens_estimate: int = 0
-    field_manifest: dict = field(default_factory=dict)
+    field_manifest: dict[str, Any] = field(default_factory=dict[str, Any])
     source_count: int = 0
     data_summary: str = ""
 

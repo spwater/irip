@@ -168,10 +168,10 @@ def _to_response(project: object) -> ExperimentProjectResponse:
         display_name=project.display_name,  # type: ignore[attr-defined]
         description=project.description,  # type: ignore[attr-defined]
         status=project.status,  # type: ignore[attr-defined]
-        visible_departments=list(getattr(project, "visible_departments", []) or []),  # type: ignore[attr-defined]
+        visible_departments=list(getattr(project, "visible_departments", []) or []),
         visibility_scope=project.visibility_scope,  # type: ignore[attr-defined]
         owner_user_id=str(project.owner_user_id),  # type: ignore[attr-defined]
-        owner_display_name=getattr(project, "_owner_display_name", None),  # type: ignore[attr-defined]
+        owner_display_name=getattr(project, "_owner_display_name", None),
         created_at=project.created_at,  # type: ignore[attr-defined]
         updated_at=project.updated_at,  # type: ignore[attr-defined]
         lock_version=project.lock_version,  # type: ignore[attr-defined]
@@ -198,7 +198,7 @@ async def _check_ownership(
         current_user=current_user,
         entity_department_id=project_department_id,
         entity_owner_user_id=project_owner_user_id,
-        session_factory=service.session_factory,  # type: ignore[attr-defined]
+        session_factory=service.session_factory,
     )
 
 

@@ -32,7 +32,7 @@ export function ProductDetailView({
   productId,
   onBack,
 }: ProductDetailViewProps): JSX.Element {
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshKey] = useState(0);
 
   // ---- 产物溯源图查询函数 ----
   const fetchProvenance = useCallback(

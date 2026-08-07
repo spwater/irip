@@ -185,9 +185,9 @@ class FileConnector:
         result = await self._artifact_service.open_stream(artifact_id)
         # result is (filename, size, stream)
         if isinstance(result, tuple) and len(result) == 3:
-            return result[2]
+            return result[2]  # type: ignore[no-any-return]
         # If result is already a stream
-        return result
+        return result  # type: ignore[no-any-return]
 
     # ---- 内部读取（从流） ----
 
@@ -196,7 +196,7 @@ class FileConnector:
         stream: IO[bytes],
         fmt: str,
         limit: int,
-    ) -> tuple[tuple[str, ...], list[list]]:
+    ) -> tuple[tuple[str, ...], list[list[Any]]]:
         """从二进制流读取前 limit 行，返回 (列名元组, 行列表)。
 
         设置资源预算限制：行数、字节、时间。
@@ -235,7 +235,7 @@ class FileConnector:
         stream: IO[bytes],
         limit: int,
         start_time: float,
-    ) -> tuple[tuple[str, ...], list[list]]:
+    ) -> tuple[tuple[str, ...], list[list[Any]]]:
         """从二进制流读取 CSV 文件前 limit 行。"""
         total_bytes: int = 0
         chunks: list[bytes] = []
@@ -267,7 +267,7 @@ class FileConnector:
         except StopIteration:
             return ((), [])
         columns = tuple(header)
-        rows: list[list] = []
+        rows: list[list[Any]] = []
         for row in reader:
             if len(rows) >= limit:
                 break
@@ -281,7 +281,7 @@ class FileConnector:
         stream: IO[bytes],
         limit: int,
         start_time: float,
-    ) -> tuple[tuple[str, ...], list[list]]:
+    ) -> tuple[tuple[str, ...], list[list[Any]]]:
         """从二进制流读取 XLSX 文件首个工作表前 limit 行。
 
         Raises:
@@ -309,7 +309,7 @@ class FileConnector:
             except StopIteration:
                 return ((), [])
             columns = tuple(str(c) if c is not None else "" for c in header)
-            rows: list[list] = []
+            rows: list[list[Any]] = []
             for row in rows_iter:
                 if len(rows) >= limit:
                     break
@@ -332,7 +332,7 @@ class FileConnector:
         stream: IO[bytes],
         limit: int,
         start_time: float,
-    ) -> tuple[tuple[str, ...], list[list]]:
+    ) -> tuple[tuple[str, ...], list[list[Any]]]:
         """从二进制流读取 JSON 文件（对象数组）前 limit 行。
 
         列名为首个对象的键的并集（保持首次出现顺序）。
@@ -380,7 +380,7 @@ class FileConnector:
                     columns.append(key)
 
         col_index = {col: idx for idx, col in enumerate(columns)}
-        rows: list[list] = []
+        rows: list[list[Any]] = []
         for obj in data[:limit]:
             if not isinstance(obj, dict):
                 continue

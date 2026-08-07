@@ -27,7 +27,7 @@ import jsonschema
 from packages.common.errors import AppError
 from packages.components.flow.flows import FlowEdge, FlowNode
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import ComponentRegistryService
+from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
 
 
 @dataclass(frozen=True)

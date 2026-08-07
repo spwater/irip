@@ -95,7 +95,7 @@ class Model(Base):
         nullable=False,
         comment="所属部门 ID",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),

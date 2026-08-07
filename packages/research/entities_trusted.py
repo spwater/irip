@@ -18,6 +18,7 @@
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -61,8 +62,8 @@ class ResearchAnalysisPlanVersion(Base):
         nullable=False,
     )
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    dag_structure: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    coverage_declaration: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    dag_structure: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    coverage_declaration: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     confirmed_by: Mapped[UUID | None] = mapped_column(
@@ -138,7 +139,7 @@ class ResearchAnalysisRun(Base):
         GUID, sa.ForeignKey("app_user.id"), nullable=True
     )
     error_summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    coverage_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    coverage_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     image_digest: Mapped[str] = mapped_column(sa.Text, nullable=False)
     created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
@@ -209,7 +210,7 @@ class ResearchAnalysisStep(Base):
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     error_message: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     error_classification: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    depends_on: Mapped[list] = mapped_column(
+    depends_on: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -301,7 +302,7 @@ class ResearchAiConversation(Base):
         nullable=False,
     )
     role: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     run_id: Mapped[UUID | None] = mapped_column(
         GUID, sa.ForeignKey("research_analysis_run.id"), nullable=True
     )
@@ -342,7 +343,7 @@ class ResearchMemoryDocument(Base):
         sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
         nullable=False,
     )
-    document: Mapped[dict] = mapped_column(
+    document: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("1"))

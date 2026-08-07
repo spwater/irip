@@ -13,7 +13,7 @@ lazy import ``apps.worker.celery_app.celery_app``，违反分层架构原则。
 例如 Celery 的 ``Celery`` 应用实例。
 """
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -30,7 +30,7 @@ class TaskSender(Protocol):
     def send_task(
         self,
         name: str,
-        args: list,
+        args: list[Any],
         queue: str,
     ) -> object:
         """发送任务到指定队列。

@@ -123,12 +123,12 @@ class NumericDataResolver:
         values = np.float64(float_val)  # 0-d array
         null_mask = np.bool_(False)  # 0-d
         unit = self._validate_unit(source.unit, source.name)
-        input_digest = self._compute_digest(values, null_mask)
+        input_digest = self._compute_digest(values, null_mask)  # type: ignore[arg-type]
 
         return ResolvedNumericInput(
             name=source.name,
-            values=values,
-            null_mask=null_mask,
+            values=values,  # type: ignore[arg-type]
+            null_mask=null_mask,  # type: ignore[arg-type]
             unit=unit,
             source_provenance=NumericSourceProvenance(
                 source_type="scalar",
@@ -503,10 +503,10 @@ class NumericDataResolver:
             from packages.facts.repository import FactRepository
 
             # 使用 FactQueryService 的 scoped session 查询 artifact 记录
-            async with fact_service._scoped_session() as session:  # type: ignore[attr-defined]
+            async with fact_service._scoped_session() as session:
                 art_record = await FactRepository.find_json_artifact(session, fact_id)
                 if art_record is not None:
-                    return art_record.id, art_record.sha256
+                    return art_record.id, art_record.sha256  # type: ignore[attr-defined]
         except Exception:
             pass
         return None, None

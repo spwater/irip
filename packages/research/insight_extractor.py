@@ -197,7 +197,7 @@ class InsightExtractor:
             extraction_failed=False,
         )
 
-    def _validate_fields(self, data: dict) -> bool:
+    def _validate_fields(self, data: dict[str, Any]) -> bool:
         """校验 6 个必填字段 + evidence_source_label 是否存在且非空。
 
         Args:

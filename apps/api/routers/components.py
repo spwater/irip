@@ -26,7 +26,7 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
-from packages.components.registry import ComponentRegistryService
+from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
 from packages.components.registry.registry import Component
 
 #: JSON Schema 路径（相对项目根目录）。
@@ -263,7 +263,7 @@ async def publish_component(
         import sqlalchemy as sa
 
         from packages.common.database import session_scope
-        from packages.standards.objects import IndustrialObject
+        from packages.standards.objects import IndustrialObject  # type: ignore[attr-defined]
 
         async with session_scope(service.session_factory) as sess:
             obj = await sess.scalar(
@@ -433,7 +433,7 @@ async def list_component_versions(
             manifest_sha256=v.manifest_sha256,
             created_at=v.created_at,
         )
-        for v in versions
+        for v in versions  # type: ignore[attr-defined]
     ]
 
 
@@ -530,16 +530,16 @@ async def update_component(
         current_user=current_user,
         entity_department_id=comp.department_id,
         entity_owner_user_id=comp.owner_user_id,
-        session_factory=service.session_factory,  # type: ignore[attr-defined]
+        session_factory=service.session_factory,
     )
 
-    async with session_scope(service.session_factory) as session:  # type: ignore[attr-defined]
+    async with session_scope(service.session_factory) as session:
         if body.department_id is not None:
-            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))
+            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))  # type: ignore[assignment]
             if comp is not None:
                 comp.department_id = UUID(body.department_id)
         if body.visible_departments is not None:
-            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))
+            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))  # type: ignore[assignment]
             if comp is not None:
                 comp.visible_departments = body.visible_departments
         await session.flush()
@@ -572,7 +572,7 @@ async def delete_component(
         current_user=current_user,
         entity_department_id=comp.department_id,
         entity_owner_user_id=comp.owner_user_id,
-        session_factory=service.session_factory,  # type: ignore[attr-defined]
+        session_factory=service.session_factory,
     )
 
     await service.delete_component(comp.id)

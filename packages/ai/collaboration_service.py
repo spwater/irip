@@ -88,7 +88,7 @@ class CollaborationService:
 
         from packages.auth.entities import AppUser
 
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             # 构建 base 条件
             conditions: list[sa.ColumnElement[bool]] = []
 
@@ -259,7 +259,7 @@ class CollaborationService:
         """
         user_id = inviter_user_id
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -382,7 +382,7 @@ class CollaborationService:
         """
         user_id = owner_user_id
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -452,7 +452,7 @@ class CollaborationService:
             AppError: code="forbidden"，owner 不能退出。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             participant = await session.scalar(
                 sa.select(ConversationParticipant).where(
                     ConversationParticipant.conversation_id == conversation_id,
@@ -501,7 +501,7 @@ class CollaborationService:
             AppError: code="not_found"，对话不存在。
             AppError: code="forbidden"，无权访问。
         """
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             from packages.auth.entities import AppUser
 
             conv = await session.scalar(
@@ -603,7 +603,7 @@ class CollaborationService:
         admin_roles = {"platform_administrator", "platform_auditor", "lab_director"}
         is_admin = roles is not None and len(admin_roles & set(roles)) > 0
 
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             stmt = sa.select(
                 AppUser.id,
                 AppUser.display_name,

@@ -182,7 +182,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
 
         # 6. 调用溯源边写入 Hook（不阻断主流程）
         try:
-            await self._lineage_writer.on_knowledge_referenced(ref.id, None)
+            await self._lineage_writer.on_knowledge_referenced(ref.id, None)  # type: ignore[attr-defined]
         except Exception as exc:
             logger.warning("on_knowledge_referenced hook failed: %s", exc)
 
@@ -391,7 +391,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
                 ensure_ascii=False,
             ).encode("utf-8")
             # S3Repository 方法为同步，直接调用（在事务内执行）
-            self._s3.put_object(path, content)
+            self._s3.put_object(path, content)  # type: ignore[attr-defined]
             return path
         except Exception as exc:
             logger.error("Failed to store snippet to MinIO: %s", exc)
@@ -408,9 +408,9 @@ class KnowledgeReferenceService(ScopedSessionMixin):
         """
         try:
             # S3Repository 方法为同步，直接调用
-            content = self._s3.get_object(snippet_storage_path)
+            content = self._s3.get_object(snippet_storage_path)  # type: ignore[attr-defined]
             data = json.loads(content.decode("utf-8"))
-            return data.get("snippet_text", "")
+            return data.get("snippet_text", "")  # type: ignore[no-any-return]
         except Exception as exc:
             logger.error("Failed to retrieve snippet from MinIO: %s", exc)
             return ""

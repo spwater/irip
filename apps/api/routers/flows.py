@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
-from packages.components.flow_runtime import (
+from packages.components.flow_runtime import (  # type: ignore[attr-defined]
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,
@@ -43,7 +43,7 @@ from packages.components.flow_runtime import (
     FlowRun,
     FlowRuntimeService,
 )
-from packages.components.flows import (
+from packages.components.flows import (  # type: ignore[attr-defined]
     FlowEdge,
     FlowNode,
     edge_from_dict,
@@ -835,7 +835,7 @@ class PersistFactRequest(BaseModel):
     """写入事实请求。"""
 
     object_id: UUID
-    custom_data: dict | None = (
+    custom_data: dict[str, Any] | None = (
         None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}  # noqa: E501
     )
 
@@ -866,7 +866,7 @@ async def persist_run_as_fact(
     """
     from apps.api.routers._flow_fact_handler import persist_run_as_fact_handler
 
-    return await persist_run_as_fact_handler(service, current_user, run_id, body)
+    return await persist_run_as_fact_handler(service, current_user, run_id, body)  # type: ignore[no-any-return]
 
 
 @flows_router.get(

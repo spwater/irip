@@ -173,7 +173,7 @@ class BackupRecordService(ScopedSessionMixin):
             BackupRecord | None: 备份记录，不存在时返回 None。
         """
         async with self._scoped_session() as session:
-            return await session.scalar(
+            return await session.scalar(  # type: ignore[no-any-return]
                 sa.select(BackupRecord).where(BackupRecord.job_id == job_id)
             )
 
@@ -226,9 +226,7 @@ class BackupRecordService(ScopedSessionMixin):
         Returns:
             list[BackupRecord]: 每日快照列表（按 created_at DESC）。
         """
-        records, _ = await self.list_by_type(
-            backup_type=BackupType.DAILY.value, limit=limit
-        )
+        records, _ = await self.list_by_type(backup_type=BackupType.DAILY.value, limit=limit)
         return records
 
     async def list_milestone(self, limit: int = 100) -> list[BackupRecord]:
@@ -242,9 +240,7 @@ class BackupRecordService(ScopedSessionMixin):
         Returns:
             list[BackupRecord]: 里程碑备份列表（按 created_at DESC）。
         """
-        records, _ = await self.list_by_type(
-            backup_type=BackupType.MILESTONE.value, limit=limit
-        )
+        records, _ = await self.list_by_type(backup_type=BackupType.MILESTONE.value, limit=limit)
         return records
 
     async def mark_succeeded(
@@ -387,9 +383,7 @@ class BackupRecordService(ScopedSessionMixin):
             record_id: 备份记录 UUID。
         """
         async with self._scoped_session() as session:
-            await session.execute(
-                sa.delete(BackupRecord).where(BackupRecord.id == record_id)
-            )
+            await session.execute(sa.delete(BackupRecord).where(BackupRecord.id == record_id))
             await session.flush()
 
     async def delete_expired(
@@ -433,16 +427,19 @@ class BackupRecordService(ScopedSessionMixin):
             try:
                 # 删除文件系统目录
                 backup_dir: Path = Path(record.file_path)
-                if backup_dir.exists():
+                if backup_dir.exists():  # noqa: ASYNC240
                     shutil.rmtree(backup_dir, ignore_errors=True)
                     logger.info(
                         "Cleaned up expired backup %s: removed dir %s",
-                        record.id, backup_dir,
+                        record.id,
+                        backup_dir,
                     )
             except Exception as exc:
                 logger.warning(
                     "Failed to remove backup dir %s for record %s: %s",
-                    record.file_path, record.id, exc,
+                    record.file_path,
+                    record.id,
+                    exc,
                 )
 
             # 删除数据库记录（独立事务 + GUC，单条失败不影响其他记录）
@@ -454,9 +451,7 @@ class BackupRecordService(ScopedSessionMixin):
                     await session.flush()
                 cleaned += 1
             except Exception as exc:
-                logger.warning(
-                    "Failed to delete backup record %s: %s", record.id, exc
-                )
+                logger.warning("Failed to delete backup record %s: %s", record.id, exc)
 
         logger.info("Retention cleanup: removed %d expired backups", cleaned)
         return cleaned

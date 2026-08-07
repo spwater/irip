@@ -150,6 +150,11 @@ export type PlanStep = {
   analysis_mode?: string;
   mode_reason?: string;
   data_budget_tokens?: number;
+  analysis_result?: string;
+  data_context?: string;
+  insight_candidate?: unknown;
+  insight_candidate_id?: string;
+  insight_run_id?: string;
 };
 
 export type PlanListResponse = {
@@ -434,7 +439,7 @@ export async function apiAnalyzeData(
   planId: string,
   snapshotId: string,
   editedAdvice?: string,
-): Promise<{ analysis_result: string }> {
+): Promise<{ analysis_result: string; data_context?: string }> {
   const res = await http.post(`/research/workspaces/${workspaceId}/analyze-data`, {
     plan_id: planId,
     snapshot_id: snapshotId,

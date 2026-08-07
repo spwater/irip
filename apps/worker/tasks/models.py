@@ -103,7 +103,7 @@ def _build_model_service(factory: Any, department_id: UUID, user_id: UUID) -> An
     )
 
 
-async def _train_model_async(payload: dict) -> dict:
+async def _train_model_async(payload: dict[str, Any]) -> dict[str, Any]:
     """异步训练模型。
 
     从 payload 提取组织 ID、模型代码、显示名称与版本 ID，
@@ -151,7 +151,7 @@ async def _train_model_async(payload: dict) -> dict:
     }
 
 
-async def _predict_model_async(payload: dict) -> dict:
+async def _predict_model_async(payload: dict[str, Any]) -> dict[str, Any]:
     """异步执行模型预测。
 
     从 payload 提取组织 ID、模型 ID 与输入参数，
@@ -186,7 +186,7 @@ async def _predict_model_async(payload: dict) -> dict:
     }
 
 
-async def _publish_model_async(payload: dict) -> dict:
+async def _publish_model_async(payload: dict[str, Any]) -> dict[str, Any]:
     """异步发布模型版本。
 
     Args:
@@ -214,8 +214,8 @@ async def _publish_model_async(payload: dict) -> dict:
     }
 
 
-@celery_app.task(name="irip.model.train")
-def train_model_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.model.train")  # type: ignore[untyped-decorator]
+def train_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：训练模型（创建 + 提交验证）。
 
     Args:
@@ -235,8 +235,8 @@ def train_model_job(job_id: str, payload: dict) -> dict:
         }
 
 
-@celery_app.task(name="irip.model.predict")
-def predict_model_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.model.predict")  # type: ignore[untyped-decorator]
+def predict_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行模型预测。
 
     Args:
@@ -256,8 +256,8 @@ def predict_model_job(job_id: str, payload: dict) -> dict:
         }
 
 
-@celery_app.task(name="irip.model.publish")
-def publish_model_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.model.publish")  # type: ignore[untyped-decorator]
+def publish_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：发布模型版本。
 
     Args:

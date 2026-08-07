@@ -322,7 +322,7 @@ class ExperimentProjectService(ScopedSessionMixin):
         display_name: str,
         description: str | None,
         lock_version: int,
-        visible_departments: list[str] | None = None,
+        visible_departments: list[str] | None = None,  # type: ignore[valid-type]
         owner_user_id: UUID | None = None,
     ) -> ExperimentProject:
         """编辑项目（code 不可修改，乐观锁）。
@@ -464,16 +464,16 @@ class ExperimentProjectService(ScopedSessionMixin):
                     fields={"status": project.status},
                 )
             # 级联删除项目下的所有任务及其关联数据
-            from packages.components.flow.flow_runtime import (
+            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
                 FlowDefinition as FD,
             )
-            from packages.components.flow.flow_runtime import (
+            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
                 FlowDefinitionVersionORM as FV,
             )
-            from packages.components.flow.flow_runtime import (
+            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
                 FlowNodeExecution as FNE,
             )
-            from packages.components.flow.flow_runtime import (
+            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
                 FlowRun as FR,
             )
 

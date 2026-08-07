@@ -19,6 +19,7 @@
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -79,7 +80,7 @@ class EvidenceSet(Base):
         nullable=False,
         comment="所属部门 ID",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),
@@ -133,7 +134,7 @@ class EvidenceSetVersion(Base):
         nullable=False,
         server_default=sa.text("'frozen'"),
     )
-    members: Mapped[list] = mapped_column(JSONB, nullable=False)
+    members: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     member_count: Mapped[int] = mapped_column(
         sa.Integer,
         nullable=False,
@@ -207,7 +208,7 @@ class TransformationRecipe(Base):
         nullable=False,
         comment="所属部门 ID",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),
@@ -269,9 +270,9 @@ class TransformationRecipeVersion(Base):
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     component_name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     component_version: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    parameters: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    parameters: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     random_seed: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    output_definitions: Mapped[list] = mapped_column(JSONB, nullable=False)
+    output_definitions: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(
         sa.Text,
         nullable=False,
@@ -346,7 +347,7 @@ class DerivationRun(Base):
         server_default=sa.text("'pending'"),
     )
     output_digest: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    outputs: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    outputs: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     error: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -403,7 +404,7 @@ class ProvenanceEdge(Base):
     target_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     target_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     edge_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    metadata_: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

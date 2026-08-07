@@ -227,7 +227,7 @@ async def check_management_permission(
         descendants = await _get_descendant_dept_ids(session, current_user.department_id)
 
     # 排除本部门（严格后代）——同部门非所有者无管理权
-    descendants.discard(current_user.department_id)
+    descendants.discard(current_user.department_id)  # type: ignore[attr-defined]
 
     if entity_department_id not in descendants:
         # 5. 实验室负责人可管本部门成员的数据

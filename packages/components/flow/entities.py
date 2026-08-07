@@ -51,7 +51,7 @@ class FlowDefinition(Base):
         comment="所属部门 ID",
     )
     # ---- 阶段1 多租户隔离键升级：A 类其余三列（department_id 已有，阶段2改为 NOT NULL） ----
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),

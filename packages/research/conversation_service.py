@@ -11,6 +11,7 @@ AIConversationService 负责：
 """
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -124,14 +125,14 @@ class AIConversationService(ScopedSessionMixin):
             )
 
             try:
-                response = await self._model_gateway.call(
+                response = await self._model_gateway.call(  # type: ignore[attr-defined]
                     task_type=TaskType.CONVERSATION,
                     system_prompt=system_prompt,
                     data_context="",
                     research_context=conversation_context,
                 )
                 ai_answer = response.answer if hasattr(response, "answer") else str(response)
-                code_blocks = []
+                code_blocks = []  # type: ignore[var-annotated]
                 list(response.tool_calls) if hasattr(response, "tool_calls") else []
             except Exception as exc:
                 logger.warning("AI conversation call failed: %s", exc)
@@ -139,7 +140,7 @@ class AIConversationService(ScopedSessionMixin):
                 code_blocks = []
 
             # 5. 持久化 AI 回复
-            ai_content: dict = {"text": ai_answer}
+            ai_content: dict[str, Any] = {"text": ai_answer}
             if code_blocks:
                 ai_content["code_blocks"] = code_blocks
             if run_id is not None:
@@ -200,7 +201,7 @@ class AIConversationService(ScopedSessionMixin):
                 for m in messages
             ]
 
-    def _build_conversation_context(self, history: list) -> str:
+    def _build_conversation_context(self, history: list[Any]) -> str:
         """构建对话上下文文本（从历史消息构建）。
 
         Args:
@@ -225,9 +226,9 @@ class AIConversationService(ScopedSessionMixin):
 
     def _truncate_history(
         self,
-        messages: list,
+        messages: list[Any],
         max_count: int = MAX_HISTORY_COUNT,
-    ) -> list:
+    ) -> list[Any]:
         """截断历史消息，保留最近 N 条。
 
         旧消息保留在数据库表中不删除，仅查询时截断。

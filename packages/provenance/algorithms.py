@@ -127,9 +127,9 @@ class RobustParameterEstimator:
 
         # 提取参数
         outlier_method: str = str(parameters.get("outlier_method", "mad"))
-        threshold: float = float(parameters.get("threshold", 3.5))
-        bootstrap_samples: int = int(parameters.get("bootstrap_samples", 1000))
-        random_seed: int = int(parameters.get("random_seed", 42))
+        threshold: float = float(parameters.get("threshold", 3.5))  # type: ignore[arg-type]
+        bootstrap_samples: int = int(parameters.get("bootstrap_samples", 1000))  # type: ignore[call-overload]
+        random_seed: int = int(parameters.get("random_seed", 42))  # type: ignore[call-overload]
 
         # 转换为 float 进行计算
         float_values: list[float] = [float(v) for v in values]

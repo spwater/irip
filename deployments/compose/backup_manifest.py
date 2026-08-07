@@ -392,7 +392,7 @@ def read_objects_metadata(objects_dir: Path) -> list[dict[str, Any]]:
     metadata_path: Path = objects_dir / OBJECTS_METADATA_FILENAME
     if not metadata_path.exists():
         return []
-    return json.loads(metadata_path.read_text(encoding="utf-8"))
+    return json.loads(metadata_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 
 class BackupManifestValidator:

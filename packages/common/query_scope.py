@@ -11,6 +11,7 @@
 """
 
 from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -33,7 +34,7 @@ class QueryScope:
     department_id: UUID
     object_root_id: UUID | None = None
 
-    def apply(self, query: sa.Select, entity_cls: type | None = None) -> sa.Select:
+    def apply(self, query: sa.Select, entity_cls: type[Any] | None = None) -> sa.Select:  # type: ignore[type-arg]
         """将 scope 条件应用到 SQLAlchemy 查询。
 
         按 department_id 等值过滤（应用层快路径）。

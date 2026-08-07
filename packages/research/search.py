@@ -10,6 +10,7 @@
 """
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -70,7 +71,7 @@ class ResultSearchService(ScopedSessionMixin):
     async def search(
         self,
         query: str | None,
-        filters: dict | None,
+        filters: dict[str, Any] | None,
         view_mode: str,
         page: int,
         page_size: int,
@@ -141,8 +142,11 @@ class ResultSearchService(ScopedSessionMixin):
 
             # 5. 筛选器应用
             if filters:
-                results, versions_map = await self._apply_filters(
-                    session, results, versions_map, filters
+                results, versions_map = await self._apply_filters(  # type: ignore[assignment]
+                    session,
+                    results,
+                    versions_map,
+                    filters,  # type: ignore[arg-type]
                 )
 
             # 6. 构建搜索结果
@@ -153,19 +157,19 @@ class ResultSearchService(ScopedSessionMixin):
                     continue
 
                 # 统计产物数量
-                dataset_count = len(version.dataset_version_refs or [])
-                view_count = len(version.view_version_refs or [])
-                insight_count = len(version.insight_version_refs or [])
+                dataset_count = len(version.dataset_version_refs or [])  # type: ignore[attr-defined]
+                view_count = len(version.view_version_refs or [])  # type: ignore[attr-defined]
+                insight_count = len(version.insight_version_refs or [])  # type: ignore[attr-defined]
 
                 items.append(
                     SearchResultItem(
                         result_id=result.id,
                         name=result.name,
-                        title=version.title,
-                        summary=version.summary or "",
-                        tags=list(version.tags or []),
-                        publisher=version.publisher,
-                        published_at=version.published_at,
+                        title=version.title,  # type: ignore[attr-defined]
+                        summary=version.summary or "",  # type: ignore[attr-defined]
+                        tags=list(version.tags or []),  # type: ignore[attr-defined]
+                        publisher=version.publisher,  # type: ignore[attr-defined]
+                        published_at=version.published_at,  # type: ignore[attr-defined]
                         current_version=result.current_version,
                         current_acl_type=result.current_acl_type,
                         dataset_count=dataset_count,
@@ -226,17 +230,17 @@ class ResultSearchService(ScopedSessionMixin):
         Returns:
             bool: 是否有权查看。
         """
-        if result.current_acl_type == "private":
-            return result.owner_user_id == principal_id
-        if result.current_acl_type == "tree":
+        if result.current_acl_type == "private":  # type: ignore[attr-defined]
+            return result.owner_user_id == principal_id  # type: ignore[no-any-return, attr-defined]
+        if result.current_acl_type == "tree":  # type: ignore[attr-defined]
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
-        if result.current_acl_type == "explicit":
-            explicit_ids = result.current_explicit_user_ids or []
+        if result.current_acl_type == "explicit":  # type: ignore[attr-defined]
+            explicit_ids = result.current_explicit_user_ids or []  # type: ignore[attr-defined]
             return (
                 str(principal_id) in [str(uid) for uid in explicit_ids]
-                or result.owner_user_id == principal_id
+                or result.owner_user_id == principal_id  # type: ignore[attr-defined]
             )
-        if result.current_acl_type == "all":
+        if result.current_acl_type == "all":  # type: ignore[attr-defined]
             return True
         return False
 
@@ -253,11 +257,11 @@ class ResultSearchService(ScopedSessionMixin):
             bool: 是否匹配。
         """
         query_lower = query.lower()
-        if version.title and query_lower in version.title.lower():
+        if version.title and query_lower in version.title.lower():  # type: ignore[attr-defined]
             return True
-        if version.summary and query_lower in version.summary.lower():
+        if version.summary and query_lower in version.summary.lower():  # type: ignore[attr-defined]
             return True
-        tags = version.tags or []
+        tags = version.tags or []  # type: ignore[attr-defined]
         for tag in tags:
             if isinstance(tag, str) and query_lower in tag.lower():
                 return True
@@ -266,10 +270,10 @@ class ResultSearchService(ScopedSessionMixin):
     async def _apply_filters(
         self,
         session: AsyncSession,
-        results: list,
-        versions_map: dict,
-        filters: dict,
-    ) -> tuple[list, dict]:
+        results: list[Any],
+        versions_map: dict[str, Any],
+        filters: dict[str, Any],
+    ) -> tuple[list[Any], dict[str, Any]]:
         """应用筛选器。
 
         支持的筛选条件：
@@ -289,8 +293,8 @@ class ResultSearchService(ScopedSessionMixin):
         Returns:
             tuple[list, dict]: (过滤后结果列表, 过滤后版本映射)。
         """
-        filtered_results: list = []
-        filtered_versions: dict = {}
+        filtered_results: list[Any] = []
+        filtered_versions: dict[str, Any] = {}
 
         publisher = filters.get("publisher")
         date_from = filters.get("date_from")

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from typing import Any
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
@@ -15,8 +16,8 @@ from apps.worker.celery_app import celery_app
 
 async def _process_derivation_async(
     job_id: str,
-    payload: dict,
-) -> dict:
+    payload: dict[str, Any],
+) -> dict[str, Any]:
     """异步处理推导作业。
 
     从 payload 中提取参数，构建 DerivationService 并执行推导。
@@ -110,7 +111,7 @@ async def _process_derivation_async(
             await session.execute(
                 sa.update(Job)
                 .values(
-                    status=JobStatus.COMPLETED.value,
+                    status=JobStatus.COMPLETED.value,  # type: ignore[attr-defined]
                     result=summary,
                     updated_at=sa.func.now(),
                     lock_version=Job.lock_version + 1,
@@ -142,8 +143,8 @@ async def _process_derivation_async(
         raise
 
 
-@celery_app.task(name="irip.derivation.process")
-def process_derivation_job(job_id: str, payload: dict) -> dict:
+@celery_app.task(name="irip.derivation.process")  # type: ignore[untyped-decorator]
+def process_derivation_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：处理推导作业。
 
     1. 从 payload 提取参数；

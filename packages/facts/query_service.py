@@ -22,6 +22,7 @@ session 语义：
 import json
 import logging
 import os
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -106,7 +107,7 @@ class FactQueryService(ScopedSessionMixin):
     async def list_facts_detail(
         self,
         *,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactDetailRow], str | None, dict[str, int]]:
@@ -167,7 +168,7 @@ class FactQueryService(ScopedSessionMixin):
         # Step 4: 组装 FactDetailRow
         rows: list[FactDetailRow] = []
         for item in items:
-            fid: UUID = item["fact_id"]
+            fid: UUID = item["fact_id"]  # type: ignore[no-redef]
             snap = snap_map.get(fid)
             rows.append(
                 FactDetailRow(
@@ -193,7 +194,7 @@ class FactQueryService(ScopedSessionMixin):
         self,
         *,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactDetailRow], str | None, dict[str, int]]:
@@ -382,7 +383,7 @@ class FactQueryService(ScopedSessionMixin):
             created_at=snap.created_at if snap else None,
         )
 
-    async def get_fact_data(self, fact_id: UUID) -> dict:
+    async def get_fact_data(self, fact_id: UUID) -> dict[str, Any]:
         """获取事实关联的提取数据（从 artifact 下载 JSON）。
 
         完整保留原 get_fact_data 逻辑：
@@ -415,9 +416,9 @@ class FactQueryService(ScopedSessionMixin):
             data_bytes: bytes | None = None
             json_error: str | None = None
             try:
-                data_bytes = await artifact_svc.get_bytes(art_record.id)
+                data_bytes = await artifact_svc.get_bytes(art_record.id)  # type: ignore[attr-defined]
             except Exception as exc:
-                _logger.warning("JSON artifact 下载失败: %s — %s", art_record.id, exc)
+                _logger.warning("JSON artifact 下载失败: %s — %s", art_record.id, exc)  # type: ignore[attr-defined]
                 json_error = str(exc)[:200]
 
             if data_bytes is not None:
@@ -443,14 +444,14 @@ class FactQueryService(ScopedSessionMixin):
                 pdf_artifact = await FactRepository.find_source_file_artifact(session, fact_id)
                 if pdf_artifact:
                     result_data["source_file"] = {
-                        "filename": pdf_artifact.filename or "原始文件",
-                        "media_type": pdf_artifact.media_type,
-                        "artifact_id": str(pdf_artifact.id),
+                        "filename": pdf_artifact.filename or "原始文件",  # type: ignore[attr-defined]
+                        "media_type": pdf_artifact.media_type,  # type: ignore[attr-defined]
+                        "artifact_id": str(pdf_artifact.id),  # type: ignore[attr-defined]
                     }
             except Exception:
                 _logger.warning("查找原始文件失败", exc_info=True)
 
-            return result_data
+            return result_data  # type: ignore[no-any-return]
 
     # ---- 私有方法 ----
 
@@ -474,7 +475,7 @@ class FactQueryService(ScopedSessionMixin):
         if art_record is None:
             return None
 
-        data_bytes = await artifact_service.get_bytes(art_record.id)
+        data_bytes = await artifact_service.get_bytes(art_record.id)  # type: ignore[attr-defined]
         parsed = json.loads(data_bytes.decode("utf-8"))
         pts = parsed.get("points", [])
         srs = parsed.get("series", [])
@@ -493,7 +494,7 @@ class FactQueryService(ScopedSessionMixin):
         self,
         fact_record: object,
         session: AsyncSession,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """解析任务信息（快照优先 → alembic-URL 超管引擎补查 → fallback GUC 反查）。
 
         优先从快照字段读任务信息（零 JOIN）。如果快照命中且有 flow_run_id，
@@ -518,7 +519,7 @@ class FactQueryService(ScopedSessionMixin):
         # 提前导入避免深层嵌套中行宽超限。
         from packages.departments.entities import Department  # noqa: F811
 
-        task_info: dict = {}
+        task_info: dict[str, Any] = {}
         try:
             if fact_record.task_code or fact_record.task_name:
                 # ---- 快照命中路径 ----
@@ -546,7 +547,7 @@ class FactQueryService(ScopedSessionMixin):
                             create_async_engine as _cae,
                         )
 
-                        from packages.components.flow_runtime import (
+                        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
                             FlowDefinition,
                             FlowDefinitionVersionORM,
                             FlowRun,
@@ -632,11 +633,11 @@ class FactQueryService(ScopedSessionMixin):
                                         # 查每个组件的实验对象→设备→部门链路
                                         data_source_list = []
                                         for comp_name in comp_names:
-                                            ds: dict = {"component": comp_name}
+                                            ds: dict[str, Any] = {"component": comp_name}
                                             # 查组件 display_name 和 experimental_object_code
                                             import yaml as yaml_lib
 
-                                            from packages.components.registry import (
+                                            from packages.components.registry import (  # type: ignore[attr-defined]
                                                 Component,
                                                 ComponentVersion,
                                             )
@@ -664,7 +665,7 @@ class FactQueryService(ScopedSessionMixin):
                                                 ds["experimental_object_code"] = (
                                                     cv.experimental_object_code
                                                 )
-                                                from packages.standards.objects import (
+                                                from packages.standards.objects import (  # type: ignore[attr-defined]
                                                     IndustrialObject,
                                                 )
 
@@ -715,7 +716,7 @@ class FactQueryService(ScopedSessionMixin):
         # ---- Fallback：快照没命中，通过 flow_run_id 外键反查（兼容旧数据）----
         if not task_info:
             try:
-                from packages.components.flow_runtime import (
+                from packages.components.flow_runtime import (  # type: ignore[attr-defined]
                     FlowDefinition,
                     FlowDefinitionVersionORM,
                     FlowRun,

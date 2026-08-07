@@ -4,9 +4,8 @@
  * 6 个结构化字段 + 证据来源标签 + 接受/修改/拒绝按钮
  */
 import { useState } from 'react';
-import { Card, Tag, Button, Typography, Space, Collapse, Popconfirm, Input, message } from 'antd';
+import { Card, Tag, Button, Typography, Space, Collapse, Popconfirm, Input } from 'antd';
 import {
-  BulbOutlined,
   CheckOutlined,
   EditOutlined,
   CloseOutlined,
@@ -31,14 +30,12 @@ export type CandidateInsightCardProps = {
 };
 
 export function CandidateInsightCard({
-  workspaceId,
-  runId,
   candidate,
   onAccept,
   onModify,
   onReject,
 }: CandidateInsightCardProps): JSX.Element {
-  const [rejecting, setRejecting] = useState(false);
+  const [, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
   const preview = candidate.preview_data as Record<string, unknown>;

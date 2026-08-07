@@ -8,7 +8,7 @@
  */
 
 import { useState } from 'react';
-import { Card, Typography, Space, Tag, Button, Input, Spin, message } from 'antd';
+import { Card, Typography, Space, Button, Input, Spin, message } from 'antd';
 import {
   BulbOutlined,
   DownOutlined,
@@ -26,8 +26,10 @@ import { apiAnalyzeData } from '../../api/research';
 export type PlanReviewCardProps = {
   plan: PlanDetail;
   workspaceId: string;
-  snapshotId: string;
-  onAnalysisComplete?: (result: { analysis_result: string }) => void;
+  snapshotId?: string;
+  onAnalysisComplete?: (result: { analysis_result: string; data_context?: string }) => void;
+  onConfirm?: () => void;
+  onAdjust?: () => void;
 };
 
 export function PlanReviewCard({
@@ -63,6 +65,7 @@ export function PlanReviewCard({
   };
 
   const handleExecute = async () => {
+    if (!snapshotId) return;
     setExecuting(true);
     try {
       const result = await apiAnalyzeData(

@@ -16,6 +16,7 @@ import base64
 import binascii
 import json
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -523,9 +524,9 @@ class ResearchRepository:
         workspace_id: UUID,
         snapshot_number: int,
         content_hash: str,
-        permission_envelope: dict,
-        field_manifest: dict,
-        source_refs: list,
+        permission_envelope: dict[str, Any],
+        field_manifest: dict[str, Any],
+        source_refs: list[Any],
         created_by: UUID,
     ) -> ResearchEvidenceSnapshot:
         """插入证据快照，返回 ORM 实体。
@@ -713,7 +714,7 @@ class ResearchRepository:
             summary: 新摘要（可选）。
             tags: 新标签列表（可选）。
         """
-        values: dict = {"updated_at": sa.func.now()}
+        values: dict[str, Any] = {"updated_at": sa.func.now()}
         if name is not None:
             values["name"] = name
         if summary is not None:
@@ -783,10 +784,10 @@ class ResearchRepository:
         *,
         dataset_id: UUID,
         version_number: int,
-        metadata_content: dict,
-        points_content: list,
-        series_content: list,
-        field_manifest: list,
+        metadata_content: dict[str, Any],
+        points_content: list[Any],
+        series_content: list[Any],
+        field_manifest: list[Any],
         source_run_id: UUID,
         source_step_id: UUID | None = None,
         source_artifact_id: UUID | None = None,
@@ -1003,7 +1004,7 @@ class ResearchRepository:
             caption: 新图注（可选）。
             display_order: 新展示顺序（可选）。
         """
-        values: dict = {"updated_at": sa.func.now()}
+        values: dict[str, Any] = {"updated_at": sa.func.now()}
         if name is not None:
             values["name"] = name
         if caption is not None:
@@ -1240,7 +1241,7 @@ class ResearchRepository:
             insight_id: Insight ID。
             name: 新名称（可选）。
         """
-        values: dict = {"updated_at": sa.func.now()}
+        values: dict[str, Any] = {"updated_at": sa.func.now()}
         if name is not None:
             values["name"] = name
         await session.execute(
@@ -1276,8 +1277,8 @@ class ResearchRepository:
         version_number: int,
         conclusion: str,
         scope: str,
-        evidence_refs: list,
-        method_refs: list,
+        evidence_refs: list[Any],
+        method_refs: list[Any],
         confidence_level: str,
         limitations: str,
         evidence_source_label: str,
@@ -1411,8 +1412,8 @@ class ResearchRepository:
         step_id: UUID | None = None,
         conclusion: str,
         scope: str,
-        evidence_refs: list,
-        method_refs: list,
+        evidence_refs: list[Any],
+        method_refs: list[Any],
         confidence_level: str,
         limitations: str,
         evidence_source_label: str,
@@ -1520,7 +1521,7 @@ class ResearchRepository:
             rejection_reason: 拒绝原因（可选）。
             reviewed_by: 审核人 ID（可选）。
         """
-        values: dict = {
+        values: dict[str, Any] = {
             "status": status,
             "reviewed_at": sa.func.now(),
         }
@@ -1552,7 +1553,7 @@ class ResearchRepository:
         status: str = "published",
         current_version: int = 0,
         current_acl_type: str = "private",
-        current_explicit_user_ids: list | None = None,
+        current_explicit_user_ids: list[Any] | None = None,
     ) -> ResearchResult:
         """插入成果包稳定身份行。
 
@@ -1675,7 +1676,7 @@ class ResearchRepository:
         session: AsyncSession,
         result_id: UUID,
         acl_type: str,
-        explicit_user_ids: list,
+        explicit_user_ids: list[Any],
     ) -> None:
         """更新成果包当前 ACL。
 
@@ -1786,17 +1787,17 @@ class ResearchRepository:
         version_number: int,
         title: str,
         summary: str | None,
-        tags: list,
+        tags: list[Any],
         release_notes: str | None,
-        dataset_version_refs: list,
-        view_version_refs: list,
-        insight_version_refs: list,
-        evidence_snapshot_ids: list,
-        analysis_run_ids: list,
-        source_run_statuses: dict,
+        dataset_version_refs: list[Any],
+        view_version_refs: list[Any],
+        insight_version_refs: list[Any],
+        evidence_snapshot_ids: list[Any],
+        analysis_run_ids: list[Any],
+        source_run_statuses: dict[str, Any],
         publisher: UUID,
         content_hash: str,
-        published_permission_envelope: dict,
+        published_permission_envelope: dict[str, Any],
         status: str = "active",
     ) -> ResearchResultVersion:
         """插入成果包版本（不可变）。
@@ -1973,9 +1974,9 @@ class ResearchRepository:
         result_id: UUID,
         revision_number: int,
         acl_type: str,
-        explicit_user_ids: list,
+        explicit_user_ids: list[Any],
         previous_acl_type: str | None = None,
-        previous_explicit_user_ids: list | None = None,
+        previous_explicit_user_ids: list[Any] | None = None,
         changed_by: UUID,
         change_reason: str | None = None,
         is_declassify: bool = False,
@@ -2307,7 +2308,7 @@ class ResearchRepository:
             )
         stmt = stmt.order_by(ResearchResultVersion.published_at.desc())
         res = await session.execute(stmt)
-        return list(res.all())
+        return list(res.all())  # type: ignore[arg-type]
 
     # ============================================================
     # 阶段 5：知识引用快照 CRUD（research_knowledge_reference）

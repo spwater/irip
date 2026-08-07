@@ -14,6 +14,7 @@ Celery 任务：
 import asyncio
 import logging
 import os
+from typing import Any
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
@@ -24,7 +25,7 @@ logger = logging.getLogger("research.tasks")
 HEARTBEAT_TIMEOUT_SECONDS: int = int(os.getenv("RESEARCH_HEARTBEAT_TIMEOUT_SECONDS", "90"))
 
 
-def _build_orchestrator():
+def _build_orchestrator() -> Any:
     """从环境变量构建 ResearchOrchestrator 实例。
 
     Worker 进程中通过此函数注入全部执行层依赖：
@@ -59,7 +60,7 @@ def _build_orchestrator():
     factory = build_session_factory(async_url)
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    redis_client = redis_lib.from_url(redis_url)
+    redis_client = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
 
     # 从 ai_config 表读取研发助手模型配置，构建真实 AI provider
     ai_provider = None
@@ -69,7 +70,7 @@ def _build_orchestrator():
 
         set_session_factory(factory)
 
-        async def _load_ai_config():
+        async def _load_ai_config() -> Any:
             return await get_active_ai_config()
 
         ai_config = asyncio.run(_load_ai_config())
@@ -134,7 +135,7 @@ def _build_orchestrator():
     scheduler = ResearchScheduler(redis_client=redis_client)
 
     # 构建工件服务
-    from apps.api.main import _build_s3_repo  # type: ignore[attr-defined]
+    from apps.api.main import _build_s3_repo
 
     s3_repo = _build_s3_repo()
     artifact_service = RunArtifactService(
@@ -165,7 +166,7 @@ def _build_orchestrator():
     return orchestrator
 
 
-@celery_app.task(name="research.run.execute", bind=True)
+@celery_app.task(name="research.run.execute", bind=True)  # type: ignore[untyped-decorator]
 def execute_analysis_run(self: object, run_id: str) -> str:
     """Celery 任务：执行分析 Run。
 
@@ -190,7 +191,7 @@ def execute_analysis_run(self: object, run_id: str) -> str:
     return run_id
 
 
-@celery_app.task(name="research.heartbeat")
+@celery_app.task(name="research.heartbeat")  # type: ignore[untyped-decorator]
 def check_run_heartbeat() -> int:
     """Celery Beat 调度任务：检查活跃 Run 心跳。
 
@@ -203,7 +204,7 @@ def check_run_heartbeat() -> int:
     import redis as redis_lib
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)
+    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
 
     import sqlalchemy as sa
 
@@ -233,7 +234,7 @@ def check_run_heartbeat() -> int:
                         session,
                         run_id,
                         "failed",
-                        completed_at=sa.func.now(),
+                        completed_at=sa.func.now(),  # type: ignore[arg-type]
                         error_summary="心跳超时，Worker 可能崩溃",
                     )
                     count += 1
@@ -242,7 +243,7 @@ def check_run_heartbeat() -> int:
     return asyncio.run(_check())
 
 
-@celery_app.task(name="research.cleanup_warm")
+@celery_app.task(name="research.cleanup_warm")  # type: ignore[untyped-decorator]
 def cleanup_warm_containers() -> int:
     """Celery Beat 调度任务：清理过期保温容器。
 
@@ -256,7 +257,7 @@ def cleanup_warm_containers() -> int:
     from packages.research.sandbox import WarmPoolManager
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)
+    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
     warm_pool = WarmPoolManager(redis_client=r)
 
     async def _cleanup() -> int:
@@ -265,7 +266,7 @@ def cleanup_warm_containers() -> int:
     return asyncio.run(_cleanup())
 
 
-@celery_app.task(name="research.promote_queued")
+@celery_app.task(name="research.promote_queued")  # type: ignore[untyped-decorator]
 def promote_queued_runs() -> int:
     """Celery Beat 调度任务：检查队列并提升等待 Run。
 
@@ -279,7 +280,7 @@ def promote_queued_runs() -> int:
     from packages.research.scheduler import ResearchScheduler
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)
+    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
     scheduler = ResearchScheduler(redis_client=r)
 
     async def _promote() -> int:

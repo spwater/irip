@@ -17,6 +17,7 @@ import base64
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -87,7 +88,7 @@ class RecipeService(ScopedSessionMixin):
         self._dept_id = department_id
         self._actor_id = actor_id
 
-    async def create_recipe(self, code: str, display_name: str) -> dict:
+    async def create_recipe(self, code: str, display_name: str) -> dict[str, Any]:
         """创建配方（draft 状态）。
 
         Args:
@@ -155,7 +156,7 @@ class RecipeService(ScopedSessionMixin):
         recipe_id: UUID,
         component_name: str,
         component_version: str,
-        parameters: dict,
+        parameters: dict[str, Any],
         random_seed: int,
         output_definitions: tuple[str, ...],
     ) -> RecipeVersion:
@@ -262,7 +263,7 @@ class RecipeService(ScopedSessionMixin):
                 status="published",
             )
 
-    async def get_recipe(self, recipe_id: UUID) -> dict:
+    async def get_recipe(self, recipe_id: UUID) -> dict[str, Any]:
         """获取配方详情（含最新版本信息）。
 
         Args:
@@ -295,7 +296,7 @@ class RecipeService(ScopedSessionMixin):
                 .limit(1)
             )
 
-            result: dict = {
+            result: dict[str, Any] = {
                 "recipe_id": recipe_id,
                 "code": recipe.code,
                 "display_name": recipe.display_name,
@@ -317,7 +318,7 @@ class RecipeService(ScopedSessionMixin):
         self,
         cursor: str | None,
         page_size: int = 20,
-    ) -> tuple[list[dict], str | None]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """分页列出配方。
 
         Args:
@@ -371,7 +372,7 @@ class RecipeService(ScopedSessionMixin):
                     ).encode("utf-8")
                 ).decode("ascii")
 
-            items: list[dict] = [
+            items: list[dict[str, Any]] = [
                 {
                     "recipe_id": r.id,
                     "code": r.code,

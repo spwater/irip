@@ -15,7 +15,7 @@
  * 参照 PRD 4.1 节 UI 设计与 arch-research-lineage.md 2.3 节文件 26/27。
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Space, Typography, Button, Slider, Input, Tag, message, Spin } from 'antd';
+import { Space, Typography, Button, Slider, Input, Tag, message } from 'antd';
 import {
   DownloadOutlined,
   FileTextOutlined,
@@ -75,7 +75,6 @@ const NODE_TYPE_LABELS: Record<string, string> = {
 export function ProvenanceTab({
   fetchGraph,
   exportGraph,
-  title = '数据溯源',
   height = 500,
 }: ProvenanceTabProps): JSX.Element {
   const [graph, setGraph] = useState<ProvenanceGraph | null>(null);

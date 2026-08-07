@@ -246,7 +246,7 @@ class ToolExecutor:
                 pass
 
         # 直接查数据库（含 data_summary）
-        async with scoped_session(self._factory, org_id, None) as session:
+        async with scoped_session(self._factory, org_id, None) as session:  # type: ignore[arg-type]
             stmt = sa.select(sa.text("f.id, f.subject_id, f.fact_type")).select_from(
                 sa.text("fact f")
             )
@@ -278,7 +278,7 @@ class ToolExecutor:
     async def _handle_search_standards(self, args: dict[str, Any], org_id: UUID) -> dict[str, Any]:
         """执行 search_standards 工具：搜索标准变量。"""
         query = str(args.get("query", ""))
-        async with scoped_session(self._factory, org_id, None) as session:
+        async with scoped_session(self._factory, org_id, None) as session:  # type: ignore[arg-type]
             stmt = (
                 sa.select(sa.text("vv.id, v.code, vv.display_name, vv.canonical_unit"))
                 .select_from(sa.text("variable_version vv"))

@@ -14,6 +14,7 @@ private(0) < explicit(1) < tree(2) < all(3)
 参照架构设计 3.3 节。
 """
 
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -72,7 +73,7 @@ class PermissionEnvelopeCalculator:
             )
 
         # 查询全部 snapshot 的 permission_envelope
-        source_details: list[dict] = []
+        source_details: list[dict[str, Any]] = []
         acl_types: list[str] = []
 
         for snapshot_id in source_snapshot_ids:
@@ -201,7 +202,7 @@ class PermissionEnvelopeCalculator:
     async def _get_snapshot_envelope(
         snapshot_id: UUID,
         session: AsyncSession,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """获取单个 Evidence Snapshot 的 permission_envelope。
 
         Args:
@@ -229,7 +230,7 @@ class PermissionEnvelopeCalculator:
         return envelope_data
 
     @staticmethod
-    def _extract_acl_from_envelope(envelope: dict) -> str:
+    def _extract_acl_from_envelope(envelope: dict[str, Any]) -> str:
         """从 permission_envelope 中提取 ACL 类型。
 
         首期简化：permission_envelope 记录了源数据的权限快照。

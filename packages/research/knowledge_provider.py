@@ -10,7 +10,7 @@ MockKnowledgeProvider 用于测试。
 import asyncio
 import hashlib
 import logging
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -132,7 +132,7 @@ class KnowledgeProviderService:
         timeout = opts.timeout if opts.timeout > 0 else DEFAULT_PROVIDER_TIMEOUT
 
         # 并行检索
-        tasks: list[tuple[str, asyncio.Task]] = []
+        tasks: list[tuple[str, asyncio.Task]] = []  # type: ignore[type-arg]
         for name, provider in active_providers.items():
             task = asyncio.create_task(
                 asyncio.wait_for(
@@ -269,7 +269,7 @@ class MockKnowledgeProvider:
     """
 
     # 预置 Mock 文档列表
-    _MOCK_DOCUMENTS: list[dict] = [
+    _MOCK_DOCUMENTS: list[dict[str, Any]] = [
         {
             "document_id": "mock_doc_001",
             "document_version": "2024.03",

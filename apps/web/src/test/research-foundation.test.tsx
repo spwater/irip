@@ -7,7 +7,7 @@
  * 3. CreateWorkspaceModal 交互
  * 4. LabOpsPage 功能开关条件渲染
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -351,7 +351,7 @@ describe('LabOpsPage feature flag conditional rendering', () => {
     };
 
     const { useAuthStore } = await import('@/features/auth/AuthProvider');
-    const store = (useAuthStore as ReturnType<typeof vi.fn>)();
+    const store = (useAuthStore as unknown as ReturnType<typeof vi.fn>)();
     const isResearchEnabled =
       (store.user as { featureFlags?: { researchModule?: boolean } })
         ?.featureFlags?.researchModule ?? false;
@@ -376,7 +376,7 @@ describe('LabOpsPage feature flag conditional rendering', () => {
     };
 
     const { useAuthStore } = await import('@/features/auth/AuthProvider');
-    const store = (useAuthStore as ReturnType<typeof vi.fn>)();
+    const store = (useAuthStore as unknown as ReturnType<typeof vi.fn>)();
     const isResearchEnabled =
       (store.user as { featureFlags?: { researchModule?: boolean } })
         ?.featureFlags?.researchModule ?? false;
@@ -395,7 +395,7 @@ describe('LabOpsPage feature flag conditional rendering', () => {
     _authState.user = null;
 
     const { useAuthStore } = await import('@/features/auth/AuthProvider');
-    const store = (useAuthStore as ReturnType<typeof vi.fn>)();
+    const store = (useAuthStore as unknown as ReturnType<typeof vi.fn>)();
     const isResearchEnabled =
       (store.user as { featureFlags?: { researchModule?: boolean } } | null)
         ?.featureFlags?.researchModule ?? false;

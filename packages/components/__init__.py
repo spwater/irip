@@ -5,7 +5,7 @@
 """
 
 # re-export 核心模块供 from packages.components import X 使用
-from packages.components.flow import (  # noqa: F401
+from packages.components.flow import (  # type: ignore[attr-defined]  # noqa: F401
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersion,
@@ -31,11 +31,11 @@ from packages.components.manifest import (  # noqa: F401
     ComponentManifest,
     ManifestValidator,
 )
-from packages.components.registry import (  # noqa: F401
+from packages.components.registry import (  # type: ignore[attr-defined]  # noqa: F401
     ComponentRegistryService,
     ComponentVersion,
 )
-from packages.components.runner import (  # noqa: F401
+from packages.components.runner import (  # type: ignore[attr-defined]  # noqa: F401
     CLIComponentRunner,
     PythonComponentRunner,
 )

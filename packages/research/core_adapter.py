@@ -12,7 +12,7 @@ CoreFactProviderImpl：实现类，内部封装 FactQueryService 的只读方法
 （tsvector 的 simple 分词器对中文不友好，"拉曼"匹配不到"拉曼样品"）。
 """
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -34,7 +34,7 @@ class CoreFactProvider(Protocol):
     async def search_facts(
         self,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactSummary], str | None]:
@@ -98,7 +98,7 @@ class CoreFactProviderImpl:
     async def search_facts(
         self,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactSummary], str | None]:
@@ -120,10 +120,10 @@ class CoreFactProviderImpl:
         from packages.facts.entities import Fact
 
         rls_dept_id: object | None = getattr(self._query_service, "_rls_dept_id", None)
-        dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id
-        user_id = self._query_service._actor_id
+        dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id  # type: ignore[attr-defined]
+        user_id = self._query_service._actor_id  # type: ignore[attr-defined]
 
-        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:
+        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:  # type: ignore[attr-defined, arg-type]
             effective_size = min(max(page_size, 1), 100)
             fetch_limit = effective_size + 1
 
@@ -193,7 +193,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            row = await self._query_service.get_fact_detail(fact_id)
+            row = await self._query_service.get_fact_detail(fact_id)  # type: ignore[attr-defined]
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(
@@ -227,7 +227,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            data = await self._query_service.get_fact_data(fact_id)
+            data = await self._query_service.get_fact_data(fact_id)  # type: ignore[attr-defined]
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(
@@ -256,7 +256,7 @@ class CoreFactProviderImpl:
 
         return fields
 
-    async def get_fact_data(self, fact_id: UUID) -> dict:
+    async def get_fact_data(self, fact_id: UUID) -> dict[str, Any]:
         """获取 Fact 完整数据（用于快照哈希计算）。
 
         此方法不暴露在 Protocol 接口中，仅由 EvidenceSnapshotService
@@ -271,7 +271,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            return await self._query_service.get_fact_data(fact_id)
+            return await self._query_service.get_fact_data(fact_id)  # type: ignore[no-any-return, attr-defined]
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(

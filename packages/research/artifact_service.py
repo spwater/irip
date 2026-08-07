@@ -346,6 +346,6 @@ class RunArtifactService(ScopedSessionMixin):
             return result if isinstance(result, bytes) else result
         sync_get = getattr(self._s3_repo, "get_object_sync", None)
         if sync_get is not None:
-            return sync_get(storage_path)
+            return sync_get(storage_path)  # type: ignore[no-any-return]
         logger.warning("S3Repository has no get_object method, returning empty")
         return b""

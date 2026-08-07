@@ -101,7 +101,7 @@ class MessagePersistence:
             sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             actual_display_name = sender_display_name
             actual_avatar_url = sender_avatar_url
             try:
@@ -161,7 +161,7 @@ class MessagePersistence:
             sender_avatar_url: 发送者头像 URL（从 app_user 快照）。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
             # irip-ai-collab: 从数据库获取发送者 display_name 和 avatar_url 快照
             actual_display_name = sender_display_name
             actual_avatar_url = sender_avatar_url
@@ -312,7 +312,7 @@ class MessagePersistence:
 
         # 更新数据库
         now = self._clock.now()
-        async with scoped_session(self._factory, None, None) as session:
+        async with scoped_session(self._factory, None, None) as session:  # type: ignore[arg-type]
             await session.execute(
                 sa.update(AIConversation)
                 .values(title=title, updated_at=now)

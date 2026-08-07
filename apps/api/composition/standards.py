@@ -37,7 +37,7 @@ def register(ctx: CompositionContext) -> None:
     from packages.departments.service import DepartmentService
     from packages.departments.user_departments import UserDepartmentService
     from packages.equipment.service import EquipmentService
-    from packages.standards.object_graph import ObjectGraphService
+    from packages.standards.object_graph import ObjectGraphService  # type: ignore[attr-defined]
 
     # 工业对象图服务
     async def _get_object_graph_service_dep(
@@ -50,7 +50,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_object_graph_service] = _get_object_graph_service_dep
@@ -66,7 +66,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_department_service] = _get_department_service_dep
@@ -82,7 +82,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_equipment_service] = _get_equipment_service_dep
@@ -97,7 +97,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep
@@ -116,7 +116,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_experiment_project_service] = (

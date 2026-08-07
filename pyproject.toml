@@ -118,6 +118,20 @@ plugins = []
 module = ["boto3.*", "botocore.*", "testcontainers.*", "celery.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = [
+  "fitz.*",
+  "paddleocr.*",
+  "openpyxl.*",
+  "jsonschema.*",
+  "yaml.*",
+  "pandas.*",
+  "scipy.*",
+  "tabulate.*",
+  "joblib.*",
+]
+ignore_missing_imports = true
+
 # ---- uv / pip 国内镜像（架构文档 §1.4）----
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

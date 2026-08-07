@@ -53,7 +53,7 @@ def build_connector(
     from packages.common.errors import AppError
 
     if source.kind == "file":
-        return FileConnector(artifact_service=artifact_service)
+        return FileConnector(artifact_service=artifact_service)  # type: ignore[return-value]
     if source.kind == "postgres":
         if secret_store is None:
             raise AppError(
@@ -62,7 +62,7 @@ def build_connector(
                 retryable=False,
                 fields={"kind": source.kind},
             )
-        return PostgresConnector(secret_store=secret_store)
+        return PostgresConnector(secret_store=secret_store)  # type: ignore[return-value]
     if source.kind == "rest":
         if secret_store is None:
             raise AppError(
@@ -71,7 +71,7 @@ def build_connector(
                 retryable=False,
                 fields={"kind": source.kind},
             )
-        return RestConnector(secret_store=secret_store)
+        return RestConnector(secret_store=secret_store)  # type: ignore[return-value]
     raise AppError(
         code="validation_failed",
         message=f"未知数据源类型：{source.kind}",

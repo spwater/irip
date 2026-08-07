@@ -18,7 +18,7 @@ from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import MAX_PAGE_SIZE
-from packages.standards.objects import (
+from packages.standards.objects import (  # type: ignore[attr-defined]
     IndustrialObject,
 )
 

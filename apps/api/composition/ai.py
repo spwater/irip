@@ -57,10 +57,10 @@ def register(ctx: CompositionContext) -> None:
                 api_key=config["api_key"],
                 base_url=config["base_url"],
                 model=config.get("assistant_model_name") or config["model_name"],
-                thinking_enabled=config.get("assistant_thinking_enabled", False),
+                thinking_enabled=config.get("assistant_thinking_enabled", False),  # type: ignore[arg-type]
             )
         else:
-            provider = OfflineProvider()
+            provider = OfflineProvider()  # type: ignore[assignment]
         tool_registry = ToolRegistry()
 
         # 构建 NumericToolFacade（注入 session_factory、Fact 查询能力、限制配置）

@@ -89,7 +89,7 @@ class Component(Base):
         nullable=False,
         comment="所属部门 ID（内置组件归 root）",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),
@@ -634,7 +634,7 @@ class ComponentRegistryService(ScopedSessionMixin):
             filtered.sort(key=lambda x: x[0].name)
             return filtered
 
-    async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:
+    async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:  # type: ignore[valid-type]
         """列出指定组件的所有版本（按版本创建时间降序）。
 
         Args:

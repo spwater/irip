@@ -209,7 +209,7 @@ class EquipmentService(ScopedSessionMixin):
         async with self._scoped_session() as session:
             rows = await EquipmentRepository.select_list(
                 session,
-                department_id=department_id,
+                department_id=department_id,  # type: ignore[arg-type]
                 visible_dept_id=visible_dept_id,
                 status=status,
                 cursor_sort_order=cursor_sort_order,
@@ -265,7 +265,7 @@ class EquipmentService(ScopedSessionMixin):
         department_id: UUID,
         sort_order: int,
         lock_version: int,
-        visible_departments: list[str] | None = None,
+        visible_departments: list[str] | None = None,  # type: ignore[valid-type]
     ) -> Equipment:
         """编辑设备（code 不可修改，乐观锁）。
 

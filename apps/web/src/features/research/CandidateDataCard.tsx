@@ -12,7 +12,7 @@ import {
 } from '@ant-design/icons';
 import { apiCreateDataset, type CandidateProduct } from '@/api/researchProducts';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 export type CandidateDataCardProps = {
   workspaceId: string;
@@ -35,13 +35,14 @@ export function CandidateDataCard({
   const fieldNames = (preview?.field_names as string[]) ?? [];
   const pointsCount = (preview?.points_count as number) ?? 0;
   const seriesCount = (preview?.series_count as number) ?? 0;
+  const metadataPreview = (preview?.metadata_preview ?? {}) as Record<string, unknown>;
 
   const handleConfirm = async () => {
     if (!candidate.source_artifact_id) return;
     setConfirming(true);
     try {
       const name = metadataKeys.length > 0
-        ? String(preview?.metadata_preview?.[metadataKeys[0]] ?? `候选数据 ${candidate.candidate_id.slice(0, 8)}`)
+        ? String(metadataPreview[metadataKeys[0]] ?? `候选数据 ${candidate.candidate_id.slice(0, 8)}`)
         : `候选数据 ${candidate.candidate_id.slice(0, 8)}`;
       await apiCreateDataset(workspaceId, {
         artifact_id: candidate.source_artifact_id,
@@ -106,7 +107,7 @@ export function CandidateDataCard({
           <DatabaseOutlined />
           <Text strong style={{ fontSize: 13 }}>
             {metadataKeys.length > 0
-              ? String(preview?.metadata_preview?.[metadataKeys[0]] ?? '候选数据')
+              ? String(metadataPreview[metadataKeys[0]] ?? '候选数据')
               : '候选数据'}
           </Text>
         </Space>

@@ -55,14 +55,14 @@ def register(ctx: CompositionContext) -> None:
         """按请求构造工件服务，从 DB 查询当前用户的 department_id。"""
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         service = ArtifactService(
-            s3_repo=ctx.s3_repo,
+            s3_repo=ctx.s3_repo,  # type: ignore[arg-type]
             session_factory=ctx.session_factory,
             department_id=dept_id,
             uploaded_by=current_user.user_id,
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_artifact_service] = _get_artifact_service
@@ -87,7 +87,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_ingestion_service] = _get_ingestion_service_dep
@@ -104,7 +104,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
         return service
 
     ctx.app.dependency_overrides[get_parameter_service] = _get_parameter_service_dep

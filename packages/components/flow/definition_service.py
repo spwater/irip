@@ -38,7 +38,7 @@ from packages.components.flow.flows import (
 )
 from packages.components.flow.manifest_utils import build_manifest_from_version
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import (
+from packages.components.registry import (  # type: ignore[attr-defined]
     ComponentRegistryService,
     ComponentVersion,
 )
@@ -560,7 +560,7 @@ class FlowDefinitionService(ScopedSessionMixin):
 
             definition.display_name = display_name
             if department_id is not None:
-                definition.department_id = UUID(department_id) if department_id else None
+                definition.department_id = UUID(department_id) if department_id else None  # type: ignore[assignment]
             if project_id is not None:
                 definition.project_id = UUID(project_id) if project_id else None
             if operator is not None:

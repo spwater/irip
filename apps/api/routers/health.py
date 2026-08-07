@@ -188,7 +188,7 @@ async def readiness(
 
         import redis
 
-        r = redis.from_url(redis_url)
+        r = redis.from_url(redis_url)  # type: ignore[no-untyped-call]
         raw = r.get("irip:worker:heartbeat")
 
         if raw is not None:

@@ -12,7 +12,7 @@
 - 密钥凭据绝不返回（仅 secret_id 引用出现在 source_config 中）。
 """
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
@@ -110,7 +110,7 @@ class PreviewResponse(BaseModel):
 def _source_to_contract(spec: SourceSpec) -> ConnectorSource:
     """将请求 SourceSpec 转为 ConnectorSource。"""
     if spec.kind == "file":
-        config: dict = spec.file.model_dump() if spec.file else {}
+        config: dict[str, Any] = spec.file.model_dump() if spec.file else {}
     elif spec.kind == "postgres":
         config = spec.postgres.model_dump() if spec.postgres else {}
     elif spec.kind == "rest":

@@ -101,7 +101,7 @@ def _resolve_and_check(host: str) -> None:
         ) from None
     for info in infos:
         ip_str = info[4][0]
-        _check_ip_allowed(ip_str)
+        _check_ip_allowed(ip_str)  # type: ignore[arg-type]
 
 
 class RESTFetch:

@@ -22,6 +22,7 @@ EvidenceSnapshotService 负责证据快照的冻结逻辑：
 import hashlib
 import json
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -135,10 +136,10 @@ class EvidenceSnapshotService(ScopedSessionMixin):
             # 2. 逐条校验权限 + 获取字段清单 + Fact 数据
             fact_summaries: dict[UUID, FactSummary] = {}
             fact_fields_map: dict[UUID, list[str]] = {}
-            fact_data_map: dict[UUID, dict] = {}
+            fact_data_map: dict[UUID, dict[str, Any]] = {}
 
             # research:derived 引用的 DerivedDatasetVersion content_hash 映射
-            derived_data_map: dict[UUID, dict] = {}
+            derived_data_map: dict[UUID, dict[str, Any]] = {}
 
             for ref in refs:
                 if ref.source_namespace == "core:fact":
@@ -253,7 +254,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_snapshot_frozen(_hook_snapshot_id, _hook_source_refs)
+                await self._lineage_writer.on_snapshot_frozen(_hook_snapshot_id, _hook_source_refs)  # type: ignore[attr-defined]
             except Exception as exc:
                 logger.warning("on_snapshot_frozen hook failed: %s", exc)
 
@@ -293,7 +294,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                 for s in snapshots
             ]
 
-    async def _get_fact_data_for_hash(self, fact_id: UUID) -> dict:
+    async def _get_fact_data_for_hash(self, fact_id: UUID) -> dict[str, Any]:
         """获取 Fact 数据用于哈希计算。
 
         通过 CoreFactProvider 获取 Fact 的字段值数据。CoreFactProviderImpl
@@ -311,7 +312,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # 此处通过 duck typing 调用 get_fact_data 方法（由 CoreFactProviderImpl 实现）。
         get_data = getattr(self._fact_provider, "get_fact_data", None)
         if get_data is not None:
-            return await get_data(fact_id)
+            return await get_data(fact_id)  # type: ignore[no-any-return]
         # 如果 fact_provider 不提供 get_fact_data，返回空字典（哈希仅基于字段名）
         return {}
 
@@ -319,7 +320,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         self,
         dataset_id: UUID,
         source_version: str | None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """获取 DerivedDatasetVersion 数据用于哈希计算（阶段 3 新增）。
 
         从 research:derived 引用中获取 DerivedDatasetVersion 的三段式数据和 content_hash。
@@ -377,7 +378,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         self,
         dataset_id: UUID,
         source_version: str | None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """获取已发布 DerivedDatasetVersion 数据用于哈希计算（阶段 4 新增）。
 
         从 research:published_derived 引用中获取 DerivedDatasetVersion 的三段式数据
@@ -398,10 +399,10 @@ class EvidenceSnapshotService(ScopedSessionMixin):
 
     def _compute_content_hash(
         self,
-        refs: list,
+        refs: list[Any],
         fact_fields_map: dict[UUID, list[str]],
-        fact_data_map: dict[UUID, dict],
-        derived_data_map: dict[UUID, dict] | None = None,
+        fact_data_map: dict[UUID, dict[str, Any]],
+        derived_data_map: dict[UUID, dict[str, Any]] | None = None,
     ) -> str:
         """计算内容哈希（SHA-256）。
 
@@ -418,7 +419,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
             str: 64 字符十六进制 SHA-256 哈希。
         """
         # 收集所有 (namespace, source_id, field_name, value) 元组
-        entries: list[dict] = []
+        entries: list[dict[str, Any]] = []
         for ref in refs:
             fact_id = ref.source_id
 
@@ -478,7 +479,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
 
         return hashlib.sha256(json_bytes).hexdigest()
 
-    def _extract_field_value(self, fact_data: dict, field_name: str) -> object:
+    def _extract_field_value(self, fact_data: dict[str, Any], field_name: str) -> object:
         """从 Fact 数据字典中提取字段值。
 
         Fact 数据格式为 {"metadata": {...}, "points": [...], "series": [...]}。
@@ -507,9 +508,9 @@ class EvidenceSnapshotService(ScopedSessionMixin):
 
     def _build_permission_envelope(
         self,
-        refs: list,
+        refs: list[Any],
         fact_summaries: dict[UUID, FactSummary],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """构建权限包络。
 
         记录每个 source 的权限快照。
@@ -521,7 +522,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         Returns:
             dict: 权限包络，如 {fact_id_str: {fact_type, status, department_name}}。
         """
-        envelope: dict[str, dict] = {}
+        envelope: dict[str, dict[str, Any]] = {}
         for ref in refs:
             summary = fact_summaries.get(ref.source_id)
             if summary is not None:
@@ -534,9 +535,9 @@ class EvidenceSnapshotService(ScopedSessionMixin):
 
     def _build_field_manifest(
         self,
-        refs: list,
+        refs: list[Any],
         fact_fields_map: dict[UUID, list[str]],
-    ) -> dict:
+    ) -> dict[str, Any]:
         """构建字段清单。
 
         Args:

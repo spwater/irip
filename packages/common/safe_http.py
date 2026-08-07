@@ -126,7 +126,7 @@ def _resolve_and_validate(host: str, port: int | None = None) -> str:
                 f"which is in a private/reserved network range"
             )
         # 返回第一个已验证的 IP
-        return ip_str
+        return ip_str  # type: ignore[return-value]
 
     raise ValueError(f"No valid IP addresses found for {host}")
 

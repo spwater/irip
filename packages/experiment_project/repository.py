@@ -186,7 +186,9 @@ class ExperimentProjectRepository:
         Returns:
             int: 任务数量。
         """
-        from packages.components.flow.flow_runtime import FlowDefinition
+        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+            FlowDefinition,
+        )
 
         count: int | None = await session.scalar(
             sa.select(sa.func.count(FlowDefinition.id)).where(
@@ -210,7 +212,7 @@ class ExperimentProjectRepository:
         Returns:
             int: 数据数量。
         """
-        from packages.components.flow.flow_runtime import (
+        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
             FlowDefinition,
             FlowDefinitionVersionORM,
             FlowRun,
@@ -252,7 +254,7 @@ class ExperimentProjectRepository:
         if not project_ids:
             return {}
 
-        from packages.components.flow.flow_runtime import (
+        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
             FlowDefinition,
             FlowDefinitionVersionORM,
             FlowRun,

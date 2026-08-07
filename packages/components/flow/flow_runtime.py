@@ -55,7 +55,7 @@ from packages.components.flow.serialization import (
     serialize_input_summary,
     serialize_output_summary,
 )
-from packages.components.registry import (
+from packages.components.registry import (  # type: ignore[attr-defined]
     ComponentRegistryService,
 )
 from packages.components.sdk import ComponentRunner

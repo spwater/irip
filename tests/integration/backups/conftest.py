@@ -106,7 +106,8 @@ def backup_factory(org_id: UUID):
             backup_type=backup_type,
             name=name,
             description=description,
-            backup_date=backup_date or (now.date() if backup_type == BackupType.DAILY.value else None),
+            backup_date=backup_date
+            or (now.date() if backup_type == BackupType.DAILY.value else None),
             file_path=file_path or f"/backups/{new_id().hex}",
             file_size=file_size,
             sha256=sha256,

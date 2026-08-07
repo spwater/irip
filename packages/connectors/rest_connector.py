@@ -14,7 +14,7 @@ secret value 格式（JSON 字符串）：
 
 import json
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
@@ -171,7 +171,7 @@ class RestConnector:
         method: str,
         headers: dict[str, str],
         limit: int,
-    ) -> tuple[tuple[str, ...], list[list]]:
+    ) -> tuple[tuple[str, ...], list[list[Any]]]:
         """发起 HTTP 请求并解析 JSON 数组为 (列名, 行列表)。
 
         安全约定（技术设计文档 F-13）：
@@ -221,7 +221,7 @@ class RestConnector:
                     columns.append(key)
 
         col_index = {col: idx for idx, col in enumerate(columns)}
-        rows: list[list] = []
+        rows: list[list[Any]] = []
         for obj in data[:limit]:
             if not isinstance(obj, dict):
                 continue

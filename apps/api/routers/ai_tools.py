@@ -226,7 +226,7 @@ async def _record_audit(
         resource_id=resource_id,
         payload=payload,
     )
-    async with session_scope(factory, principal=actor) as audit_session:
+    async with session_scope(factory, principal=actor) as audit_session:  # type: ignore[arg-type]
         await AuditRecorder.record(audit_session, event)
 
 

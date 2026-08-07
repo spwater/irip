@@ -149,7 +149,8 @@ def _make_record(
         backup_type=backup_type,
         name=kwargs.pop("name", None),
         description=kwargs.pop("description", None),
-        backup_date=kwargs.pop("backup_date", None) or (now.date() if backup_type == BackupType.DAILY.value else None),
+        backup_date=kwargs.pop("backup_date", None)
+        or (now.date() if backup_type == BackupType.DAILY.value else None),
         file_path=kwargs.pop("file_path", f"/backups/{new_id().hex}"),
         file_size=kwargs.pop("file_size", None),
         sha256=kwargs.pop("sha256", None),
@@ -345,9 +346,7 @@ class TestListBackupsByType:
         """GET /api/v1/backups/ 无 type 参数 → 返回全部。"""
 
         async def _setup():
-            await _insert_record(
-                rls_session_factory, _make_record(org_id, BackupType.DAILY.value)
-            )
+            await _insert_record(rls_session_factory, _make_record(org_id, BackupType.DAILY.value))
             await _insert_record(
                 rls_session_factory,
                 _make_record(org_id, BackupType.MILESTONE.value, name="m1"),
@@ -371,9 +370,7 @@ class TestListBackupsByType:
         """GET /api/v1/backups/?type=daily → 只返回 daily 类型。"""
 
         async def _setup():
-            await _insert_record(
-                rls_session_factory, _make_record(org_id, BackupType.DAILY.value)
-            )
+            await _insert_record(rls_session_factory, _make_record(org_id, BackupType.DAILY.value))
             await _insert_record(
                 rls_session_factory,
                 _make_record(org_id, BackupType.MILESTONE.value, name="m1"),
@@ -400,9 +397,7 @@ class TestListBackupsByType:
         """GET /api/v1/backups/?type=milestone → 只返回 milestone 类型。"""
 
         async def _setup():
-            await _insert_record(
-                rls_session_factory, _make_record(org_id, BackupType.DAILY.value)
-            )
+            await _insert_record(rls_session_factory, _make_record(org_id, BackupType.DAILY.value))
             await _insert_record(
                 rls_session_factory,
                 _make_record(org_id, BackupType.MILESTONE.value, name="m1"),

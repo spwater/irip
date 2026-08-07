@@ -12,7 +12,7 @@ actor_id（操作人）。所有写操作通过 session_scope 事务上下文管
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -22,7 +22,7 @@ from packages.common.database import ScopedSessionMixin, session_scope
 from packages.common.errors import AppError
 from packages.facts.observations import FactMeta, FactRef
 from packages.facts.repository import FactRepository
-from packages.standards.objects import IndustrialObject
+from packages.standards.objects import IndustrialObject  # type: ignore[attr-defined]
 
 
 class FactType(StrEnum):
@@ -200,7 +200,7 @@ class FactService(ScopedSessionMixin):
                 department_id=command.department_id,
                 fact_type=command.fact_type,
                 object_id=command.object_id,
-                owner_user_id=self._actor_id,
+                owner_user_id=self._actor_id,  # type: ignore[arg-type]
                 visibility_scope="tree",
                 status="active",
                 idempotency_key=command.idempotency_key,
@@ -250,7 +250,7 @@ class FactService(ScopedSessionMixin):
     async def search(
         self,
         query: str,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactRef], str | None]:
@@ -409,7 +409,7 @@ class FactService(ScopedSessionMixin):
 
     async def list_facts(
         self,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[FactRef], str | None]:

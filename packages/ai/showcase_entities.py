@@ -60,7 +60,7 @@ class ShowcaseItem(Base):
     content_snapshot: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_message_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     source_block_index: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
-    data_source: Mapped[dict] = mapped_column(
+    data_source: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
         default=dict,

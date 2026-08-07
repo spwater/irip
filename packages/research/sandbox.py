@@ -25,7 +25,7 @@ import asyncio
 import hashlib
 import logging
 import os
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from packages.research.models_trusted import ExecutionResult, OutputFile, ResourceLimits
 
@@ -164,13 +164,13 @@ class WarmPoolManager:
         """
 
         # 检查当前保温容器数量
-        count = self._redis.scard("research:warm_pool")
+        count = self._redis.scard("research:warm_pool")  # type: ignore[attr-defined]
         if count >= self._limit:
             return False
 
         # 添加到保温池
-        self._redis.sadd("research:warm_pool", container_id)
-        self._redis.set(f"{WARM_KEY_PREFIX}{container_id}", run_id, ex=self._ttl)
+        self._redis.sadd("research:warm_pool", container_id)  # type: ignore[attr-defined]
+        self._redis.set(f"{WARM_KEY_PREFIX}{container_id}", run_id, ex=self._ttl)  # type: ignore[attr-defined]
         return True
 
     async def release_warm_slot(self, container_id: str) -> None:
@@ -179,8 +179,8 @@ class WarmPoolManager:
         Args:
             container_id: 容器 ID。
         """
-        self._redis.srem("research:warm_pool", container_id)
-        self._redis.delete(f"{WARM_KEY_PREFIX}{container_id}")
+        self._redis.srem("research:warm_pool", container_id)  # type: ignore[attr-defined]
+        self._redis.delete(f"{WARM_KEY_PREFIX}{container_id}")  # type: ignore[attr-defined]
 
     async def get_warm_container(self, run_id: str) -> str | None:
         """查找指定 Run 的保温容器。
@@ -191,9 +191,9 @@ class WarmPoolManager:
         Returns:
             str | None: 保温容器 ID，不存在时返回 None。
         """
-        members = self._redis.smembers("research:warm_pool")
+        members = self._redis.smembers("research:warm_pool")  # type: ignore[attr-defined]
         for container_id in members:
-            stored_run_id = self._redis.get(f"{WARM_KEY_PREFIX}{container_id}")
+            stored_run_id = self._redis.get(f"{WARM_KEY_PREFIX}{container_id}")  # type: ignore[attr-defined]
             if stored_run_id and stored_run_id.decode() == run_id:
                 return container_id.decode() if isinstance(container_id, bytes) else container_id
         return None
@@ -204,12 +204,12 @@ class WarmPoolManager:
         Returns:
             int: 清理的记录数。
         """
-        members = self._redis.smembers("research:warm_pool")
+        members = self._redis.smembers("research:warm_pool")  # type: ignore[attr-defined]
         cleaned = 0
         for container_id in members:
             cid = container_id.decode() if isinstance(container_id, bytes) else container_id
-            if not self._redis.exists(f"{WARM_KEY_PREFIX}{cid}"):
-                self._redis.srem("research:warm_pool", cid)
+            if not self._redis.exists(f"{WARM_KEY_PREFIX}{cid}"):  # type: ignore[attr-defined]
+                self._redis.srem("research:warm_pool", cid)  # type: ignore[attr-defined]
                 cleaned += 1
         return cleaned
 
@@ -278,7 +278,7 @@ class DockerSandboxRuntime:
 
         config = self._build_container_config(input_package_path, image_digest, resource_limits)
 
-        container = await client.containers.create(config)
+        container = await client.containers.create(config)  # type: ignore[attr-defined]
         container_id = container.id if hasattr(container, "id") else str(container._id)
 
         await container.start()
@@ -305,7 +305,7 @@ class DockerSandboxRuntime:
             ExecutionResult: 执行结果。
         """
         client = await self._get_client()
-        container = client.containers.container(container_id)
+        container = client.containers.container(container_id)  # type: ignore[attr-defined]
 
         # 将脚本写入容器
         import base64
@@ -356,7 +356,7 @@ class DockerSandboxRuntime:
                 stdout_parts: list[bytes] = []
                 stderr_parts: list[bytes] = []
 
-                async def read_stream():
+                async def read_stream() -> None:
                     while True:
                         msg = await stream.read_out()
                         if msg is None:
@@ -411,7 +411,7 @@ class DockerSandboxRuntime:
             container_id: 容器 ID。
         """
         client = await self._get_client()
-        container = client.containers.container(container_id)
+        container = client.containers.container(container_id)  # type: ignore[attr-defined]
         try:
             await container.kill(signal="SIGTERM")
         except Exception as exc:
@@ -436,7 +436,7 @@ class DockerSandboxRuntime:
         import fnmatch
 
         client = await self._get_client()
-        container = client.containers.container(container_id)
+        container = client.containers.container(container_id)  # type: ignore[attr-defined]
         output_files: list[OutputFile] = []
 
         try:
@@ -499,7 +499,7 @@ class DockerSandboxRuntime:
             container_id: 容器 ID。
         """
         client = await self._get_client()
-        container = client.containers.container(container_id)
+        container = client.containers.container(container_id)  # type: ignore[attr-defined]
         try:
             await container.kill()
         except Exception:
@@ -542,7 +542,7 @@ class DockerSandboxRuntime:
         input_package_path: str,
         image_digest: str,
         limits: ResourceLimits,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """构建容器配置。
 
         安全配置：

@@ -26,7 +26,6 @@ export type QueueStatusProps = {
 export function QueueStatus({
   workspaceId,
   runId,
-  initialPosition = 0,
   onCancel,
   onCancelLoading,
 }: QueueStatusProps) {

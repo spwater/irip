@@ -1,6 +1,6 @@
 """流程引擎子包。"""
 
-from packages.components.flow.flow_runtime import (  # noqa: F401
+from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]  # noqa: F401
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,

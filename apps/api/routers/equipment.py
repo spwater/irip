@@ -94,7 +94,7 @@ class EquipmentResponse(BaseModel):
     code: str
     display_name: str
     description: str | None
-    department_id: str
+    department_id: str  # type: ignore[no-redef]
     visible_departments: list[str]
     status: str
     sort_order: int
@@ -136,7 +136,7 @@ def _to_response(equip: object) -> EquipmentResponse:
         code=equip.code,  # type: ignore[attr-defined]
         display_name=equip.display_name,  # type: ignore[attr-defined]
         description=equip.description,  # type: ignore[attr-defined]
-        visible_departments=list(getattr(equip, "visible_departments", []) or []),  # type: ignore[attr-defined]
+        visible_departments=list(getattr(equip, "visible_departments", []) or []),
         status=equip.status,  # type: ignore[attr-defined]
         sort_order=equip.sort_order,  # type: ignore[attr-defined]
         created_at=equip.created_at,  # type: ignore[attr-defined]
@@ -165,7 +165,7 @@ async def _check_ownership(
         current_user=current_user,
         entity_department_id=equipment_department_id,
         entity_owner_user_id=equipment_owner_user_id,
-        session_factory=service._factory,  # type: ignore[attr-defined]
+        session_factory=service._factory,
     )
 
 

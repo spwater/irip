@@ -15,6 +15,7 @@ import base64
 import binascii
 import json
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -227,10 +228,10 @@ class FactRepository:
         session: AsyncSession,
         query: str,
         org_id: UUID,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
-    ) -> tuple[list[dict], str | None]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """全文搜索事实（使用 PostgreSQL tsvector + GIN 索引）。
 
         直接查 fact 表的 search_vector 列进行搜索。
@@ -295,7 +296,7 @@ class FactRepository:
         result = await session.execute(stmt)
         rows = result.all()
 
-        items: list[dict] = [
+        items: list[dict[str, Any]] = [
             {
                 "fact_id": row.fact_id,
                 "fact_type": row.fact_type,
@@ -316,10 +317,10 @@ class FactRepository:
     async def list_facts(
         session: AsyncSession,
         org_id: UUID,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
-    ) -> tuple[list[dict], str | None]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """分页列出事实（按 fact_type, object_id, status 过滤）。
 
         直接查 fact 表，返回每个事实的字段。
@@ -374,7 +375,7 @@ class FactRepository:
         result = await session.execute(stmt)
         rows = result.all()
 
-        items: list[dict] = [
+        items: list[dict[str, Any]] = [
             {
                 "fact_id": row.fact_id,
                 "fact_type": row.fact_type,
@@ -443,17 +444,17 @@ class FactRepository:
         Returns:
             dict[UUID, FactSnapshotRow]: fact_id → 快照行映射。
         """
-        from packages.components.flow_runtime import (
+        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
             FlowDefinition as _FD,
         )
-        from packages.components.flow_runtime import (
+        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
             FlowDefinitionVersionORM as _FV,
         )
-        from packages.components.flow_runtime import (
+        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
             FlowRun as _FR,
         )
 
-        columns: list[sa.ColumnElement] = [
+        columns: list[sa.ColumnElement] = [  # type: ignore[type-arg]
             Fact.id.label("fact_id"),
             (Fact.fact_type if include_base else sa.null()).label("fact_type"),
             (Fact.subject_id if include_base else sa.null()).label("subject_id"),
@@ -803,6 +804,6 @@ class FactRepository:
             session: 异步会话。
             flow_run_ids: 流程运行 ID 列表。
         """
-        from packages.components.flow_runtime import FlowRun
+        from packages.components.flow_runtime import FlowRun  # type: ignore[attr-defined]
 
         await session.execute(sa.delete(FlowRun).where(FlowRun.id.in_(flow_run_ids)))

@@ -19,6 +19,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -81,7 +82,7 @@ class ParameterVersionRef:
     unit: str | None
     confidence: str | None
     status: str
-    conditions: dict | None
+    conditions: dict[str, Any] | None
     published_at: datetime | None
 
 
@@ -118,7 +119,7 @@ class ParameterService(ScopedSessionMixin):
         self,
         variable_code: str,
         object_id: UUID,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """创建参数（draft 状态）。
 
         Args:
@@ -187,8 +188,8 @@ class ParameterService(ScopedSessionMixin):
         value: str,
         unit: str | None,
         confidence: str | None,
-        conditions: dict | None = None,
-    ) -> dict:
+        conditions: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """创建参数候选（pending_review 状态）。
 
         流程：
@@ -315,7 +316,7 @@ class ParameterService(ScopedSessionMixin):
                 "status": candidate.status,
             }
 
-    async def submit_for_review(self, candidate_id: UUID) -> dict:
+    async def submit_for_review(self, candidate_id: UUID) -> dict[str, Any]:
         """提交候选审核（pending_review 状态）。
 
         候选在创建时即为 pending_review 状态，此方法确认并返回候选信息。
@@ -519,7 +520,7 @@ class ParameterService(ScopedSessionMixin):
                 published_at=now,
             )
 
-    async def reject(self, candidate_id: UUID, reviewer: UUID, comment: str) -> dict:
+    async def reject(self, candidate_id: UUID, reviewer: UUID, comment: str) -> dict[str, Any]:
         """拒绝候选。
 
         流程：
@@ -609,7 +610,7 @@ class ParameterService(ScopedSessionMixin):
                 "review_decision": candidate.review_decision,
             }
 
-    async def get_parameter(self, parameter_id: UUID) -> dict:
+    async def get_parameter(self, parameter_id: UUID) -> dict[str, Any]:
         """获取参数详情（含当前版本）。
 
         Args:
@@ -731,10 +732,10 @@ class ParameterService(ScopedSessionMixin):
 
     async def list_parameters(
         self,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         cursor: str | None = None,
         page_size: int = 20,
-    ) -> tuple[list[dict], str | None]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """分页列出参数（按 variable_code, object_id, status 过滤）。
 
         Args:
@@ -803,7 +804,7 @@ class ParameterService(ScopedSessionMixin):
                     ).encode("utf-8")
                 ).decode("ascii")
 
-            items: list[dict] = []
+            items: list[dict[str, Any]] = []
             for p in params[:page_size]:
                 items.append(
                     {
@@ -815,7 +816,7 @@ class ParameterService(ScopedSessionMixin):
                 )
             return items, next_cursor
 
-    async def list_candidates(self, parameter_id: UUID) -> list[dict]:
+    async def list_candidates(self, parameter_id: UUID) -> list[dict[str, Any]]:
         """列出参数的所有候选。
 
         Args:
@@ -851,7 +852,7 @@ class ParameterService(ScopedSessionMixin):
                 for c in candidates
             ]
 
-    async def deprecate(self, parameter_id: UUID) -> dict:
+    async def deprecate(self, parameter_id: UUID) -> dict[str, Any]:
         """弃用参数（published → deprecated）。
 
         Args:

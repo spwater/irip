@@ -18,6 +18,7 @@
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -105,7 +106,7 @@ class ResearchQuestionVersion(Base):
     )
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     question_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    sub_questions: Mapped[list] = mapped_column(
+    sub_questions: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -197,9 +198,9 @@ class ResearchEvidenceSnapshot(Base):
     captured_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    permission_envelope: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    field_manifest: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    source_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
+    permission_envelope: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    field_manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
@@ -248,7 +249,9 @@ class ResearchDerivedDataset(Base):
     owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
+    tags: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'confirmed'")
     )
@@ -307,14 +310,14 @@ class ResearchDerivedDatasetVersion(Base):
         nullable=False,
     )
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    metadata_content: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    points_content: Mapped[list] = mapped_column(
+    metadata_content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    points_content: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    series_content: Mapped[list] = mapped_column(
+    series_content: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    field_manifest: Mapped[list] = mapped_column(
+    field_manifest: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     source_run_id: Mapped[UUID] = mapped_column(
@@ -543,8 +546,8 @@ class ResearchInsightVersion(Base):
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     conclusion: Mapped[str] = mapped_column(sa.Text, nullable=False)
     scope: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    evidence_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
-    method_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
+    evidence_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    method_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     confidence_level: Mapped[str] = mapped_column(sa.Text, nullable=False)
     limitations: Mapped[str] = mapped_column(sa.Text, nullable=False)
     evidence_source_label: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -607,8 +610,8 @@ class ResearchInsightCandidate(Base):
     )
     conclusion: Mapped[str] = mapped_column(sa.Text, nullable=False)
     scope: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    evidence_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
-    method_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
+    evidence_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+    method_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     confidence_level: Mapped[str] = mapped_column(sa.Text, nullable=False)
     limitations: Mapped[str] = mapped_column(sa.Text, nullable=False)
     evidence_source_label: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -677,7 +680,7 @@ class ResearchResult(Base):
     current_acl_type: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'private'")
     )
-    current_explicit_user_ids: Mapped[list] = mapped_column(
+    current_explicit_user_ids: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -736,24 +739,26 @@ class ResearchResultVersion(Base):
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     title: Mapped[str] = mapped_column(sa.Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
+    tags: Mapped[list[Any]] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
     release_notes: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    dataset_version_refs: Mapped[list] = mapped_column(
+    dataset_version_refs: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    view_version_refs: Mapped[list] = mapped_column(
+    view_version_refs: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    insight_version_refs: Mapped[list] = mapped_column(
+    insight_version_refs: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    evidence_snapshot_ids: Mapped[list] = mapped_column(
+    evidence_snapshot_ids: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    analysis_run_ids: Mapped[list] = mapped_column(
+    analysis_run_ids: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
-    source_run_statuses: Mapped[dict] = mapped_column(
+    source_run_statuses: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
     publisher: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
@@ -761,7 +766,7 @@ class ResearchResultVersion(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     content_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    published_permission_envelope: Mapped[dict] = mapped_column(
+    published_permission_envelope: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
@@ -808,11 +813,11 @@ class ResearchResultAclRevision(Base):
     )
     revision_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     acl_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    explicit_user_ids: Mapped[list] = mapped_column(
+    explicit_user_ids: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     previous_acl_type: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    previous_explicit_user_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    previous_explicit_user_ids: Mapped[list[Any] | None] = mapped_column(JSONB, nullable=True)
     changed_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     changed_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False

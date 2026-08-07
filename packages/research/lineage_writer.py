@@ -14,6 +14,7 @@ Hook 为可选调用，失败时记录告警日志不阻断主流程。
 """
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -45,7 +46,7 @@ class LineageWriterService:
     async def on_snapshot_frozen(
         self,
         snapshot_id: UUID,
-        source_refs: list[dict],
+        source_refs: list[dict[str, Any]],
     ) -> None:
         """证据快照冻结时创建溯源边。
 

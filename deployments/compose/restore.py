@@ -543,7 +543,7 @@ class RestoreService:
             cmd_mirror, capture_output=True, check=False
         )
         if result_mirror.returncode != 0:
-            stderr: str = result_mirror.stderr.decode("utf-8", errors="replace")
+            stderr: str = result_mirror.stderr.decode("utf-8", errors="replace")  # type: ignore[no-redef]
             raise RuntimeError(
                 f"mc mirror restore failed (exit={result_mirror.returncode}): {stderr}"
             )
@@ -734,7 +734,7 @@ class RestoreService:
                 raise RuntimeError(
                     "age binary not found; install age to decrypt backup"
                 )
-            identity: str = self._config.age_identity or os.getenv(AGE_IDENTITY_ENV, "")
+            identity: str = self._config.age_identity or os.getenv(AGE_IDENTITY_ENV, "")  # type: ignore[assignment]
             cmd: list[str] = ["age", "-d"]
             if identity:
                 cmd.extend(["-i", identity])
@@ -962,7 +962,7 @@ class RestoreService:
         restored: int = 0
         failed: list[str] = []
         for obj_meta in metadata:
-            key: str = obj_meta["key"]
+            key: str = obj_meta["key"]  # type: ignore[no-redef]
             expected_sha: str = obj_meta["sha256"]
             obj_path: Path = objects_dir / key
             if not obj_path.exists():
@@ -984,7 +984,7 @@ class RestoreService:
                         f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
                     )
                     continue
-                content_type: str = "application/octet-stream"
+                content_type: str = "application/octet-stream"  # type: ignore[no-redef]
                 self._s3.put_object(key, data, content_type)
             else:
                 # H-09: 大文件（> 10 MiB）：流式校验 + 流式上传
@@ -997,14 +997,14 @@ class RestoreService:
                         if not chunk:
                             break
                         hasher.update(chunk)
-                actual_sha: str = hasher.hexdigest()
+                actual_sha: str = hasher.hexdigest()  # type: ignore[no-redef]
                 if actual_sha != expected_sha:
                     failed.append(
                         f"sha256 mismatch: {key} "
                         f"(expected={expected_sha[:12]}, actual={actual_sha[:12]})"
                     )
                     continue
-                content_type: str = "application/octet-stream"
+                content_type: str = "application/octet-stream"  # type: ignore[no-redef]
                 # H-09: 流式上传大对象
                 with open(obj_path, "rb") as f:
                     self._s3.put_object_stream(key, f, content_type)

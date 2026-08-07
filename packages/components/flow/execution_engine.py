@@ -50,7 +50,7 @@ from packages.components.flow.serialization import (
     serialize_output_summary,
 )
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import (
+from packages.components.registry import (  # type: ignore[attr-defined]
     ComponentRegistryService,
     ComponentVersion,
 )
@@ -733,8 +733,8 @@ class FlowExecutionEngine(ScopedSessionMixin):
             }
 
         except Exception as exc:
-            now_end: datetime = self._clock.now()
-            duration_ms: int = int((now_end - now_start).total_seconds() * 1000)
+            now_end: datetime = self._clock.now()  # type: ignore[no-redef]
+            duration_ms: int = int((now_end - now_start).total_seconds() * 1000)  # type: ignore[no-redef]
 
             diagnostics: dict[str, Any] = {
                 "error_type": type(exc).__name__,

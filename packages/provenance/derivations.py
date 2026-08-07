@@ -19,6 +19,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -67,7 +68,7 @@ def _compute_output_digest(
     Returns:
         str: SHA-256 十六进制摘要。
     """
-    serialized: list[dict] = []
+    serialized: list[dict[str, Any]] = []
     for out in outputs:
         serialized.append(
             {
@@ -86,7 +87,7 @@ def _compute_output_digest(
     return hashlib.sha256(json_str.encode("utf-8")).hexdigest()
 
 
-def _output_to_dict(out: ParameterCandidateOutput) -> dict:
+def _output_to_dict(out: ParameterCandidateOutput) -> dict[str, Any]:
     """将 ParameterCandidateOutput 序列化为 JSONB 可存储的字典。"""
     return {
         "variable_code": out.variable_code,
@@ -97,7 +98,7 @@ def _output_to_dict(out: ParameterCandidateOutput) -> dict:
     }
 
 
-def _output_from_dict(d: dict) -> ParameterCandidateOutput:
+def _output_from_dict(d: dict[str, Any]) -> ParameterCandidateOutput:
     """从字典反序列化 ParameterCandidateOutput。"""
     return ParameterCandidateOutput(
         variable_code=d["variable_code"],
@@ -226,7 +227,7 @@ class DerivationService(ScopedSessionMixin):
                 )
 
             # 4. 从成员的事实中提取 fact_ids
-            members_list: list = ev_version.members or []
+            members_list: list[Any] = ev_version.members or []
             fact_ids: list[UUID] = [
                 UUID(str(m["fact_id"]))
                 for m in members_list
@@ -391,7 +392,7 @@ class DerivationService(ScopedSessionMixin):
                     fields={"run_id": str(run_id)},
                 )
 
-            outputs_list: list = run.outputs or []
+            outputs_list: list[Any] = run.outputs or []
             outputs: tuple[ParameterCandidateOutput, ...] = tuple(
                 _output_from_dict(o) for o in outputs_list
             )
@@ -463,7 +464,7 @@ class DerivationService(ScopedSessionMixin):
 
             refs: list[DerivationRunRef] = []
             for run in runs[:page_size]:
-                outputs_list: list = run.outputs or []
+                outputs_list: list[Any] = run.outputs or []
                 outputs: tuple[ParameterCandidateOutput, ...] = tuple(
                     _output_from_dict(o) for o in outputs_list
                 )

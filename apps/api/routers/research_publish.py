@@ -41,7 +41,7 @@ GET    /catalog/search-published                      — 搜索已发布 Derive
 参照 apps/api/routers/research_products.py 的 DI 占位 + Pydantic 模型模式。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -176,7 +176,7 @@ class NewWorkspaceFromPublicationRequest(BaseModel):
 # ---- 辅助函数 ----
 
 
-def _result_ref_to_dict(ref) -> dict:
+def _result_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return {
         "result_id": str(ref.result_id),
         "name": ref.name,
@@ -186,7 +186,7 @@ def _result_ref_to_dict(ref) -> dict:
     }
 
 
-def _version_ref_to_dict(ref) -> dict:
+def _version_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return {
         "result_id": str(ref.result_id),
         "version_number": ref.version_number,
@@ -196,7 +196,7 @@ def _version_ref_to_dict(ref) -> dict:
     }
 
 
-def _version_detail_to_dict(detail) -> dict:
+def _version_detail_to_dict(detail) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return {
         "result_id": str(detail.result_id),
         "version_number": detail.version_number,
@@ -218,7 +218,7 @@ def _version_detail_to_dict(detail) -> dict:
     }
 
 
-def _acl_revision_to_dict(ref) -> dict:
+def _acl_revision_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return {
         "revision_number": ref.revision_number,
         "acl_type": ref.acl_type,
@@ -233,7 +233,7 @@ def _acl_revision_to_dict(ref) -> dict:
     }
 
 
-def _search_item_to_dict(item) -> dict:
+def _search_item_to_dict(item) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     return {
         "result_id": str(item.result_id),
         "name": item.name,
@@ -262,7 +262,7 @@ async def publish_result(
     request: PublishResultRequest,
     service: PublicationServiceDep,
     user: PublishUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """组装并发布研究成果包。"""
     from packages.research.models import PublishRequest as PublishRequestDC
 
@@ -288,7 +288,7 @@ async def list_workspace_results(
     workspace_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """列出工作空间成果包。"""
     from packages.research.repository import ResearchRepository
 
@@ -314,7 +314,7 @@ async def get_workspace_result(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """成果包详情。"""
     detail = await service.get_result_detail(result_id)
     return {
@@ -335,7 +335,7 @@ async def update_result_metadata(
     request: UpdateResultMetadataRequest,
     service: PublicationServiceDep,
     user: PublishUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """编辑成果包元数据（仅 name）。"""
     ref = await service.update_result_metadata(result_id, request.name)
     return _result_ref_to_dict(ref)
@@ -348,7 +348,7 @@ async def publish_new_version(
     request: PublishNewVersionRequest,
     service: PublicationServiceDep,
     user: PublishUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """发布新版本。"""
     from packages.research.models import PublishRequest as PublishRequestDC
 
@@ -375,7 +375,7 @@ async def list_versions(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """版本历史列表。"""
     versions = await service.list_versions(result_id)
     return [_version_ref_to_dict(v) for v in versions]
@@ -390,7 +390,7 @@ async def get_version_detail(
     version_number: int,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本详情。"""
     detail = await service.get_version_detail(result_id, version_number)
     return _version_detail_to_dict(detail)
@@ -411,7 +411,7 @@ async def withdraw_version(
     request: WithdrawVersionRequest,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """撤回版本。"""
     await service.withdraw_result(result_id, version_number, request.reason)
     return {"status": "withdrawn"}
@@ -423,7 +423,7 @@ async def withdraw_publication(
     request: WithdrawVersionRequest,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """撤回成果包（全部版本）。"""
     await service.withdraw_result(result_id, None, request.reason)
     return {"status": "withdrawn"}
@@ -440,7 +440,7 @@ async def get_acl(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """查看 ACL 当前状态和历史。"""
     revisions = await service.list_acl_revisions(result_id)
     return {
@@ -455,7 +455,7 @@ async def update_acl(
     request: UpdateAclRequest,
     service: PublicationServiceDep,
     user: PublishUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """修改 ACL。"""
     ref = await service.update_acl(
         result_id=result_id,
@@ -475,7 +475,7 @@ async def declassify(
     request: DeclassifyRequest,
     service: PublicationServiceDep,
     user: DeclassifyUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """突破权限包络（需 research:declassify 权限）。"""
     ref = await service.update_acl(
         result_id=result_id,
@@ -507,9 +507,9 @@ async def search_publications(
     view_mode: str = Query(default="all"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-) -> dict:
+) -> dict[str, Any]:
     """搜索已发布成果包。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if publisher is not None:
         filters["publisher"] = str(publisher)
     if tags is not None:
@@ -543,7 +543,7 @@ async def get_publication_detail(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """已发布成果包详情。"""
     detail = await service.get_result_detail(result_id)
     return {
@@ -563,7 +563,7 @@ async def get_publication_version(
     version_number: int,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """已发布版本详情。"""
     detail = await service.get_version_detail(result_id, version_number)
     return _version_detail_to_dict(detail)
@@ -576,7 +576,7 @@ async def get_publication_item(
     item_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """成果包内部对象独立引用详情。"""
     return await service.get_result_internal_object(result_id, item_type, item_id)
 
@@ -586,14 +586,14 @@ async def get_publication_provenance(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """成果包来源信息。"""
     detail = await service.get_result_detail(result_id)
     current_version = detail.current_version
 
     # 查询 snapshot 和 run 的可读名称
-    snapshot_labels: list[dict] = []
-    run_labels: list[dict] = []
+    snapshot_labels: list[dict[str, Any]] = []
+    run_labels: list[dict[str, Any]] = []
     if current_version:
         import os as _os
 
@@ -660,7 +660,7 @@ async def add_evidence_from_publication(
     request: AddFromPublicationRequest,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """从已发布成果包添加 DerivedDataset 到当前 Workspace。"""
     ref = await service.add_to_workspace(
         result_id=request.result_id,
@@ -684,7 +684,7 @@ async def new_workspace_from_publication(
     request: NewWorkspaceFromPublicationRequest,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """基于已发布成果包新建 Workspace。"""
     ref = await service.new_workspace_from_result(
         result_id=result_id,
@@ -709,7 +709,7 @@ async def add_favorite(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """收藏成果包。"""
     await service.toggle_favorite(result_id, True)
     return {"status": "favorited"}
@@ -720,7 +720,7 @@ async def remove_favorite(
     result_id: UUID,
     service: PublicationServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """取消收藏。"""
     await service.toggle_favorite(result_id, False)
     return {"status": "unfavorited"}
@@ -730,7 +730,7 @@ async def remove_favorite(
 async def list_favorites(
     service: SearchServiceDep,
     user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """收藏列表。"""
     result = await service.list_results(
         view_mode="favorites",
@@ -754,9 +754,9 @@ async def search_published_catalog(
     user: ResearchUserDep,
     query: str | None = Query(default=None),
     result_id: UUID | None = Query(default=None),  # noqa: B008
-) -> dict:
+) -> dict[str, Any]:
     """搜索已发布成果包中的 DerivedDataset（跨用户，ACL 过滤）。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if result_id is not None:
         filters["result_id"] = str(result_id)
     results = await catalog.search_published_derived_data(

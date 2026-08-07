@@ -17,7 +17,7 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class ConnectorSource:
     """
 
     kind: Literal["file", "postgres", "rest"]
-    config: dict
+    config: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class PreviewTable:
     """
 
     columns: tuple[str, ...]
-    rows: tuple[tuple, ...]
+    rows: tuple[tuple[Any, ...], ...]
     row_count: int
 
 

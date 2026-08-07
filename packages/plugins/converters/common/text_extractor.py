@@ -16,6 +16,7 @@
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from packages.common.errors import AppError
 
@@ -143,7 +144,7 @@ def _extract_pdf_with_ocr(file_path: Path, image_dpi: int = 200) -> str:
 _ocr_engine = None
 
 
-def _get_ocr_engine():
+def _get_ocr_engine() -> Any:
     """获取或初始化 PaddleOCR 单例。"""
     global _ocr_engine
     if _ocr_engine is not None:

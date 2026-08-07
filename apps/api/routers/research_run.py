@@ -137,8 +137,8 @@ class PlanDetailResponse(BaseModel):
     workspace_id: str
     version_number: int
     status: str
-    dag_structure: dict
-    coverage_declaration: dict | None = None
+    dag_structure: dict[str, Any]
+    coverage_declaration: dict[str, Any] | None = None
     created_at: str | None = None
     confirmed_at: str | None = None
 
@@ -189,7 +189,7 @@ class RunProgressResponse(BaseModel):
     total_steps: int
     completed_steps: int
     steps: list[StepProgressResponse]
-    coverage_declaration: dict | None = None
+    coverage_declaration: dict[str, Any] | None = None
     started_at: str | None = None
     completed_at: str | None = None
 
@@ -229,7 +229,7 @@ class ConversationMessageResponse(BaseModel):
     message_id: str
     workspace_id: str
     role: str
-    content: dict
+    content: dict[str, Any]
     run_id: str | None = None
     created_at: str | None = None
 
@@ -254,7 +254,7 @@ class EligibilityResponse(BaseModel):
 # ============================================================
 
 
-def _plan_ref_to_response(ref) -> PlanResponse:
+def _plan_ref_to_response(ref) -> PlanResponse:  # type: ignore[no-untyped-def]
     """将 PlanVersionRef 转为响应模型。"""
     return PlanResponse(
         plan_id=str(ref.plan_id),
@@ -265,7 +265,7 @@ def _plan_ref_to_response(ref) -> PlanResponse:
     )
 
 
-def _plan_detail_to_response(detail) -> PlanDetailResponse:
+def _plan_detail_to_response(detail) -> PlanDetailResponse:  # type: ignore[no-untyped-def]
     """将 PlanDetail 转为响应模型。"""
     return PlanDetailResponse(
         plan_id=str(detail.plan_id),
@@ -279,7 +279,7 @@ def _plan_detail_to_response(detail) -> PlanDetailResponse:
     )
 
 
-def _run_ref_to_response(ref) -> RunResponse:
+def _run_ref_to_response(ref) -> RunResponse:  # type: ignore[no-untyped-def]
     """将 RunRef 转为响应模型。"""
     return RunResponse(
         run_id=str(ref.run_id),
@@ -290,7 +290,7 @@ def _run_ref_to_response(ref) -> RunResponse:
     )
 
 
-def _step_progress_to_response(s) -> StepProgressResponse:
+def _step_progress_to_response(s) -> StepProgressResponse:  # type: ignore[no-untyped-def]
     """将 StepProgress 转为响应模型。"""
     return StepProgressResponse(
         step_id=str(s.step_id),
@@ -307,7 +307,7 @@ def _step_progress_to_response(s) -> StepProgressResponse:
     )
 
 
-def _run_progress_to_response(p) -> RunProgressResponse:
+def _run_progress_to_response(p) -> RunProgressResponse:  # type: ignore[no-untyped-def]
     """将 RunProgress 转为响应模型。"""
     coverage_dict = p.coverage_declaration.to_dict() if p.coverage_declaration else None
     return RunProgressResponse(
@@ -322,7 +322,7 @@ def _run_progress_to_response(p) -> RunProgressResponse:
     )
 
 
-def _artifact_to_response(a) -> ArtifactResponse:
+def _artifact_to_response(a) -> ArtifactResponse:  # type: ignore[no-untyped-def]
     """将 ArtifactRef 转为响应模型。"""
     return ArtifactResponse(
         artifact_id=str(a.artifact_id),
@@ -338,7 +338,7 @@ def _artifact_to_response(a) -> ArtifactResponse:
     )
 
 
-def _message_to_response(m) -> ConversationMessageResponse:
+def _message_to_response(m) -> ConversationMessageResponse:  # type: ignore[no-untyped-def]
     """将 ConversationMessage 转为响应模型。"""
     return ConversationMessageResponse(
         message_id=str(m.message_id),
@@ -374,7 +374,7 @@ async def generate_plan(
 @research_run_router.post(
     "/workspaces/{workspace_id}/analyze-data",
 )
-async def analyze_data(
+async def analyze_data(  # type: ignore[no-untyped-def]
     workspace_id: UUID,
     body: AnalyzeDataRequest,
     current_user: ResearchUserDep,
@@ -393,7 +393,7 @@ async def analyze_data(
 @research_run_router.post(
     "/workspaces/{workspace_id}/extract-insight",
 )
-async def extract_insight(
+async def extract_insight(  # type: ignore[no-untyped-def]
     workspace_id: UUID,
     body: ExtractInsightRequest,
     current_user: ResearchUserDep,
@@ -565,7 +565,7 @@ async def list_run_artifacts(
     from apps.api.routers.research_run import _get_artifact_service
 
     artifact_service = _get_artifact_service()
-    artifacts = await artifact_service.list_artifacts(run_id, artifact_type=artifact_type)
+    artifacts = await artifact_service.list_artifacts(run_id, artifact_type=artifact_type)  # type: ignore[attr-defined]
     return ArtifactListResponse(items=[_artifact_to_response(a) for a in artifacts])
 
 
@@ -577,12 +577,12 @@ async def get_run_artifact(
     run_id: UUID,
     artifact_id: UUID,
     current_user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """获取工件内容。"""
     from apps.api.routers.research_run import _get_artifact_service
 
     artifact_service = _get_artifact_service()
-    content = await artifact_service.get_artifact(artifact_id)
+    content = await artifact_service.get_artifact(artifact_id)  # type: ignore[attr-defined]
     if content is None:
         return {"error": {"code": "not_found", "message": "工件不存在"}}
     return {
@@ -634,9 +634,9 @@ async def run_events(
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
     channel = f"research:run:{run_id}:events"
 
-    async def event_generator():
+    async def event_generator() -> Any:
         """SSE 事件生成器。"""
-        r = redis_lib.from_url(redis_url)
+        r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
         pubsub = r.pubsub()
         pubsub.subscribe(channel)
 

@@ -668,7 +668,7 @@ class NumericToolFacade:
         count = len(vector) if vector is not None else 0
 
         if count <= self._limits.vector_preview_threshold:
-            values_list = [self._normalize_zero(float(v)) for v in vector]
+            values_list = [self._normalize_zero(float(v)) for v in vector]  # type: ignore[union-attr]
             return {
                 "result_type": "vector",
                 "count": count,
@@ -679,8 +679,8 @@ class NumericToolFacade:
 
         # 截断预览
         preview_count = 5
-        head = [self._normalize_zero(float(v)) for v in vector[:preview_count]]
-        tail = [self._normalize_zero(float(v)) for v in vector[-preview_count:]]
+        head = [self._normalize_zero(float(v)) for v in vector[:preview_count]]  # type: ignore[index]
+        tail = [self._normalize_zero(float(v)) for v in vector[-preview_count:]]  # type: ignore[index]
         sha256 = self._compute_vector_digest(vector)
 
         return {

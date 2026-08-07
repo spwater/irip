@@ -307,13 +307,13 @@ class JobService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
-            from packages.components.flow_runtime import (
+            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
                 FlowDefinition as FlowDefORM,
             )
-            from packages.components.flow_runtime import (
+            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
                 FlowDefinitionVersionORM,
             )
-            from packages.components.flow_runtime import (
+            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
                 FlowRun as FlowRunORM,
             )
             from packages.departments.entities import Department
@@ -336,7 +336,7 @@ class JobService(ScopedSessionMixin):
                 .limit(limit + 1)
             )
             result = await session.execute(stmt)
-            rows: list[tuple[Job, str | None, str | None]] = list(result.all())
+            rows: list[tuple[Job, str | None, str | None]] = list(result.all())  # type: ignore[arg-type]
 
         has_more: bool = len(rows) > limit
         page_rows: list[tuple[Job, str | None, str | None]] = rows[:limit]

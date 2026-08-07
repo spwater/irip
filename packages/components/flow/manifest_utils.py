@@ -11,7 +11,7 @@ import yaml
 
 from packages.common.errors import AppError
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import ComponentVersion
+from packages.components.registry import ComponentVersion  # type: ignore[attr-defined]
 
 
 def build_manifest_from_version(

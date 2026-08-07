@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -46,7 +46,7 @@ class EvidenceMember:
     decision: Literal["included", "excluded"]
     reason: str
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """序列化为 JSONB 可存储的字典。"""
         return {
             "fact_id": str(self.fact_id),
@@ -56,12 +56,12 @@ class EvidenceMember:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> EvidenceMember:
+    def from_dict(cls, d: dict[str, Any]) -> EvidenceMember:
         """从字典反序列化。"""
         return cls(
             fact_id=UUID(str(d["fact_id"])),
             observation_id=UUID(str(d["observation_id"])) if d.get("observation_id") else None,
-            decision=d["decision"],  # type: ignore[arg-type]
+            decision=d["decision"],
             reason=d.get("reason", ""),
         )
 
@@ -114,7 +114,7 @@ class EvidenceService(ScopedSessionMixin):
         self._dept_id = department_id
         self._actor_id = actor_id
 
-    async def create_set(self, name: str) -> dict:
+    async def create_set(self, name: str) -> dict[str, Any]:
         """创建空的证据集（draft 状态）。
 
         Args:
@@ -156,7 +156,7 @@ class EvidenceService(ScopedSessionMixin):
     async def freeze(
         self,
         set_id: UUID,
-        fact_filter: dict | None = None,
+        fact_filter: dict[str, Any] | None = None,
     ) -> EvidenceSetRef:
         """冻结证据集：查询符合条件的事实，创建不可变版本。
 
@@ -259,7 +259,7 @@ class EvidenceService(ScopedSessionMixin):
                 status="frozen",
             )
 
-    async def get_set(self, set_id: UUID) -> dict:
+    async def get_set(self, set_id: UUID) -> dict[str, Any]:
         """获取证据集详情（含最新版本信息）。
 
         Args:

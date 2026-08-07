@@ -126,10 +126,10 @@ export function ViewPreview({ workspaceId, viewId }: ViewPreviewProps): JSX.Elem
           <Text style={{ fontSize: 12 }}>Run: {detail.source_run_id}</Text>
           {versionInfo && (
             <>
-              {versionInfo.image_digest && (
+              {Boolean(versionInfo.image_digest) && (
                 <Text style={{ fontSize: 12 }}>镜像: {String(versionInfo.image_digest)}</Text>
               )}
-              {versionInfo.chart_description && (
+              {Boolean(versionInfo.chart_description) && (
                 <Text style={{ fontSize: 12 }}>说明: {String(versionInfo.chart_description)}</Text>
               )}
             </>

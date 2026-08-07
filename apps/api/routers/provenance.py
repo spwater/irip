@@ -16,7 +16,7 @@
   GET    /derivation-runs/{id}/graph          — 获取溯源图（provenance:read）
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -87,7 +87,9 @@ class CreateEvidenceSetRequest(BaseModel):
 class FreezeEvidenceSetRequest(BaseModel):
     """冻结证据集请求。"""
 
-    fact_filter: dict | None = Field(None, description="过滤条件，如 {'quality': 'passed'}")
+    fact_filter: dict[str, Any] | None = Field(
+        None, description="过滤条件，如 {'quality': 'passed'}"
+    )
 
 
 class CreateRecipeRequest(BaseModel):
@@ -102,7 +104,7 @@ class PublishRecipeVersionRequest(BaseModel):
 
     component_name: str = Field(..., min_length=1, max_length=128)
     component_version: str = Field(..., min_length=1, max_length=64)
-    parameters: dict = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict[str, Any])
     random_seed: int = Field(default=42, ge=0)
     output_definitions: list[str] = Field(default_factory=list)
 
@@ -188,7 +190,7 @@ class RecipeVersionResponse(BaseModel):
     version: int
     component_name: str
     component_version: str
-    parameters: dict
+    parameters: dict[str, Any]
     random_seed: int
     output_definitions: list[str]
     status: str

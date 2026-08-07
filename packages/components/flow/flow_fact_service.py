@@ -186,10 +186,10 @@ class FlowFactService(ScopedSessionMixin):
                                 else None
                             )
                             if comp_name:
-                                from packages.components.registry import (
+                                from packages.components.registry import (  # type: ignore[attr-defined]
                                     Component as _C,
                                 )
-                                from packages.components.registry import (
+                                from packages.components.registry import (  # type: ignore[attr-defined]
                                     ComponentVersion as _CV,
                                 )
 

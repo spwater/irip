@@ -7,7 +7,7 @@
  * 3. PlanReviewCard 渲染（步骤摘要 + 确认按钮）
  * 4. Run 状态色板
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 // vi.mock 必须在 import 之前（vitest 会自动提升）

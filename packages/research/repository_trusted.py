@@ -19,6 +19,7 @@ ResearchRepositoryTrusted 封装阶段 2 新增的 6 张表的数据库操作：
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -52,8 +53,8 @@ class ResearchRepositoryTrusted:
         *,
         workspace_id: UUID,
         version_number: int,
-        dag_structure: dict,
-        coverage_declaration: dict | None = None,
+        dag_structure: dict[str, Any],
+        coverage_declaration: dict[str, Any] | None = None,
         created_by: UUID,
     ) -> ResearchAnalysisPlanVersion:
         """插入分析计划版本，返回 ORM 实体。
@@ -161,7 +162,7 @@ class ResearchRepositoryTrusted:
             confirmed_at: 确认时间（确认时设置）。
             confirmed_by: 确认人 ID（确认时设置）。
         """
-        values: dict = {"status": status}
+        values: dict[str, Any] = {"status": status}
         if confirmed_at is not None:
             values["confirmed_at"] = confirmed_at
         if confirmed_by is not None:
@@ -288,7 +289,7 @@ class ResearchRepositoryTrusted:
         cancelled_at: datetime | None = None,
         cancelled_by: UUID | None = None,
         error_summary: str | None = None,
-        coverage_summary: dict | None = None,
+        coverage_summary: dict[str, Any] | None = None,
     ) -> None:
         """更新 Run 状态。
 
@@ -303,7 +304,7 @@ class ResearchRepositoryTrusted:
             error_summary: 错误摘要。
             coverage_summary: 覆盖率汇总。
         """
-        values: dict = {"status": status}
+        values: dict[str, Any] = {"status": status}
         if started_at is not None:
             values["started_at"] = started_at
         if completed_at is not None:
@@ -395,7 +396,7 @@ class ResearchRepositoryTrusted:
         step_key: str,
         step_index: int,
         method: str,
-        depends_on: list | None = None,
+        depends_on: list[Any] | None = None,
     ) -> ResearchAnalysisStep:
         """插入分析步骤，返回 ORM 实体。
 
@@ -427,7 +428,7 @@ class ResearchRepositoryTrusted:
     async def batch_insert_steps(
         session: AsyncSession,
         run_id: UUID,
-        steps_data: list[dict],
+        steps_data: list[dict[str, Any]],
     ) -> list[ResearchAnalysisStep]:
         """批量插入步骤。
 
@@ -540,7 +541,7 @@ class ResearchRepositoryTrusted:
             error_message: 错误消息。
             error_classification: 错误分类。
         """
-        values: dict = {"status": status, "updated_at": sa.func.now()}
+        values: dict[str, Any] = {"status": status, "updated_at": sa.func.now()}
         if started_at is not None:
             values["started_at"] = started_at
         if completed_at is not None:
@@ -581,7 +582,7 @@ class ResearchRepositoryTrusted:
             mode_reason: 模式选择原因。
             attempt_count: 尝试次数。
         """
-        values: dict = {"updated_at": sa.func.now()}
+        values: dict[str, Any] = {"updated_at": sa.func.now()}
         if analysis_mode is not None:
             values["analysis_mode"] = analysis_mode
         if data_budget_tokens is not None:
@@ -763,7 +764,7 @@ class ResearchRepositoryTrusted:
         *,
         workspace_id: UUID,
         role: str,
-        content: dict,
+        content: dict[str, Any],
         run_id: UUID | None = None,
         created_by: UUID | None = None,
     ) -> ResearchAiConversation:
@@ -874,7 +875,7 @@ class ResearchRepositoryTrusted:
     async def upsert_memory(
         session: AsyncSession,
         workspace_id: UUID,
-        document: dict,
+        document: dict[str, Any],
     ) -> ResearchMemoryDocument:
         """插入或更新研究记忆文档。
 
@@ -907,7 +908,7 @@ class ResearchRepositoryTrusted:
     async def update_memory_version(
         session: AsyncSession,
         workspace_id: UUID,
-        document: dict,
+        document: dict[str, Any],
     ) -> None:
         """更新记忆文档内容和版本号。
 

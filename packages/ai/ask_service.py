@@ -428,7 +428,7 @@ class AskService:
 
         # 如果有工具被执行，进行第二轮 completion 获取最终回答
         if tool_result_messages:
-            assistant_tool_calls = []
+            assistant_tool_calls = []  # type: ignore[var-annotated]
             for tc in response.tool_calls:
                 tc_id = (
                     str(tc.get("id", ""))
@@ -474,7 +474,7 @@ class AskService:
 
             try:
                 _t_r2_start = time.monotonic()
-                second_response: AIResponse = await self._provider.complete(
+                second_response: AIResponse = await self._provider.complete(  # type: ignore[call-arg]
                     second_request, cancel_event=ctx.cancel_event
                 )
                 _t_r2_end = time.monotonic()
@@ -605,7 +605,7 @@ class AskService:
             # 调用 Provider（支持取消）
             _t0 = time.monotonic()
             _t1 = time.monotonic()
-            response: AIResponse = await self._provider.complete(
+            response: AIResponse = await self._provider.complete(  # type: ignore[call-arg]
                 ctx.ai_request, cancel_event=ctx.cancel_event
             )
             _t2 = time.monotonic()
@@ -730,7 +730,7 @@ class AskService:
             if not has_stream:
                 # OfflineProvider 等不支持流式：一次性获取完整回答，作为单个 chunk yield
                 _t1 = time.monotonic()
-                response: AIResponse = await self._provider.complete(
+                response: AIResponse = await self._provider.complete(  # type: ignore[call-arg]
                     ctx.ai_request, cancel_event=ctx.cancel_event
                 )
                 _t2 = time.monotonic()
@@ -754,7 +754,7 @@ class AskService:
                 streamed_tool_calls: list[dict[str, Any]] = []
                 stream_error = False
 
-                async for event in self._provider.stream_complete(
+                async for event in self._provider.stream_complete(  # type: ignore[attr-defined]
                     ctx.ai_request, cancel_event=ctx.cancel_event
                 ):
                     event_type = event.get("type", "")

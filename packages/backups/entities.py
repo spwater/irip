@@ -114,17 +114,11 @@ class BackupRecord(Base):
     migration_version: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     application_version: Mapped[str | None] = mapped_column(sa.String(50), nullable=True)
     # ---- PITR 升级新增字段（0061 迁移）----
-    backup_timestamp: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
+    backup_timestamp: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     wal_start_lsn: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
     wal_end_lsn: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
-    recovery_target_time: Mapped[datetime | None] = mapped_column(
-        UTCDateTime, nullable=True
-    )
-    backup_method: Mapped[str] = mapped_column(
-        sa.String(20), nullable=False, server_default="pitr"
-    )
+    recovery_target_time: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+    backup_method: Mapped[str] = mapped_column(sa.String(20), nullable=False, server_default="pitr")
     created_by: Mapped[UUID | None] = mapped_column(
         GUID, sa.ForeignKey("app_user.id"), nullable=True
     )

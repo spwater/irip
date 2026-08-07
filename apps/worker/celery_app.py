@@ -16,6 +16,7 @@ F-19 可观测性增强：
 import os
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from typing import Any
 
 from celery import Celery
 from celery.schedules import crontab
@@ -106,7 +107,7 @@ celery_app.conf.update(
 )
 
 
-@celery_app.task(name="jobs.execute", bind=True)
+@celery_app.task(name="jobs.execute", bind=True)  # type: ignore[untyped-decorator]
 def execute_job(self: object, job_id: str) -> str:
     """Celery 任务入口：执行作业。
 
@@ -126,7 +127,7 @@ def execute_job(self: object, job_id: str) -> str:
     return _do_execute_job(job_id)
 
 
-@celery_app.task(name="outbox.dispatch")
+@celery_app.task(name="outbox.dispatch")  # type: ignore[untyped-decorator]
 def dispatch_outbox() -> int:
     """Celery Beat 调度任务：拉取 Outbox 未投递事件并发送到 Celery。
 
@@ -145,7 +146,7 @@ def dispatch_outbox() -> int:
     return run_dispatch(task_sender=celery_app)
 
 
-@celery_app.task(name="worker.heartbeat")
+@celery_app.task(name="worker.heartbeat")  # type: ignore[untyped-decorator]
 def worker_heartbeat() -> str:
     """Celery Beat 调度任务：Worker 心跳。
 
@@ -161,7 +162,7 @@ def worker_heartbeat() -> str:
         import redis
 
         redis_url = os.getenv("IRIP_REDIS_URL", "redis://redis:6379/0")
-        r = redis.from_url(redis_url)
+        r = redis.from_url(redis_url)  # type: ignore[no-untyped-call]
         r.set("irip:worker:heartbeat", str(time.time()), ex=120)
     except Exception:
         # 心跳记录失败不应影响心跳任务本身
@@ -169,7 +170,7 @@ def worker_heartbeat() -> str:
     return "heartbeat-ok"
 
 
-@celery_app.task(name="worker.reap_expired_leases")
+@celery_app.task(name="worker.reap_expired_leases")  # type: ignore[untyped-decorator]
 def reap_expired_leases() -> int:
     """Celery Beat 调度任务：回收过期租约。
 
@@ -204,14 +205,14 @@ def reap_expired_leases() -> int:
         default_user_id=default_user_id,
     )
 
-    async def _reap() -> list:
+    async def _reap() -> list[Any]:
         return await lease_manager.reap_expired()
 
     result = asyncio.run(_reap())
     return len(result)
 
 
-@celery_app.task(name="worker.retry_wait_jobs")
+@celery_app.task(name="worker.retry_wait_jobs")  # type: ignore[untyped-decorator]
 def retry_wait_jobs() -> int:
     """Celery Beat 调度任务：重新入队 retry_wait 状态且已到 run_after 的作业。
 
@@ -287,7 +288,7 @@ def retry_wait_jobs() -> int:
 # ---- 数据库备份调度任务 ----
 
 
-@celery_app.task(name="backup.daily")
+@celery_app.task(name="backup.daily")  # type: ignore[untyped-decorator]
 def daily_backup() -> str:
     """Celery Beat 调度任务：每日数据库自动备份。
 
@@ -408,7 +409,7 @@ def daily_backup() -> str:
     return asyncio.run(_create_daily_backup())
 
 
-@celery_app.task(name="backup.retention_cleanup")
+@celery_app.task(name="backup.retention_cleanup")  # type: ignore[untyped-decorator]
 def retention_cleanup() -> int:
     """Celery Beat 调度任务：清理过期备份。
 
@@ -551,7 +552,7 @@ def _assert_not_superuser() -> None:
         engine.dispose()
 
 
-@worker_process_init.connect
+@worker_process_init.connect  # type: ignore[untyped-decorator]
 def _start_healthcheck_on_worker_init(**kwargs: object) -> None:
     """Worker 子进程启动时自动启动健康检查 HTTP 服务器 + RLS 安全断言。
 

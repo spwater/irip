@@ -14,6 +14,7 @@ PlanService 负责：
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -288,7 +289,7 @@ class PlanService(ScopedSessionMixin):
         self,
         workspace_id: UUID,
         plan_id: UUID,
-        revised_steps: list[dict],
+        revised_steps: list[dict[str, Any]],
     ) -> PlanVersionRef:
         """基于已有计划创建修订版本（用户调整步骤后保存）。
 
@@ -371,7 +372,7 @@ class PlanService(ScopedSessionMixin):
         plan_id: UUID,
         snapshot_id: UUID,
         edited_advice: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """基于分析建议执行数据分析（Step 2，不含 Insight 提取）。
 
         Args:
@@ -501,7 +502,7 @@ class PlanService(ScopedSessionMixin):
 
             analysis_result = ""
             try:
-                response = await self._model_gateway.call(
+                response = await self._model_gateway.call(  # type: ignore[attr-defined]
                     task_type=TaskType.LONG_CONTEXT,
                     system_prompt=analysis_system_prompt,
                     data_context=full_data_text[:256000],
@@ -511,7 +512,7 @@ class PlanService(ScopedSessionMixin):
                 # 清洗 echarts
                 import re as _re
 
-                def _clean_echarts_block(match):
+                def _clean_echarts_block(match) -> None:  # type: ignore[no-untyped-def]
                     block = match.group(1)
                     block = _re.sub(
                         r'"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}',
@@ -523,11 +524,11 @@ class PlanService(ScopedSessionMixin):
                         '"formatter": "{b}: {c}"',
                         block,
                     )
-                    return "```echarts\n" + block + "\n```"
+                    return "```echarts\n" + block + "\n```"  # type: ignore[return-value]
 
                 analysis_result = _re.sub(
                     r"```echarts\n([\s\S]*?)```",
-                    _clean_echarts_block,
+                    _clean_echarts_block,  # type: ignore[arg-type]
                     analysis_result,
                 )
             except Exception as exc:
@@ -570,7 +571,7 @@ class PlanService(ScopedSessionMixin):
                 runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
                 run_id = runs[0].id if runs else None
                 if run_id is None:
-                    run_id = await ResearchRepositoryTrusted.insert_run(
+                    run_id = await ResearchRepositoryTrusted.insert_run(  # type: ignore[assignment, call-arg]
                         session,
                         workspace_id=workspace_id,
                         plan_id=plan_id,
@@ -674,7 +675,7 @@ class PlanService(ScopedSessionMixin):
         workspace_id: UUID,
         plan_id: UUID,
         snapshot_id: UUID,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """从已有分析结果提取 Insight 候选（Step 3，独立调用）。
 
         Args:
@@ -741,7 +742,7 @@ class PlanService(ScopedSessionMixin):
 
             insight_candidate = None
             try:
-                response = await self._model_gateway.call(
+                response = await self._model_gateway.call(  # type: ignore[attr-defined]
                     task_type=TaskType.INSIGHT,
                     system_prompt=insight_system_prompt,
                     data_context=analysis_result[:4000],
@@ -775,7 +776,7 @@ class PlanService(ScopedSessionMixin):
                     if runs:
                         run_id = runs[0].id
                     else:
-                        run_id = await ResearchRepositoryTrusted.insert_run(
+                        run_id = await ResearchRepositoryTrusted.insert_run(  # type: ignore[assignment, call-arg]
                             session,
                             workspace_id=workspace_id,
                             plan_id=plan_id,
@@ -1057,7 +1058,7 @@ class PlanService(ScopedSessionMixin):
             DataProfile: 数据 Profile。
         """
         field_manifest: dict[str, list[str]] = {}
-        source_refs = snapshot.source_refs or []
+        source_refs = snapshot.source_refs or []  # type: ignore[attr-defined]
         total_records = 0
         data_summary_parts: list[str] = []
 
@@ -1066,7 +1067,7 @@ class PlanService(ScopedSessionMixin):
             if source_id is None:
                 continue
             # 获取字段清单
-            fields = await self._fact_provider.get_fact_fields(source_id)
+            fields = await self._fact_provider.get_fact_fields(source_id)  # type: ignore[attr-defined]
             field_manifest[str(source_id)] = list(fields)
 
             # 获取 Fact 名称（来源任务名）
@@ -1142,7 +1143,7 @@ class PlanService(ScopedSessionMixin):
         total_tokens_estimate = total_records * 500
 
         return DataProfile(
-            snapshot_id=snapshot.id,
+            snapshot_id=snapshot.id,  # type: ignore[attr-defined]
             total_records=total_records,
             total_tokens_estimate=total_tokens_estimate,
             field_manifest=field_manifest,
@@ -1155,7 +1156,7 @@ class PlanService(ScopedSessionMixin):
         data_profile: DataProfile,
         research_question: str,
         sub_questions: list[str] | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """调用 AI 生成分析建议（纯文本，不分步 DAG）。
 
         Args:
@@ -1192,7 +1193,7 @@ class PlanService(ScopedSessionMixin):
             research_context = f"研究问题: {research_question}\n数据摘要:\n{data_text}"
 
         try:
-            response = await self._model_gateway.call(
+            response = await self._model_gateway.call(  # type: ignore[attr-defined]
                 task_type=TaskType.PLANNING,
                 system_prompt=system_prompt,
                 data_context=data_text,
@@ -1231,7 +1232,7 @@ class PlanService(ScopedSessionMixin):
         self,
         data_profile: DataProfile,
         research_question: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """生成回退建议（AI 调用失败时使用）。
 
         Args:
@@ -1277,9 +1278,9 @@ class PlanService(ScopedSessionMixin):
 
     def _enrich_plan_with_modes(
         self,
-        dag_json: dict,
+        dag_json: dict[str, Any],
         data_profile: DataProfile,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """用 ContextRouter 预分析每步，填入 analysis_mode / data_budget / mode_reason。
 
         Args:
@@ -1321,7 +1322,9 @@ class PlanService(ScopedSessionMixin):
                 step_dict.setdefault("data_budget_tokens", 50000)
         return dag_json
 
-    def _estimate_coverage(self, dag_structure: dict, data_profile: DataProfile) -> dict:
+    def _estimate_coverage(
+        self, dag_structure: dict[str, Any], data_profile: DataProfile
+    ) -> dict[str, Any]:
         """计算预估覆盖声明。
 
         Args:
@@ -1364,7 +1367,7 @@ class PlanService(ScopedSessionMixin):
         self,
         snapshot_id: UUID,
         question_version: int,
-        dag_structure: dict,
+        dag_structure: dict[str, Any],
     ) -> ScopeBoundary:
         """从计划构建范围边界。
 

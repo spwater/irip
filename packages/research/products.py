@@ -18,6 +18,7 @@ ProductService 管理 DerivedDataset / ResearchView / Insight 的完整生命周
 """
 
 import logging
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -162,7 +163,7 @@ class ProductService(ScopedSessionMixin):
                 )
 
             # 2. 下载工件内容
-            artifact_content = await self._artifact_service.get_artifact(artifact_id)
+            artifact_content = await self._artifact_service.get_artifact(artifact_id)  # type: ignore[attr-defined]
             if artifact_content is None:
                 raise AppError(
                     code="validation_failed",
@@ -256,7 +257,7 @@ class ProductService(ScopedSessionMixin):
                 ),
             )
 
-            result = DerivedDatasetRef(
+            result = DerivedDatasetRef(  # type: ignore[assignment]
                 dataset_id=dataset.id,
                 name=name,
                 status="confirmed",
@@ -269,7 +270,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(
+                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
                     _hook_run_id,
                     "research:derived_dataset",
                     _hook_dataset_id,
@@ -278,7 +279,7 @@ class ProductService(ScopedSessionMixin):
             except Exception as exc:
                 logger.warning("on_product_confirmed hook failed: %s", exc)
 
-        return result
+        return result  # type: ignore[return-value]
 
     async def list_datasets(self, workspace_id: UUID) -> list[DerivedDatasetRef]:
         """列出工作空间内的 DerivedDataset。
@@ -329,7 +330,7 @@ class ProductService(ScopedSessionMixin):
                     fields={"dataset_id": str(dataset_id)},
                 )
 
-            current_version_data: dict | None = None
+            current_version_data: dict[str, Any] | None = None
             if dataset.current_version > 0:
                 version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
                 if version is not None:
@@ -661,7 +662,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(
+                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
                     _hook_run_id,
                     "research:view",
                     _hook_view_id,
@@ -722,7 +723,7 @@ class ProductService(ScopedSessionMixin):
                     fields={"view_id": str(view_id)},
                 )
 
-            current_version_info: dict | None = None
+            current_version_info: dict[str, Any] | None = None
             if view.current_version > 0:
                 version = await ResearchRepository.get_view_version(
                     session, view_id, view.current_version
@@ -1062,7 +1063,7 @@ class ProductService(ScopedSessionMixin):
             except Exception as exc:
                 logger.warning("Failed to clear insight candidate from dag_structure: %s", exc)
 
-            result = InsightRef(
+            result = InsightRef(  # type: ignore[assignment]
                 insight_id=insight.id,
                 name=insight_name,
                 status="confirmed",
@@ -1074,7 +1075,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(
+                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
                     _hook_run_id,
                     "research:insight",
                     _hook_insight_id,
@@ -1083,13 +1084,13 @@ class ProductService(ScopedSessionMixin):
             except Exception as exc:
                 logger.warning("on_product_confirmed hook failed: %s", exc)
 
-        return result
+        return result  # type: ignore[return-value]
 
     async def create_insight_from_modify(
         self,
         workspace_id: UUID,
         candidate_id: UUID,
-        modified_fields: dict,
+        modified_fields: dict[str, Any],
         modification_note: str,
     ) -> InsightRef:
         """修改候选 → 创建 Insight + v1（is_modified=true，保留 AI 原稿 + 修改记录）。
@@ -1238,7 +1239,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(
+                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
                     _hook_run_id,
                     "research:insight",
                     _hook_insight_id,
@@ -1297,7 +1298,7 @@ class ProductService(ScopedSessionMixin):
                     fields={"insight_id": str(insight_id)},
                 )
 
-            current_version_data: dict | None = None
+            current_version_data: dict[str, Any] | None = None
             if insight.current_version > 0:
                 version = await ResearchRepository.get_latest_insight_version(session, insight_id)
                 if version is not None:

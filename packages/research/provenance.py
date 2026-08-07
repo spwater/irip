@@ -155,13 +155,13 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
             ProvenanceNode | None: 节点详情，不存在或无权限时返回 None。
         """
         adapter = self._route_adapter(namespace)
-        node = await adapter.query_node(namespace, node_id)
+        node = await adapter.query_node(namespace, node_id)  # type: ignore[attr-defined]
         if node is None:
             return None
 
         # 权限校验
         principal = _SimplePrincipal(self._actor_id, self._dept_id)
-        has_perm = await adapter.check_permission(namespace, node_id, principal)
+        has_perm = await adapter.check_permission(namespace, node_id, principal)  # type: ignore[attr-defined]
         if not has_perm:
             return None
 
@@ -237,13 +237,13 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
             adapter = self._route_adapter(ns)
 
             # 查询节点
-            node = await adapter.query_node(ns, nid)
+            node = await adapter.query_node(ns, nid)  # type: ignore[attr-defined]
             if node is None:
                 continue
             nodes.append(node)
 
             # 查询入边
-            incoming = await adapter.query_incoming_edges(ns, nid)
+            incoming = await adapter.query_incoming_edges(ns, nid)  # type: ignore[attr-defined]
             edges.extend(incoming)
 
             # 对每条入边的 source 节点入队
@@ -293,7 +293,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
         for i, node in enumerate(nodes):
             adapter = self._route_adapter(node.namespace)
             try:
-                has_perm = await adapter.check_permission(node.namespace, node.node_id, principal)
+                has_perm = await adapter.check_permission(node.namespace, node.node_id, principal)  # type: ignore[attr-defined]
             except Exception as exc:
                 logger.warning(
                     "Permission check failed for %s:%s: %s",

@@ -49,9 +49,7 @@ async def _get_record(
 ) -> BackupRecord | None:
     """按 ID 查询记录。"""
     async with factory() as session:
-        return await session.scalar(
-            sa.select(BackupRecord).where(BackupRecord.id == record_id)
-        )
+        return await session.scalar(sa.select(BackupRecord).where(BackupRecord.id == record_id))
 
 
 # ============================================================
@@ -301,9 +299,7 @@ class TestMarkRestored:
         """mark_restored 写入 recovery_target_time。"""
         service = BackupRecordService(rls_session_factory)
 
-        record = backup_factory(
-            BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value
-        )
+        record = backup_factory(BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value)
         await _insert_record(rls_session_factory, record)
 
         target_time = datetime.now(UTC)
@@ -322,9 +318,7 @@ class TestMarkRestored:
         """mark_restored 传 None 时 recovery_target_time 为 None。"""
         service = BackupRecordService(rls_session_factory)
 
-        record = backup_factory(
-            BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value
-        )
+        record = backup_factory(BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value)
         await _insert_record(rls_session_factory, record)
 
         updated = await service.mark_restored(record.id, recovery_target_time=None)
@@ -354,9 +348,7 @@ class TestMarkRestored:
         """mark_restored 的 recovery_target_time 持久化到数据库。"""
         service = BackupRecordService(rls_session_factory)
 
-        record = backup_factory(
-            BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value
-        )
+        record = backup_factory(BackupType.DAILY.value, status=BackupStatus.SUCCEEDED.value)
         await _insert_record(rls_session_factory, record)
 
         target_time = datetime.now(UTC)

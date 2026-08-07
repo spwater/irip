@@ -10,10 +10,9 @@
 对应 docs/arch-db-backup-pitr-upgrade.md §3.5 / T03。
 """
 
-import asyncio
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 import sqlalchemy as sa
@@ -29,13 +28,6 @@ from apps.api.routers.backups import (
     backups_router,
     get_backups_session_factory,
 )
-from packages.backups.entities import (
-    BackupMethod,
-    BackupRecord,
-    BackupStatus,
-    BackupType,
-)
-from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 
@@ -81,7 +73,10 @@ def _cleanup_test_user(sync_engine, user_id: UUID) -> None:
     """清理测试用户。"""
     with sync_engine.connect() as conn:
         conn.execute(
-            sa.text("DELETE FROM outbox_event WHERE aggregate_id IN (SELECT id FROM job WHERE created_by = :uid)"),
+            sa.text(
+                "DELETE FROM outbox_event WHERE aggregate_id IN "
+                "(SELECT id FROM job WHERE created_by = :uid)"
+            ),
             {"uid": str(user_id)},
         )
         conn.execute(

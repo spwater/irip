@@ -93,14 +93,14 @@ class AIMessage(Base):
     )
     role: Mapped[str] = mapped_column(sa.Text, nullable=False)
     content: Mapped[str] = mapped_column(sa.Text, nullable=False, default="")
-    tool_calls_json: Mapped[list] = mapped_column(
+    tool_calls_json: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
     )
-    citations_json: Mapped[list] = mapped_column(
+    citations_json: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
     )
     # irip-ai-collab: @ 人 user_id 数组
-    mentions: Mapped[list] = mapped_column(
+    mentions: Mapped[list[Any]] = mapped_column(
         JSONB, nullable=False, default=list, server_default=sa.text("'[]'::jsonb")
     )
     # irip-ai-collab: 发送者冗余字段（避免每次 JOIN 查用户表）

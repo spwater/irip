@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from packages.common.errors import AppError
 
@@ -118,7 +119,7 @@ class ConditionEngine:
     匹配给定上下文。仅允许白名单字段和预定义操作符，确保安全求值。
     """
 
-    def parse(self, json_condition: dict) -> ConditionNode:
+    def parse(self, json_condition: dict[str, Any]) -> ConditionNode:
         """将 JSON 条件解析为类型化 AST。
 
         支持操作符: eq, ne, lt, lte, gt, gte, in, and, or。
@@ -238,7 +239,7 @@ class ConditionEngine:
 
         return ConditionLeaf(field=field, op=op_key, value=value)
 
-    def matches(self, condition: dict, context: dict[str, object]) -> bool:
+    def matches(self, condition: dict[str, Any], context: dict[str, object]) -> bool:
         """评估条件是否匹配给定上下文。
 
         示例::

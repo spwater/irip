@@ -273,7 +273,7 @@ def create_app() -> FastAPI:
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:
         """将 AppError 映射为统一 JSON 错误响应。"""
-        status = _STATUS_MAP.get(exc.code, 500)
+        status = _STATUS_MAP.get(exc.code, 500)  # type: ignore[arg-type]
         return JSONResponse(
             status_code=status,
             content={"error": exc.to_dict()},

@@ -83,7 +83,7 @@ async def _call_llm(
 def _parse_llm_json(content: str) -> dict[str, Any]:
     """从 LLM 返回内容中提取 JSON 对象（3 级 fallback）。"""
     try:
-        return json.loads(content)
+        return json.loads(content)  # type: ignore[no-any-return]
     except json.JSONDecodeError:
         pass
 
@@ -91,7 +91,7 @@ def _parse_llm_json(content: str) -> dict[str, Any]:
     match = re.search(pattern, content, re.DOTALL)
     if match:
         try:
-            return json.loads(match.group(1).strip())
+            return json.loads(match.group(1).strip())  # type: ignore[no-any-return]
         except json.JSONDecodeError:
             pass
 
@@ -99,7 +99,7 @@ def _parse_llm_json(content: str) -> dict[str, Any]:
     end: int = content.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            return json.loads(content[start : end + 1])
+            return json.loads(content[start : end + 1])  # type: ignore[no-any-return]
         except json.JSONDecodeError:
             pass
 

@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
-from packages.standards.object_graph import ObjectGraphService
+from packages.standards.object_graph import ObjectGraphService  # type: ignore[attr-defined]
 
 #: 路由实例。
 objects_router = APIRouter(prefix="/api/v1/objects", tags=["objects"])
@@ -67,7 +67,7 @@ async def _check_object_ownership(
         current_user=current_user,
         entity_department_id=obj_department_id,
         entity_owner_user_id=obj_owner_user_id,
-        session_factory=service._factory,  # type: ignore[attr-defined]
+        session_factory=service._factory,
     )
 
 
@@ -396,7 +396,7 @@ def _object_to_response(obj: object) -> ObjectResponse:
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
-        visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
+        visible_departments=list(getattr(obj, "visible_departments", []) or []),
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]
@@ -415,7 +415,7 @@ def _object_to_list_item(obj: object) -> ObjectListItem:
         description=obj.description,  # type: ignore[attr-defined]
         equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
         component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
-        visible_departments=list(getattr(obj, "visible_departments", []) or []),  # type: ignore[attr-defined]
+        visible_departments=list(getattr(obj, "visible_departments", []) or []),
         status=obj.status,  # type: ignore[attr-defined]
         created_at=obj.created_at,  # type: ignore[attr-defined]
         updated_at=obj.updated_at,  # type: ignore[attr-defined]

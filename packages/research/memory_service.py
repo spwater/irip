@@ -29,6 +29,7 @@ ResearchMemoryService 负责：
 
 import copy
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -39,7 +40,7 @@ from packages.research.repository_trusted import ResearchRepositoryTrusted
 logger = logging.getLogger("research.memory")
 
 #: 记忆文档默认结构。
-DEFAULT_DOCUMENT: dict = {
+DEFAULT_DOCUMENT: dict[str, Any] = {
     "main_question": "",
     "current_scope": "",
     "evidence_summary": [],
@@ -86,7 +87,7 @@ class ResearchMemoryService(ScopedSessionMixin):
         self._dept_id = department_id
         self._actor_id = actor_id
 
-    async def get_or_create(self, workspace_id: UUID) -> dict:
+    async def get_or_create(self, workspace_id: UUID) -> dict[str, Any]:
         """获取或创建工作空间的记忆文档。
 
         Args:
@@ -108,8 +109,8 @@ class ResearchMemoryService(ScopedSessionMixin):
         self,
         workspace_id: UUID,
         event_type: str,
-        event_data: dict,
-    ) -> dict:
+        event_data: dict[str, Any],
+    ) -> dict[str, Any]:
         """根据事件自动更新记忆文档。
 
         事件类型处理：
@@ -208,7 +209,7 @@ class ResearchMemoryService(ScopedSessionMixin):
             )
             return document
 
-    async def rebuild_from_events(self, workspace_id: UUID) -> dict:
+    async def rebuild_from_events(self, workspace_id: UUID) -> dict[str, Any]:
         """从审计事件重建记忆文档。
 
         文档可重建（非权威源），原始事件为权威源。

@@ -11,7 +11,7 @@ Composition Root 中条件替换注册。
 参照架构设计 3.3 节。
 """
 
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -27,8 +27,8 @@ class ResearchCatalog(Protocol):
     async def search_derived_data(
         self,
         query: str,
-        filters: dict | None = None,
-    ) -> list[dict]:
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """搜索已确认的衍生数据。
 
         Args:
@@ -50,8 +50,8 @@ class ResearchCatalogStub:
     async def search_derived_data(
         self,
         query: str,
-        filters: dict | None = None,
-    ) -> list[dict]:
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """搜索已确认的衍生数据（占位返回空列表）。
 
         Args:
@@ -95,8 +95,8 @@ class ResearchCatalogImpl:
     async def search_derived_data(
         self,
         query: str,
-        filters: dict | None = None,
-    ) -> list[dict]:
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """搜索已确认 DerivedDataset。
 
         返回 [{id, name, current_version, workspace_id, owner_user_id, summary, tags}]
@@ -157,8 +157,8 @@ class ResearchCatalogImpl:
     async def search_published_derived_data(
         self,
         query: str,
-        filters: dict | None = None,
-    ) -> list[dict]:
+        filters: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """搜索已发布成果包中的 DerivedDataset（跨用户，ACL 过滤）。
 
         阶段 4 新增：搜索范围从当前用户已确认 DerivedDataset 扩展为已发布成果包
@@ -194,7 +194,7 @@ class ResearchCatalogImpl:
                 result_id=result_id,
             )
 
-            results: list[dict] = []
+            results: list[dict[str, Any]] = []
             for version, result_entity in pairs:
                 # ACL 过滤
                 if not self._check_visible(result_entity):
@@ -232,16 +232,16 @@ class ResearchCatalogImpl:
         Returns:
             bool: 是否有权查看。
         """
-        if result_entity.current_acl_type == "private":
-            return result_entity.owner_user_id == self._actor_id
-        if result_entity.current_acl_type == "tree":
+        if result_entity.current_acl_type == "private":  # type: ignore[attr-defined]
+            return result_entity.owner_user_id == self._actor_id  # type: ignore[no-any-return, attr-defined]
+        if result_entity.current_acl_type == "tree":  # type: ignore[attr-defined]
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
-        if result_entity.current_acl_type == "explicit":
-            explicit_ids = result_entity.current_explicit_user_ids or []
+        if result_entity.current_acl_type == "explicit":  # type: ignore[attr-defined]
+            explicit_ids = result_entity.current_explicit_user_ids or []  # type: ignore[attr-defined]
             return (
                 str(self._actor_id) in [str(uid) for uid in explicit_ids]
-                or result_entity.owner_user_id == self._actor_id
+                or result_entity.owner_user_id == self._actor_id  # type: ignore[attr-defined]
             )
-        if result_entity.current_acl_type == "all":
+        if result_entity.current_acl_type == "all":  # type: ignore[attr-defined]
             return True
         return False

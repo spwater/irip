@@ -37,7 +37,6 @@ import {
 } from '@ant-design/icons';
 import type { ResultDetail, ResultVersionDetail } from '@/api/researchPublish';
 import {
-  apiGetPublicationVersion,
   apiGetPublicationProvenance,
   apiGetPublicationItem,
   apiUpdateResultMetadata,

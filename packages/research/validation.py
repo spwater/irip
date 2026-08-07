@@ -26,7 +26,7 @@ class ThreeSegmentValidator:
     """
 
     @staticmethod
-    def validate(data: dict | bytes) -> ValidationResult:
+    def validate(data: dict[str, Any] | bytes) -> ValidationResult:
         """校验三段式数据结构，返回校验结果 + field_manifest。
 
         Args:
@@ -112,7 +112,7 @@ class ThreeSegmentValidator:
         )
 
     @staticmethod
-    def infer_field_manifest(points: list, series: list) -> list[dict]:
+    def infer_field_manifest(points: list[Any], series: list[Any]) -> list[dict[str, Any]]:
         """自动推断 field_manifest。
 
         返回 [{field_name, inferred_type, unit, description, source_step, column_order, shape}]
@@ -125,7 +125,7 @@ class ThreeSegmentValidator:
         Returns:
             list[dict]: 字段清单条目列表。
         """
-        entries: list[dict] = []
+        entries: list[dict[str, Any]] = []
         column_order = 0
 
         # 从 points 推断字段（name + value + unit）
@@ -195,7 +195,7 @@ class ThreeSegmentValidator:
         return entries
 
     @staticmethod
-    def compute_content_hash(metadata: dict, points: list, series: list) -> str:
+    def compute_content_hash(metadata: dict[str, Any], points: list[Any], series: list[Any]) -> str:
         """计算三段式数据 SHA-256。
 
         序列化 JSON (sort_keys=True, ensure_ascii=False, separators=(",",":"))

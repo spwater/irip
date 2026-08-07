@@ -4,7 +4,7 @@
  * 按类型分组展示已确认产物
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Card, List, Tag, Typography, Spin, Empty, Space, Button, Popconfirm, message } from 'antd';
+import { Card, List, Tag, Typography, Spin, Space, Button, Popconfirm, message } from 'antd';
 import {
   DatabaseOutlined,
   BarChartOutlined,
@@ -37,7 +37,7 @@ export function ConfirmedProductsPanel({
   workspaceId,
   onSelectProduct,
   refreshTrigger,
-}: ConfirmedProductsPanelProps): JSX.Element {
+}: ConfirmedProductsPanelProps): JSX.Element | null {
   const [products, setProducts] = useState<ProductSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);

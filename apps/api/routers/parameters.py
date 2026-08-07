@@ -13,7 +13,7 @@
   POST   /{parameter_id}/deprecate              — 弃用参数（parameter:publish）
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -72,7 +72,7 @@ class CreateCandidateRequest(BaseModel):
     value: str = Field(..., min_length=1)
     unit: str | None = None
     confidence: str | None = None
-    conditions: dict | None = None
+    conditions: dict[str, Any] | None = None
 
 
 class RejectCandidateRequest(BaseModel):
@@ -124,7 +124,7 @@ class ParameterVersionResponse(BaseModel):
     unit: str | None
     confidence: str | None
     status: str
-    conditions: dict | None
+    conditions: dict[str, Any] | None
     published_at: str | None
 
 
@@ -233,7 +233,7 @@ async def list_parameters(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> ParameterListResponse:
     """分页列出参数。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if variable_code is not None:
         filters["variable_code"] = variable_code
     if status is not None:

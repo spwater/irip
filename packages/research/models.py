@@ -9,6 +9,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 from uuid import UUID
 
 
@@ -184,9 +185,9 @@ class ThreeSegmentData:
         series: 普通表格/时间序列列表（list of {name, columns, rows}）。
     """
 
-    metadata: dict = field(default_factory=dict)
-    points: list = field(default_factory=list)
-    series: list = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict[str, Any])
+    points: list[Any] = field(default_factory=list[Any])
+    series: list[Any] = field(default_factory=list[Any])
 
 
 @dataclass(frozen=True)
@@ -226,7 +227,7 @@ class ValidationResult:
     valid: bool
     errors: list[str] = field(default_factory=list)
     data: ThreeSegmentData | None = None
-    field_manifest: list[dict] = field(default_factory=list)
+    field_manifest: list[dict[str, Any]] = field(default_factory=list[Any])
 
 
 @dataclass(frozen=True)
@@ -293,7 +294,7 @@ class DatasetDetail:
     current_version: int
     source_run_id: UUID
     source_snapshot_id: UUID | None
-    current_version_data: dict | None = None
+    current_version_data: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -316,10 +317,10 @@ class DatasetVersionDetail:
     version_id: UUID
     dataset_id: UUID
     version_number: int
-    metadata_content: dict
-    points_content: list
-    series_content: list
-    field_manifest: list
+    metadata_content: dict[str, Any]
+    points_content: list[Any]
+    series_content: list[Any]
+    field_manifest: list[Any]
     content_hash: str
     source_run_id: UUID
     source_step_id: UUID | None
@@ -393,7 +394,7 @@ class ViewDetail:
     status: str
     current_version: int
     source_run_id: UUID
-    current_version_info: dict | None = None
+    current_version_info: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -490,7 +491,7 @@ class InsightDetail:
     status: str
     current_version: int
     source_run_id: UUID | None
-    current_version_data: dict | None = None
+    current_version_data: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -534,8 +535,8 @@ class InsightCandidateData:
 
     conclusion: str
     scope: str
-    evidence_refs: list
-    method_refs: list
+    evidence_refs: list[Any]
+    method_refs: list[Any]
     confidence_level: str
     limitations: str
     evidence_source_label: str
@@ -567,7 +568,7 @@ class CandidateProductSummary:
     source_step_id: UUID | None
     step_name: str
     step_status: str
-    preview_data: dict
+    preview_data: dict[str, Any]
     status: str
     error_reason: str = ""
 
@@ -588,7 +589,7 @@ class CandidateDetail:
     candidate_id: UUID
     source_run_id: UUID
     source_step_id: UUID | None
-    preview_data: dict
+    preview_data: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -696,7 +697,7 @@ class PermissionEnvelope:
 
     acl_type: str
     explicit_user_ids: list[UUID] = field(default_factory=list)
-    source_details: list[dict] = field(default_factory=list)
+    source_details: list[dict[str, Any]] = field(default_factory=list[Any])
 
 
 @dataclass(frozen=True)
@@ -713,7 +714,7 @@ class EnvelopeValidationResult:
     valid: bool
     effective_acl: str = "private"
     reason: str = ""
-    limiting_sources: list[dict] = field(default_factory=list)
+    limiting_sources: list[dict[str, Any]] = field(default_factory=list[Any])
 
 
 @dataclass(frozen=True)
@@ -729,9 +730,9 @@ class ProductRefCollection:
         source_run_statuses: Run 状态映射 {run_id: status}。
     """
 
-    dataset_version_refs: list[dict] = field(default_factory=list)
-    view_version_refs: list[dict] = field(default_factory=list)
-    insight_version_refs: list[dict] = field(default_factory=list)
+    dataset_version_refs: list[dict[str, Any]] = field(default_factory=list[Any])
+    view_version_refs: list[dict[str, Any]] = field(default_factory=list[Any])
+    insight_version_refs: list[dict[str, Any]] = field(default_factory=list[Any])
     evidence_snapshot_ids: list[str] = field(default_factory=list)
     analysis_run_ids: list[str] = field(default_factory=list)
     source_run_statuses: dict[str, str] = field(default_factory=dict)
@@ -805,16 +806,16 @@ class ResultVersionDetail:
     summary: str
     tags: list[str]
     release_notes: str
-    dataset_version_refs: list[dict]
-    view_version_refs: list[dict]
-    insight_version_refs: list[dict]
+    dataset_version_refs: list[dict[str, Any]]
+    view_version_refs: list[dict[str, Any]]
+    insight_version_refs: list[dict[str, Any]]
     evidence_snapshot_ids: list[str]
     analysis_run_ids: list[str]
     source_run_statuses: dict[str, str]
     publisher: UUID
     published_at: datetime
     content_hash: str
-    published_permission_envelope: dict
+    published_permission_envelope: dict[str, Any]
     status: str
 
 
@@ -1043,7 +1044,7 @@ class ProvenanceNode:
     version: int | None
     node_type: str
     display_label: NodeDisplayLabel | None
-    attributes: dict
+    attributes: dict[str, Any]
     is_restricted: bool = False
 
 
@@ -1088,7 +1089,7 @@ class RestrictedNode:
 
     node_type: str
     display_label: str
-    attributes: dict
+    attributes: dict[str, Any]
     temp_id: str
 
 
@@ -1104,7 +1105,7 @@ class ProvenanceGraphStats:
     """
 
     total_nodes: int
-    nodes_by_type: dict
+    nodes_by_type: dict[str, Any]
     restricted_nodes_count: int
     truncated_count: int
 

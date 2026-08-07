@@ -18,6 +18,7 @@
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -80,7 +81,7 @@ class Parameter(Base):
         nullable=False,
         comment="所属部门 ID（阶段1双写，阶段3 RLS 锚定此列）",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),
@@ -151,8 +152,8 @@ class ParameterVersion(Base):
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     confidence: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    confidence_interval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    confidence_interval: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    conditions: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     derivation_run_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("derivation_run.id"),
@@ -232,8 +233,8 @@ class ParameterCandidate(Base):
     value: Mapped[str] = mapped_column(sa.Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     confidence: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    confidence_interval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    conditions: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    confidence_interval: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    conditions: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(
         sa.Text,
         nullable=False,

@@ -5,7 +5,7 @@
  * 新用户看到空状态引导 + "新建 Workspace" 主操作按钮。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Empty, Input, Row, Col, Segmented, Spin, message } from 'antd';
+import { Button, Empty, Input, Row, Col, Segmented, Spin } from 'antd';
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons';
 import {
   apiListWorkspaces,

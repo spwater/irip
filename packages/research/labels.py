@@ -6,6 +6,7 @@ NodeDisplayLabelGenerator 为静态工具类，按命名空间映射到类型标
 参照架构设计 3.3 节 NodeDisplayLabelGenerator。
 """
 
+from typing import Any
 from uuid import UUID
 
 from packages.research.models import NodeDisplayLabel
@@ -61,7 +62,7 @@ class NodeDisplayLabelGenerator:
     """
 
     @staticmethod
-    def generate(namespace: str, node_data: dict) -> NodeDisplayLabel:
+    def generate(namespace: str, node_data: dict[str, Any]) -> NodeDisplayLabel:
         """生成节点展示标签。
 
         Args:

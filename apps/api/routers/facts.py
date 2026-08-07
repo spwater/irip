@@ -17,7 +17,7 @@ MinIO Artifact 删除编排。不含任何 sa.* / session.execute。
 
 import logging
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 _logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ async def list_facts(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> FactListResponse:
     """分页列出事实（支持按 fact_type, object_id, status 过滤）。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if fact_type is not None:
         filters["fact_type"] = fact_type
     if object_id is not None:
@@ -213,7 +213,7 @@ async def search_facts(
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> FactListResponse:
     """全文搜索事实（基于 subject_id 和 fact_type）。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if fact_type is not None:
         filters["fact_type"] = fact_type
     if object_id is not None:
@@ -296,7 +296,7 @@ async def get_fact_data(
     fact_id: UUID,
     current_user: ReadUserDep,
     query_service: FactQueryServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """获取事实关联的提取数据（从 artifact 下载 JSON）。
 
     返回 {"metadata": {...}, "points": [...], "series": [...]} 格式的干净数据。

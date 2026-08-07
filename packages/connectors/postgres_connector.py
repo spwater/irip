@@ -13,7 +13,7 @@
 """
 
 from collections.abc import AsyncIterator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlparse
@@ -163,7 +163,7 @@ class PostgresConnector:
             AppError: code="validation_failed"，当 SQL 不是单条 SELECT 语句时。
         """
         statements = sqlparse.parse(query)
-        non_empty = [s for s in statements if s.token_first(skip_ws=True, skip_cm=True) is not None]
+        non_empty = [s for s in statements if s.token_first(skip_ws=True, skip_cm=True) is not None]  # type: ignore[no-untyped-call]
         if len(non_empty) != 1:
             raise AppError(
                 code="validation_failed",
@@ -171,7 +171,7 @@ class PostgresConnector:
                 retryable=False,
                 fields={},
             )
-        stmt_type = non_empty[0].get_type()
+        stmt_type = non_empty[0].get_type()  # type: ignore[no-untyped-call]
         if stmt_type != "SELECT":
             raise AppError(
                 code="validation_failed",
@@ -181,7 +181,7 @@ class PostgresConnector:
             )
 
     @staticmethod
-    async def _execute(engine: AsyncEngine, sql: str) -> tuple[tuple[str, ...], list[list]]:
+    async def _execute(engine: AsyncEngine, sql: str) -> tuple[tuple[str, ...], list[list[Any]]]:
         """执行 SQL，返回 (列名元组, 行列表)。
 
         H-08 安全修复：在 READ ONLY 事务中执行，设置 statement_timeout，

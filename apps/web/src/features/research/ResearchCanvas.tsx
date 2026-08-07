@@ -12,7 +12,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Space, Button, Empty, Spin, Typography, Modal, Input, message, Popconfirm } from 'antd';
+import { Card, Tag, Space, Button, Empty, Typography, Modal, Input, message } from 'antd';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChartBlock } from '../assistant/message-thread/components/ChartBlock';
@@ -28,17 +28,12 @@ import {
 } from '@ant-design/icons';
 import {
   apiGeneratePlan,
-  apiGetRun,
   apiUpdateQuestion,
   type PlanDetail,
   type RunProgress,
-  type Artifact,
-  type CoverageDeclaration,
   type WorkspaceDetail as WorkspaceDetailType,
 } from '../../api/research';
 import { PlanReviewCard } from './PlanReviewCard';
-import { PublishButton } from './PublishButton';
-import { KnowledgeSearchPanel } from './KnowledgeSearchPanel';
 
 export type ResearchCanvasProps = {
   workspaceId: string;
@@ -72,13 +67,9 @@ export function ResearchCanvas({
 
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [run, setRun] = useState<RunProgress | null>(null);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [generating, setGenerating] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [dataContext, setDataContext] = useState<string | null>(null);
-  const [executing, setExecuting] = useState(false);
   const [extractingInsight, setExtractingInsight] = useState(false);
   const [resultExpanded, setResultExpanded] = useState(true);
 
@@ -137,27 +128,6 @@ export function ResearchCanvas({
   const [editQuestionText, setEditQuestionText] = useState('');
   const [editSubQuestions, setEditSubQuestions] = useState<string[]>([]);
   const [savingQuestion, setSavingQuestion] = useState(false);
-
-  // 编辑问题状态
-  const handleExecuteFromCard = useCallback(async () => {
-    if (!plan || !snapshotId) return;
-    setExecuting(true);
-    try {
-      const { apiAnalyzeData } = await import('../../api/research');
-      const result = await apiAnalyzeData(
-        workspaceId,
-        plan.plan_id,
-        snapshotId,
-      );
-      setAnalysisResult(result.analysis_result);
-      setDataContext(result.data_context || null);
-      message.success('数据分析完成');
-    } catch {
-      message.error('分析执行失败');
-    } finally {
-      setExecuting(false);
-    }
-  }, [plan, snapshotId, workspaceId]);
 
   // 提炼 Insight
   const handleExtractInsight = useCallback(async () => {

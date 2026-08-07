@@ -19,6 +19,7 @@ import asyncio
 import io
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -141,7 +142,7 @@ class Artifact(Base):
         nullable=False,
         comment="所属部门 ID",
     )
-    visible_departments: Mapped[list] = mapped_column(
+    visible_departments: Mapped[list[Any]] = mapped_column(
         JSONB,
         nullable=False,
         server_default=sa.text("'[]'::jsonb"),

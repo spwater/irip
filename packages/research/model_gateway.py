@@ -156,7 +156,7 @@ class ModelGateway:
         system_prompt: str,
         data_context: str,
         research_context: str,
-        tools: list[dict] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> ModelResponse:
         """调用模型并记录元数据。
 
@@ -251,7 +251,7 @@ class ModelGateway:
         system_prompt: str,
         data_context: str,
         research_context: str,
-        tools: list[dict] | None = None,
+        tools: list[dict[str, Any]] | None = None,
     ) -> ModelResponse:
         """调用模型，故障时自动切换备用模型。
 

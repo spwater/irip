@@ -5,7 +5,7 @@
  * 确认/接受/修改/拒绝操作后实时更新
  */
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Spin, Empty, Typography, message } from 'antd';
+import { Card, Spin, Typography, message } from 'antd';
 import {
   apiGetCandidates,
   apiAcceptCandidate,
@@ -29,7 +29,7 @@ export function CandidatePreviewPanel({
   workspaceId,
   runId,
   onProductsChanged,
-}: CandidatePreviewPanelProps): JSX.Element {
+}: CandidatePreviewPanelProps): JSX.Element | null {
   const [candidates, setCandidates] = useState<CandidateProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [modifyCandidate, setModifyCandidate] = useState<CandidateProduct | null>(null);

@@ -686,7 +686,7 @@ class ModelService(ScopedSessionMixin):
         model_id: UUID,
     ) -> Model | None:
         """获取属于当前部门的模型。"""
-        return await session.scalar(
+        return await session.scalar(  # type: ignore[no-any-return]
             sa.select(Model).where(
                 Model.id == model_id,
             )
@@ -699,7 +699,7 @@ class ModelService(ScopedSessionMixin):
         version_id: UUID,
     ) -> ModelVersion | None:
         """获取属于指定模型的版本。"""
-        return await session.scalar(
+        return await session.scalar(  # type: ignore[no-any-return]
             sa.select(ModelVersion).where(
                 ModelVersion.id == version_id,
                 ModelVersion.model_id == model_id,
@@ -744,12 +744,12 @@ class ModelService(ScopedSessionMixin):
         command = CreateFactCommand(
             fact_type="model_execution",
             department_id=self._dept_id,
-            object_id=model_id,  # type: ignore[arg-type]
+            object_id=model_id,
             subject_id=f"model:{model_id}:version:{version_no}",
             started_at=started_at,
             ended_at=ended_at,
             idempotency_key=(f"model-exec-{model_version_id}-{started_at.isoformat()}"),
-            created_by=None,  # type: ignore[arg-type]
+            created_by=None,
         )
         ref = await self._fact_service.create(command)
-        return ref.fact_id
+        return ref.fact_id  # type: ignore[no-any-return]

@@ -23,6 +23,7 @@ H-09 改动：
 import asyncio
 import os
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from packages.common.database import build_session_factory, session_scope
@@ -101,7 +102,7 @@ def _register_handlers(executor: JobExecutor) -> None:
     """
     from apps.worker.tasks.flows import _execute_flow_async, _mark_job_failed, _resume_flow_async
 
-    async def _flow_execute_adapter(job):
+    async def _flow_execute_adapter(job) -> None:  # type: ignore[no-untyped-def]
         """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。
 
         H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。
@@ -118,7 +119,7 @@ def _register_handlers(executor: JobExecutor) -> None:
                 fields={"job_id": job_id},
             )
         try:
-            return await _execute_flow_async(run_id, payload)
+            return await _execute_flow_async(run_id, payload)  # type: ignore[return-value]
         except Exception as exc:
             # H-03: 失败必须 raise，不返回 error dict
             try:
@@ -127,7 +128,7 @@ def _register_handlers(executor: JobExecutor) -> None:
                 pass
             raise
 
-    async def _flow_resume_adapter(job):
+    async def _flow_resume_adapter(job) -> None:  # type: ignore[no-untyped-def]
         """适配 flow_resume。
 
         H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。
@@ -136,7 +137,7 @@ def _register_handlers(executor: JobExecutor) -> None:
         job_id = str(job.id)
         payload = job.payload or {}
         try:
-            return await _resume_flow_async(payload)
+            return await _resume_flow_async(payload)  # type: ignore[call-arg, return-value, arg-type]
         except Exception as exc:
             # H-03: 失败必须 raise，不返回 error dict
             try:
@@ -145,22 +146,22 @@ def _register_handlers(executor: JobExecutor) -> None:
                 pass
             raise
 
-    def _adapt(handler):
+    def _adapt(handler: Any) -> Any:
         """适配 (job_id, payload) 签名的同步 handler 为 async (job) 签名。
 
         H-03: handler 原生 async，失败必须 raise（不返回 error dict）。
         用于非 flow handler（它们内部用 asyncio.run，不在嵌套 async 上下文中）。
         """
 
-        async def _wrapper(job):
+        async def _wrapper(job: Any) -> Any:
             _validate_job_kind(job)
             return handler(str(job.id), job.payload or {})
 
         return _wrapper
 
     # Flow handler（用 async 适配器避免 asyncio.run 嵌套）
-    executor.register_handler("flow_execute", _flow_execute_adapter)
-    executor.register_handler("flow_resume", _flow_resume_adapter)
+    executor.register_handler("flow_execute", _flow_execute_adapter)  # type: ignore[arg-type]
+    executor.register_handler("flow_resume", _flow_resume_adapter)  # type: ignore[arg-type]
 
     # Model handler
     executor.register_handler("model_train", _adapt(train_model_job))
@@ -194,7 +195,7 @@ def _validate_job_kind(job: object) -> None:
         )
 
 
-async def _backup_handler(job: object) -> dict:
+async def _backup_handler(job: object) -> dict[str, Any]:
     """备份作业 handler。
 
     执行 PostgreSQL + MinIO 全量备份，生成完整性 manifest，并更新 backup_record 状态。
@@ -219,7 +220,7 @@ async def _backup_handler(job: object) -> dict:
 
     # H-09: org_id 从 job 取，不从 payload 取（服务端生成，不可被客户端覆盖）
     org_id = getattr(job, "department_id", None)
-    payload: dict = getattr(job, "payload", None) or {}
+    payload: dict[str, Any] = getattr(job, "payload", None) or {}
     backup_record_id_str: str = payload.get("backup_record_id", "")
     backup_type: str = payload.get("type", "daily")
 
@@ -241,7 +242,7 @@ async def _backup_handler(job: object) -> dict:
     if backup_record_id_str:
         try:
             # 从 manifest.extra 读取 PITR 元数据（v2 格式）
-            extra: dict = manifest.extra or {}
+            extra: dict[str, Any] = manifest.extra or {}
             backup_timestamp_str: str = str(extra.get("backup_timestamp", ""))
             wal_start_lsn: str = str(extra.get("wal_start_lsn", ""))
             wal_end_lsn: str = str(extra.get("wal_end_lsn", ""))
@@ -282,7 +283,7 @@ async def _backup_handler(job: object) -> dict:
     }
 
 
-async def _restore_handler(job: object) -> dict:
+async def _restore_handler(job: object) -> dict[str, Any]:
     """恢复作业 handler。
 
     C-02: 使用签名 backup_id 而非 backup_dir 路径。
@@ -313,7 +314,7 @@ async def _restore_handler(job: object) -> dict:
     from packages.backups.service import BackupRecordService
     from packages.common.ids import new_id
 
-    payload: dict = getattr(job, "payload", None) or {}
+    payload: dict[str, Any] = getattr(job, "payload", None) or {}
     backup_id: str = payload.get("backup_id", "")
     pre_restore_created: bool = payload.get("pre_restore_created", False)
     org_id = getattr(job, "department_id", None)
@@ -373,7 +374,7 @@ async def _restore_handler(job: object) -> dict:
             # 执行备份
             pre_manifest = await run_backup()
             # 从 manifest.extra 读取 PITR 元数据
-            pre_extra: dict = pre_manifest.extra or {}
+            pre_extra: dict[str, Any] = pre_manifest.extra or {}
             pre_backup_ts_str: str = str(pre_extra.get("backup_timestamp", ""))
             pre_wal_start: str = str(pre_extra.get("wal_start_lsn", ""))
             pre_wal_end: str = str(pre_extra.get("wal_end_lsn", ""))
@@ -492,7 +493,7 @@ def _resolve_backup_dir_by_id(backup_id: str) -> "Path":
     manifest_filename: str = "manifest.json"
     for candidate in search_dir.rglob(manifest_filename):
         try:
-            manifest_data: dict = json.loads(candidate.read_text(encoding="utf-8"))
+            manifest_data: dict[str, Any] = json.loads(candidate.read_text(encoding="utf-8"))
             if manifest_data.get("backup_id") == backup_id:
                 return candidate.parent
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
@@ -506,7 +507,7 @@ def _resolve_backup_dir_by_id(backup_id: str) -> "Path":
     )
 
 
-async def _audit_export_handler(job: object) -> dict:
+async def _audit_export_handler(job: object) -> dict[str, Any]:
     """审计导出作业 handler。
 
     导出指定时间范围内的审计事件为 JSON 归档。
@@ -525,7 +526,7 @@ async def _audit_export_handler(job: object) -> dict:
 
     from packages.common.database import build_session_factory, session_scope
 
-    payload: dict = getattr(job, "payload", None) or {}
+    payload: dict[str, Any] = getattr(job, "payload", None) or {}
     org_id_str: str = payload.get("department_id", "")
     start_date_str: str = payload.get("start_date", "")
     end_date_str: str = payload.get("end_date", "")
@@ -565,7 +566,7 @@ async def _audit_export_handler(job: object) -> dict:
         if end_date_str:
             conditions.append(sa.text("created_at <= :end_date"))
 
-        params: dict = {}
+        params: dict[str, Any] = {}
         if org_id is not None:
             params["org_id"] = str(org_id)
         if start_date_str:
@@ -573,7 +574,7 @@ async def _audit_export_handler(job: object) -> dict:
         if end_date_str:
             params["end_date"] = end_date_str
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        where_clause = " AND ".join(conditions) if conditions else "1=1"  # type: ignore[arg-type]
         query = sa.text(f"SELECT count(*) FROM audit_event WHERE {where_clause}")
         count_result = await session.execute(query, params)
         count: int = count_result.scalar() or 0

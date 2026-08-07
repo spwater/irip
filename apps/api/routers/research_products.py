@@ -46,7 +46,7 @@ GET    /catalog/search                                                — 搜索
 参照 apps/api/routers/research_run.py 的 DI 占位 + Pydantic 模型模式。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -145,8 +145,8 @@ class ModifyCandidateRequest(BaseModel):
 
     conclusion: str | None = None
     scope: str | None = None
-    evidence_refs: list[dict] | None = None
-    method_refs: list[dict] | None = None
+    evidence_refs: list[dict[str, Any]] | None = None
+    method_refs: list[dict[str, Any]] | None = None
     confidence_level: str | None = None
     limitations: str | None = None
     evidence_source_label: str | None = None
@@ -196,7 +196,7 @@ async def list_candidates(
     run_id: UUID,
     _user: ResearchUserDep,
     candidate_service: CandidateServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Run 的全部候选产物。"""
     candidates = await candidate_service.identify_candidates(workspace_id, run_id)
     return {
@@ -227,7 +227,7 @@ async def get_candidate(
     candidate_id: UUID,
     _user: ResearchUserDep,
     candidate_service: CandidateServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """获取候选产物详情。"""
     detail = await candidate_service.get_candidate_detail(workspace_id, run_id, candidate_id)
     return {
@@ -278,7 +278,7 @@ async def list_datasets(
     workspace_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Workspace 内 DerivedDataset。"""
     refs = await product_service.list_datasets(workspace_id)
     return {
@@ -303,7 +303,7 @@ async def get_dataset(
     dataset_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """DerivedDataset 详情。"""
     detail = await product_service.get_dataset(workspace_id, dataset_id)
     return {
@@ -355,7 +355,7 @@ async def list_dataset_versions(
     dataset_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本历史列表。"""
     refs = await product_service.list_dataset_versions(workspace_id, dataset_id)
     return {
@@ -381,7 +381,7 @@ async def get_dataset_version(
     version_number: int,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本详情（含三段式数据 + field_manifest）。"""
     detail = await product_service.get_dataset_version(workspace_id, dataset_id, version_number)
     return {
@@ -440,7 +440,7 @@ async def list_views(
     workspace_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Workspace 内 ResearchView。"""
     refs = await product_service.list_views(workspace_id)
     return {
@@ -466,7 +466,7 @@ async def get_view(
     view_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """ResearchView 详情。"""
     detail = await product_service.get_view(workspace_id, view_id)
     return {
@@ -518,7 +518,7 @@ async def list_view_versions(
     view_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本历史列表。"""
     refs = await product_service.list_view_versions(workspace_id, view_id)
     return {
@@ -545,7 +545,7 @@ async def get_view_version(
     version_number: int,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本详情。"""
     detail = await product_service.get_view_version(workspace_id, view_id, version_number)
     return {
@@ -606,7 +606,7 @@ async def list_insights(
     workspace_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Workspace 内 Insight。"""
     refs = await product_service.list_insights(workspace_id)
     return {
@@ -630,7 +630,7 @@ async def get_insight(
     insight_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """Insight 详情。"""
     detail = await product_service.get_insight(workspace_id, insight_id)
     return {
@@ -725,7 +725,7 @@ async def list_insight_versions(
     insight_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """版本历史列表。"""
     refs = await product_service.list_insight_versions(workspace_id, insight_id)
     return {
@@ -755,7 +755,7 @@ async def list_insight_candidates(
     run_id: UUID,
     _user: ResearchUserDep,
     candidate_service: CandidateServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Run 的 Insight 候选。"""
     refs = await candidate_service.list_insight_candidates(workspace_id, run_id)
     return {
@@ -783,7 +783,7 @@ async def get_insight_candidate(
     candidate_id: UUID,
     _user: ResearchUserDep,
     candidate_service: CandidateServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """候选详情。"""
     detail = await candidate_service.get_candidate_detail(workspace_id, run_id, candidate_id)
     return {
@@ -832,7 +832,7 @@ async def modify_insight_candidate(
     product_service: ProductServiceDep,
 ) -> InsightResponse:
     """修改候选 → 创建 Insight + v1。"""
-    modified_fields: dict = {}
+    modified_fields: dict[str, Any] = {}
     if body.conclusion is not None:
         modified_fields["conclusion"] = body.conclusion
     if body.scope is not None:
@@ -886,7 +886,7 @@ async def reject_candidate(
     )
     factory = build_session_factory(url)
     # 先查是否为 insight 候选
-    async with session_scope(factory, principal=_user) as session:
+    async with session_scope(factory, principal=_user) as session:  # type: ignore[arg-type]
         result = await session.execute(
             sa_text("SELECT 1 FROM research_insight_candidate WHERE id = :cid"),
             {"cid": str(candidate_id)},
@@ -902,7 +902,7 @@ async def reject_candidate(
         )
     else:
         # dataset/view 候选 → 物理删除 artifact
-        async with session_scope(factory, principal=_user) as session:
+        async with session_scope(factory, principal=_user) as session:  # type: ignore[arg-type]
             await session.execute(
                 sa_text("DELETE FROM research_run_artifact WHERE id = :aid AND run_id = :rid"),
                 {"aid": str(candidate_id), "rid": str(run_id)},
@@ -942,7 +942,7 @@ async def list_products(
     workspace_id: UUID,
     _user: ResearchUserDep,
     product_service: ProductServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """列出 Workspace 全部已确认产物（按类型分组）。"""
     products = await product_service.list_products(workspace_id)
     return {
@@ -972,9 +972,9 @@ async def search_catalog(
     catalog: CatalogDep,
     query: str = Query(default=""),
     workspace_id: UUID | None = Query(default=None),  # noqa: B008
-) -> dict:
+) -> dict[str, Any]:
     """搜索当前用户已确认 DerivedDataset。"""
-    filters: dict = {}
+    filters: dict[str, Any] = {}
     if workspace_id is not None:
         filters["workspace_id"] = str(workspace_id)
     results = await catalog.search_derived_data(query=query, filters=filters)

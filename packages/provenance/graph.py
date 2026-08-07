@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -322,7 +322,7 @@ class ProvenanceGraphService(ScopedSessionMixin):
         target_type: str,
         target_id: UUID,
         edge_type: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """添加溯源边。
 

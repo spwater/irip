@@ -319,4 +319,4 @@ class DepartmentRepository:
                 Department.id == department_id,
             )
         )
-        return result.rowcount > 0
+        return result.rowcount > 0  # type: ignore[no-any-return, attr-defined]

@@ -64,7 +64,7 @@ def _validate_select_only(query: str) -> None:
         )
 
     for stmt in parsed:
-        stmt_type = stmt.get_type()
+        stmt_type = stmt.get_type()  # type: ignore[no-untyped-call]
         if stmt_type != "SELECT":
             raise AppError(
                 code="forbidden_query",
@@ -73,7 +73,7 @@ def _validate_select_only(query: str) -> None:
                 fields={"statement_type": stmt_type or "UNKNOWN"},
             )
         # 二次检查：扫描所有 token 关键字
-        for token in stmt.flatten():
+        for token in stmt.flatten():  # type: ignore[no-untyped-call]
             if token.ttype in sqlparse.tokens.Keyword:
                 kw = str(token).upper()
                 if kw in _FORBIDDEN_KEYWORDS:
@@ -121,7 +121,7 @@ class PostgresQuery:
                     col_names: tuple[str, ...] = (
                         tuple(desc[0] for desc in cur.description) if cur.description else ()
                     )
-                    rows_data: list[list[Any]] = cur.fetchmany(limit)
+                    rows_data: list[list[Any]] = cur.fetchmany(limit)  # type: ignore[assignment]
                     return col_names, rows_data
 
         columns, raw_rows = await asyncio.to_thread(_run_query)
