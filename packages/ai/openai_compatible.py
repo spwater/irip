@@ -370,7 +370,7 @@ class OpenAICompatibleProvider:
             "不得靠语言模型自身心算——即使看起来很简单（如 3+5）。"
             "\n2. 已有 Fact/Artifact 引用时，优先传稳定 ID（fact_id + series_index + column_name），"
             "不要复制大型数组到内联参数。"
-            "\n3. 用户未说明"总体还是样本方差"时，describe_series 使用 variance_mode=both "
+            "\n3. 用户未说明'总体还是样本方差'时，describe_series 使用 variance_mode=both "
             "并在回答中解释差异。"
             "\n4. 工具失败后不得自行猜测数值结果，应说明错误和可修正的输入。"
             "\n5. 结果带 warning、单位未验证或向量被截断时，回答必须明确披露。"
