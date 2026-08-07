@@ -178,11 +178,15 @@ async def test_migration_roundtrip_preserves_data(monkeypatch) -> None:
         with engine.connect() as conn:
             # 先创建 department（FK 约束）
             conn.execute(
-                sa.text("INSERT INTO department (id, name, code) VALUES (:id, :name, :code)"),
+                sa.text(
+                    "INSERT INTO department "
+                    "(id, code, display_name, status, lock_version) "
+                    "VALUES (:id, :code, :name, 'active', 0)"
+                ),
                 {
                     "id": test_dept_id,
-                    "name": f"Test Dept {test_dept_id.hex[:8]}",
                     "code": f"dept-{test_dept_id.hex[:8]}",
+                    "name": f"Test Dept {test_dept_id.hex[:8]}",
                 },
             )
             conn.execute(

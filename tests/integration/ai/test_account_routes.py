@@ -39,11 +39,15 @@ def _insert_user(
         # 先创建 department（满足 FK 约束）
         if org_id is None:
             conn.execute(
-                sa.text("INSERT INTO department (id, name, code) VALUES (:id, :name, :code)"),
+                sa.text(
+                    "INSERT INTO department "
+                    "(id, code, display_name, status, lock_version) "
+                    "VALUES (:id, :code, :name, 'active', 0)"
+                ),
                 {
                     "id": final_org,
-                    "name": f"Test Dept {final_org.hex[:8]}",
                     "code": f"dept-{final_org.hex[:8]}",
+                    "name": f"Test Dept {final_org.hex[:8]}",
                 },
             )
         conn.execute(

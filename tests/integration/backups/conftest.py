@@ -43,6 +43,27 @@ def org_id() -> UUID:
     return UUID("00000000-0000-0000-0000-000000000001")
 
 
+@pytest.fixture(autouse=True)
+def _ensure_department_exists(sync_engine, org_id: UUID) -> None:
+    """确保固定 org_id 的 department 存在（FK 约束）。"""
+    from sqlalchemy import text as sa_text
+
+    with sync_engine.connect() as conn:
+        conn.execute(
+            sa_text(
+                "INSERT INTO department (id, code, display_name, status, lock_version) "
+                "VALUES (:id, :code, :name, 'active', 0) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": str(org_id),
+                "code": "test-dept-001",
+                "name": "Test Department 001",
+            },
+        )
+        conn.commit()
+
+
 @pytest.fixture
 def rls_session_factory(sync_engine, org_id: UUID) -> async_sessionmaker[AsyncSession]:
     """提供 RLS 感知的异步会话工厂。

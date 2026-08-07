@@ -407,10 +407,10 @@ jobs:
           pip install -e ".[dev]"
       - name: Generate Python SBOM (CycloneDX)
         run: |
-          # Pin cyclonedx-bom to v3 — v4+ renamed `environment` subcommand to `env`
-          pip install 'cyclonedx-bom>=3,<4'
           # Python 3.12 不再内置 setuptools，cyclonedx-py 依赖 pkg_resources
           pip install setuptools
+          # Pin cyclonedx-bom to v3 — v4+ renamed `environment` subcommand to `env`
+          pip install 'cyclonedx-bom>=3,<4'
           # M-11: 从已安装的依赖环境生成 SBOM
           cyclonedx-py environment --output-file sbom-python.json
           # M-11: 验证 SBOM 非空且包含组件
