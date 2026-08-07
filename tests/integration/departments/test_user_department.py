@@ -62,20 +62,23 @@ async def _cleanup_test_user(session_factory: object, user_id: object) -> None:
 
 
 async def _cleanup_departments(session_factory: object, org_id: object, codes: list[str]) -> None:
-    """清理测试实验室。"""
+    """清理测试实验室。
+
+    按 code 删除（parent_id 为 NULL 的顶级实验室）。
+    """
     async with session_factory() as session:  # type: ignore[operator]
         async with session.begin():
             await session.execute(
                 sa.text(
                     "DELETE FROM app_user_department WHERE department_id IN ("
-                    "SELECT id FROM department WHERE department_id = :org "
+                    "SELECT id FROM department WHERE parent_id IS NULL "
                     "AND code = ANY(:codes))"
                 ),
-                {"org": org_id, "codes": codes},
+                {"codes": codes},
             )
             await session.execute(
-                sa.text("DELETE FROM department WHERE department_id = :org AND code = ANY(:codes)"),
-                {"org": org_id, "codes": codes},
+                sa.text("DELETE FROM department WHERE parent_id IS NULL AND code = ANY(:codes)"),
+                {"codes": codes},
             )
 
 

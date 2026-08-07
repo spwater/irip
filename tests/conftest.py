@@ -174,7 +174,10 @@ def _insert_test_user(engine: Engine, email: str) -> TestUser:
 
 
 def _cleanup_test_user(engine: Engine, user_id: UUID) -> None:
-    """清理测试用户及其关联 department。"""
+    """清理测试用户及其关联 department。
+
+    按依赖顺序删除子记录（component/flow/model 等）以避免 FK 约束冲突。
+    """
     with engine.connect() as conn:
         # 先查出 department_id
         result = conn.execute(
@@ -183,7 +186,60 @@ def _cleanup_test_user(engine: Engine, user_id: UUID) -> None:
         )
         row = result.fetchone()
         dept_id = row[0] if row else None
-        # 先删除该用户作业关联的 outbox 事件
+
+        # ---- 删除引用 app_user 的子记录（避免 FK 约束冲突） ----
+
+        # flow 相关（flow_node_execution → flow_run → flow_definition_version → flow_definition）
+        conn.execute(
+            sa.text(
+                "DELETE FROM flow_node_execution WHERE flow_run_id IN ("
+                "SELECT id FROM flow_run WHERE department_id = :did)"
+            ),
+            {"did": dept_id},
+        )
+        conn.execute(
+            sa.text("DELETE FROM flow_run WHERE department_id = :did"),
+            {"did": dept_id},
+        )
+        conn.execute(
+            sa.text(
+                "DELETE FROM flow_definition_version WHERE flow_definition_id IN ("
+                "SELECT id FROM flow_definition WHERE owner_user_id = :uid)"
+            ),
+            {"uid": user_id},
+        )
+        conn.execute(
+            sa.text("DELETE FROM flow_definition WHERE owner_user_id = :uid"),
+            {"uid": user_id},
+        )
+
+        # component 相关（component_version → component）
+        conn.execute(
+            sa.text(
+                "DELETE FROM component_version WHERE component_id IN ("
+                "SELECT id FROM component WHERE owner_user_id = :uid)"
+            ),
+            {"uid": user_id},
+        )
+        conn.execute(
+            sa.text("DELETE FROM component WHERE owner_user_id = :uid"),
+            {"uid": user_id},
+        )
+
+        # model 相关（model_version → model）
+        conn.execute(
+            sa.text(
+                "DELETE FROM model_version WHERE model_id IN ("
+                "SELECT id FROM model WHERE owner_user_id = :uid)"
+            ),
+            {"uid": user_id},
+        )
+        conn.execute(
+            sa.text("DELETE FROM model WHERE owner_user_id = :uid"),
+            {"uid": user_id},
+        )
+
+        # ---- 删除其余引用 app_user 的记录 ----
         conn.execute(
             sa.text(
                 "DELETE FROM outbox_event "

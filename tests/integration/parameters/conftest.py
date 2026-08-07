@@ -19,10 +19,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import session_scope
 from packages.common.ids import new_id
 from packages.facts.service import CreateFactCommand, FactService
+from packages.provenance.algorithms import register_executor
 from packages.provenance.derivations import DerivationService
 from packages.provenance.evidence import EvidenceService
 from packages.provenance.recipes import RecipeService
 from packages.standards.objects import IndustrialObject
+
+
+@pytest.fixture(autouse=True)
+def _register_test_executor() -> None:
+    """注册测试用推导执行器（版本 0.1.0，与测试数据匹配）。"""
+    from packages.provenance.algorithms import RobustParameterEstimator
+
+    executor = RobustParameterEstimator()
+    executor.version = "0.1.0"  # type: ignore[misc]
+    register_executor(executor)
 
 
 @pytest.fixture

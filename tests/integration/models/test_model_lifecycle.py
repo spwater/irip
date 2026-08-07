@@ -170,7 +170,7 @@ async def model_service(
     if not _SKLEARN_AVAILABLE:
         pytest.skip("scikit-learn 未安装")
 
-    org_id = UUID("00000000-0000-0000-0000-000000000010")
+    org_id = test_user.department_id  # type: ignore[attr-defined]
     model_bytes = _train_tiny_model()
     artifact_service = _FakeArtifactService(model_bytes)
     fact_service = _FakeFactService()
