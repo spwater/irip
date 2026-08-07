@@ -16,7 +16,7 @@ DI 约定（与 V1 standards 路由一致）：
 
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Any, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -26,7 +26,7 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
-from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
+from packages.components.registry import ComponentRegistryService
 from packages.components.registry.registry import Component
 
 #: JSON Schema 路径（相对项目根目录）。
@@ -263,7 +263,7 @@ async def publish_component(
         import sqlalchemy as sa
 
         from packages.common.database import session_scope
-        from packages.standards.objects import IndustrialObject  # type: ignore[attr-defined]
+        from packages.standards.objects import IndustrialObject
 
         async with session_scope(service.session_factory) as sess:
             obj = await sess.scalar(
@@ -433,7 +433,7 @@ async def list_component_versions(
             manifest_sha256=v.manifest_sha256,
             created_at=v.created_at,
         )
-        for v in versions  # type: ignore[attr-defined]
+        for v in versions
     ]
 
 

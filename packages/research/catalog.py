@@ -232,16 +232,16 @@ class ResearchCatalogImpl:
         Returns:
             bool: 是否有权查看。
         """
-        if result_entity.current_acl_type == "private":  # type: ignore[attr-defined]
-            return result_entity.owner_user_id == self._actor_id  # type: ignore[no-any-return, attr-defined]
-        if result_entity.current_acl_type == "tree":  # type: ignore[attr-defined]
+        if result_entity.current_acl_type == "private":
+            return result_entity.owner_user_id == self._actor_id
+        if result_entity.current_acl_type == "tree":
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
-        if result_entity.current_acl_type == "explicit":  # type: ignore[attr-defined]
-            explicit_ids = result_entity.current_explicit_user_ids or []  # type: ignore[attr-defined]
+        if result_entity.current_acl_type == "explicit":
+            explicit_ids = result_entity.current_explicit_user_ids or []
             return (
                 str(self._actor_id) in [str(uid) for uid in explicit_ids]
-                or result_entity.owner_user_id == self._actor_id  # type: ignore[attr-defined]
+                or result_entity.owner_user_id == self._actor_id
             )
-        if result_entity.current_acl_type == "all":  # type: ignore[attr-defined]
+        if result_entity.current_acl_type == "all":
             return True
         return False

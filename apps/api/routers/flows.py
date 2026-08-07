@@ -35,7 +35,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
-from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+from packages.components.flow_runtime import (
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,
@@ -43,7 +43,7 @@ from packages.components.flow_runtime import (  # type: ignore[attr-defined]
     FlowRun,
     FlowRuntimeService,
 )
-from packages.components.flows import (  # type: ignore[attr-defined]
+from packages.components.flows import (
     FlowEdge,
     FlowNode,
     edge_from_dict,
@@ -64,6 +64,7 @@ ExecuteUserDep = Annotated[CurrentUser, Depends(require_permission("flow:execute
 
 # 从 facts 路由复用响应模型
 from apps.api.routers.facts import FactListResponse, FactResponse  # noqa: E402
+from typing import Any
 
 
 def get_flow_service() -> FlowRuntimeService:
@@ -866,7 +867,7 @@ async def persist_run_as_fact(
     """
     from apps.api.routers._flow_fact_handler import persist_run_as_fact_handler
 
-    return await persist_run_as_fact_handler(service, current_user, run_id, body)  # type: ignore[no-any-return]
+    return await persist_run_as_fact_handler(service, current_user, run_id, body)
 
 
 @flows_router.get(

@@ -67,8 +67,8 @@ class ProductService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        artifact_service: object,
-        lineage_writer: object | None = None,
+        artifact_service: Any,
+        lineage_writer: Any | None = None,
     ) -> None:
         """初始化产物服务。
 
@@ -163,7 +163,7 @@ class ProductService(ScopedSessionMixin):
                 )
 
             # 2. 下载工件内容
-            artifact_content = await self._artifact_service.get_artifact(artifact_id)  # type: ignore[attr-defined]
+            artifact_content = await self._artifact_service.get_artifact(artifact_id)
             if artifact_content is None:
                 raise AppError(
                     code="validation_failed",
@@ -270,7 +270,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
+                await self._lineage_writer.on_product_confirmed(
                     _hook_run_id,
                     "research:derived_dataset",
                     _hook_dataset_id,
@@ -662,7 +662,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
+                await self._lineage_writer.on_product_confirmed(
                     _hook_run_id,
                     "research:view",
                     _hook_view_id,
@@ -1075,7 +1075,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
+                await self._lineage_writer.on_product_confirmed(
                     _hook_run_id,
                     "research:insight",
                     _hook_insight_id,
@@ -1239,7 +1239,7 @@ class ProductService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_product_confirmed(  # type: ignore[attr-defined]
+                await self._lineage_writer.on_product_confirmed(
                     _hook_run_id,
                     "research:insight",
                     _hook_insight_id,

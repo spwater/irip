@@ -36,6 +36,7 @@ from apps.api.dependencies.authorization import require_permission
 from packages.research.conversation_service import AIConversationService
 from packages.research.plan_service import PlanService
 from packages.research.run_service import AnalysisRunService
+from typing import Any
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
@@ -254,7 +255,7 @@ class EligibilityResponse(BaseModel):
 # ============================================================
 
 
-def _plan_ref_to_response(ref) -> PlanResponse:  # type: ignore[no-untyped-def]
+def _plan_ref_to_response(ref) -> PlanResponse:
     """将 PlanVersionRef 转为响应模型。"""
     return PlanResponse(
         plan_id=str(ref.plan_id),
@@ -265,7 +266,7 @@ def _plan_ref_to_response(ref) -> PlanResponse:  # type: ignore[no-untyped-def]
     )
 
 
-def _plan_detail_to_response(detail) -> PlanDetailResponse:  # type: ignore[no-untyped-def]
+def _plan_detail_to_response(detail) -> PlanDetailResponse:
     """将 PlanDetail 转为响应模型。"""
     return PlanDetailResponse(
         plan_id=str(detail.plan_id),
@@ -279,7 +280,7 @@ def _plan_detail_to_response(detail) -> PlanDetailResponse:  # type: ignore[no-u
     )
 
 
-def _run_ref_to_response(ref) -> RunResponse:  # type: ignore[no-untyped-def]
+def _run_ref_to_response(ref) -> RunResponse:
     """将 RunRef 转为响应模型。"""
     return RunResponse(
         run_id=str(ref.run_id),
@@ -290,7 +291,7 @@ def _run_ref_to_response(ref) -> RunResponse:  # type: ignore[no-untyped-def]
     )
 
 
-def _step_progress_to_response(s) -> StepProgressResponse:  # type: ignore[no-untyped-def]
+def _step_progress_to_response(s) -> StepProgressResponse:
     """将 StepProgress 转为响应模型。"""
     return StepProgressResponse(
         step_id=str(s.step_id),
@@ -307,7 +308,7 @@ def _step_progress_to_response(s) -> StepProgressResponse:  # type: ignore[no-un
     )
 
 
-def _run_progress_to_response(p) -> RunProgressResponse:  # type: ignore[no-untyped-def]
+def _run_progress_to_response(p) -> RunProgressResponse:
     """将 RunProgress 转为响应模型。"""
     coverage_dict = p.coverage_declaration.to_dict() if p.coverage_declaration else None
     return RunProgressResponse(
@@ -322,7 +323,7 @@ def _run_progress_to_response(p) -> RunProgressResponse:  # type: ignore[no-unty
     )
 
 
-def _artifact_to_response(a) -> ArtifactResponse:  # type: ignore[no-untyped-def]
+def _artifact_to_response(a) -> ArtifactResponse:
     """将 ArtifactRef 转为响应模型。"""
     return ArtifactResponse(
         artifact_id=str(a.artifact_id),
@@ -338,7 +339,7 @@ def _artifact_to_response(a) -> ArtifactResponse:  # type: ignore[no-untyped-def
     )
 
 
-def _message_to_response(m) -> ConversationMessageResponse:  # type: ignore[no-untyped-def]
+def _message_to_response(m) -> ConversationMessageResponse:
     """将 ConversationMessage 转为响应模型。"""
     return ConversationMessageResponse(
         message_id=str(m.message_id),
@@ -374,7 +375,7 @@ async def generate_plan(
 @research_run_router.post(
     "/workspaces/{workspace_id}/analyze-data",
 )
-async def analyze_data(  # type: ignore[no-untyped-def]
+async def analyze_data(
     workspace_id: UUID,
     body: AnalyzeDataRequest,
     current_user: ResearchUserDep,
@@ -393,7 +394,7 @@ async def analyze_data(  # type: ignore[no-untyped-def]
 @research_run_router.post(
     "/workspaces/{workspace_id}/extract-insight",
 )
-async def extract_insight(  # type: ignore[no-untyped-def]
+async def extract_insight(
     workspace_id: UUID,
     body: ExtractInsightRequest,
     current_user: ResearchUserDep,
@@ -565,7 +566,7 @@ async def list_run_artifacts(
     from apps.api.routers.research_run import _get_artifact_service
 
     artifact_service = _get_artifact_service()
-    artifacts = await artifact_service.list_artifacts(run_id, artifact_type=artifact_type)  # type: ignore[attr-defined]
+    artifacts = await artifact_service.list_artifacts(run_id, artifact_type=artifact_type)
     return ArtifactListResponse(items=[_artifact_to_response(a) for a in artifacts])
 
 
@@ -582,7 +583,7 @@ async def get_run_artifact(
     from apps.api.routers.research_run import _get_artifact_service
 
     artifact_service = _get_artifact_service()
-    content = await artifact_service.get_artifact(artifact_id)  # type: ignore[attr-defined]
+    content = await artifact_service.get_artifact(artifact_id)
     if content is None:
         return {"error": {"code": "not_found", "message": "工件不存在"}}
     return {
@@ -636,7 +637,7 @@ async def run_events(
 
     async def event_generator() -> Any:
         """SSE 事件生成器。"""
-        r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+        r = redis_lib.from_url(redis_url)
         pubsub = r.pubsub()
         pubsub.subscribe(channel)
 

@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from typing import Any
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
@@ -202,23 +203,23 @@ def _node_to_response(node: object) -> ProvenanceNodeResponse:
         ProvenanceNodeResponse: 响应模型。
     """
     label = None
-    if node.display_label is not None:  # type: ignore[attr-defined]
+    if node.display_label is not None:
         label = ProvenanceNodeLabelResponse(
-            display_label=node.display_label.display_label,  # type: ignore[attr-defined]
-            node_type_label=node.display_label.node_type_label,  # type: ignore[attr-defined]
-            version_summary=node.display_label.version_summary,  # type: ignore[attr-defined]
-            namespace=node.display_label.namespace,  # type: ignore[attr-defined]
-            icon=node.display_label.icon,  # type: ignore[attr-defined]
-            jump_target=node.display_label.jump_target,  # type: ignore[attr-defined]
+            display_label=node.display_label.display_label,
+            node_type_label=node.display_label.node_type_label,
+            version_summary=node.display_label.version_summary,
+            namespace=node.display_label.namespace,
+            icon=node.display_label.icon,
+            jump_target=node.display_label.jump_target,
         )
     return ProvenanceNodeResponse(
-        namespace=node.namespace,  # type: ignore[attr-defined]
-        node_id=str(node.node_id),  # type: ignore[attr-defined]
-        version=node.version,  # type: ignore[attr-defined]
-        node_type=node.node_type,  # type: ignore[attr-defined]
+        namespace=node.namespace,
+        node_id=str(node.node_id),
+        version=node.version,
+        node_type=node.node_type,
         display_label=label,
-        attributes=node.attributes,  # type: ignore[attr-defined]
-        is_restricted=node.is_restricted,  # type: ignore[attr-defined]
+        attributes=node.attributes,
+        is_restricted=node.is_restricted,
     )
 
 
@@ -232,14 +233,14 @@ def _edge_to_response(edge: object) -> ProvenanceEdgeResponse:
         ProvenanceEdgeResponse: 响应模型。
     """
     return ProvenanceEdgeResponse(
-        source_namespace=edge.source_namespace,  # type: ignore[attr-defined]
-        source_id=str(edge.source_id),  # type: ignore[attr-defined]
-        source_version=edge.source_version,  # type: ignore[attr-defined]
-        target_namespace=edge.target_namespace,  # type: ignore[attr-defined]
-        target_id=str(edge.target_id),  # type: ignore[attr-defined]
-        target_version=edge.target_version,  # type: ignore[attr-defined]
-        edge_type=edge.edge_type,  # type: ignore[attr-defined]
-        edge_type_label=edge.edge_type_label,  # type: ignore[attr-defined]
+        source_namespace=edge.source_namespace,
+        source_id=str(edge.source_id),
+        source_version=edge.source_version,
+        target_namespace=edge.target_namespace,
+        target_id=str(edge.target_id),
+        target_version=edge.target_version,
+        edge_type=edge.edge_type,
+        edge_type_label=edge.edge_type_label,
     )
 
 
@@ -253,13 +254,13 @@ def _graph_to_response(graph: object) -> ProvenanceGraphResponse:
         ProvenanceGraphResponse: 响应模型。
     """
     return ProvenanceGraphResponse(
-        nodes=[_node_to_response(n) for n in graph.nodes],  # type: ignore[attr-defined]
-        edges=[_edge_to_response(e) for e in graph.edges],  # type: ignore[attr-defined]
+        nodes=[_node_to_response(n) for n in graph.nodes],
+        edges=[_edge_to_response(e) for e in graph.edges],
         stats=ProvenanceStatsResponse(
-            total_nodes=graph.stats.total_nodes,  # type: ignore[attr-defined]
-            nodes_by_type=graph.stats.nodes_by_type,  # type: ignore[attr-defined]
-            restricted_nodes_count=graph.stats.restricted_nodes_count,  # type: ignore[attr-defined]
-            truncated_count=graph.stats.truncated_count,  # type: ignore[attr-defined]
+            total_nodes=graph.stats.total_nodes,
+            nodes_by_type=graph.stats.nodes_by_type,
+            restricted_nodes_count=graph.stats.restricted_nodes_count,
+            truncated_count=graph.stats.truncated_count,
         ),
     )
 
@@ -267,30 +268,30 @@ def _graph_to_response(graph: object) -> ProvenanceGraphResponse:
 def _ref_to_response(ref: object) -> KnowledgeReferenceRefResponse:
     """将 KnowledgeReferenceRef dataclass 转换为响应模型。"""
     return KnowledgeReferenceRefResponse(
-        reference_id=str(ref.reference_id),  # type: ignore[attr-defined]
-        workspace_id=str(ref.workspace_id),  # type: ignore[attr-defined]
-        run_id=str(ref.run_id),  # type: ignore[attr-defined]
-        step_id=str(ref.step_id) if ref.step_id else None,  # type: ignore[attr-defined]
-        insight_id=str(ref.insight_id) if ref.insight_id else None,  # type: ignore[attr-defined]
-        document_id=ref.document_id,  # type: ignore[attr-defined]
-        document_version=ref.document_version,  # type: ignore[attr-defined]
-        title=ref.title,  # type: ignore[attr-defined]
-        content_hash=ref.content_hash,  # type: ignore[attr-defined]
-        source_uri=ref.source_uri,  # type: ignore[attr-defined]
-        retrieval_time=ref.retrieval_time.isoformat() if ref.retrieval_time else "",  # type: ignore[attr-defined]
-        provider_name=ref.provider_name,  # type: ignore[attr-defined]
+        reference_id=str(ref.reference_id),
+        workspace_id=str(ref.workspace_id),
+        run_id=str(ref.run_id),
+        step_id=str(ref.step_id) if ref.step_id else None,
+        insight_id=str(ref.insight_id) if ref.insight_id else None,
+        document_id=ref.document_id,
+        document_version=ref.document_version,
+        title=ref.title,
+        content_hash=ref.content_hash,
+        source_uri=ref.source_uri,
+        retrieval_time=ref.retrieval_time.isoformat() if ref.retrieval_time else "",
+        provider_name=ref.provider_name,
     )
 
 
 def _detail_to_response(detail: object) -> KnowledgeReferenceDetailResponse:
     """将 KnowledgeReferenceDetail dataclass 转换为响应模型。"""
     return KnowledgeReferenceDetailResponse(
-        ref=_ref_to_response(detail.ref),  # type: ignore[attr-defined]
-        snippet_text=detail.snippet_text,  # type: ignore[attr-defined]
-        section=detail.section,  # type: ignore[attr-defined]
-        page=detail.page,  # type: ignore[attr-defined]
-        chunk_id=detail.chunk_id,  # type: ignore[attr-defined]
-        research_question_context=detail.research_question_context,  # type: ignore[attr-defined]
+        ref=_ref_to_response(detail.ref),
+        snippet_text=detail.snippet_text,
+        section=detail.section,
+        page=detail.page,
+        chunk_id=detail.chunk_id,
+        research_question_context=detail.research_question_context,
     )
 
 
@@ -314,7 +315,7 @@ async def query_provenance_graph(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth, truncate_branch=truncate_branch)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace=target_namespace,
         target_id=UUID(target_id),
         options=options,
@@ -338,7 +339,7 @@ async def query_result_provenance(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace="research:result_version",
         target_id=result_id,
         options=options,
@@ -362,7 +363,7 @@ async def query_dataset_provenance(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace="research:derived_dataset",
         target_id=dataset_id,
         options=options,
@@ -386,7 +387,7 @@ async def query_view_provenance(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace="research:view",
         target_id=view_id,
         options=options,
@@ -410,7 +411,7 @@ async def query_insight_provenance(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace="research:insight",
         target_id=insight_id,
         options=options,
@@ -430,7 +431,7 @@ async def query_node_detail(
     node_id: UUID,
 ) -> ProvenanceNodeResponse:
     """查询单个溯源节点详情（校验权限）。"""
-    node = await service.query_node_detail(namespace=namespace, node_id=node_id)  # type: ignore[attr-defined]
+    node = await service.query_node_detail(namespace=namespace, node_id=node_id)
     if node is None:
         from packages.common.errors import AppError
 
@@ -460,7 +461,7 @@ async def search_knowledge(
 
     options = KnowledgeSearchOptions(max_results=max_results)
     provider_names = [provider_name] if provider_name else None
-    results = await service.search(  # type: ignore[attr-defined]
+    results = await service.search(
         query=search_query,
         options=options,
         provider_names=provider_names,
@@ -506,7 +507,7 @@ async def list_knowledge_references_by_insight(
         # 此处简化：调用方通过 Query 参数控制
         pass
 
-    details = await service.list_references_by_insight(  # type: ignore[attr-defined]
+    details = await service.list_references_by_insight(
         insight_id=insight_id,
         include_full_content=include_full,
     )
@@ -530,7 +531,7 @@ async def get_knowledge_reference(
 
     full_content=True 需 research:manage 权限。
     """
-    detail = await service.get_reference(  # type: ignore[attr-defined]
+    detail = await service.get_reference(
         reference_id=reference_id,
         include_full_content=full_content,
     )
@@ -560,7 +561,7 @@ async def export_provenance_graph(
     from packages.research.models import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=request.max_depth)
-    graph = await service.query_provenance_graph(  # type: ignore[attr-defined]
+    graph = await service.query_provenance_graph(
         target_namespace=request.target_namespace,
         target_id=UUID(request.target_id),
         options=options,

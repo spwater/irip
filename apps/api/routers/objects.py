@@ -11,7 +11,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Any, Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
-from packages.standards.object_graph import ObjectGraphService  # type: ignore[attr-defined]
+from packages.standards.object_graph import ObjectGraphService
 
 #: 路由实例。
 objects_router = APIRouter(prefix="/api/v1/objects", tags=["objects"])
@@ -388,36 +388,36 @@ async def delete_object(
 def _object_to_response(obj: object) -> ObjectResponse:
     """将 IndustrialObject ORM 实体转为响应模型。"""
     return ObjectResponse(
-        id=str(obj.id),  # type: ignore[attr-defined]
-        department_id=str(obj.department_id),  # type: ignore[attr-defined]
-        object_type=obj.object_type,  # type: ignore[attr-defined]
-        code=obj.code,  # type: ignore[attr-defined]
-        display_name=obj.display_name,  # type: ignore[attr-defined]
-        description=obj.description,  # type: ignore[attr-defined]
-        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
-        component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
+        id=str(obj.id),
+        department_id=str(obj.department_id),
+        object_type=obj.object_type,
+        code=obj.code,
+        display_name=obj.display_name,
+        description=obj.description,
+        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,
+        component_id=str(obj.component_id) if obj.component_id else None,
         visible_departments=list(getattr(obj, "visible_departments", []) or []),
-        status=obj.status,  # type: ignore[attr-defined]
-        created_at=obj.created_at,  # type: ignore[attr-defined]
-        updated_at=obj.updated_at,  # type: ignore[attr-defined]
-        lock_version=obj.lock_version,  # type: ignore[attr-defined]
+        status=obj.status,
+        created_at=obj.created_at,
+        updated_at=obj.updated_at,
+        lock_version=obj.lock_version,
     )
 
 
 def _object_to_list_item(obj: object) -> ObjectListItem:
     """将 IndustrialObject ORM 实体转为列表项。"""
     return ObjectListItem(
-        id=str(obj.id),  # type: ignore[attr-defined]
-        department_id=str(obj.department_id) if obj.department_id else None,  # type: ignore[attr-defined]
-        object_type=obj.object_type,  # type: ignore[attr-defined]
-        code=obj.code,  # type: ignore[attr-defined]
-        display_name=obj.display_name,  # type: ignore[attr-defined]
-        description=obj.description,  # type: ignore[attr-defined]
-        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,  # type: ignore[attr-defined]
-        component_id=str(obj.component_id) if obj.component_id else None,  # type: ignore[attr-defined]
+        id=str(obj.id),
+        department_id=str(obj.department_id) if obj.department_id else None,
+        object_type=obj.object_type,
+        code=obj.code,
+        display_name=obj.display_name,
+        description=obj.description,
+        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,
+        component_id=str(obj.component_id) if obj.component_id else None,
         visible_departments=list(getattr(obj, "visible_departments", []) or []),
-        status=obj.status,  # type: ignore[attr-defined]
-        created_at=obj.created_at,  # type: ignore[attr-defined]
-        updated_at=obj.updated_at,  # type: ignore[attr-defined]
-        lock_version=obj.lock_version,  # type: ignore[attr-defined]
+        status=obj.status,
+        created_at=obj.created_at,
+        updated_at=obj.updated_at,
+        lock_version=obj.lock_version,
     )

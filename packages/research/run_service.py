@@ -35,6 +35,7 @@ from packages.research.models_trusted import (
     StepProgress,
 )
 from packages.research.repository_trusted import ResearchRepositoryTrusted
+from typing import Any
 
 logger = logging.getLogger("research.run_service")
 
@@ -61,7 +62,7 @@ class AnalysisRunService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        scheduler: object,
+        scheduler: Any,
     ) -> None:
         """初始化运行服务。
 
@@ -168,7 +169,7 @@ class AnalysisRunService(ScopedSessionMixin):
             )
 
             # 5. 调度
-            acquired, position = await self._scheduler.acquire_slot(str(actor_id), str(run.id))  # type: ignore[attr-defined]
+            acquired, position = await self._scheduler.acquire_slot(str(actor_id), str(run.id))
 
             if acquired:
                 # 有槽位：立即开始执行
@@ -279,7 +280,7 @@ class AnalysisRunService(ScopedSessionMixin):
                     )
 
             # 释放调度槽位
-            await self._scheduler.release_slot(str(run.created_by), str(run_id))  # type: ignore[attr-defined]
+            await self._scheduler.release_slot(str(run.created_by), str(run_id))
 
             # 工件标记不可发布（在独立事务中由 ArtifactService 处理，此处仅标记）
             artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(session, run_id)
@@ -451,7 +452,7 @@ class AnalysisRunService(ScopedSessionMixin):
             if run.status != "queued":
                 return QueuePosition(position=0, ahead_count=0, estimated_wait_seconds=0)
 
-            return await self._scheduler.get_queue_position(str(run_id))  # type: ignore[no-any-return, attr-defined]
+            return await self._scheduler.get_queue_position(str(run_id))
 
     async def check_publish_eligibility(
         self,

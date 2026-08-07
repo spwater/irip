@@ -67,8 +67,8 @@ export function ResearchShowcasePanel({
     try {
       const res = await apiListProducts(workspaceId);
       setProducts(res?.items ?? []);
-    } catch {
-      // 静默
+    } catch (err) {
+      console.error('加载已确认产物失败', err);
     } finally {
       setLoading(false);
     }

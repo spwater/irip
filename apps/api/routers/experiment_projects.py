@@ -17,7 +17,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Any, Annotated, Literal
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -162,19 +162,19 @@ class ExperimentProjectDetailResponse(BaseModel):
 def _to_response(project: object) -> ExperimentProjectResponse:
     """将 ExperimentProject ORM 实体转换为响应模型。"""
     return ExperimentProjectResponse(
-        id=str(project.id),  # type: ignore[attr-defined]
-        department_id=str(project.department_id),  # type: ignore[attr-defined]
-        code=project.code,  # type: ignore[attr-defined]
-        display_name=project.display_name,  # type: ignore[attr-defined]
-        description=project.description,  # type: ignore[attr-defined]
-        status=project.status,  # type: ignore[attr-defined]
+        id=str(project.id),
+        department_id=str(project.department_id),
+        code=project.code,
+        display_name=project.display_name,
+        description=project.description,
+        status=project.status,
         visible_departments=list(getattr(project, "visible_departments", []) or []),
-        visibility_scope=project.visibility_scope,  # type: ignore[attr-defined]
-        owner_user_id=str(project.owner_user_id),  # type: ignore[attr-defined]
+        visibility_scope=project.visibility_scope,
+        owner_user_id=str(project.owner_user_id),
         owner_display_name=getattr(project, "_owner_display_name", None),
-        created_at=project.created_at,  # type: ignore[attr-defined]
-        updated_at=project.updated_at,  # type: ignore[attr-defined]
-        lock_version=project.lock_version,  # type: ignore[attr-defined]
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+        lock_version=project.lock_version,
     )
 
 

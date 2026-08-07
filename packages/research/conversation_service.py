@@ -44,7 +44,7 @@ class AIConversationService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        model_gateway: object,
+        model_gateway: Any,
     ) -> None:
         """初始化 AI 对话服务。
 
@@ -125,7 +125,7 @@ class AIConversationService(ScopedSessionMixin):
             )
 
             try:
-                response = await self._model_gateway.call(  # type: ignore[attr-defined]
+                response = await self._model_gateway.call(
                     task_type=TaskType.CONVERSATION,
                     system_prompt=system_prompt,
                     data_context="",

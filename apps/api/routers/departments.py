@@ -18,7 +18,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Any, Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -132,15 +132,15 @@ def _to_response(dept: object) -> DepartmentResponse:
     """将 Department ORM 实体转换为响应模型。"""
     parent_id_val = getattr(dept, "parent_id", None)
     return DepartmentResponse(
-        id=str(dept.id),  # type: ignore[attr-defined]
-        code=dept.code,  # type: ignore[attr-defined]
-        display_name=dept.display_name,  # type: ignore[attr-defined]
-        description=dept.description,  # type: ignore[attr-defined]
-        status=dept.status,  # type: ignore[attr-defined]
-        sort_order=dept.sort_order,  # type: ignore[attr-defined]
-        created_at=dept.created_at,  # type: ignore[attr-defined]
-        updated_at=dept.updated_at,  # type: ignore[attr-defined]
-        lock_version=dept.lock_version,  # type: ignore[attr-defined]
+        id=str(dept.id),
+        code=dept.code,
+        display_name=dept.display_name,
+        description=dept.description,
+        status=dept.status,
+        sort_order=dept.sort_order,
+        created_at=dept.created_at,
+        updated_at=dept.updated_at,
+        lock_version=dept.lock_version,
         parent_id=str(parent_id_val) if parent_id_val is not None else None,
     )
 

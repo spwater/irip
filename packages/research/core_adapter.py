@@ -87,7 +87,7 @@ class CoreFactProviderImpl:
         _query_service: FactQueryService 实例（只读访问 Fact 数据）。
     """
 
-    def __init__(self, query_service: object) -> None:
+    def __init__(self, query_service: Any) -> None:
         """初始化 CoreFactProvider 实现。
 
         Args:
@@ -120,8 +120,8 @@ class CoreFactProviderImpl:
         from packages.facts.entities import Fact
 
         rls_dept_id: object | None = getattr(self._query_service, "_rls_dept_id", None)
-        dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id  # type: ignore[attr-defined]
-        user_id = self._query_service._actor_id  # type: ignore[attr-defined]
+        dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id
+        user_id = self._query_service._actor_id
 
         async with scoped_session(self._query_service._factory, dept_id, user_id) as session:  # type: ignore[attr-defined, arg-type]
             effective_size = min(max(page_size, 1), 100)
@@ -193,7 +193,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            row = await self._query_service.get_fact_detail(fact_id)  # type: ignore[attr-defined]
+            row = await self._query_service.get_fact_detail(fact_id)
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(
@@ -227,7 +227,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            data = await self._query_service.get_fact_data(fact_id)  # type: ignore[attr-defined]
+            data = await self._query_service.get_fact_data(fact_id)
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(
@@ -271,7 +271,7 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            return await self._query_service.get_fact_data(fact_id)  # type: ignore[no-any-return, attr-defined]
+            return await self._query_service.get_fact_data(fact_id)
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(

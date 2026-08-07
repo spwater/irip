@@ -59,10 +59,10 @@ class PlanService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        model_gateway: object,
+        model_gateway: Any,
         context_router: ContextRouter,
-        fact_provider: object,
-        numeric_tools: object | None = None,
+        fact_provider: Any,
+        numeric_tools: Any | None = None,
     ) -> None:
         """初始化计划服务。
 
@@ -535,7 +535,7 @@ class PlanService(ScopedSessionMixin):
                     self._numeric_tools is not None,
                     len(numeric_tool_schemas),
                 )
-                response = await self._model_gateway.call(  # type: ignore[attr-defined]
+                response = await self._model_gateway.call(
                     task_type=TaskType.LONG_CONTEXT,
                     system_prompt=analysis_system_prompt,
                     data_context=full_data_text[:256000],
@@ -606,7 +606,7 @@ class PlanService(ScopedSessionMixin):
 
                     # 第二轮 LLM 调用：带工具结果生成最终报告
                     if tool_messages:
-                        second_response = await self._model_gateway.call(  # type: ignore[attr-defined]
+                        second_response = await self._model_gateway.call(
                             task_type=TaskType.LONG_CONTEXT,
                             system_prompt=analysis_system_prompt,
                             data_context=full_data_text[:256000],
@@ -626,7 +626,7 @@ class PlanService(ScopedSessionMixin):
                 # 清洗 echarts
                 import re as _re
 
-                def _clean_echarts_block(match) -> None:  # type: ignore[no-untyped-def]
+                def _clean_echarts_block(match) -> None:
                     block = match.group(1)
                     block = _re.sub(
                         r'"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}',
@@ -856,7 +856,7 @@ class PlanService(ScopedSessionMixin):
 
             insight_candidate = None
             try:
-                response = await self._model_gateway.call(  # type: ignore[attr-defined]
+                response = await self._model_gateway.call(
                     task_type=TaskType.INSIGHT,
                     system_prompt=insight_system_prompt,
                     data_context=analysis_result[:4000],
@@ -1172,7 +1172,7 @@ class PlanService(ScopedSessionMixin):
             DataProfile: 数据 Profile。
         """
         field_manifest: dict[str, list[str]] = {}
-        source_refs = snapshot.source_refs or []  # type: ignore[attr-defined]
+        source_refs = snapshot.source_refs or []
         total_records = 0
         data_summary_parts: list[str] = []
 
@@ -1181,7 +1181,7 @@ class PlanService(ScopedSessionMixin):
             if source_id is None:
                 continue
             # 获取字段清单
-            fields = await self._fact_provider.get_fact_fields(source_id)  # type: ignore[attr-defined]
+            fields = await self._fact_provider.get_fact_fields(source_id)
             field_manifest[str(source_id)] = list(fields)
 
             # 获取 Fact 名称（来源任务名）
@@ -1257,7 +1257,7 @@ class PlanService(ScopedSessionMixin):
         total_tokens_estimate = total_records * 500
 
         return DataProfile(
-            snapshot_id=snapshot.id,  # type: ignore[attr-defined]
+            snapshot_id=snapshot.id,
             total_records=total_records,
             total_tokens_estimate=total_tokens_estimate,
             field_manifest=field_manifest,
@@ -1307,7 +1307,7 @@ class PlanService(ScopedSessionMixin):
             research_context = f"研究问题: {research_question}\n数据摘要:\n{data_text}"
 
         try:
-            response = await self._model_gateway.call(  # type: ignore[attr-defined]
+            response = await self._model_gateway.call(
                 task_type=TaskType.PLANNING,
                 system_prompt=system_prompt,
                 data_context=data_text,

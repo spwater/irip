@@ -64,8 +64,8 @@ export function AiAssistantPanel({
     try {
       const res = await apiListMessages(workspaceId, runId ?? undefined, 50);
       setMessages(res.items);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error('加载对话消息失败', err);
     } finally {
       setLoading(false);
     }

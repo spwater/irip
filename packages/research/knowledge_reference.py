@@ -26,6 +26,7 @@ from packages.research.models import (
     KnowledgeSearchResult,
 )
 from packages.research.repository import ResearchRepository
+from typing import Any
 
 logger = logging.getLogger("research.knowledge_reference")
 
@@ -58,8 +59,8 @@ class KnowledgeReferenceService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        lineage_writer: object,
-        s3: object,
+        lineage_writer: Any,
+        s3: Any,
     ) -> None:
         """初始化知识引用快照管理服务。
 
@@ -182,7 +183,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
 
         # 6. 调用溯源边写入 Hook（不阻断主流程）
         try:
-            await self._lineage_writer.on_knowledge_referenced(ref.id, None)  # type: ignore[attr-defined]
+            await self._lineage_writer.on_knowledge_referenced(ref.id, None)
         except Exception as exc:
             logger.warning("on_knowledge_referenced hook failed: %s", exc)
 
@@ -391,7 +392,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
                 ensure_ascii=False,
             ).encode("utf-8")
             # S3Repository 方法为同步，直接调用（在事务内执行）
-            self._s3.put_object(path, content)  # type: ignore[attr-defined]
+            self._s3.put_object(path, content)
             return path
         except Exception as exc:
             logger.error("Failed to store snippet to MinIO: %s", exc)
@@ -408,9 +409,9 @@ class KnowledgeReferenceService(ScopedSessionMixin):
         """
         try:
             # S3Repository 方法为同步，直接调用
-            content = self._s3.get_object(snippet_storage_path)  # type: ignore[attr-defined]
+            content = self._s3.get_object(snippet_storage_path)
             data = json.loads(content.decode("utf-8"))
-            return data.get("snippet_text", "")  # type: ignore[no-any-return]
+            return data.get("snippet_text", "")
         except Exception as exc:
             logger.error("Failed to retrieve snippet from MinIO: %s", exc)
             return ""

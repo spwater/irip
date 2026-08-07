@@ -74,7 +74,7 @@ class PublicationService(ScopedSessionMixin):
         session_factory: async_sessionmaker[AsyncSession],
         department_id: UUID,
         actor_id: UUID | None,
-        product_service: object,
+        product_service: Any,
         lineage_service: LineageEdgeService,
     ) -> None:
         """初始化成果包服务。
@@ -1680,23 +1680,23 @@ class PublicationService(ScopedSessionMixin):
             bool: 是否有权查看。
         """
         # private: 仅 owner 可见
-        if result.current_acl_type == "private":  # type: ignore[attr-defined]
-            return result.owner_user_id == principal_id  # type: ignore[no-any-return, attr-defined]
+        if result.current_acl_type == "private":
+            return result.owner_user_id == principal_id
 
         # tree: 同部门可见（首期简化为部门内可见，实际需查询部门树）
-        if result.current_acl_type == "tree":  # type: ignore[attr-defined]
+        if result.current_acl_type == "tree":
             return True  # 首期简化：同部门用户可见（RLS 已过滤跨部门）
 
         # explicit: 指定用户可见
-        if result.current_acl_type == "explicit":  # type: ignore[attr-defined]
-            explicit_ids = result.current_explicit_user_ids or []  # type: ignore[attr-defined]
+        if result.current_acl_type == "explicit":
+            explicit_ids = result.current_explicit_user_ids or []
             return (
                 str(principal_id) in [str(uid) for uid in explicit_ids]
-                or result.owner_user_id == principal_id  # type: ignore[attr-defined]
+                or result.owner_user_id == principal_id
             )
 
         # all: 全部可见
-        if result.current_acl_type == "all":  # type: ignore[attr-defined]
+        if result.current_acl_type == "all":
             return True
 
         # 未知 ACL 类型，保守为不可见
@@ -1717,13 +1717,13 @@ class PublicationService(ScopedSessionMixin):
             ResultVersionDetail: 版本详情。
         """
         # 查询发布者 display_name
-        publisher_display = str(version.publisher)  # type: ignore[attr-defined]
+        publisher_display = str(version.publisher)
         try:
             from sqlalchemy import text as _sa_text
 
-            r = await session.execute(  # type: ignore[attr-defined]
+            r = await session.execute(
                 _sa_text("SELECT display_name FROM app_user WHERE id = :uid"),
-                {"uid": str(version.publisher)},  # type: ignore[attr-defined]
+                {"uid": str(version.publisher)},
             )
             row = r.fetchone()
             if row and row[0]:
@@ -1732,23 +1732,23 @@ class PublicationService(ScopedSessionMixin):
             pass
 
         return ResultVersionDetail(
-            result_id=version.result_id,  # type: ignore[attr-defined]
-            version_number=version.version_number,  # type: ignore[attr-defined]
-            title=version.title,  # type: ignore[attr-defined]
-            summary=version.summary or "",  # type: ignore[attr-defined]
-            tags=list(version.tags or []),  # type: ignore[attr-defined]
-            release_notes=version.release_notes or "",  # type: ignore[attr-defined]
-            dataset_version_refs=list(version.dataset_version_refs or []),  # type: ignore[attr-defined]
-            view_version_refs=list(version.view_version_refs or []),  # type: ignore[attr-defined]
-            insight_version_refs=list(version.insight_version_refs or []),  # type: ignore[attr-defined]
-            evidence_snapshot_ids=list(version.evidence_snapshot_ids or []),  # type: ignore[attr-defined]
-            analysis_run_ids=list(version.analysis_run_ids or []),  # type: ignore[attr-defined]
-            source_run_statuses=dict(version.source_run_statuses or {}),  # type: ignore[attr-defined]
+            result_id=version.result_id,
+            version_number=version.version_number,
+            title=version.title,
+            summary=version.summary or "",
+            tags=list(version.tags or []),
+            release_notes=version.release_notes or "",
+            dataset_version_refs=list(version.dataset_version_refs or []),
+            view_version_refs=list(version.view_version_refs or []),
+            insight_version_refs=list(version.insight_version_refs or []),
+            evidence_snapshot_ids=list(version.evidence_snapshot_ids or []),
+            analysis_run_ids=list(version.analysis_run_ids or []),
+            source_run_statuses=dict(version.source_run_statuses or {}),
             publisher=publisher_display,  # type: ignore[arg-type]
-            published_at=version.published_at,  # type: ignore[attr-defined]
-            content_hash=version.content_hash,  # type: ignore[attr-defined]
-            published_permission_envelope=dict(version.published_permission_envelope or {}),  # type: ignore[attr-defined]
-            status=version.status,  # type: ignore[attr-defined]
+            published_at=version.published_at,
+            content_hash=version.content_hash,
+            published_permission_envelope=dict(version.published_permission_envelope or {}),
+            status=version.status,
         )
 
     async def _get_dataset_detail(

@@ -57,7 +57,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         department_id: UUID,
         actor_id: UUID | None,
         fact_provider: CoreFactProviderProtocol,
-        lineage_writer: object | None = None,
+        lineage_writer: Any | None = None,
     ) -> None:
         """初始化证据快照服务。
 
@@ -254,7 +254,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_snapshot_frozen(_hook_snapshot_id, _hook_source_refs)  # type: ignore[attr-defined]
+                await self._lineage_writer.on_snapshot_frozen(_hook_snapshot_id, _hook_source_refs)
             except Exception as exc:
                 logger.warning("on_snapshot_frozen hook failed: %s", exc)
 
@@ -312,7 +312,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # 此处通过 duck typing 调用 get_fact_data 方法（由 CoreFactProviderImpl 实现）。
         get_data = getattr(self._fact_provider, "get_fact_data", None)
         if get_data is not None:
-            return await get_data(fact_id)  # type: ignore[no-any-return]
+            return await get_data(fact_id)
         # 如果 fact_provider 不提供 get_fact_data，返回空字典（哈希仅基于字段名）
         return {}
 

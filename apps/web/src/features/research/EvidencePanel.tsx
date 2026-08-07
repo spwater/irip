@@ -104,8 +104,8 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
     try {
       const res = await apiListSnapshots(workspaceId);
       setSnapshots(res?.items ?? []);
-    } catch {
-      // 静默
+    } catch (err) {
+      console.error('加载证据快照失败', err);
     }
   }, [workspaceId]);
 

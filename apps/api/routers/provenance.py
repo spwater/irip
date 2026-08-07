@@ -28,6 +28,7 @@ from packages.provenance.derivations import DerivationRunRef, DerivationService
 from packages.provenance.evidence import EvidenceMember, EvidenceService, EvidenceSetRef
 from packages.provenance.graph import ProvenanceGraph, ProvenanceGraphService
 from packages.provenance.recipes import RecipeService, RecipeVersion
+from typing import Any
 
 #: 需 provenance:write 权限的当前用户依赖。
 WriteUserDep = Annotated[CurrentUser, Depends(require_permission("provenance:write"))]
@@ -269,7 +270,7 @@ def _member_to_response(m: EvidenceMember) -> EvidenceMemberResponse:
     )
 
 
-def _output_to_response(out) -> ParameterCandidateOutputResponse:  # type: ignore[no-untyped-def]
+def _output_to_response(out) -> ParameterCandidateOutputResponse:
     """将 ParameterCandidateOutput 转为响应模型。"""
     return ParameterCandidateOutputResponse(
         variable_code=out.variable_code,

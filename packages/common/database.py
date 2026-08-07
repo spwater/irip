@@ -55,7 +55,14 @@ def build_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
         async_sessionmaker[AsyncSession]: 会话工厂，``expire_on_commit=False``
         避免提交后访问属性触发隐式刷新。
     """
-    engine = create_async_engine(url, pool_pre_ping=True)
+    engine = create_async_engine(
+        url,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_timeout=30,
+        pool_recycle=3600,
+    )
 
     @event.listens_for(engine.sync_engine, "connect")
     def _set_tenant_guc_default(dbapi_conn, _record):  # type: ignore[no-untyped-def]

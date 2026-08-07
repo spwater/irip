@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import ScopedSessionMixin
 from packages.research.models_trusted import ArtifactContent, ArtifactRef
 from packages.research.repository_trusted import ResearchRepositoryTrusted
+from typing import Any
 
 logger = logging.getLogger("research.artifacts")
 
@@ -64,7 +65,7 @@ class RunArtifactService(ScopedSessionMixin):
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        s3_repo: object,
+        s3_repo: Any,
     ) -> None:
         """初始化工件服务。
 
@@ -346,6 +347,6 @@ class RunArtifactService(ScopedSessionMixin):
             return result if isinstance(result, bytes) else result
         sync_get = getattr(self._s3_repo, "get_object_sync", None)
         if sync_get is not None:
-            return sync_get(storage_path)  # type: ignore[no-any-return]
+            return sync_get(storage_path)
         logger.warning("S3Repository has no get_object method, returning empty")
         return b""

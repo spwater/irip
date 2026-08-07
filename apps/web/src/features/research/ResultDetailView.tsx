@@ -92,8 +92,8 @@ export function ResultDetailView({
     try {
       const info = await apiGetPublicationProvenance(resultId);
       setProvenance(info);
-    } catch {
-      // 静默
+    } catch (err) {
+      console.error('加载来源信息失败', err);
     } finally {
       setLoadingProvenance(false);
     }

@@ -32,6 +32,7 @@ from packages.research.models import (
     WorkspaceRef,
 )
 from packages.research.repository import ResearchRepository
+from typing import Any
 
 if TYPE_CHECKING:
     pass
@@ -82,7 +83,7 @@ class WorkspaceService(ScopedSessionMixin):
         department_id: UUID,
         actor_id: UUID | None,
         fact_provider: CoreFactProviderProtocol,
-        research_catalog: object | None = None,
+        research_catalog: Any | None = None,
     ) -> None:
         """初始化工作空间服务。
 
@@ -649,7 +650,7 @@ class WorkspaceService(ScopedSessionMixin):
                         fields={},
                     )
                 # 搜索校验归属（通过 owner_user_id 过滤）
-                results = await self._research_catalog.search_derived_data(  # type: ignore[attr-defined]
+                results = await self._research_catalog.search_derived_data(
                     query="",
                     filters={"dataset_id": str(source_id)},
                 )
@@ -674,7 +675,7 @@ class WorkspaceService(ScopedSessionMixin):
                         fields={},
                     )
                 # 通过跨用户 ACL 过滤搜索校验
-                results = await self._research_catalog.search_published_derived_data(  # type: ignore[attr-defined]
+                results = await self._research_catalog.search_published_derived_data(
                     query="",
                     filters={"dataset_id_filter": str(source_id)},
                 )

@@ -73,8 +73,8 @@ export function KnowledgeReferenceList({
         hasManagePermission,
       );
       setReferences(refs);
-    } catch {
-      // 静默处理
+    } catch (err) {
+      console.error('加载知识引用失败', err);
       setReferences([]);
     } finally {
       setLoading(false);

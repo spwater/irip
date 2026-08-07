@@ -17,7 +17,7 @@
 """
 
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Any, Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -131,17 +131,17 @@ class EquipmentListResponse(BaseModel):
 def _to_response(equip: object) -> EquipmentResponse:
     """将 Equipment ORM 实体转换为响应模型。"""
     return EquipmentResponse(
-        id=str(equip.id),  # type: ignore[attr-defined]
-        department_id=str(equip.department_id),  # type: ignore[attr-defined]
-        code=equip.code,  # type: ignore[attr-defined]
-        display_name=equip.display_name,  # type: ignore[attr-defined]
-        description=equip.description,  # type: ignore[attr-defined]
+        id=str(equip.id),
+        department_id=str(equip.department_id),
+        code=equip.code,
+        display_name=equip.display_name,
+        description=equip.description,
         visible_departments=list(getattr(equip, "visible_departments", []) or []),
-        status=equip.status,  # type: ignore[attr-defined]
-        sort_order=equip.sort_order,  # type: ignore[attr-defined]
-        created_at=equip.created_at,  # type: ignore[attr-defined]
-        updated_at=equip.updated_at,  # type: ignore[attr-defined]
-        lock_version=equip.lock_version,  # type: ignore[attr-defined]
+        status=equip.status,
+        sort_order=equip.sort_order,
+        created_at=equip.created_at,
+        updated_at=equip.updated_at,
+        lock_version=equip.lock_version,
     )
 
 

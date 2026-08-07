@@ -52,6 +52,7 @@ from apps.api.dependencies.authorization import require_permission
 from packages.research.catalog import ResearchCatalogImpl
 from packages.research.publication import PublicationService
 from packages.research.search import ResultSearchService
+from typing import Any
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
@@ -176,7 +177,7 @@ class NewWorkspaceFromPublicationRequest(BaseModel):
 # ---- 辅助函数 ----
 
 
-def _result_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+def _result_ref_to_dict(ref) -> dict[str, Any]:
     return {
         "result_id": str(ref.result_id),
         "name": ref.name,
@@ -186,7 +187,7 @@ def _result_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     }
 
 
-def _version_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+def _version_ref_to_dict(ref) -> dict[str, Any]:
     return {
         "result_id": str(ref.result_id),
         "version_number": ref.version_number,
@@ -196,7 +197,7 @@ def _version_ref_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     }
 
 
-def _version_detail_to_dict(detail) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+def _version_detail_to_dict(detail) -> dict[str, Any]:
     return {
         "result_id": str(detail.result_id),
         "version_number": detail.version_number,
@@ -218,7 +219,7 @@ def _version_detail_to_dict(detail) -> dict[str, Any]:  # type: ignore[no-untype
     }
 
 
-def _acl_revision_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+def _acl_revision_to_dict(ref) -> dict[str, Any]:
     return {
         "revision_number": ref.revision_number,
         "acl_type": ref.acl_type,
@@ -233,7 +234,7 @@ def _acl_revision_to_dict(ref) -> dict[str, Any]:  # type: ignore[no-untyped-def
     }
 
 
-def _search_item_to_dict(item) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+def _search_item_to_dict(item) -> dict[str, Any]:
     return {
         "result_id": str(item.result_id),
         "name": item.name,
@@ -597,7 +598,7 @@ async def get_publication_provenance(
     if current_version:
         from sqlalchemy import text as _sa_text
 
-        async with service._scoped_session() as session:  # type: ignore[attr-defined]
+        async with service._scoped_session() as session:
             for sid in current_version.evidence_snapshot_ids:
                 try:
                     r = await session.execute(

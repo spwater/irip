@@ -157,19 +157,19 @@ class ResultSearchService(ScopedSessionMixin):
                     continue
 
                 # 统计产物数量
-                dataset_count = len(version.dataset_version_refs or [])  # type: ignore[attr-defined]
-                view_count = len(version.view_version_refs or [])  # type: ignore[attr-defined]
-                insight_count = len(version.insight_version_refs or [])  # type: ignore[attr-defined]
+                dataset_count = len(version.dataset_version_refs or [])
+                view_count = len(version.view_version_refs or [])
+                insight_count = len(version.insight_version_refs or [])
 
                 items.append(
                     SearchResultItem(
                         result_id=result.id,
                         name=result.name,
-                        title=version.title,  # type: ignore[attr-defined]
-                        summary=version.summary or "",  # type: ignore[attr-defined]
-                        tags=list(version.tags or []),  # type: ignore[attr-defined]
-                        publisher=version.publisher,  # type: ignore[attr-defined]
-                        published_at=version.published_at,  # type: ignore[attr-defined]
+                        title=version.title,
+                        summary=version.summary or "",
+                        tags=list(version.tags or []),
+                        publisher=version.publisher,
+                        published_at=version.published_at,
                         current_version=result.current_version,
                         current_acl_type=result.current_acl_type,
                         dataset_count=dataset_count,
@@ -230,17 +230,17 @@ class ResultSearchService(ScopedSessionMixin):
         Returns:
             bool: 是否有权查看。
         """
-        if result.current_acl_type == "private":  # type: ignore[attr-defined]
-            return result.owner_user_id == principal_id  # type: ignore[no-any-return, attr-defined]
-        if result.current_acl_type == "tree":  # type: ignore[attr-defined]
+        if result.current_acl_type == "private":
+            return result.owner_user_id == principal_id
+        if result.current_acl_type == "tree":
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
-        if result.current_acl_type == "explicit":  # type: ignore[attr-defined]
-            explicit_ids = result.current_explicit_user_ids or []  # type: ignore[attr-defined]
+        if result.current_acl_type == "explicit":
+            explicit_ids = result.current_explicit_user_ids or []
             return (
                 str(principal_id) in [str(uid) for uid in explicit_ids]
-                or result.owner_user_id == principal_id  # type: ignore[attr-defined]
+                or result.owner_user_id == principal_id
             )
-        if result.current_acl_type == "all":  # type: ignore[attr-defined]
+        if result.current_acl_type == "all":
             return True
         return False
 
@@ -257,11 +257,11 @@ class ResultSearchService(ScopedSessionMixin):
             bool: 是否匹配。
         """
         query_lower = query.lower()
-        if version.title and query_lower in version.title.lower():  # type: ignore[attr-defined]
+        if version.title and query_lower in version.title.lower():
             return True
-        if version.summary and query_lower in version.summary.lower():  # type: ignore[attr-defined]
+        if version.summary and query_lower in version.summary.lower():
             return True
-        tags = version.tags or []  # type: ignore[attr-defined]
+        tags = version.tags or []
         for tag in tags:
             if isinstance(tag, str) and query_lower in tag.lower():
                 return True
