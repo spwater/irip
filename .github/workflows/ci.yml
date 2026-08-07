@@ -430,9 +430,8 @@ jobs:
         run: |
           corepack enable pnpm
           pnpm install --frozen-lockfile
-          npm install -g @cyclonedx/cyclonedx-npm
-          # M-11: 从已安装的 node_modules 生成 SBOM，失败时阻断（不写空 components）
-          cyclonedx-npm --output-file ../sbom-node.json
+          # pnpm 安装的 node_modules 对 npm 不兼容，用 npx 运行 cyclonedx-npm
+          npx --yes @cyclonedx/cyclonedx-npm --output-file ../sbom-node.json
           # M-11: 验证 SBOM 非空且包含组件
           if [ ! -s ../sbom-node.json ]; then
             echo "ERROR: Node SBOM file is empty"

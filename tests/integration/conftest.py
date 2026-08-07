@@ -333,7 +333,8 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             {"uid": user_id},
         )
 
-        # component 相关（component_version → component）
+        # component 相关（component_version 不可变，需禁用 trigger）
+        conn.execute(sa.text("ALTER TABLE component_version DISABLE TRIGGER ALL"))
         conn.execute(
             sa.text(
                 "DELETE FROM component_version WHERE component_id IN ("
@@ -341,12 +342,14 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             ),
             {"uid": user_id},
         )
+        conn.execute(sa.text("ALTER TABLE component_version ENABLE TRIGGER ALL"))
         conn.execute(
             sa.text("DELETE FROM component WHERE owner_user_id = :uid"),
             {"uid": user_id},
         )
 
-        # model 相关（model_version → model）
+        # model 相关（model_version 不可变，需禁用 trigger）
+        conn.execute(sa.text("ALTER TABLE model_version DISABLE TRIGGER ALL"))
         conn.execute(
             sa.text(
                 "DELETE FROM model_version WHERE model_id IN ("
@@ -354,6 +357,7 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             ),
             {"uid": user_id},
         )
+        conn.execute(sa.text("ALTER TABLE model_version ENABLE TRIGGER ALL"))
         conn.execute(
             sa.text("DELETE FROM model WHERE owner_user_id = :uid"),
             {"uid": user_id},
