@@ -2,7 +2,7 @@
 
 覆盖 P0 功能需求：
 - P0-01 对话参与者管理（创建自动 owner / 邀请 / 移除 / 退出 / 跨部门 拒绝）；
-- P0-02/09 对话三栏查询（private / same_org / cross_org 返回空）；
+- P0-02/09 对话三栏查询（private / same_dept / cross_dept 返回空）；
 - P0-03 @人提及（list_mentionable_users 同 org active）。
 
 依赖测试数据库（IRIP_TEST_DATABASE_URL），
@@ -145,7 +145,7 @@ class TestCreateConversationAutoOwner:
 class TestAddParticipant:
     """P0-01: 邀请同 org 成员 / 跨部门 拒绝 / 重复邀请冲突。"""
 
-    async def test_invite_same_org_member(self, ai_service, sync_engine):
+    async def test_invite_same_dept_member(self, ai_service, sync_engine):
         owner_id, org_id = _insert_user(
             sync_engine, f"inviter-{uuid4().hex[:8]}@irip.local", display_name="邀请者"
         )
@@ -171,7 +171,7 @@ class TestAddParticipant:
             _cleanup_user(sync_engine, owner_id)
             _cleanup_user(sync_engine, target_id)
 
-    async def test_invite_cross_org_rejected(self, ai_service, sync_engine):
+    async def test_invite_cross_dept_rejected(self, ai_service, sync_engine):
         owner_id, org_a = _insert_user(sync_engine, f"cross-owner-{uuid4().hex[:8]}@irip.local")
         target_id, org_b = _insert_user(sync_engine, f"cross-target-{uuid4().hex[:8]}@irip.local")
         assert org_a != org_b
@@ -440,11 +440,11 @@ class TestListParticipants:
 class TestListConversationsWithTab:
     """P0-02/09: 对话三栏查询。"""
 
-    async def test_cross_org_returns_empty(self, ai_service, sync_engine):
+    async def test_cross_dept_returns_empty(self, ai_service, sync_engine):
         user_id, org_id = _insert_user(sync_engine, f"tab-cross-{uuid4().hex[:8]}@irip.local")
         try:
             result = await ai_service.list_conversations_with_tab(
-                user_id=user_id, department_id=org_id, tab="cross_org"
+                user_id=user_id, department_id=org_id, tab="cross_dept"
             )
             assert result == []
         finally:
@@ -477,7 +477,7 @@ class TestListConversationsWithTab:
             _cleanup_user(sync_engine, owner_id)
             _cleanup_user(sync_engine, member_id)
 
-    async def test_same_org_tab_returns_owned_and_participated(self, ai_service, sync_engine):
+    async def test_same_dept_tab_returns_owned_and_participated(self, ai_service, sync_engine):
         owner_id, org_id = _insert_user(sync_engine, f"tab-org-{uuid4().hex[:8]}@irip.local")
         member_id, _ = _insert_user(
             sync_engine, f"tab-org-m-{uuid4().hex[:8]}@irip.local", org_id=org_id
@@ -494,16 +494,16 @@ class TestListConversationsWithTab:
                 inviter_user_id=owner_id,
                 target_user_id=member_id,
             )
-            # owner 视角：same_org 包含 solo 和 shared
+            # owner 视角：same_dept 包含 solo 和 shared
             result = await ai_service.list_conversations_with_tab(
-                user_id=owner_id, department_id=org_id, tab="same_org"
+                user_id=owner_id, department_id=org_id, tab="same_dept"
             )
             ids = {r.id for r in result}
             assert solo.id in ids
             assert shared.id in ids
-            # member 视角：same_org 仅包含 shared（参与者）
+            # member 视角：same_dept 仅包含 shared（参与者）
             result_member = await ai_service.list_conversations_with_tab(
-                user_id=member_id, department_id=org_id, tab="same_org"
+                user_id=member_id, department_id=org_id, tab="same_dept"
             )
             member_ids = {r.id for r in result_member}
             assert shared.id in member_ids
@@ -519,7 +519,7 @@ class TestListConversationsWithTab:
 class TestListMentionableUsers:
     """P0-03: list_mentionable_users 返回同 org active 用户（排除自己）。"""
 
-    async def test_returns_same_org_active_excluding_self(self, ai_service, sync_engine):
+    async def test_returns_same_dept_active_excluding_self(self, ai_service, sync_engine):
         me_id, org_id = _insert_user(
             sync_engine, f"me-{uuid4().hex[:8]}@irip.local", display_name="我", roles=["lab_member"]
         )

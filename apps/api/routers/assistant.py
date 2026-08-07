@@ -297,7 +297,7 @@ async def list_conversations(
     org_id = await _resolve_dept_id(current_user)
 
     # tab 参数走协作筛选逻辑
-    if tab is not None and tab in ("private", "collaborative", "same_org", "cross_org"):
+    if tab is not None and tab in ("private", "collaborative", "same_dept", "cross_dept"):
         refs = await service.list_conversations_with_tab(
             user_id=current_user.user_id,
             department_id=org_id,

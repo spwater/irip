@@ -65,16 +65,15 @@ class CollaborationService:
 
         tab 分类逻辑（架构文档 §7.2）：
         - private: user_id == me AND 无其他参与者的对话
-        - same_org: (user_id == me OR participant) — 同部门可见对话
-          （org 命名为历史遗留，实际按 department_id 隔离）
-        - cross_org: 返回空列表（已废弃，organization_id 已退役）
+        - same_dept: (user_id == me OR participant) — 同部门可见对话
+        - cross_dept: 已废弃，返回空列表
 
         结果附带参与者摘要（批量查询 conversation_participant JOIN app_user）。
 
         Args:
             user_id: 当前用户 ID。
             department_id: 当前用户部门 ID。
-            tab: 筛选标签（private / same_org / cross_org）。
+            tab: 筛选标签（private / collaborative / same_dept / cross_dept）。
             limit: 最大返回数。
             include_archived: 是否包含已归档对话。
             archived_only: 是否只返回已归档对话。
@@ -83,8 +82,8 @@ class CollaborationService:
         Returns:
             list[ConversationRef]: 对话引用列表（含参与者摘要）。
         """
-        # cross_org 已废弃，不再使用
-        if tab == "cross_org":
+        # cross_dept 已废弃
+        if tab == "cross_dept":
             return []
 
         from packages.auth.entities import AppUser
@@ -132,7 +131,7 @@ class CollaborationService:
                 )
                 conditions.append(participant_or_owner)
                 conditions.append(other_participant_exists)
-            elif tab == "same_org":
+            elif tab == "same_dept":
                 # 同部门对话：owner 或参与者，不要求有其他参与者
                 participant_or_owner = sa.or_(
                     AIConversation.user_id == user_id,
