@@ -4,6 +4,7 @@ import {
   Form,
   Input,
   Space,
+  Switch,
   Typography,
   message,
 } from 'antd';
@@ -22,6 +23,7 @@ type AIConfig = {
   research_model_name: string;
   enabled: boolean;
   meta_prompt: string | null;
+  thinking_enabled: boolean;
   updated_at: string | null;
 };
 
@@ -42,6 +44,7 @@ export function AIConfigPage(): JSX.Element {
   const [testExtractLoading, setTestExtractLoading] = useState(false);
   const [testAssistantLoading, setTestAssistantLoading] = useState(false);
   const [testResearchLoading, setTestResearchLoading] = useState(false);
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
 
   const { data: config } = useQuery({
     queryKey: ['ai-config'],
@@ -64,6 +67,7 @@ export function AIConfigPage(): JSX.Element {
         assistant_model_name: config.assistant_model_name || config.model_name || '',
         research_model_name: config.research_model_name || config.model_name || '',
       });
+      setThinkingEnabled(config.thinking_enabled ?? false);
     }
   }, [config, form]);
 
@@ -86,6 +90,7 @@ export function AIConfigPage(): JSX.Element {
       research_model_name: string;
       enabled: boolean;
       meta_prompt: string;
+      thinking_enabled: boolean;
     }) => {
       const res = await http.put<AIConfig>('/ai-config', values);
       return res.data;
@@ -163,6 +168,7 @@ export function AIConfigPage(): JSX.Element {
         research_model_name: values.research_model_name,
         enabled: true,
         meta_prompt: existingPrompt,
+        thinking_enabled: thinkingEnabled,
       });
     } catch {
       // 校验失败
@@ -200,6 +206,17 @@ export function AIConfigPage(): JSX.Element {
           rules={[{ required: true, message: '请输入 API 密钥' }]}
         >
           <Input.Password placeholder="sk-..." />
+        </Form.Item>
+        <Form.Item label="思考模式">
+          <Space align="center">
+            <Switch
+              checked={thinkingEnabled}
+              onChange={setThinkingEnabled}
+            />
+            <span style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
+              {thinkingEnabled ? '已开启 — 模型支持思考模式（如 Qwen3）' : '已关闭 — AI 助手中的思考滑钮将不生效'}
+            </span>
+          </Space>
         </Form.Item>
         <Form.Item label="数据提取模型">
           <Space.Compact style={{ width: '100%' }}>

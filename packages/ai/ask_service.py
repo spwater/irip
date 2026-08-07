@@ -70,6 +70,7 @@ class _AskContext:
     thinking_enabled: bool
     provider_name: str
     mention_only: bool
+    config_thinking_enabled: bool = False
 
 
 class AskService:
@@ -234,9 +235,11 @@ class AskService:
             provider_mode=provider_name,
         )
 
-        # 思考模式
+        # 思考模式：前端开关 AND 配置层面开关，两者都为 True 时才启用
+        config_thinking = False
         if hasattr(self._provider, "_thinking_enabled"):
-            self._provider._thinking_enabled = thinking_enabled
+            config_thinking = getattr(self._provider, "_thinking_enabled", False)
+            self._provider._thinking_enabled = thinking_enabled and config_thinking
 
         # 创建取消事件并注册（仅对非 mention-only 消息注册）
         if not mention_only:
@@ -260,6 +263,7 @@ class AskService:
             thinking_enabled=thinking_enabled,
             provider_name=provider_name,
             mention_only=mention_only,
+            config_thinking_enabled=config_thinking,
         )
 
     async def _execute_and_finalize(
@@ -457,7 +461,7 @@ class AskService:
             )
 
             if hasattr(self._provider, "_thinking_enabled"):
-                self._provider._thinking_enabled = ctx.thinking_enabled
+                self._provider._thinking_enabled = ctx.thinking_enabled and ctx.config_thinking_enabled
 
             try:
                 second_response: AIResponse = await self._provider.complete(
