@@ -265,7 +265,7 @@ class TestSchemaConsistency:
     def test_evaluate_variables_limits(self) -> None:
         schema = EVALUATE_EXPRESSION_SCHEMA
         var_prop = schema["properties"]["variables"]
-        assert var_prop["minItems"] == 1
+        assert var_prop["minItems"] == 0
         assert var_prop["maxItems"] == 16
 
     def test_evaluate_options_enums(self) -> None:

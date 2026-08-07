@@ -229,12 +229,6 @@ class NumericToolFacade:
                 message="'variables' must be an array",
                 path="variables",
             )
-        if len(variables) < 1:
-            raise NumericError(
-                code="numeric_invalid_source",
-                message="'variables' must have at least 1 variable",
-                path="variables",
-            )
         if len(variables) > self._limits.max_variables:
             raise NumericError(
                 code="numeric_size_limit",

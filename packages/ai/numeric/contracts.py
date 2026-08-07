@@ -489,7 +489,7 @@ EVALUATE_EXPRESSION_SCHEMA: dict[str, Any] = {
         },
         "variables": {
             "type": "array",
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 16,
             "items": _VARIABLE_SOURCE_SCHEMA,
             "description": "变量数组，每个变量指定名称和数据来源",
