@@ -49,12 +49,19 @@ class CurrentUser:
 def get_token_secret() -> str:
     """获取 JWT 签名密钥。
 
-    从环境变量 IRIP_JWT_SECRET 读取，开发环境使用默认值。
-
-    Returns:
-        str: JWT 签名密钥。
+    从环境变量 IRIP_JWT_SECRET 读取。
+    非测试环境缺密钥时拒绝启动（fail-closed），与 EnvelopeCrypto 策略对齐。
+    测试环境使用固定默认值。
     """
-    return os.getenv("IRIP_JWT_SECRET", "irip-dev-secret-2026")
+    secret = os.getenv("IRIP_JWT_SECRET", "")
+    if not secret:
+        if os.getenv("IRIP_ENV") != "test":
+            raise RuntimeError(
+                "IRIP_JWT_SECRET is required in non-test environment. "
+                "Set IRIP_ENV=test for test environments or provide IRIP_JWT_SECRET."
+            )
+        return "irip-dev-secret-2026"
+    return secret
 
 
 def get_auth_session_factory() -> async_sessionmaker[AsyncSession]:
@@ -119,51 +126,58 @@ async def get_current_user(
     user_id = UUID(str(sub))
 
     # H-06: 每次认证复核 is_active 和 token_version
+    # fail-closed: session_factory 为 None 时拒绝认证（DI 未覆盖可能是配置错误）
+    if session_factory is None:
+        raise AppError(
+            code="internal_error",
+            message="认证服务未正确配置（session_factory 缺失）",
+            retryable=False,
+            fields={},
+        )
     department_id: UUID | None = None
     is_root_member: bool = False
-    if session_factory is not None:
-        async with session_factory() as session:
-            user: AppUser | None = await session.scalar(
-                sa.select(AppUser).where(AppUser.id == user_id)
-            )
-            if user is not None:
-                department_id = user.department_id
-                # H-06: 复核账户状态（disabled 用户拒绝）
-                if user.status == "disabled":
-                    raise AppError(
-                        code="forbidden",
-                        message="用户已被禁用",
-                        retryable=False,
-                        fields={},
-                    )
-                # H-06: 复核 token_version（不匹配则 token 已被撤销）
-                if user.token_version != token_version_jwt:
-                    raise AppError(
-                        code="token_expired",
-                        message="访问令牌已被撤销，请重新登录",
-                        retryable=False,
-                        fields={},
-                    )
-                # department_id 不可为空（fail-closed）
-                if department_id is None:
-                    raise AppError(
-                        code="forbidden",
-                        message="用户未分配部门（department_id 为空）",
-                        retryable=False,
-                        fields={"user_id": str(user_id)},
-                    )
-                # 查询是否 root 部门成员
-                from apps.api.dependencies.dept_scope import check_is_root_member
-
-                is_root_member = await check_is_root_member(department_id, session_factory)
-            else:
-                # 用户不存在，拒绝
+    async with session_factory() as session:
+        user: AppUser | None = await session.scalar(
+            sa.select(AppUser).where(AppUser.id == user_id)
+        )
+        if user is not None:
+            department_id = user.department_id
+            # H-06: 复核账户状态（disabled 用户拒绝）
+            if user.status == "disabled":
                 raise AppError(
-                    code="invalid_credentials",
-                    message="用户不存在",
+                    code="forbidden",
+                    message="用户已被禁用",
                     retryable=False,
                     fields={},
                 )
+            # H-06: 复核 token_version（不匹配则 token 已被撤销）
+            if user.token_version != token_version_jwt:
+                raise AppError(
+                    code="token_expired",
+                    message="访问令牌已被撤销，请重新登录",
+                    retryable=False,
+                    fields={},
+                )
+            # department_id 不可为空（fail-closed）
+            if department_id is None:
+                raise AppError(
+                    code="forbidden",
+                    message="用户未分配部门（department_id 为空）",
+                    retryable=False,
+                    fields={"user_id": str(user_id)},
+                )
+            # 查询是否 root 部门成员
+            from apps.api.dependencies.dept_scope import check_is_root_member
+
+            is_root_member = await check_is_root_member(department_id, session_factory)
+        else:
+            # 用户不存在，拒绝
+            raise AppError(
+                code="invalid_credentials",
+                message="用户不存在",
+                retryable=False,
+                fields={},
+            )
 
     return CurrentUser(
         user_id=user_id,

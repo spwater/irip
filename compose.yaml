@@ -95,7 +95,7 @@ services:
     <<: *security-base
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -135,7 +135,7 @@ services:
     command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       # 备份/恢复 subprocess 专用 superuser 连接串（pg_basebackup/pg_dump 需全量数据，RLS 会过滤 irip_app）
       IRIP_DATABASE_ADMIN_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
@@ -183,7 +183,7 @@ services:
     command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:-irip_dev_password}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1

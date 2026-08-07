@@ -89,7 +89,21 @@ class SecretStore(ScopedSessionMixin):
         try:
             return crypto.decrypt(secret.value)
         except ValueError:
-            # 兼容旧版明文存储（迁移期间）
+            # 迁移 0082 完成后，明文回退应视为异常
+            # 保留回退仅兼容迁移期间，生产环境应报警
+            import os
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Secret %s 解密失败，回退明文（迁移 0082 未执行？）",
+                secret_id,
+            )
+            if os.getenv("IRIP_ENV") != "test":
+                logger.error(
+                    "DEPRECATED: 明文回退将在迁移 0082 完成后移除。"
+                    "请执行迁移 0082 加密存量凭据。"
+                )
             return secret.value
 
     async def create(self, kind: str, value: str) -> UUID:

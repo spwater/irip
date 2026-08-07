@@ -560,11 +560,11 @@ async def _audit_export_handler(job: object) -> dict[str, Any]:
         # 动态查询 audit_event 表（使用原始 SQL 避免硬依赖 ORM 模型）
         conditions = []
         if org_id is not None:
-            conditions.append(sa.text("department_id = :org_id"))
+            conditions.append("department_id = :org_id")
         if start_date_str:
-            conditions.append(sa.text("created_at >= :start_date"))
+            conditions.append("created_at >= :start_date")
         if end_date_str:
-            conditions.append(sa.text("created_at <= :end_date"))
+            conditions.append("created_at <= :end_date")
 
         params: dict[str, Any] = {}
         if org_id is not None:
@@ -574,7 +574,7 @@ async def _audit_export_handler(job: object) -> dict[str, Any]:
         if end_date_str:
             params["end_date"] = end_date_str
 
-        where_clause = " AND ".join(conditions) if conditions else "1=1"  # type: ignore[arg-type]
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
         query = sa.text(f"SELECT count(*) FROM audit_event WHERE {where_clause}")
         count_result = await session.execute(query, params)
         count: int = count_result.scalar() or 0

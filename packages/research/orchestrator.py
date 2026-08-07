@@ -350,9 +350,8 @@ class ResearchOrchestrator:
             try:
                 async with self._factory() as session:
                     if created_by is not None:
-                        await session.execute(
-                            sa.text(f"SET LOCAL app.current_user_id = '{created_by}'")
-                        )
+                        from packages.common.tenant_guc import set_user_guc
+                        await set_user_guc(session, created_by)
                     await AuditRecorder.record(
                         session,
                         AuditEventData(
@@ -755,9 +754,8 @@ class ResearchOrchestrator:
                         # 审计沙箱超限
                         async with self._factory() as session:
                             if created_by is not None:
-                                await session.execute(
-                                    sa.text(f"SET LOCAL app.current_user_id = '{created_by}'")
-                                )
+                                from packages.common.tenant_guc import set_user_guc
+                                await set_user_guc(session, created_by)
                             await AuditRecorder.record(
                                 session,
                                 AuditEventData(

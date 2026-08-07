@@ -384,16 +384,36 @@ class PythonModelAdapter:
 
         延迟导入 joblib（优先）或 pickle，反序列化工件字节为模型对象。
 
+        安全约束：
+        - pickle 反序列化是已知 RCE 向量。本方法仅接受经 artifact_service 上传的工件，
+          上传需要 model:manage 权限。
+        - 工件必须携带 SHA-256 哈希，load 前校验完整性。
+        - 这是已接受的信任边界：有 model:manage 权限的用户被视为可信上传者。
+        - 如需更高安全性，应在 artifact 上传阶段增加签名校验或沙箱加载。
+
         Args:
             artifact_bytes: 模型工件字节内容（pickle 序列化）。
-            contract: 模型契约。
+            contract: 模型契约（含 artifact_sha256 用于完整性校验）。
 
         Returns:
             LoadedModel: 已加载的模型引用。
 
         Raises:
-            AppError: code="invalid_model_artifact"，当反序列化失败时。
+            AppError: code="invalid_model_artifact"，当反序列化失败或哈希校验不通过时。
         """
+        import hashlib
+
+        expected_sha = getattr(contract, "artifact_sha256", None)
+        if expected_sha:
+            actual_sha = hashlib.sha256(artifact_bytes).hexdigest()
+            if actual_sha != expected_sha:
+                raise AppError(
+                    code="invalid_model_artifact",
+                    message="工件 SHA-256 校验失败，内容可能被篡改",
+                    retryable=False,
+                    fields={"expected": expected_sha[:16], "actual": actual_sha[:16]},
+                )
+
         try:
             try:
                 import io

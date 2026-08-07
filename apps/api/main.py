@@ -14,8 +14,9 @@
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -129,8 +130,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # ---- 3. Redis URL ----
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
 
-    # ---- 4. JWT 密钥 ----
-    token_secret = os.getenv("IRIP_JWT_SECRET", "irip-dev-secret-2026")
+    # ---- 4. JWT 密钥 ----（fail-closed: 非测试环境缺密钥拒绝启动）
+    token_secret = os.getenv("IRIP_JWT_SECRET", "")
+    if not token_secret:
+        if os.getenv("IRIP_ENV") == "test":
+            token_secret = "irip-dev-secret-2026"
+        else:
+            raise RuntimeError("IRIP_JWT_SECRET is required in non-test environment.")
 
     # ---- 5. 依赖覆盖（按领域 provider 模块注册） ----
     # 查询 root 部门 ID（用于平台管理员/平台监督员 RLS 绕过）
@@ -210,12 +216,48 @@ def create_app() -> FastAPI:
 
     from packages.common.metrics import generate_metrics
 
-    @app.get("/api/v1/metrics", include_in_schema=False, tags=["metrics"])
-    async def metrics_endpoint() -> Response:
+    @app.get("/metrics", include_in_schema=False, tags=["metrics"])
+    async def metrics_endpoint(
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    ) -> Response:
         """Prometheus 指标暴露端点（F-19）。
 
-        返回 Prometheus exposition 格式文本，供 Prometheus scrape 抓取。
+        需要 platform_administrator 或 platform_auditor 角色的 JWT 认证。
+        端点挂在 /metrics（非 /api/v1 路径），减少意外暴露。
         """
+        from apps.api.dependencies.auth import get_token_secret
+
+        if authorization is None or not authorization.startswith("Bearer "):
+            raise AppError(
+                code="invalid_credentials",
+                message="metrics 端点需要认证",
+                retryable=False,
+                fields={},
+            )
+        try:
+            import jwt
+
+            payload = jwt.decode(
+                authorization[len("Bearer ") :],
+                get_token_secret(),
+                algorithms=["HS256"],
+            )
+            roles = payload.get("roles", [])
+            if "platform_administrator" not in roles and "platform_auditor" not in roles:
+                raise AppError(
+                    code="forbidden",
+                    message="需要平台管理员或审计员权限",
+                    retryable=False,
+                    fields={},
+                )
+        except jwt.InvalidTokenError:
+            raise AppError(
+                code="invalid_credentials",
+                message="metrics 端点令牌无效",
+                retryable=False,
+                fields={},
+            )
+
         return Response(
             content=generate_metrics(),
             media_type="text/plain; version=0.0.4; charset=utf-8",
