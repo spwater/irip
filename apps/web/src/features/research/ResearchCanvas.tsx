@@ -164,20 +164,18 @@ export function ResearchCanvas({
     }
   }, [workspaceId, snapshotId]);
 
-  // ===== 以下多步执行流程暂时注释掉，后面再说 =====
-  // // 确认计划
-  // const handleConfirmPlan = useCallback(async () => {
-  //   if (!plan) return;
-  //   try {
-  //     await apiConfirmPlan(workspaceId, plan.plan_id);
-  //     setPlan({ ...plan, status: 'confirmed' });
-  //   } catch {
-  //     // ignore
-  //   }
-  // }, [workspaceId, plan]);
-
-  // // 调整计划
-  // const handleAdjustPlan = useCallback(() => {}, []);
+  // 确认计划
+  const handleConfirmPlan = useCallback(async () => {
+    if (!plan) return;
+    try {
+      const { apiConfirmPlan } = await import('../../api/research');
+      await apiConfirmPlan(workspaceId, plan.plan_id);
+      setPlan({ ...plan, status: 'confirmed' });
+      message.success('计划已确认');
+    } catch {
+      message.error('确认计划失败');
+    }
+  }, [workspaceId, plan]);
 
   // // 提交 Run
   // const handleSubmitRun = useCallback(async () => {
@@ -303,6 +301,7 @@ export function ResearchCanvas({
           plan={plan}
           workspaceId={workspaceId}
           snapshotId={snapshotId || ''}
+          onConfirm={handleConfirmPlan}
           onAnalysisComplete={(result) => {
             setAnalysisResult(result.analysis_result);
       setDataContext(result.data_context || null);

@@ -336,7 +336,7 @@ export function ResearchShowcasePanel({
                         await apiRejectAnyCandidate(workspaceId, latestRunId || '', c.candidate_id, '用户拒绝');
                         setDatasetCandidates(prev => prev.filter(x => x.candidate_id !== c.candidate_id));
                       } catch {
-                        setDatasetCandidates(prev => prev.filter(x => x.candidate_id !== c.candidate_id));
+                        message.error('拒绝失败，请重试');
                       }
                     }}
                     okText="拒绝"
@@ -406,7 +406,7 @@ export function ResearchShowcasePanel({
                           await apiRejectAnyCandidate(workspaceId, latestRunId || '', c.candidate_id, '用户拒绝');
                           setViewCandidates(prev => prev.filter(x => x.candidate_id !== c.candidate_id));
                         } catch {
-                          setViewCandidates(prev => prev.filter(x => x.candidate_id !== c.candidate_id));
+                          message.error('拒绝失败，请重试');
                         }
                       }}
                       okText="拒绝"

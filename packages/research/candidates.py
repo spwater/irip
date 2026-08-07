@@ -83,10 +83,11 @@ class CandidateService(ScopedSessionMixin):
         workspace_id: UUID,
         run_id: UUID,
     ) -> list[CandidateProductSummary]:
-        """识别 Run 的全部候选产物。
+        """识别候选产物。
 
         流程：
-        1. 查询 research_run_artifact WHERE run_id=? AND is_publishable=true
+        1. 查询 workspace 下所有 run 的 publishable 工件
+           （不只查指定 run，因为 analyze_data 可能创建了新 run 但工件在旧 run）
         2. data 工件 → 下载内容 → ThreeSegmentValidator.validate()
            → 校验通过标记为候选 DerivedDataset，失败标记为不可用
         3. chart 工件 → 读取元数据 → 标记为候选 ResearchView
@@ -95,7 +96,7 @@ class CandidateService(ScopedSessionMixin):
 
         Args:
             workspace_id: 工作空间 ID。
-            run_id: Run ID。
+            run_id: Run ID（用于 insight 候选查询）。
 
         Returns:
             list[CandidateProductSummary]: 候选产物列表。
@@ -103,10 +104,16 @@ class CandidateService(ScopedSessionMixin):
         candidates: list[CandidateProductSummary] = []
 
         async with self._scoped_session() as session:
-            # 1. 查询 publishable 工件
-            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(session, run_id)
-            # 获取步骤信息用于展示
-            steps = await ResearchRepositoryTrusted.list_steps_by_run(session, run_id)
+            # 1. 查询 workspace 下所有 run 的 publishable 工件
+            #    （不只查指定 run，因为 analyze_data 可能创建了新 run 但工件在旧 run）
+            all_runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
+            artifacts = []
+            steps = []
+            for r in all_runs:
+                r_artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(session, r.id)
+                artifacts.extend(r_artifacts)
+                r_steps = await ResearchRepositoryTrusted.list_steps_by_run(session, r.id)
+                steps.extend(r_steps)
             step_map: dict[UUID, object] = {s.id: s for s in steps}
 
             # 2. 识别 data 候选
@@ -120,7 +127,7 @@ class CandidateService(ScopedSessionMixin):
                     candidate = self._identify_chart_candidate(artifact, step_map)
                     candidates.append(candidate)
 
-            # 3. 查询 Insight 候选
+            # 3. 查询 Insight 候选（查指定 run）
             insight_candidates = await ResearchRepository.list_insight_candidates(
                 session, run_id, status="pending"
             )
@@ -402,6 +409,63 @@ class CandidateService(ScopedSessionMixin):
                 retryable=False,
                 fields={"candidate_id": str(candidate_id)},
             )
+
+    async def reject_any_candidate(
+        self,
+        workspace_id: UUID,
+        run_id: UUID,
+        candidate_id: UUID,
+        reason: str | None = None,
+    ) -> None:
+        """拒绝任意类型候选 → 物理删除 artifact 或 insight 候选（幂等）。
+
+        先查 research_insight_candidate 表判断类型：
+        - 是 insight 候选 → 调 reject_insight_candidate（含 dag_structure 清理）
+        - 否则 → DELETE research_run_artifact（dataset/view 候选）
+
+        Args:
+            workspace_id: 工作空间 ID。
+            run_id: Run ID（用于审计日志）。
+            candidate_id: 候选 ID。
+            reason: 拒绝原因（可选）。
+        """
+        async with self._scoped_session() as session:
+            # 判断是否为 insight 候选
+            result = await session.execute(
+                sa.text("SELECT 1 FROM research_insight_candidate WHERE id = :cid"),
+                {"cid": str(candidate_id)},
+            )
+            is_insight = result.fetchone() is not None
+
+        if is_insight:
+            await self.reject_insight_candidate(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                candidate_id=candidate_id,
+                reason=reason,
+            )
+        else:
+            # dataset/view 候选 → 物理删除 artifact
+            actor_id = self._require_actor()
+            async with self._scoped_session() as session:
+                await session.execute(
+                    sa.text(
+                        "DELETE FROM research_run_artifact "
+                        "WHERE id = :aid AND run_id = :rid"
+                    ),
+                    {"aid": str(candidate_id), "rid": str(run_id)},
+                )
+                await AuditRecorder.record(
+                    session,
+                    AuditEventData(
+                        department_id=self._dept_id,
+                        action="research.artifact.reject",
+                        actor_user_id=actor_id,
+                        resource_type="research_run_artifact",
+                        resource_id=candidate_id,
+                        payload={"reason": reason or "", "run_id": str(run_id)},
+                    ),
+                )
 
     async def reject_insight_candidate(
         self,

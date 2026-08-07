@@ -113,7 +113,7 @@ export function PlanReviewCard({
 
   const extraContent = (
     <Space size="small">
-      {!editing && !isConfirmed && (
+      {!editing && (
         <>
           <Button
             size="small"
@@ -204,14 +204,11 @@ export function PlanReviewCard({
         </div>
       )}
 
-      {/* Confirm / Adjust buttons for draft status */}
+      {/* Confirm button for draft status */}
       {!isConfirmed && (
         <Space style={{ marginBottom: 12 }}>
           <Button type="primary" onClick={handleConfirm}>
             确认计划
-          </Button>
-          <Button onClick={onAdjust}>
-            调整计划
           </Button>
         </Space>
       )}

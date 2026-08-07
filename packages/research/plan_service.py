@@ -62,6 +62,7 @@ class PlanService(ScopedSessionMixin):
         model_gateway: object,
         context_router: ContextRouter,
         fact_provider: object,
+        numeric_tools: object | None = None,
     ) -> None:
         """初始化计划服务。
 
@@ -72,6 +73,7 @@ class PlanService(ScopedSessionMixin):
             model_gateway: 模型网关（ModelGateway 实例）。
             context_router: 上下文路由器。
             fact_provider: CoreFactProvider 只读适配器。
+            numeric_tools: NumericToolFacade 实例（数值工具，可选）。
         """
         self._factory = session_factory
         self._dept_id = department_id
@@ -79,6 +81,7 @@ class PlanService(ScopedSessionMixin):
         self._model_gateway = model_gateway
         self._context_router = context_router
         self._fact_provider = fact_provider
+        self._numeric_tools = numeric_tools
         self._rls_dept_id: UUID | None = None
 
     def _require_actor(self) -> UUID:
@@ -481,7 +484,12 @@ class PlanService(ScopedSessionMixin):
                 "   - 柱状图用于成分对比，折线图用于趋势/累积分布，散点图用于相关性\n"
                 "5. 对比数据用 Markdown 表格\n"
                 "6. 用中文回答，给出有数据支撑的结论\n"
-                "7. 请根据问题内容，判断合适的结构化输出数据。对每个问题和子问题都执行一次：\n"
+                "7. **重要：涉及精确统计量计算时（均值、标准差、方差、中位数、分位数、"
+                "偏度、峰度等），必须调用 describe_series 工具来计算，不要自己估算。**\n"
+                "   - 将需要计算的数据序列通过 inline 方式传入工具\n"
+                "   - 工具返回的结果是精确计算的，可以直接引用\n"
+                "   - 仅对定性判断和简单算术（如百分比差异）可以自行计算\n"
+                "8. 请根据问题内容，判断合适的结构化输出数据。对每个问题和子问题都执行一次：\n"
                 "   - 在报告末尾为每个问题/子问题分别附加一个 ```data 代码块\n"
                 '   - 代码块内为三段式 JSON：{"metadata": {}, "points": [], "series": []}\n'
                 "   - metadata: 报告级单值信息（如分析范围、方法、时间等）\n"
@@ -502,13 +510,119 @@ class PlanService(ScopedSessionMixin):
 
             analysis_result = ""
             try:
+                # 构建数值工具 schema（供 LLM tool calling）
+                numeric_tool_schemas: list[dict[str, Any]] = []
+                if self._numeric_tools is not None:
+                    from packages.ai.numeric import DESCRIBE_SERIES_SCHEMA
+
+                    numeric_tool_schemas = [
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "describe_series",
+                                "description": (
+                                    "计算序列的描述统计量：count、sum、mean、"
+                                    "总体/样本方差、标准差、min、max、median、分位数、"
+                                    "偏度和峰度。涉及精确统计量时必须调用此工具。"
+                                ),
+                                "parameters": DESCRIBE_SERIES_SCHEMA,
+                            },
+                        },
+                    ]
+
+                logger.info(
+                    "analyze_data: numeric_tools=%s, tool_schemas_count=%d",
+                    self._numeric_tools is not None,
+                    len(numeric_tool_schemas),
+                )
                 response = await self._model_gateway.call(  # type: ignore[attr-defined]
                     task_type=TaskType.LONG_CONTEXT,
                     system_prompt=analysis_system_prompt,
                     data_context=full_data_text[:256000],
                     research_context=analysis_context,
+                    tools=numeric_tool_schemas or None,
+                )
+                logger.info(
+                    "analyze_data: has_tool_calls=%s, tool_calls=%s",
+                    bool(getattr(response, "tool_calls", None)),
+                    getattr(response, "tool_calls", None),
                 )
                 analysis_result = response.answer if hasattr(response, "answer") else str(response)
+
+                # 处理 tool_calls：执行数值工具 → 第二轮 LLM 调用
+                if (
+                    self._numeric_tools is not None
+                    and hasattr(response, "tool_calls")
+                    and response.tool_calls
+                ):
+                    from packages.ai.numeric import NumericPrincipal
+
+                    principal = NumericPrincipal(
+                        user_id=self._actor_id or UUID("00000000-0000-0000-0000-000000000000"),
+                        department_id=self._dept_id,
+                        roles=(),
+                    )
+
+                    # 执行每个 tool call
+                    tool_messages: list[dict[str, Any]] = []
+                    assistant_tool_calls: list[dict[str, Any]] = []
+                    for tc in response.tool_calls:
+                        tool_name = tc.get("tool", "") if isinstance(tc, dict) else ""
+                        tool_args = tc.get("args", {}) if isinstance(tc, dict) else {}
+                        tc_id = tc.get("id", f"call_{len(tool_messages)}") if isinstance(tc, dict) else f"call_{len(tool_messages)}"
+
+                        if tool_name == "describe_series":
+                            try:
+                                result = await self._numeric_tools.describe_series(tool_args, principal)
+                                tool_messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc_id,
+                                    "content": _json.dumps(result.llm_data, ensure_ascii=False, default=str),
+                                })
+                                # 拼入摘要供日志参考
+                                logger.info("describe_series result: %s", result.summary)
+                            except Exception as tool_exc:
+                                logger.warning("describe_series failed: %s", tool_exc)
+                                tool_messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc_id,
+                                    "content": _json.dumps({"error": str(tool_exc)}, ensure_ascii=False),
+                                })
+                        else:
+                            tool_messages.append({
+                                "role": "tool",
+                                "tool_call_id": tc_id,
+                                "content": _json.dumps({"error": f"unknown tool: {tool_name}"}, ensure_ascii=False),
+                            })
+
+                        assistant_tool_calls.append({
+                            "id": tc_id,
+                            "type": "function",
+                            "function": {
+                                "name": tool_name,
+                                "arguments": _json.dumps(tool_args, ensure_ascii=False, default=str),
+                            },
+                        })
+
+                    # 第二轮 LLM 调用：带工具结果生成最终报告
+                    if tool_messages:
+                        second_response = await self._model_gateway.call(  # type: ignore[attr-defined]
+                            task_type=TaskType.LONG_CONTEXT,
+                            system_prompt=analysis_system_prompt,
+                            data_context=full_data_text[:256000],
+                            research_context=(
+                                analysis_context
+                                + "\n\n--- 工具调用结果 ---\n"
+                                + "\n".join(
+                                    f"工具 {m.get('tool_call_id', '')}: {m.get('content', '')}"
+                                    for m in tool_messages
+                                )
+                                + "\n请基于以上工具返回的精确统计结果，生成最终分析报告。"
+                            ),
+                            tools=None,
+                        )
+                        analysis_result = second_response.answer if hasattr(second_response, "answer") else str(second_response)
+
                 # 清洗 echarts
                 import re as _re
 

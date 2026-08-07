@@ -875,38 +875,12 @@ async def reject_candidate(
     candidate_service: CandidateServiceDep,
 ) -> None:
     """拒绝任意类型候选 → 物理删除 artifact 或 insight 候选。"""
-    import os
-
-    from sqlalchemy import text as sa_text
-
-    from packages.common.database import build_session_factory, session_scope
-
-    url = os.getenv("IRIP_DATABASE_URL", "").replace(
-        "postgresql+psycopg://", "postgresql+psycopg_async://"
+    await candidate_service.reject_any_candidate(
+        workspace_id=workspace_id,
+        run_id=run_id,
+        candidate_id=candidate_id,
+        reason=body.reason,
     )
-    factory = build_session_factory(url)
-    # 先查是否为 insight 候选
-    async with session_scope(factory, principal=_user) as session:  # type: ignore[arg-type]
-        result = await session.execute(
-            sa_text("SELECT 1 FROM research_insight_candidate WHERE id = :cid"),
-            {"cid": str(candidate_id)},
-        )
-        is_insight = result.fetchone() is not None
-
-    if is_insight:
-        await candidate_service.reject_insight_candidate(
-            workspace_id=workspace_id,
-            run_id=run_id,
-            candidate_id=candidate_id,
-            reason=body.reason,
-        )
-    else:
-        # dataset/view 候选 → 物理删除 artifact
-        async with session_scope(factory, principal=_user) as session:  # type: ignore[arg-type]
-            await session.execute(
-                sa_text("DELETE FROM research_run_artifact WHERE id = :aid AND run_id = :rid"),
-                {"aid": str(candidate_id), "rid": str(run_id)},
-            )
 
 
 @research_products_router.post(

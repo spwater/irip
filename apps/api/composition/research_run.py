@@ -132,6 +132,41 @@ def register(ctx: CompositionContext) -> None:
     # 注册工件服务（供路由端点使用）
     _set_artifact_service(artifact_service)
 
+    # 构建 NumericToolFacade（供 PlanService 数值工具调用）
+    numeric_tools = None
+    try:
+        from packages.ai.numeric import (
+            NumericDataResolver,
+            NumericLimits,
+            NumericToolFacade,
+            SafeExpressionEngine,
+            SeriesStatisticsService,
+        )
+
+        def _fact_query_factory(principal):  # type: ignore[no-untyped-def]
+            from packages.facts.query_service import FactQueryService
+
+            return FactQueryService(
+                session_factory=ctx.session_factory,
+                department_id=principal.department_id,
+                actor_id=principal.user_id,
+                s3_repo=ctx.s3_repo,
+            )
+
+        _limits = NumericLimits()
+        numeric_tools = NumericToolFacade(
+            data_resolver=NumericDataResolver(
+                fact_query_factory=_fact_query_factory,
+                limits=_limits,
+            ),
+            expression_engine=SafeExpressionEngine(_limits),
+            statistics_service=SeriesStatisticsService(_limits),
+            limits=_limits,
+            max_concurrent=4,
+        )
+    except Exception as exc:
+        _logger.warning("Failed to build NumericToolFacade for PlanService: %s", exc)
+
     # PlanService
     async def _get_plan_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
@@ -160,6 +195,7 @@ def register(ctx: CompositionContext) -> None:
             model_gateway=model_gateway,
             context_router=context_router,
             fact_provider=fact_provider,
+            numeric_tools=numeric_tools,
         )
         if rls_dept_id is not None:
             service._rls_dept_id = rls_dept_id
