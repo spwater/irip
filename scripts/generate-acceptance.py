@@ -15,11 +15,10 @@ H-10 改动：
 """
 
 import argparse
-import os
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 #: 项目根目录。
@@ -73,7 +72,7 @@ def _run_check(cmd: list[str], cwd: Path | None = None) -> str:
         str: "PASS" / "FAIL" / "UNKNOWN"。
     """
     try:
-        result: subprocess.run(
+        result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
@@ -143,12 +142,8 @@ def _collect_quality_status() -> dict[str, str]:
     results: dict[str, str] = {}
 
     # Ruff lint + format
-    results["Ruff E/F/I"] = _run_check(
-        ["ruff", "check", "apps", "packages", "tests"]
-    )
-    ruff_fmt: str = _run_check(
-        ["ruff", "format", "--check", "apps", "packages", "tests"]
-    )
+    results["Ruff E/F/I"] = _run_check(["ruff", "check", "apps", "packages", "tests"])
+    ruff_fmt: str = _run_check(["ruff", "format", "--check", "apps", "packages", "tests"])
     if results["Ruff E/F/I"] == "PASS" and ruff_fmt == "PASS":
         results["Ruff Format"] = "PASS"
     elif results["Ruff E/F/I"] == "FAIL" or ruff_fmt == "FAIL":
@@ -157,21 +152,15 @@ def _collect_quality_status() -> dict[str, str]:
         results["Ruff Format"] = "UNKNOWN"
 
     # Mypy type check
-    results["Mypy Type Check"] = _run_check(
-        ["mypy", "packages", "apps/api"]
-    )
+    results["Mypy Type Check"] = _run_check(["mypy", "packages", "apps/api"])
 
     # Error code exhaustiveness
-    results["Error Code Exhaustiveness"] = _run_check(
-        ["python", "-c", _ERROR_CODE_CHECK_SCRIPT]
-    )
+    results["Error Code Exhaustiveness"] = _run_check(["python", "-c", _ERROR_CODE_CHECK_SCRIPT])
 
     # Docker Compose config (if docker available)
     docker_available: bool = shutil_which("docker") is not None
     if docker_available:
-        results["Docker Compose Config"] = _run_check(
-            ["docker", "compose", "config", "--quiet"]
-        )
+        results["Docker Compose Config"] = _run_check(["docker", "compose", "config", "--quiet"])
     else:
         results["Docker Compose Config"] = "UNKNOWN"
 
@@ -195,9 +184,7 @@ def _collect_quality_status() -> dict[str, str]:
         results[name] = _read_junit_results(artifacts_dir / filename)
 
     # Coverage
-    results["Coverage"] = _read_coverage(
-        PROJECT_ROOT / "coverage.xml"
-    )
+    results["Coverage"] = _read_coverage(PROJECT_ROOT / "coverage.xml")
 
     return results
 
@@ -264,11 +251,12 @@ def main() -> int:
 
     commit: str = args.commit or get_git_commit()
     branch: str = get_git_branch()
-    timestamp: str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    timestamp: str = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # 调用 generate-stats.py 获取统计 JSON
     try:
         import importlib.util
+
         stats_module_path: Path = PROJECT_ROOT / "scripts" / "generate-stats.py"
         spec = importlib.util.spec_from_file_location("generate_stats", stats_module_path)
         if spec is not None and spec.loader is not None:
@@ -294,7 +282,7 @@ def main() -> int:
         f"> **Commit**: `{commit}`",
         f"> **Branch**: `{branch}`",
         f"> **生成时间**: {timestamp}",
-        f"> **生成方式**: CI 自动生成（`scripts/generate-acceptance.py`）",
+        "> **生成方式**: CI 自动生成（`scripts/generate-acceptance.py`）",
         "",
         "## 版本状态",
         "",
@@ -320,15 +308,17 @@ def main() -> int:
         "|--------|------|",
     ]
     lines.extend(quality_rows)
-    lines.extend([
-        "",
-        "> H-10: 质量门状态从 JUnit XML / coverage / 实时命令执行中读取，",
-        "> 缺失证据标记为 UNKNOWN。",
-        "",
-        "---",
-        "",
-        f"> 本报告由 CI 针对 commit `{commit}` 自动生成。",
-    ])
+    lines.extend(
+        [
+            "",
+            "> H-10: 质量门状态从 JUnit XML / coverage / 实时命令执行中读取，",
+            "> 缺失证据标记为 UNKNOWN。",
+            "",
+            "---",
+            "",
+            f"> 本报告由 CI 针对 commit `{commit}` 自动生成。",
+        ]
+    )
 
     output: str = "\n".join(lines)
 
