@@ -53,28 +53,44 @@ class SecSeededUser:
     department_id: UUID
 
 
-def _insert_user_sync(engine: Engine, user_id: UUID, email: str) -> None:
-    """同步插入测试用户到 app_user。"""
+def _insert_user_sync(engine: Engine, user_id: UUID, email: str) -> UUID:
+    """同步插入测试用户到 app_user，返回 department_id。"""
     from packages.auth.passwords import hash_password
 
+    dept_id = new_id()
     with engine.connect() as conn:
+        # 先创建 department（满足 app_user.department_id FK 约束）
+        conn.execute(
+            sa.text(
+                "INSERT INTO department "
+                "(id, code, display_name, status, lock_version) "
+                "VALUES (:id, :code, :name, 'active', 0)"
+            ),
+            {
+                "id": dept_id,
+                "code": f"sec-dept-{dept_id.hex[:8]}",
+                "name": "Security Test Department",
+            },
+        )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, email, display_name, password_hash, status, lock_version) "
-                "VALUES (:id, :email, :name, :hash, 'active', 0)"
+                "(id, department_id, email, display_name, password_hash, status, lock_version) "
+                "VALUES (:id, :dept, :email, :name, :hash, 'active', 0)"
             ),
             {
                 "id": user_id,
+                "dept": dept_id,
                 "email": email,
                 "name": "Security Test User",
                 "hash": hash_password("Test-Password-2026!"),
             },
         )
         conn.commit()
+    return dept_id
 
 
-def _cleanup_user_sync(engine: Engine, user_id: UUID) -> None:
+def _cleanup_user_sync(engine: Engine, user_id: UUID, dept_id: UUID | None = None) -> None:
     """同步清理测试用户。"""
     with engine.connect() as conn:
         # scope_grant 表已在迁移 0036 中删除，安全清理
@@ -86,6 +102,11 @@ def _cleanup_user_sync(engine: Engine, user_id: UUID) -> None:
             sa.text("DELETE FROM app_user WHERE id = :uid"),
             {"uid": user_id},
         )
+        if dept_id is not None:
+            conn.execute(
+                sa.text("DELETE FROM department WHERE id = :did"),
+                {"did": dept_id},
+            )
         conn.commit()
 
 
@@ -151,6 +172,19 @@ def sec_seeded_user(
     org_id = new_id()
     email = f"sec-test-{uuid_module.uuid4().hex[:8]}@irip.local"
     with sync_engine.connect() as conn:
+        # 先创建 department（满足 app_user.department_id FK 约束）
+        conn.execute(
+            sa.text(
+                "INSERT INTO department "
+                "(id, code, display_name, status, lock_version) "
+                "VALUES (:id, :code, :name, 'active', 0)"
+            ),
+            {
+                "id": org_id,
+                "code": f"sec-dept-{uuid_module.uuid4().hex[:8]}",
+                "name": "Security Test Department",
+            },
+        )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
@@ -184,6 +218,10 @@ def sec_seeded_user(
         conn.execute(
             sa.text("DELETE FROM app_user WHERE id = :uid"),
             {"uid": user_id},
+        )
+        conn.execute(
+            sa.text("DELETE FROM department WHERE id = :did"),
+            {"did": org_id},
         )
         conn.commit()
 

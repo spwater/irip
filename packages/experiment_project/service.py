@@ -158,9 +158,9 @@ class ExperimentProjectService(ScopedSessionMixin):
         """
         async with self._scoped_session() as session:
             # 自动生成编码（和现有项目格式一致：proj_ + UUID 短码）
-            if not code or not code.strip():
-                from packages.common.ids import new_id
+            from packages.common.ids import new_id
 
+            if not code or not code.strip():
                 code = f"proj_{str(new_id())[:8]}"
             existing = await ExperimentProjectRepository.select_by_dept_and_code(
                 session, department_id, code

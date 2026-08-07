@@ -63,7 +63,7 @@ export function CreateWorkspaceModal({ open, onClose, onCreated }: CreateWorkspa
         </Form.Item>
         <Form.Item
           name="question_text"
-          label="研究问题"
+          label="主研究问题"
           rules={[{ required: true, message: '请输入研究问题' }]}
         >
           <Input.TextArea

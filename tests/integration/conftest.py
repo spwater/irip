@@ -251,20 +251,38 @@ def _insert_user(
     password: str,
     status: str,
 ) -> UUID:
-    """向数据库插入测试用户，返回用户 ID。"""
+    """向数据库插入测试用户，返回用户 ID。
+
+    自动创建 department 记录以满足 app_user.department_id FK 约束。
+    """
     from packages.auth.passwords import hash_password
     from packages.common.ids import new_id
 
     user_id = new_id()
+    dept_id = new_id()
     with engine.connect() as conn:
+        # 先创建 department（满足 app_user.department_id FK 约束）
+        conn.execute(
+            sa.text(
+                "INSERT INTO department "
+                "(id, code, display_name, status, lock_version) "
+                "VALUES (:id, :code, :name, 'active', 0)"
+            ),
+            {
+                "id": dept_id,
+                "code": f"test-dept-{dept_id.hex[:8]}",
+                "name": "Test Department",
+            },
+        )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
-                "(id, email, display_name, password_hash, status, lock_version) "
-                "VALUES (:id, :email, :name, :hash, :status, 0)"
+                "(id, department_id, email, display_name, password_hash, status, lock_version) "
+                "VALUES (:id, :dept, :email, :name, :hash, :status, 0)"
             ),
             {
                 "id": user_id,
+                "dept": dept_id,
                 "email": email,
                 "name": display_name,
                 "hash": hash_password(password),
@@ -276,8 +294,15 @@ def _insert_user(
 
 
 def _cleanup_user(engine: Engine, user_id: UUID) -> None:
-    """清理测试用户及其刷新会话。"""
+    """清理测试用户及其刷新会话和关联的 department。"""
     with engine.connect() as conn:
+        # 先查出 department_id
+        result = conn.execute(
+            sa.text("SELECT department_id FROM app_user WHERE id = :uid"),
+            {"uid": user_id},
+        )
+        row = result.fetchone()
+        dept_id = row[0] if row else None
         conn.execute(
             sa.text("DELETE FROM refresh_session WHERE user_id = :uid"),
             {"uid": user_id},
@@ -286,6 +311,11 @@ def _cleanup_user(engine: Engine, user_id: UUID) -> None:
             sa.text("DELETE FROM app_user WHERE id = :uid"),
             {"uid": user_id},
         )
+        if dept_id is not None:
+            conn.execute(
+                sa.text("DELETE FROM department WHERE id = :did"),
+                {"did": dept_id},
+            )
         conn.commit()
 
 

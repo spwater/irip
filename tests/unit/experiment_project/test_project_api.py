@@ -532,7 +532,7 @@ class TestArchivedProjectCreateTask:
 
             # 模拟 flows 路由调用 check_not_archived
             with pytest.raises(AppError) as exc_info:
-                asyncio.get_event_loop().run_until_complete(mock_check(uuid4()))
+                asyncio.run(mock_check(uuid4()))
 
             assert exc_info.value.code == "conflict"
             assert "归档" in exc_info.value.message
