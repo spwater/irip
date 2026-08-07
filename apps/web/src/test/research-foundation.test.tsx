@@ -335,12 +335,6 @@ describe('CreateWorkspaceModal', () => {
 // ---------------------------------------------------------------------------
 
 describe('LabOpsPage feature flag conditional rendering', () => {
-  // LabOpsPage 中：
-  //   const isResearchEnabled = user?.featureFlags?.researchModule ?? false;
-  //   const VALID_TABS = isResearchEnabled
-  //     ? ['flows', 'research', 'publication']
-  //     : ['flows', 'parameters', 'models'];
-
   it('when researchModule flag is false, tabs are flows/parameters/models', async () => {
     _authState.user = {
       id: 'u-001',

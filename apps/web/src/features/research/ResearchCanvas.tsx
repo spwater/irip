@@ -99,8 +99,8 @@ export function ResearchCanvas({
               }
             }
           }
-        } catch {
-          // 静默
+        } catch (err) {
+          console.error('恢复分析状态失败', err);
         }
 
         // 恢复 Run
@@ -117,8 +117,8 @@ export function ResearchCanvas({
             setRun(progress);
           }
         }
-      } catch {
-        // 静默
+      } catch (err) {
+        console.error('恢复 Run 状态失败', err);
       }
     })();
   }, [workspaceId]);
@@ -158,7 +158,7 @@ export function ResearchCanvas({
       const detail = await apiGetPlan(workspaceId, planRef.plan_id);
       setPlan(detail);
     } catch {
-      // ignore
+      message.error('生成计划失败');
     } finally {
       setGenerating(false);
     }
@@ -176,41 +176,6 @@ export function ResearchCanvas({
       message.error('确认计划失败');
     }
   }, [workspaceId, plan]);
-
-  // // 提交 Run
-  // const handleSubmitRun = useCallback(async () => {
-  //   if (!plan || !snapshotId) return;
-  //   setSubmitting(true);
-  //   try {
-  //     const runRef = await apiSubmitRun(workspaceId, plan.plan_id, snapshotId);
-  //     const progress = await apiGetRun(workspaceId, runRef.run_id);
-  //     setRun(progress);
-  //     const artRes = await apiListRunArtifacts(workspaceId, runRef.run_id);
-  //     setArtifacts(artRes?.items ?? []);
-  //   } catch {
-  //     // ignore
-  //   } finally {
-  //     setSubmitting(false);
-  //   }
-  // }, [workspaceId, plan, snapshotId]);
-
-  // // 取消 Run
-  // const handleCancelRun = useCallback(async () => {
-  //   if (!run) return;
-  //   setCancelling(true);
-  //   try {
-  //     await apiCancelRun(workspaceId, run.run_id);
-  //     const progress = await apiGetRun(workspaceId, run.run_id);
-  //     setRun(progress);
-  //   } catch {
-  //     // ignore
-  //   } finally {
-  //     setCancelling(false);
-  //   }
-  // }, [workspaceId, run]);
-
-  // const isRunActive = run && ['queued', 'planning', 'running'].includes(run.status);
-  // const isQueued = run?.status === 'queued' && (run.steps?.length ?? 0) === 0;
 
   // 打开编辑问题弹窗
   const handleOpenEdit = useCallback(() => {

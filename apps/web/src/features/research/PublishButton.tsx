@@ -37,8 +37,8 @@ export function PublishButton({
     try {
       const res = await apiListProducts(workspaceId);
       setProducts(res?.items ?? []);
-    } catch {
-      // 静默
+    } catch (err) {
+      console.error('加载产物列表失败', err);
     } finally {
       setLoading(false);
     }

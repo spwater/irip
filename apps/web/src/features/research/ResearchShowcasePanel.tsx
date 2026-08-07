@@ -92,9 +92,9 @@ export function ResearchShowcasePanel({
         setDatasetCandidates(items.filter((c) => c.candidate_type === 'derived_dataset' && c.status === 'available'));
         setViewCandidates(items.filter((c) => c.candidate_type === 'view' && c.status === 'available'));
       } catch {
+        message.error('加载候选产物失败');
         setDatasetCandidates([]);
         setViewCandidates([]);
-        setDatasetCandidates([]);
       }
     })();
   }, [workspaceId, latestRunId, productsRefresh]);

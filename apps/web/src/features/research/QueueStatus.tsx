@@ -59,7 +59,7 @@ export function QueueStatus({
       await apiCancelRun(workspaceId, runId);
       onCancel();
     } catch {
-      // ignore
+      message.error('取消排队失败');
     } finally {
       setCancelling(false);
     }

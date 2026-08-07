@@ -591,20 +591,13 @@ async def get_publication_provenance(
     detail = await service.get_result_detail(result_id)
     current_version = detail.current_version
 
-    # 查询 snapshot 和 run 的可读名称
+    # 查询 snapshot 和 run 的可读名称（复用 service session）
     snapshot_labels: list[dict[str, Any]] = []
     run_labels: list[dict[str, Any]] = []
     if current_version:
-        import os as _os
-
         from sqlalchemy import text as _sa_text
 
-        from packages.common.database import build_session_factory
-
-        _db_url = _os.getenv("IRIP_DATABASE_URL", "")
-        _async_url = _db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://")
-        factory = build_session_factory(_async_url)
-        async with factory() as session:
+        async with service._scoped_session() as session:  # type: ignore[attr-defined]
             for sid in current_version.evidence_snapshot_ids:
                 try:
                     r = await session.execute(

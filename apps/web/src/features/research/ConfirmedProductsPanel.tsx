@@ -48,7 +48,7 @@ export function ConfirmedProductsPanel({
       const res = await apiListProducts(workspaceId);
       setProducts(res?.items ?? []);
     } catch {
-      // 静默
+      message.error('加载已确认产物失败');
     } finally {
       setLoading(false);
     }

@@ -60,8 +60,8 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         if (runs.length > 0) {
           setLatestRunId(runs[0].run_id);
         }
-      } catch {
-        // 静默
+      } catch (err) {
+        console.error('加载 Run 列表失败', err);
       }
     })();
   }, [workspaceId, productsRefresh]);
