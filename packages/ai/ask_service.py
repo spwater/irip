@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
@@ -116,6 +117,8 @@ class AskService:
         self._cancellation = cancellation_registry
         self._factory = session_factory
         self._clock = clock
+        self._tools_cache_ts: float = 0.0
+        self._tools_cache_ttl: float = 30.0
 
     async def _prepare_ask(
         self,
@@ -149,10 +152,13 @@ class AskService:
         if org_id is None:
             org_id = new_id()
 
-        # 热更新：每次 ask 从 DB 重新加载工具声明层（D-4）
+        # 热更新：从 DB 重新加载工具声明层（带 30s TTL 缓存）
         if self._factory is not None:
-            async with scoped_session(self._factory, None, user_id) as session:
-                await self._tool_registry.reload_from_db(session)
+            now = time.monotonic()
+            if now - self._tools_cache_ts > self._tools_cache_ttl:
+                async with scoped_session(self._factory, None, user_id) as session:
+                    await self._tool_registry.reload_from_db(session)
+                self._tools_cache_ts = now
 
         # 加载或创建对话
         if conversation_id is None:
@@ -168,15 +174,31 @@ class AskService:
             msgs = await self._conversation_svc.list_messages(conversation_id, user_id)
             history_messages = [{"role": m.role, "content": m.content} for m in msgs]
 
-        # irip-ai-collab: 根据 conversation_participant 判断对话类型
+        # 合并 session：participant count + system_context 读写
         mentions_list: list[str] = mentions or []
         participant_count: int | None = None
-        async with scoped_session(self._factory, None, user_id) as session:
-            participant_count = await session.scalar(
-                sa.select(sa.func.count())
-                .select_from(ConversationParticipant)
-                .where(ConversationParticipant.conversation_id == conversation_id)
-            )
+        if self._factory is not None:
+            async with scoped_session(self._factory, None, user_id) as session:
+                # 查 participant count（判断 mention_only）
+                participant_count = await session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(ConversationParticipant)
+                    .where(ConversationParticipant.conversation_id == conversation_id)
+                )
+                # system_context 恢复（前端没传时从对话记录读）
+                if not system_context:
+                    conv_obj = await session.scalar(
+                        sa.select(AIConversation).where(AIConversation.id == conversation_id)
+                    )
+                    if conv_obj and conv_obj.system_context:
+                        system_context = conv_obj.system_context
+                # system_context 写回（如果前端传了新值）
+                if system_context:
+                    conv_obj2 = await session.scalar(
+                        sa.select(AIConversation).where(AIConversation.id == conversation_id)
+                    )
+                    if conv_obj2:
+                        conv_obj2.system_context = system_context
         is_private: bool = participant_count is None or participant_count <= 1
         mention_only: bool = not is_private and "ai" not in mentions_list
 
@@ -196,23 +218,8 @@ class AskService:
         msg_list.append({"role": "user", "content": question})
         messages: tuple[dict[str, Any], ...] = tuple(msg_list)
 
-        # 把 system_context 存到 user_context 和对话记录
-        # 如果前端没传 system_context，从对话记录恢复之前存储的
-        if not system_context:
-            async with scoped_session(self._factory, None, user_id) as session:
-                conv_obj = await session.scalar(
-                    sa.select(AIConversation).where(AIConversation.id == conversation_id)
-                )
-                if conv_obj and conv_obj.system_context:
-                    system_context = conv_obj.system_context
         if system_context:
             user_context["system_context"] = system_context
-            async with scoped_session(self._factory, None, user_id) as session:
-                conv_obj = await session.scalar(
-                    sa.select(AIConversation).where(AIConversation.id == conversation_id)
-                )
-                if conv_obj:
-                    conv_obj.system_context = system_context
 
         # 构建工具名称和 schema
         tool_names: tuple[str, ...] = self._tool_registry.enabled_names()
