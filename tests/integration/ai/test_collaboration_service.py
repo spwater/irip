@@ -34,12 +34,29 @@ def ai_service(async_session_factory):  # type: ignore[no-untyped-def]
 def _insert_user(
     sync_engine, email: str, org_id=None, display_name="用户", roles=None, status="active"
 ):
-    """插入测试用户并返回 (user_id, org_id)。"""
+    """插入测试用户并返回 (user_id, org_id)。
+
+    当 org_id 为 None 时自动创建 department 记录（满足 app_user.department_id FK 约束）。
+    """
     from packages.common.ids import new_id as _new_id
 
     user_id = _new_id()
     final_org = org_id if org_id is not None else _new_id()
     with sync_engine.connect() as conn:
+        # 当创建新 org 时，先插入 department 记录（满足 app_user.department_id FK 约束）
+        if org_id is None:
+            conn.execute(
+                sa.text(
+                    "INSERT INTO department "
+                    "(id, code, display_name, status, lock_version) "
+                    "VALUES (:id, :code, :name, 'active', 0)"
+                ),
+                {
+                    "id": final_org,
+                    "code": f"test-dept-{final_org.hex[:8]}",
+                    "name": "Test Department",
+                },
+            )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
@@ -62,8 +79,15 @@ def _insert_user(
 
 
 def _cleanup_user(sync_engine, user_id):
-    """清理测试用户及其对话/参与者记录。"""
+    """清理测试用户及其对话/参与者记录和关联 department。"""
     with sync_engine.connect() as conn:
+        # 先查出 department_id
+        result = conn.execute(
+            sa.text("SELECT department_id FROM app_user WHERE id = :uid"),
+            {"uid": user_id},
+        )
+        row = result.fetchone()
+        dept_id = row[0] if row else None
         conn.execute(
             sa.text("DELETE FROM conversation_participant WHERE user_id = :uid"),
             {"uid": user_id},
@@ -80,6 +104,15 @@ def _cleanup_user(sync_engine, user_id):
             {"uid": user_id},
         )
         conn.execute(sa.text("DELETE FROM app_user WHERE id = :uid"), {"uid": user_id})
+        # 删除 department（仅当没有其他用户引用时）
+        if dept_id is not None:
+            conn.execute(
+                sa.text(
+                    "DELETE FROM department WHERE id = :did "
+                    "AND NOT EXISTS (SELECT 1 FROM app_user WHERE department_id = :did)"
+                ),
+                {"did": dept_id},
+            )
         conn.commit()
 
 

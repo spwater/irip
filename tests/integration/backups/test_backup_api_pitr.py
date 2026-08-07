@@ -44,12 +44,29 @@ def _to_async_url(url: str) -> str:
 
 
 def _insert_test_user(sync_engine, org_id: UUID) -> tuple[UUID, str]:
-    """向数据库插入测试用户，返回 (user_id, email)。"""
+    """向数据库插入测试用户，返回 (user_id, email)。
+
+    自动创建 department 记录以满足 app_user.department_id FK 约束。
+    """
     from packages.auth.passwords import hash_password
 
     user_id = new_id()
     email = f"pitr-admin-{user_id.hex[:8]}@irip.local"
     with sync_engine.connect() as conn:
+        # 先创建 department（满足 app_user.department_id FK 约束）
+        conn.execute(
+            sa.text(
+                "INSERT INTO department "
+                "(id, code, display_name, status, lock_version) "
+                "VALUES (:id, :code, :name, 'active', 0) "
+                "ON CONFLICT (id) DO NOTHING"
+            ),
+            {
+                "id": org_id,
+                "code": f"test-dept-{org_id.hex[:8]}",
+                "name": "Test Department",
+            },
+        )
         conn.execute(
             sa.text(
                 "INSERT INTO app_user "
@@ -70,8 +87,15 @@ def _insert_test_user(sync_engine, org_id: UUID) -> tuple[UUID, str]:
 
 
 def _cleanup_test_user(sync_engine, user_id: UUID) -> None:
-    """清理测试用户。"""
+    """清理测试用户及其关联 department。"""
     with sync_engine.connect() as conn:
+        # 先查出 department_id
+        result = conn.execute(
+            sa.text("SELECT department_id FROM app_user WHERE id = :uid"),
+            {"uid": str(user_id)},
+        )
+        row = result.fetchone()
+        dept_id = row[0] if row else None
         conn.execute(
             sa.text(
                 "DELETE FROM outbox_event WHERE aggregate_id IN "
@@ -91,6 +115,11 @@ def _cleanup_test_user(sync_engine, user_id: UUID) -> None:
             sa.text("DELETE FROM app_user WHERE id = :uid"),
             {"uid": str(user_id)},
         )
+        if dept_id is not None:
+            conn.execute(
+                sa.text("DELETE FROM department WHERE id = :did"),
+                {"did": dept_id},
+            )
         conn.commit()
 
 
