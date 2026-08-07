@@ -69,6 +69,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const streamingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /** 从对话的 system_context 恢复实验数据上下文 */
   const restoreContextFromConversation = useCallback((conv: ConversationSummary | undefined) => {
@@ -207,7 +208,8 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
           void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
           void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });
           // 延迟 100ms 让 DB 消息先到达，再清 streamingAnswer，避免中间空白闪烁
-          setTimeout(() => {
+          streamingTimeoutRef.current = setTimeout(() => {
+            streamingTimeoutRef.current = null;
             setStreamingAnswer(null);
             setIsSending(false);
           }, 100);
@@ -252,6 +254,16 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
     setIsSending(false);
     void queryClient.invalidateQueries({ queryKey: ['assistant-messages', selectedConvId] });
   }, [selectedConvId, queryClient, setIsSending]);
+
+  // 组件卸载时清理 setTimeout，避免对已卸载组件的状态更新
+  useEffect(() => {
+    return () => {
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+        streamingTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     localMessages,

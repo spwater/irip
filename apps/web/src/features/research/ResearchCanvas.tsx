@@ -31,6 +31,7 @@ import {
   apiUpdateQuestion,
   type PlanDetail,
   type RunProgress,
+  type InsightCandidate,
   type WorkspaceDetail as WorkspaceDetailType,
 } from '../../api/research';
 import { PlanReviewCard } from './PlanReviewCard';
@@ -39,10 +40,10 @@ export type ResearchCanvasProps = {
   workspaceId: string;
   detail: WorkspaceDetailType;
   onQuestionUpdated?: () => void;
-  insightCandidate: any | null;
+  insightCandidate: InsightCandidate | null;
   insightCandidateId: string | null;
   insightRunId: string | null;
-  onInsightCandidateChange: (candidate: any | null, candidateId: string | null, runId: string | null) => void;
+  onInsightCandidateChange: (candidate: InsightCandidate | null, candidateId: string | null, runId: string | null) => void;
   onProductsRefresh: () => void;
 };
 
@@ -75,6 +76,7 @@ export function ResearchCanvas({
 
   // 加载时恢复最近的 Run + 分析结果
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const { apiListRuns, apiListPlans, apiGetPlan } = await import('../../api/research');
@@ -85,6 +87,7 @@ export function ResearchCanvas({
           const latestPlan = plansRes?.items?.[0];
           if (latestPlan) {
             const planDetail = await apiGetPlan(workspaceId, latestPlan.plan_id);
+            if (cancelled) return;
             setPlan(planDetail);
             const steps = planDetail.dag_structure?.steps || [];
             if (steps.length > 0) {
@@ -100,11 +103,12 @@ export function ResearchCanvas({
             }
           }
         } catch (err) {
-          console.error('恢复分析状态失败', err);
+          if (!cancelled) console.error('恢复分析状态失败', err);
         }
 
         // 恢复 Run
         const res = await apiListRuns(workspaceId);
+        if (cancelled) return;
         const items = res?.items ?? [];
         if (items.length > 0) {
           const activeRun = items.find(
@@ -114,13 +118,14 @@ export function ResearchCanvas({
           if (target) {
             const { apiGetRun } = await import('../../api/research');
             const progress = await apiGetRun(workspaceId, target.run_id);
-            setRun(progress);
+            if (!cancelled) setRun(progress);
           }
         }
       } catch (err) {
-        console.error('恢复 Run 状态失败', err);
+        if (!cancelled) console.error('恢复 Run 状态失败', err);
       }
     })();
+    return () => { cancelled = true; };
   }, [workspaceId]);
 
   // 编辑问题状态

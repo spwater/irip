@@ -18,6 +18,7 @@ queued / running → cancelled
 import logging
 import os
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -35,7 +36,6 @@ from packages.research.models_trusted import (
     StepProgress,
 )
 from packages.research.repository_trusted import ResearchRepositoryTrusted
-from typing import Any
 
 logger = logging.getLogger("research.run_service")
 

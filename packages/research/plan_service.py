@@ -569,40 +569,62 @@ class PlanService(ScopedSessionMixin):
                     for tc in response.tool_calls:
                         tool_name = tc.get("tool", "") if isinstance(tc, dict) else ""
                         tool_args = tc.get("args", {}) if isinstance(tc, dict) else {}
-                        tc_id = tc.get("id", f"call_{len(tool_messages)}") if isinstance(tc, dict) else f"call_{len(tool_messages)}"
+                        tc_id = (
+                            tc.get("id", f"call_{len(tool_messages)}")
+                            if isinstance(tc, dict)
+                            else f"call_{len(tool_messages)}"
+                        )
 
                         if tool_name == "describe_series":
                             try:
-                                result = await self._numeric_tools.describe_series(tool_args, principal)
-                                tool_messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": tc_id,
-                                    "content": _json.dumps(result.llm_data, ensure_ascii=False, default=str),
-                                })
+                                result = await self._numeric_tools.describe_series(
+                                    tool_args, principal
+                                )
+                                tool_messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tc_id,
+                                        "content": _json.dumps(
+                                            result.llm_data, ensure_ascii=False, default=str
+                                        ),
+                                    }
+                                )
                                 # 拼入摘要供日志参考
                                 logger.info("describe_series result: %s", result.summary)
                             except Exception as tool_exc:
                                 logger.warning("describe_series failed: %s", tool_exc)
-                                tool_messages.append({
+                                tool_messages.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": tc_id,
+                                        "content": _json.dumps(
+                                            {"error": str(tool_exc)}, ensure_ascii=False
+                                        ),
+                                    }
+                                )
+                        else:
+                            tool_messages.append(
+                                {
                                     "role": "tool",
                                     "tool_call_id": tc_id,
-                                    "content": _json.dumps({"error": str(tool_exc)}, ensure_ascii=False),
-                                })
-                        else:
-                            tool_messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc_id,
-                                "content": _json.dumps({"error": f"unknown tool: {tool_name}"}, ensure_ascii=False),
-                            })
+                                    "content": _json.dumps(
+                                        {"error": f"unknown tool: {tool_name}"}, ensure_ascii=False
+                                    ),
+                                }
+                            )
 
-                        assistant_tool_calls.append({
-                            "id": tc_id,
-                            "type": "function",
-                            "function": {
-                                "name": tool_name,
-                                "arguments": _json.dumps(tool_args, ensure_ascii=False, default=str),
-                            },
-                        })
+                        assistant_tool_calls.append(
+                            {
+                                "id": tc_id,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_name,
+                                    "arguments": _json.dumps(
+                                        tool_args, ensure_ascii=False, default=str
+                                    ),
+                                },
+                            }
+                        )
 
                     # 第二轮 LLM 调用：带工具结果生成最终报告
                     if tool_messages:
@@ -621,7 +643,11 @@ class PlanService(ScopedSessionMixin):
                             ),
                             tools=None,
                         )
-                        analysis_result = second_response.answer if hasattr(second_response, "answer") else str(second_response)
+                        analysis_result = (
+                            second_response.answer
+                            if hasattr(second_response, "answer")
+                            else str(second_response)
+                        )
 
                 # 清洗 echarts
                 import re as _re

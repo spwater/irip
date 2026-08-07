@@ -18,6 +18,7 @@
 - 备份记录持久化到 backup_record 表，通过 BackupRecordService 管理。
 """
 
+import asyncio
 import os
 import shutil
 from datetime import UTC, datetime
@@ -311,6 +312,14 @@ async def create_backup(
     now: datetime = datetime.now(UTC)
     backup_dir: str = _build_backup_output_dir(job_id)
 
+    # 确定性幂等键：daily 按"类型+日期"去重（同一天只接受一次），
+    # milestone 按"类型+用户+名称"去重（同名里程碑不重复创建）
+    if body.type == BackupType.DAILY.value:
+        idem_key = f"backup:daily:{now.strftime('%Y-%m-%d')}"
+    else:
+        safe_name = (body.name or "").strip()
+        idem_key = f"backup:milestone:{current_user.user_id}:{safe_name}"
+
     async with session_scope(session_factory) as session:
         job = Job(
             id=job_id,
@@ -325,7 +334,7 @@ async def create_backup(
                 "backup_method": "pitr",
                 "triggered_by": str(current_user.user_id),
             },
-            idempotency_key=f"backup:{job_id}",
+            idempotency_key=idem_key,
             attempt=0,
             max_attempts=1,
             created_by=current_user.user_id,
@@ -586,7 +595,7 @@ async def create_restore(
                 "triggered_by": str(current_user.user_id),
                 "pre_restore_created": False,
             },
-            idempotency_key=f"restore:{restore_job_id}",
+            idempotency_key=f"restore:{record_id}",
             attempt=0,
             max_attempts=1,
             created_by=current_user.user_id,
@@ -659,10 +668,10 @@ async def delete_backup(
                 fields={"backup_type": "daily", "expires_at": str(record.expires_at)},
             )
 
-    # 删除文件系统目录
+    # 先删除数据库记录（事务内），确认后再删文件
+    await backup_service.delete(record_id)
+
+    # 删除文件系统目录（DB 记录已删除，文件丢失可接受；反之则不一致）
     backup_dir: Path = Path(record.file_path)
     if backup_dir.exists():  # noqa: ASYNC240
-        shutil.rmtree(backup_dir, ignore_errors=True)
-
-    # 删除数据库记录
-    await backup_service.delete(record_id)
+        await asyncio.to_thread(shutil.rmtree, backup_dir, True)

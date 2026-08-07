@@ -173,6 +173,14 @@ class AIService:
         """切换对话置顶状态（委托到 ConversationService）。"""
         return await self._conversation_svc.toggle_pin(conversation_id, user_id, pinned)
 
+    async def get_conversation(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> ConversationRef | None:
+        """查询单个对话（委托到 ConversationService）。"""
+        return await self._conversation_svc.get_conversation(conversation_id, user_id)
+
     async def toggle_archive(
         self,
         conversation_id: UUID,

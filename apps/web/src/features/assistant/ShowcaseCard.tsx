@@ -42,7 +42,8 @@ function renderMath(tex: string, displayMode: boolean): string {
   try {
     return katex.renderToString(tex, { displayMode, throwOnError: false, strict: false });
   } catch {
-    return `<span style="color:red">${tex}</span>`;
+    const escaped = tex.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return `<span style="color:red">${escaped}</span>`;
   }
 }
 

@@ -14,7 +14,7 @@ get_current_user 中的 session_factory 通过 AsyncMock 替身。
 from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 
@@ -326,20 +326,23 @@ class TestEdgeCases:
             )
         assert exc_info.value.code == "invalid_credentials"
 
-    async def test_no_session_factory_skips_db_check(self) -> None:
-        """session_factory=None 时跳过数据库检查（仅解析 JWT）。"""
+    async def test_no_session_factory_rejects_auth(self) -> None:
+        """session_factory=None 时拒绝认证（fail-closed 安全策略 H-06）。
+
+        安全修复 d5f44d3 将 session_factory=None 的行为从 fail-open（跳过 DB 检查、
+        放行认证）改为 fail-closed（抛出 AppError）。session_factory 缺失通常意味着
+        DI 未正确覆盖，属于配置错误，fail-closed 可防止绕过 is_active/token_version
+        复核的认证放行。
+        """
         user_id = uuid4()
         token = _make_token(token_version=0, user_id=user_id)
 
-        result = await get_current_user(
-            authorization=f"Bearer {token}",
-            token_secret=SECRET,
-            session_factory=None,
-        )
-        assert isinstance(result, CurrentUser)
-        assert result.user_id == user_id
-        # 无 DB 查询时 department_id 为默认值 UUID(int=0)
-        assert result.department_id == UUID(int=0)
+        with pytest.raises(AppError, match="session_factory 缺失"):
+            await get_current_user(
+                authorization=f"Bearer {token}",
+                token_secret=SECRET,
+                session_factory=None,
+            )
 
 
 # ---- department_id 填充 ----

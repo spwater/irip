@@ -5,18 +5,54 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router';
+import { lazy, Suspense } from 'react';
+import { Spin } from 'antd';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { AppShell } from '@/app/AppShell';
-import { WorkbenchPage } from '@/features/dashboard/WorkbenchPage';
-import { StandardsPage as StandardsPageV1 } from '@/features/standards/StandardsPage';
-import { LabOpsPage } from '@/features/dashboard/LabOpsPage';
-import { PlatformPage } from '@/features/dashboard/PlatformPage';
-import { FactDetail } from '@/features/facts/FactDetail';
-import { ComponentsPage } from '@/features/components/ComponentsPage';
-import { GovernanceConsole } from '@/features/governance/GovernanceConsole';
-import { JobsPage } from '@/features/jobs/JobsPage';
-import { JobDetail } from '@/features/jobs/JobDetail';
+
+// 懒加载页面组件（代码分割，减少首屏 bundle 体积）
+const WorkbenchPage = lazy(() =>
+  import('@/features/dashboard/WorkbenchPage').then((m) => ({ default: m.WorkbenchPage })),
+);
+const StandardsPageV1 = lazy(() =>
+  import('@/features/standards/StandardsPage').then((m) => ({ default: m.StandardsPage })),
+);
+const LabOpsPage = lazy(() =>
+  import('@/features/dashboard/LabOpsPage').then((m) => ({ default: m.LabOpsPage })),
+);
+const PlatformPage = lazy(() =>
+  import('@/features/dashboard/PlatformPage').then((m) => ({ default: m.PlatformPage })),
+);
+const FactDetail = lazy(() =>
+  import('@/features/facts/FactDetail').then((m) => ({ default: m.FactDetail })),
+);
+const ComponentsPage = lazy(() =>
+  import('@/features/components/ComponentsPage').then((m) => ({ default: m.ComponentsPage })),
+);
+const GovernanceConsole = lazy(() =>
+  import('@/features/governance/GovernanceConsole').then((m) => ({ default: m.GovernanceConsole })),
+);
+const JobsPage = lazy(() =>
+  import('@/features/jobs/JobsPage').then((m) => ({ default: m.JobsPage })),
+);
+const JobDetail = lazy(() =>
+  import('@/features/jobs/JobDetail').then((m) => ({ default: m.JobDetail })),
+);
+
+/** Suspense fallback */
+function PageLoading(): JSX.Element {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <Spin size="large" />
+    </div>
+  );
+}
+
+/** 懒加载包裹器 */
+function LazyPage({ children }: { children: React.ReactNode }): JSX.Element {
+  return <Suspense fallback={<PageLoading />}>{children}</Suspense>;
+}
 
 /**
  * 根路由布局 — 包裹 AuthProvider
@@ -66,14 +102,14 @@ export function createAppRouter() {
   const workbenchRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/workbench',
-    component: WorkbenchPage,
+    component: () => <LazyPage><WorkbenchPage /></LazyPage>,
   });
 
   // V1 routes — using new components
   const standardsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/standards',
-    component: StandardsPageV1,
+    component: () => <LazyPage><StandardsPageV1 /></LazyPage>,
     validateSearch: (search: Record<string, unknown>): { tab?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
     }),
@@ -106,7 +142,7 @@ export function createAppRouter() {
   const factDetailRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/facts/$factId',
-    component: FactDetail,
+    component: () => <LazyPage><FactDetail /></LazyPage>,
   });
 
   const provenanceRoute = createRoute({
@@ -129,7 +165,7 @@ export function createAppRouter() {
   const componentsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/components',
-    component: ComponentsPage,
+    component: () => <LazyPage><ComponentsPage /></LazyPage>,
     validateSearch: (search: Record<string, unknown>): { prefill_object?: string; edit_id?: string } => ({
       prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
       edit_id: typeof search.edit_id === 'string' ? search.edit_id : undefined,
@@ -151,7 +187,7 @@ export function createAppRouter() {
   const labOpsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/lab-ops',
-    component: LabOpsPage,
+    component: () => <LazyPage><LabOpsPage /></LazyPage>,
     validateSearch: (search: Record<string, unknown>): { tab?: string; project?: string; param?: string; provenance_run_id?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
       project: typeof search.project === 'string' ? search.project : undefined,
@@ -164,7 +200,7 @@ export function createAppRouter() {
   const platformRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/platform',
-    component: PlatformPage,
+    component: () => <LazyPage><PlatformPage /></LazyPage>,
     validateSearch: (search: Record<string, unknown>): { tab?: string; prefill_object?: string; edit_id?: string } => ({
       tab: typeof search.tab === 'string' ? search.tab : undefined,
       prefill_object: typeof search.prefill_object === 'string' ? search.prefill_object : undefined,
@@ -176,19 +212,19 @@ export function createAppRouter() {
   const governanceRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/governance',
-    component: GovernanceConsole,
+    component: () => <LazyPage><GovernanceConsole /></LazyPage>,
   });
 
   const jobsRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/jobs',
-    component: JobsPage,
+    component: () => <LazyPage><JobsPage /></LazyPage>,
   });
 
   const jobDetailRoute = createRoute({
     getParentRoute: () => protectedLayoutRoute,
     path: '/jobs/$jobId',
-    component: JobDetail,
+    component: () => <LazyPage><JobDetail /></LazyPage>,
   });
 
   const routeTree = rootRoute.addChildren([

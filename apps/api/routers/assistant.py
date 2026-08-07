@@ -15,6 +15,7 @@
 """
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Any
@@ -30,6 +31,9 @@ from apps.api.dependencies.authorization import require_permission
 from packages.ai.service import AIService
 from packages.common.database import session_scope as _ai_session_scope
 from packages.common.errors import AppError
+
+#: 模块级 logger。
+logger = logging.getLogger("api.assistant")
 
 # session_factory 由 main.py 注入
 _ai_factory: Any = None
@@ -67,14 +71,17 @@ AIServiceDep = Annotated[AIService, Depends(get_ai_service)]
 
 
 async def _resolve_dept_id(current_user: CurrentUser) -> UUID:
-    """从数据库查询用户的 department_id。"""
-    from packages.common.ids import new_id
+    """从数据库查询用户的 department_id。
 
+    优先使用 token 中的 department_id；缺失时查 DB；
+    DB 也查不到时抛错，不生成随机 UUID（避免孤儿数据 + RLS 绕过）。
+    """
     user_id = current_user.user_id
     org_id = getattr(current_user, "department_id", None)
     if org_id is not None:
         return UUID(str(org_id))
 
+    # 1. 优先查 app_user 表获取用户的 department_id
     try:
         from packages.auth.entities import AppUser
 
@@ -82,21 +89,30 @@ async def _resolve_dept_id(current_user: CurrentUser) -> UUID:
             user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
             if user is not None and user.department_id is not None:
                 return user.department_id
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to load AppUser.department_id for %s: %s", user_id, exc)
 
+    # 2. 兜底：查询 root 哨兵部门（code='root', parent_id IS NULL）。
+    #    organization 表已在迁移 0066 中 DROP，原 IRIP-DEMO 兜底改用 department 哨兵。
     try:
         async with _ai_session_scope(_get_ai_factory()) as session:
             result = await session.execute(
-                sa.text("SELECT id FROM organization WHERE code = 'IRIP-DEMO'")
+                sa.text(
+                    "SELECT id FROM department WHERE code = 'root' AND parent_id IS NULL LIMIT 1"
+                )
             )
             row = result.scalar()
             if row is not None:
                 return UUID(str(row))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to resolve sentinel root department: %s", exc)
 
-    return new_id()
+    raise AppError(
+        code="forbidden",
+        message="无法确定用户所属部门，请先绑定部门后再使用 AI 助手",
+        retryable=False,
+        fields={"user_id": str(user_id)},
+    )
 
 
 # ---- 请求模型 ----
@@ -116,11 +132,12 @@ class SendMessageRequest(BaseModel):
     provider_name: str = Field("offline", max_length=64, description="Provider 名称")
     thinking_enabled: bool = Field(False, description="是否启用思考模式")
     system_context: str | None = Field(
-        None, max_length=1000000, description="系统上下文（如实验数据JSON）"
+        None, max_length=102400, description="系统上下文（如实验数据JSON）"
     )
     # irip-ai-collab: @ 人的 user_id 数组；协作对话中 "ai" 表示 @AI 助手
     mentions: list[str] = Field(
         default_factory=list,
+        max_length=50,
         description="@ 人的 user_id 数组；协作对话中包含 'ai' 表示触发 AI 回复",
     )
 
@@ -357,26 +374,23 @@ async def toggle_pin(
         conversation_id=conversation_id,
         user_id=current_user.user_id,
     )
-    # 重新查询返回完整信息
-    refs = await service.list_conversations(
+    # 直接查询单条对话（避免 O(n) 全量重查）
+    ref = await service.get_conversation(
+        conversation_id=conversation_id,
         user_id=current_user.user_id,
-        department_id=await _resolve_dept_id(current_user),
-        limit=200,
-        include_archived=True,
     )
-    for r in refs:
-        if r.id == conversation_id:
-            return ConversationResponse(
-                id=str(r.id),
-                user_id=str(r.user_id),
-                title=r.title,
-                provider_mode=r.provider_mode,
-                pinned=r.pinned,
-                archived=r.archived,
-                created_at=r.created_at,
-                updated_at=r.updated_at,
-            )
-    raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+    if ref is None:
+        raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+    return ConversationResponse(
+        id=str(ref.id),
+        user_id=str(ref.user_id),
+        title=ref.title,
+        provider_mode=ref.provider_mode,
+        pinned=ref.pinned,
+        archived=ref.archived,
+        created_at=ref.created_at,
+        updated_at=ref.updated_at,
+    )
 
 
 @assistant_router.patch(
@@ -393,25 +407,23 @@ async def toggle_archive(
         conversation_id=conversation_id,
         user_id=current_user.user_id,
     )
-    refs = await service.list_conversations(
+    # 直接查询单条对话（避免 O(n) 全量重查）
+    ref = await service.get_conversation(
+        conversation_id=conversation_id,
         user_id=current_user.user_id,
-        department_id=await _resolve_dept_id(current_user),
-        limit=200,
-        include_archived=True,
     )
-    for r in refs:
-        if r.id == conversation_id:
-            return ConversationResponse(
-                id=str(r.id),
-                user_id=str(r.user_id),
-                title=r.title,
-                provider_mode=r.provider_mode,
-                pinned=r.pinned,
-                archived=r.archived,
-                created_at=r.created_at,
-                updated_at=r.updated_at,
-            )
-    raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+    if ref is None:
+        raise AppError(code="not_found", message="对话不存在", retryable=False, fields={})
+    return ConversationResponse(
+        id=str(ref.id),
+        user_id=str(ref.user_id),
+        title=ref.title,
+        provider_mode=ref.provider_mode,
+        pinned=ref.pinned,
+        archived=ref.archived,
+        created_at=ref.created_at,
+        updated_at=ref.updated_at,
+    )
 
 
 @assistant_router.post(
@@ -575,9 +587,10 @@ async def send_message_stream(
                     )
                     yield f"data: {data}\n\n"
                     yield "data: [DONE]\n\n"
-        except Exception as exc:
+        except Exception:
+            logging.getLogger("api").exception("SSE stream error")
             error_data = json.dumps(
-                {"type": "error", "message": str(exc)},
+                {"type": "error", "message": "处理请求时发生内部错误"},
                 ensure_ascii=False,
             )
             yield f"data: {error_data}\n\n"

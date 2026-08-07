@@ -210,6 +210,11 @@ export function PlanReviewCard({
           <Button type="primary" onClick={handleConfirm}>
             确认计划
           </Button>
+          {onAdjust && (
+            <Button size="small" onClick={onAdjust}>
+              调整计划
+            </Button>
+          )}
         </Space>
       )}
 

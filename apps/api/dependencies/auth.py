@@ -137,9 +137,7 @@ async def get_current_user(
     department_id: UUID | None = None
     is_root_member: bool = False
     async with session_factory() as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == user_id)
-        )
+        user: AppUser | None = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
         if user is not None:
             department_id = user.department_id
             # H-06: 复核账户状态（disabled 用户拒绝）

@@ -85,6 +85,16 @@ export type EvidenceListResponse = {
   items: EvidenceRef[];
 };
 
+/** Insight 候选产物（AI 抽取的结论候选） */
+export type InsightCandidate = {
+  confidence_level?: string;
+  conclusion?: string;
+  scope?: string;
+  limitations?: string;
+  evidence_source_label?: string;
+  [key: string]: unknown;
+};
+
 export type Snapshot = {
   snapshot_id: string;
   snapshot_number: number;
@@ -152,7 +162,7 @@ export type PlanStep = {
   data_budget_tokens?: number;
   analysis_result?: string;
   data_context?: string;
-  insight_candidate?: unknown;
+  insight_candidate?: InsightCandidate | null;
   insight_candidate_id?: string;
   insight_run_id?: string;
 };
@@ -452,7 +462,7 @@ export async function apiExtractInsight(
   workspaceId: string,
   planId: string,
   snapshotId: string,
-): Promise<{ insight_candidate: any | null; insight_candidate_id: string | null; run_id: string | null }> {
+): Promise<{ insight_candidate: InsightCandidate | null; insight_candidate_id: string | null; run_id: string | null }> {
   const res = await http.post(`/research/workspaces/${workspaceId}/extract-insight`, {
     plan_id: planId,
     snapshot_id: snapshotId,

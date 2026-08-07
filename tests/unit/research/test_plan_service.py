@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -22,6 +22,8 @@ import pytest
 from packages.common.errors import AppError
 from packages.research.models_trusted import TaskType
 
+if TYPE_CHECKING:
+    from packages.research.plan_service import PlanService
 
 # ============================================================
 # 测试常量与工厂
@@ -78,7 +80,7 @@ class FakeFactProvider:
 def make_plan_service(
     model_gateway: FakeModelGateway | None = None,
     numeric_tools: MagicMock | None = None,
-) -> "PlanService":
+) -> PlanService:
     """构造一个带 mock 依赖的 PlanService 实例。"""
     from packages.research.plan_service import PlanService
 
@@ -303,12 +305,8 @@ class TestPlanReviewCardContract:
     通过源码扫描验证，不 import 前端模块。
     """
 
-    PLAN_REVIEW_CARD_PATH = (
-        "apps/web/src/features/research/PlanReviewCard.tsx"
-    )
-    RESEARCH_CANVAS_PATH = (
-        "apps/web/src/features/research/ResearchCanvas.tsx"
-    )
+    PLAN_REVIEW_CARD_PATH = "apps/web/src/features/research/PlanReviewCard.tsx"
+    RESEARCH_CANVAS_PATH = "apps/web/src/features/research/ResearchCanvas.tsx"
 
     def _read_source(self, relative_path: str) -> str:
         """读取前端源码文件内容。"""
@@ -321,8 +319,7 @@ class TestPlanReviewCardContract:
         """ResearchCanvas 必须有 handleConfirmPlan（防止再次被注释掉）。"""
         source = self._read_source(self.RESEARCH_CANVAS_PATH)
         assert "handleConfirmPlan" in source, (
-            "handleConfirmPlan must exist in ResearchCanvas — "
-            "do not comment it out!"
+            "handleConfirmPlan must exist in ResearchCanvas — do not comment it out!"
         )
         assert "onConfirm={handleConfirmPlan}" in source, (
             "handleConfirmPlan must be passed to PlanReviewCard as onConfirm"
@@ -333,10 +330,19 @@ class TestPlanReviewCardContract:
         source = self._read_source(self.RESEARCH_CANVAS_PATH)
         assert "onAdjust" not in source, "onAdjust should be removed from ResearchCanvas"
 
-    def test_plan_review_card_no_adjust_button(self) -> None:
-        """PlanReviewCard 不应包含调整计划按钮。"""
+    def test_plan_review_card_has_conditional_adjust_button(self) -> None:
+        """PlanReviewCard 应包含调整计划按钮，且仅在 onAdjust 存在时条件渲染。
+
+        安全修复 d5f44d3 重新引入了「调整计划」按钮，但用 ``{onAdjust && ...}``
+        条件渲染——只有当父组件传入 onAdjust 回调时才显示，避免死按钮。
+        ResearchCanvas 目前不传 onAdjust（见 test_research_canvas_has_no_adjust_button），
+        因此按钮在当前 UI 中不可见，但代码契约保留以便后续接入。
+        """
         source = self._read_source(self.PLAN_REVIEW_CARD_PATH)
-        assert "调整计划" not in source, "调整计划 button should be removed"
+        assert "调整计划" in source, "PlanReviewCard must have 调整计划 button"
+        assert "onAdjust" in source, "PlanReviewCard must reference onAdjust prop"
+        # 按钮必须条件渲染（{onAdjust && ...}），防止无回调时显示死按钮
+        assert "onAdjust &&" in source, "调整计划 button must be conditionally rendered"
 
     def test_plan_review_card_execute_visible_after_confirm(self) -> None:
         """PlanReviewCard 确认后执行分析按钮仍可见（extraContent 条件不含 !isConfirmed）。"""
@@ -347,7 +353,9 @@ class TestPlanReviewCardContract:
             return  # 如果没有 extraContent，跳过
         # 找到 extraContent 的结束位置（下一个变量声明或 return）
         extra_end = source.find("return (", extra_content_start)
-        extra_section = source[extra_content_start:extra_end] if extra_end > 0 else source[extra_content_start:]
+        extra_section = (
+            source[extra_content_start:extra_end] if extra_end > 0 else source[extra_content_start:]
+        )
         # extraContent 里的条件不应包含 !isConfirmed（执行分析按钮确认后仍可见）
         assert "!isConfirmed" not in extra_section, (
             "执行分析按钮在确认后不应隐藏 — extraContent 中移除 !isConfirmed 条件"

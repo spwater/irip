@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Row, Col, Spin, Modal, Input, message, Popconfirm, Tag } from 'antd';
 import { ArrowLeftOutlined, ForkOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons';
-import { apiGetWorkspace, apiForkWorkspace, apiDeleteWorkspace, apiArchiveWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
+import { apiGetWorkspace, apiForkWorkspace, apiDeleteWorkspace, apiArchiveWorkspace, type WorkspaceDetail as WorkspaceDetailType, type InsightCandidate } from '@/api/research';
 import { EvidencePanel } from './EvidencePanel';
 import { ResearchCanvas } from './ResearchCanvas';
 import { ResearchShowcasePanel } from './ResearchShowcasePanel';
@@ -26,7 +26,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
   const [forking, setForking] = useState(false);
 
   // 共享状态：分析产物（中栏产生，右栏展示）
-  const [insightCandidate, setInsightCandidate] = useState<any | null>(null);
+  const [insightCandidate, setInsightCandidate] = useState<InsightCandidate | null>(null);
   const [insightCandidateId, setInsightCandidateId] = useState<string | null>(null);
   const [insightRunId, setInsightRunId] = useState<string | null>(null);
   const [productsRefresh, setProductsRefresh] = useState(0);

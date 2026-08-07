@@ -181,7 +181,15 @@ def _collect_quality_status() -> dict[str, str]:
         ("Security Tests", "security-results.xml"),
         ("Recovery Tests", "recovery-results.xml"),
     ]:
-        results[name] = _read_junit_results(artifacts_dir / filename)
+        # B-3: download-artifact v4 places each artifact in a subdirectory
+        # named after the artifact (e.g. test-results/integration-test-results/),
+        # so search recursively if the file is not at the top level.
+        xml_path = artifacts_dir / filename
+        if not xml_path.exists():
+            matches = list(artifacts_dir.rglob(filename))
+            if matches:
+                xml_path = matches[0]
+        results[name] = _read_junit_results(xml_path)
 
     # Coverage
     results["Coverage"] = _read_coverage(PROJECT_ROOT / "coverage.xml")

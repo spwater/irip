@@ -11,6 +11,7 @@
   uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
 """
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -125,7 +126,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # ---- 2. S3 / MinIO ----
     s3_repo = _build_s3_repo()
-    s3_repo.ensure_bucket()
+    await asyncio.to_thread(s3_repo.ensure_bucket)
 
     # ---- 3. Redis URL ----
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
@@ -183,8 +184,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[o.strip() for o in cors_origins.split(",")],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     )
 
     # ---- F-19: 结构化日志 + Correlation ID 中间件 ----
@@ -256,7 +257,7 @@ def create_app() -> FastAPI:
                 message="metrics 端点令牌无效",
                 retryable=False,
                 fields={},
-            )
+            ) from None
 
         return Response(
             content=generate_metrics(),
@@ -335,6 +336,8 @@ def create_app() -> FastAPI:
                 "error": {
                     "code": "internal_error",
                     "message": "服务器内部错误，请联系管理员",
+                    "retryable": True,
+                    "fields": {},
                 }
             },
         )

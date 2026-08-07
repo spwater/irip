@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
-import { Button, Progress, Spin, Space, Typography } from 'antd';
+import { Button, Progress, Spin, Space, Typography, message } from 'antd';
 import { ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
 import { apiGetQueueStatus, apiCancelRun, type QueueStatus as QueueStatusType } from '../../api/research';
 

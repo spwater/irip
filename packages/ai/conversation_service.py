@@ -160,6 +160,41 @@ class ConversationService:
                 for r in rows
             ]
 
+    async def get_conversation(
+        self,
+        conversation_id: UUID,
+        user_id: UUID,
+    ) -> ConversationRef | None:
+        """查询单个对话（按 conversation_id + user_id）。
+
+        Args:
+            conversation_id: 对话 ID。
+            user_id: 用户 ID（权限检查）。
+
+        Returns:
+            ConversationRef | None: 对话引用，不存在时返回 None。
+        """
+        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+            r = await session.scalar(
+                sa.select(AIConversation).where(
+                    AIConversation.id == conversation_id,
+                    AIConversation.user_id == user_id,
+                )
+            )
+            if r is None:
+                return None
+            return ConversationRef(
+                id=r.id,
+                user_id=r.user_id,
+                title=r.title,
+                provider_mode=r.provider_mode,
+                pinned=r.pinned,
+                archived=r.archived,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+                system_context=r.system_context,
+            )
+
     async def toggle_pin(
         self,
         conversation_id: UUID,

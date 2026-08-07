@@ -36,7 +36,6 @@ from apps.api.dependencies.authorization import require_permission
 from packages.research.conversation_service import AIConversationService
 from packages.research.plan_service import PlanService
 from packages.research.run_service import AnalysisRunService
-from typing import Any
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]

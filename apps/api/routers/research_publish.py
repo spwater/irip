@@ -52,7 +52,6 @@ from apps.api.dependencies.authorization import require_permission
 from packages.research.catalog import ResearchCatalogImpl
 from packages.research.publication import PublicationService
 from packages.research.search import ResultSearchService
-from typing import Any
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]

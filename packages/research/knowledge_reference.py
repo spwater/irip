@@ -12,6 +12,7 @@ KnowledgeReferenceService 保存 AI 引用知识库时的段落快照、文档�
 import hashlib
 import json
 import logging
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -26,7 +27,6 @@ from packages.research.models import (
     KnowledgeSearchResult,
 )
 from packages.research.repository import ResearchRepository
-from typing import Any
 
 logger = logging.getLogger("research.knowledge_reference")
 

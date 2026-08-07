@@ -44,7 +44,6 @@ from packages.ai.tools import ToolRegistry
 from packages.common.clock import Clock
 from packages.common.database import scoped_session
 from packages.common.errors import AppError
-from packages.common.ids import new_id
 
 
 @dataclass
@@ -151,7 +150,12 @@ class AskService:
         user_id: UUID = user.user_id
         org_id: UUID | None = getattr(user, "department_id", None)
         if org_id is None:
-            org_id = new_id()
+            raise AppError(
+                code="forbidden",
+                message="无法确定用户所属部门，请先绑定部门后再使用 AI 助手",
+                retryable=False,
+                fields={"user_id": str(user_id)},
+            )
 
         # 热更新：从 DB 重新加载工具声明层（带 30s TTL 缓存）
         if self._factory is not None:
@@ -186,7 +190,8 @@ class AskService:
                     .select_from(ConversationParticipant)
                     .where(ConversationParticipant.conversation_id == conversation_id)
                 )
-                # system_context 恢复（前端没传时从对话记录读）
+                # system_context 恢复（前端没传时从对话记录读）+ 写回
+                conv_obj: AIConversation | None = None
                 if not system_context:
                     conv_obj = await session.scalar(
                         sa.select(AIConversation).where(AIConversation.id == conversation_id)
@@ -195,11 +200,12 @@ class AskService:
                         system_context = conv_obj.system_context
                 # system_context 写回（如果前端传了新值）
                 if system_context:
-                    conv_obj2 = await session.scalar(
-                        sa.select(AIConversation).where(AIConversation.id == conversation_id)
-                    )
-                    if conv_obj2:
-                        conv_obj2.system_context = system_context
+                    if conv_obj is None:
+                        conv_obj = await session.scalar(
+                            sa.select(AIConversation).where(AIConversation.id == conversation_id)
+                        )
+                    if conv_obj:
+                        conv_obj.system_context = system_context
         is_private: bool = participant_count is None or participant_count <= 1
         mention_only: bool = not is_private and "ai" not in mentions_list
 

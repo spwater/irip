@@ -29,32 +29,38 @@ DEPARTMENTS = [
 
 # (email, display_name, password, role, [dept_names])
 # primary = dept_names[0], 其余为 secondary
+# 密码从环境变量 IRIP_SEED_PASSWORD 读取（默认 asdf1234 仅供开发）
+_SEED_PASSWORD = os.getenv("IRIP_SEED_PASSWORD", "asdf1234")
 USERS = [
-    ("shuipei@hcrdi.com", "水沛", "asdf1234", "platform_administrator", ["研发中心", "机理仿真实验室"]),
-    ("13955184486@163.com", "高霖", "asdf1234", "lab_director", ["粉磨技术实验室"]),
-    ("chub@hcrdi.com", "褚彪", "asdf1234", "platform_administrator", ["研发中心", "先进控制实验室"]),
-    ("lining@hcrdi.com", "李宁", "asdf1234", "lab_director", ["固废资源化实验室"]),
-    ("sh@hcrdi.com", "宋昊", "asdf1234", "lab_director", ["无机非金属材料实验室"]),
-    ("18654180525@irip.com", "王梦瑜", "asdf1234", "lab_director", ["工业烟气污染控制实验室"]),
-    ("lyj@hcrdi.com", "刘银杰", "asdf1234", "lab_director", ["热化学工程实验室"]),
-    ("lzq@hcrdi.com", "刘志强", "asdf1234", "lab_member", ["热化学工程实验室"]),
-    ("15755537388@irip.com", "陈宝新", "asdf1234", "lab_member", ["热化学工程实验室"]),
-    ("18225512770@irio.com", "苏明雪", "asdf1234", "lab_member", ["固废资源化实验室"]),
-    ("253218588@qq.com", "丁浩", "asdf1234", "lab_member", ["粉磨技术实验室"]),
-    ("1401666768@qq.com", "王广", "asdf1234", "lab_member", ["机理仿真实验室"]),
-    ("fanwei971129@163.com", "范威", "asdf1234", "lab_member", ["机理仿真实验室"]),
-    ("ytf@hcrdi.com", "殷腾飞", "asdf1234", "lab_member", ["机理仿真实验室"]),
-    ("15927211562@irip.com", "袁鹏", "asdf1234", "lab_member", ["机理仿真实验室"]),
-    ("hg@hcrdi.com", "胡光", "asdf1234", "platform_administrator", ["科技管理部"]),
-    ("liutao@cbmi.com.cn", "刘韬", "asdf1234", "platform_administrator", ["研发中心", "先进控制实验室"]),
-    ("13855189911@irip.com", "王虔虔", "asdf1234", "platform_auditor", ["合肥水泥研究设计院有限公司"]),
-    ("zza@cbmi.com.cn", "朱子昂", "asdf1234", "lab_director", ["复合耐磨材料实验室"]),
+    ("shuipei@hcrdi.com", "水沛", _SEED_PASSWORD, "platform_administrator", ["研发中心", "机理仿真实验室"]),
+    ("13955184486@163.com", "高霖", _SEED_PASSWORD, "lab_director", ["粉磨技术实验室"]),
+    ("chub@hcrdi.com", "褚彪", _SEED_PASSWORD, "platform_administrator", ["研发中心", "先进控制实验室"]),
+    ("lining@hcrdi.com", "李宁", _SEED_PASSWORD, "lab_director", ["固废资源化实验室"]),
+    ("sh@hcrdi.com", "宋昊", _SEED_PASSWORD, "lab_director", ["无机非金属材料实验室"]),
+    ("18654180525@irip.com", "王梦瑜", _SEED_PASSWORD, "lab_director", ["工业烟气污染控制实验室"]),
+    ("lyj@hcrdi.com", "刘银杰", _SEED_PASSWORD, "lab_director", ["热化学工程实验室"]),
+    ("lzq@hcrdi.com", "刘志强", _SEED_PASSWORD, "lab_member", ["热化学工程实验室"]),
+    ("15755537388@irip.com", "陈宝新", _SEED_PASSWORD, "lab_member", ["热化学工程实验室"]),
+    ("18225512770@irio.com", "苏明雪", _SEED_PASSWORD, "lab_member", ["固废资源化实验室"]),
+    ("253218588@qq.com", "丁浩", _SEED_PASSWORD, "lab_member", ["粉磨技术实验室"]),
+    ("1401666768@qq.com", "王广", _SEED_PASSWORD, "lab_member", ["机理仿真实验室"]),
+    ("fanwei971129@163.com", "范威", _SEED_PASSWORD, "lab_member", ["机理仿真实验室"]),
+    ("ytf@hcrdi.com", "殷腾飞", _SEED_PASSWORD, "lab_member", ["机理仿真实验室"]),
+    ("15927211562@irip.com", "袁鹏", _SEED_PASSWORD, "lab_member", ["机理仿真实验室"]),
+    ("hg@hcrdi.com", "胡光", _SEED_PASSWORD, "platform_administrator", ["科技管理部"]),
+    ("liutao@cbmi.com.cn", "刘韬", _SEED_PASSWORD, "platform_administrator", ["研发中心", "先进控制实验室"]),
+    ("13855189911@irip.com", "王虔虔", _SEED_PASSWORD, "platform_auditor", ["合肥水泥研究设计院有限公司"]),
+    ("zza@cbmi.com.cn", "朱子昂", _SEED_PASSWORD, "lab_director", ["复合耐磨材料实验室"]),
 ]
 
 
 async def main():
     from packages.auth.passwords import hash_password
     from packages.common.ids import new_id
+
+    if os.getenv("IRIP_SEED_PASSWORD") is None:
+        print("⚠️  WARNING: IRIP_SEED_PASSWORD 未设置，使用默认密码 asdf1234。")
+        print("   生产环境请通过环境变量指定安全密码。\n")
 
     db_url = os.getenv("IRIP_DATABASE_URL", "").replace(
         "postgresql+psycopg://", "postgresql+psycopg_async://", 1

@@ -32,7 +32,6 @@ from packages.research.models import (
     WorkspaceRef,
 )
 from packages.research.repository import ResearchRepository
-from typing import Any
 
 if TYPE_CHECKING:
     pass

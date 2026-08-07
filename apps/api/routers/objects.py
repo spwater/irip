@@ -11,7 +11,7 @@
 """
 
 from datetime import datetime
-from typing import Any, Annotated, Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query

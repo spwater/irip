@@ -13,6 +13,7 @@ RunArtifactService 负责：
 
 import hashlib
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -20,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.database import ScopedSessionMixin
 from packages.research.models_trusted import ArtifactContent, ArtifactRef
 from packages.research.repository_trusted import ResearchRepositoryTrusted
-from typing import Any
 
 logger = logging.getLogger("research.artifacts")
 

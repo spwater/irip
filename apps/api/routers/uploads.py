@@ -16,7 +16,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
@@ -53,9 +53,9 @@ ArtifactServiceDep = Annotated[ArtifactService, Depends(get_artifact_service)]
 class PresignUploadRequest(BaseModel):
     """预签名上传请求体。"""
 
-    filename: str
-    media_type: str
-    size_bytes: int
+    filename: str = Field(..., min_length=1, max_length=255)
+    media_type: str = Field(..., max_length=128)
+    size_bytes: int = Field(..., ge=0)
 
 
 class PresignUploadResponse(BaseModel):
@@ -69,10 +69,10 @@ class PresignUploadResponse(BaseModel):
 class CompleteUploadRequest(BaseModel):
     """完成上传请求体。"""
 
-    sha256: str
-    size_bytes: int
-    media_type: str
-    filename: str
+    sha256: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+    size_bytes: int = Field(..., ge=0)
+    media_type: str = Field(..., max_length=128)
+    filename: str = Field(..., min_length=1, max_length=255)
 
 
 class CompleteUploadResponse(BaseModel):
@@ -191,8 +191,9 @@ async def complete_upload(
         AppError: code="hash_mismatch"，当 SHA-256 不匹配时。
         AppError: code="size_mismatch"，当大小不匹配时。
     """
+    user_prefix = str(current_user.user_id)[:8]
     ref = await service.complete_upload(
-        temp_key=f"uploads/{artifact_id}",
+        temp_key=f"uploads/{user_prefix}/{artifact_id}",
         media_type=body.media_type,
         filename=body.filename,
         expected_sha256=body.sha256,

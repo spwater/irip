@@ -19,7 +19,7 @@ import ast
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray

@@ -91,8 +91,8 @@ class SecretStore(ScopedSessionMixin):
         except ValueError:
             # 迁移 0082 完成后，明文回退应视为异常
             # 保留回退仅兼容迁移期间，生产环境应报警
-            import os
             import logging
+            import os
 
             logger = logging.getLogger(__name__)
             logger.warning(
@@ -101,8 +101,7 @@ class SecretStore(ScopedSessionMixin):
             )
             if os.getenv("IRIP_ENV") != "test":
                 logger.error(
-                    "DEPRECATED: 明文回退将在迁移 0082 完成后移除。"
-                    "请执行迁移 0082 加密存量凭据。"
+                    "DEPRECATED: 明文回退将在迁移 0082 完成后移除。请执行迁移 0082 加密存量凭据。"
                 )
             return secret.value
 

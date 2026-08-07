@@ -351,6 +351,7 @@ class ResearchOrchestrator:
                 async with self._factory() as session:
                     if created_by is not None:
                         from packages.common.tenant_guc import set_user_guc
+
                         await set_user_guc(session, created_by)
                     await AuditRecorder.record(
                         session,
@@ -755,6 +756,7 @@ class ResearchOrchestrator:
                         async with self._factory() as session:
                             if created_by is not None:
                                 from packages.common.tenant_guc import set_user_guc
+
                                 await set_user_guc(session, created_by)
                             await AuditRecorder.record(
                                 session,

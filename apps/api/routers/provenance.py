@@ -28,7 +28,6 @@ from packages.provenance.derivations import DerivationRunRef, DerivationService
 from packages.provenance.evidence import EvidenceMember, EvidenceService, EvidenceSetRef
 from packages.provenance.graph import ProvenanceGraph, ProvenanceGraphService
 from packages.provenance.recipes import RecipeService, RecipeVersion
-from typing import Any
 
 #: 需 provenance:write 权限的当前用户依赖。
 WriteUserDep = Annotated[CurrentUser, Depends(require_permission("provenance:write"))]

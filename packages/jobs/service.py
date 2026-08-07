@@ -190,7 +190,7 @@ class JobService(ScopedSessionMixin):
                     fields={"status": current_status.value},
                 )
 
-            await session.execute(
+            result = await session.execute(
                 sa.update(Job)
                 .values(
                     status=JobStatus.CANCEL_REQUESTED.value,
@@ -202,6 +202,13 @@ class JobService(ScopedSessionMixin):
                     Job.lock_version == job.lock_version,
                 )
             )
+            if result.rowcount == 0:
+                raise AppError(
+                    code="conflict",
+                    message="作业状态已被其他请求修改，请重试",
+                    retryable=True,
+                    fields={"lock_version": job.lock_version},
+                )
 
             await OutboxDispatcher.enqueue(
                 session,

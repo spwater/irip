@@ -16,7 +16,7 @@ DI 约定（与 V1 standards 路由一致）：
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Annotated
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query

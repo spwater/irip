@@ -64,7 +64,6 @@ ExecuteUserDep = Annotated[CurrentUser, Depends(require_permission("flow:execute
 
 # 从 facts 路由复用响应模型
 from apps.api.routers.facts import FactListResponse, FactResponse  # noqa: E402
-from typing import Any
 
 
 def get_flow_service() -> FlowRuntimeService:

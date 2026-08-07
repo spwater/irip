@@ -16,6 +16,7 @@ UnifiedProvenanceQueryService 协调 CoreProvenanceAdapter 和 ResearchLineageAd
 
 import logging
 from collections import deque
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -25,7 +26,6 @@ from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.research.labels import NodeDisplayLabelGenerator
 from packages.research.models import (
-from typing import Any
     ProvenanceEdge,
     ProvenanceGraph,
     ProvenanceGraphStats,

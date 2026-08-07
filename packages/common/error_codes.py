@@ -142,6 +142,11 @@ class ErrorCode(enum.Enum):
         self.code = code
         self.http_status = http_status
 
+    # 类级缓存：code→member 映射，避免高频 from_string 线性遍历。
+    # 裸注解（不带赋值），否则带值赋值的类属性会被 enum 元类当作成员，
+    # 在 __set_name__ 中以 None 调用 __init__(*args) 而触发 TypeError。
+    _code_cache: dict[str, "ErrorCode"] | None
+
     @classmethod
     def from_string(cls, code: str) -> "ErrorCode | None":
         """将错误码字符串解析为 ErrorCode 枚举成员。
@@ -155,10 +160,9 @@ class ErrorCode(enum.Enum):
         Returns:
             ErrorCode | None: 匹配的枚举成员，未注册时返回 None。
         """
-        for member in cls:
-            if member.code == code:
-                return member
-        return None
+        if cls._code_cache is None:
+            cls._code_cache = {m.code: m for m in cls}
+        return cls._code_cache.get(code)
 
     @classmethod
     def to_status_map(cls) -> dict[str, int]:
@@ -181,3 +185,9 @@ class ErrorCode(enum.Enum):
             set[str]: 所有已注册错误码字符串。
         """
         return {member.code for member in cls}
+
+
+# 类级缓存在类体外初始化为 None：类体内带值赋值会被 enum 元类当作成员
+# （以 None 调用 __init__(code, http_status) 触发 TypeError），裸注解则不创建
+# 类属性导致 from_string 首次访问 AttributeError，故在此处赋值最稳妥。
+ErrorCode._code_cache = None

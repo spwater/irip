@@ -173,34 +173,45 @@ class DepartmentRepository:
         result = await session.execute(query)
         rows = result.all()
 
-        # 递归 CTE：收集部门自身 + 所有后代部门 ID，再分别统计成员数与设备数。
-        # 锚点包含部门自身（id = :dept_id），递归部分沿 parent_id 向下展开全部后代。
-        # 使用绑定参数 :dept_id 避免关联子查询/CTE 的作用域歧义问题。
-        recursive_sql = sa.text(
+        # 批量递归 CTE：一次查询计算所有当页部门的 member_count + equipment_count，
+        # 消除 N+1 查询（原实现在循环内逐个执行 recursive_sql）。
+        output: list[tuple[Department, int, int, int]] = []
+        if not rows:
+            return output
+
+        dept_ids = [row[0].id for row in rows]
+        batch_sql = sa.text(
             """
             WITH RECURSIVE descendants AS (
-                SELECT id FROM department WHERE id = :dept_id
+                SELECT id AS root_id, id AS descendant_id
+                FROM department
+                WHERE id = ANY(:dept_ids)
                 UNION ALL
-                SELECT child.id FROM department child
-                JOIN descendants ON child.parent_id = descendants.id
+                SELECT d.root_id, child.id
+                FROM descendants d
+                JOIN department child ON child.parent_id = d.descendant_id
             )
             SELECT
+                d.root_id,
                 (SELECT count(*) FROM app_user_department aud
-                 WHERE aud.department_id IN (SELECT id FROM descendants))
-                    AS member_count,
+                 WHERE aud.department_id IN (
+                     SELECT descendant_id FROM descendants WHERE root_id = d.root_id
+                 )) AS member_count,
                 (SELECT count(*) FROM equipment e
-                 WHERE e.department_id IN (SELECT id FROM descendants))
-                    AS equipment_count
+                 WHERE e.department_id IN (
+                     SELECT descendant_id FROM descendants WHERE root_id = d.root_id
+                 )) AS equipment_count
+            FROM (SELECT DISTINCT root_id FROM descendants) d
             """
         )
+        count_result = await session.execute(batch_sql, {"dept_ids": dept_ids})
+        count_map: dict = {row[0]: (int(row[1]), int(row[2])) for row in count_result}
 
-        output: list[tuple[Department, int, int, int]] = []
         for row in rows:
             dept = row[0]
             children = int(row[1])
-            count_result = await session.execute(recursive_sql, {"dept_id": dept.id})
-            count_row = count_result.one()
-            output.append((dept, int(count_row[0]), children, int(count_row[1])))
+            mc, ec = count_map.get(dept.id, (0, 0))
+            output.append((dept, mc, children, ec))
         return output
 
     @staticmethod

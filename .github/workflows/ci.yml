@@ -26,11 +26,14 @@ jobs:
   lint:
     name: Ruff Lint + Format Check
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - run: pip install ruff
       - run: ruff check apps packages tests
       # F-24: Ruff format check -- 范围与 Makefile/release-gate 一致
@@ -95,20 +98,24 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
-      - run: mypy packages apps/api
+      - run: mypy packages apps/api apps/worker
 
   # F-17: Unit tests -- 不跑 DB 测试（排除 integration mark）
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       # F-17: unit job 不跑需要 DB 的 integration 测试
-      - run: python -m pytest tests/unit -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=25
+      # B-2: 纳入根级测试文件（tests/test_*.py），覆盖 371 个游离测试函数
+      - run: python -m pytest tests/unit tests/test_*.py -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=30
 
   # F-17: Contract tests -- 独立 job
   test-contract:
@@ -181,7 +188,14 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
       # H-10: 按目录独立执行，不加 marker 过滤
-      - run: python -m pytest tests/integration/ -v --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=15 --junit-xml=integration-results.xml
+      - run: python -m pytest tests/integration/ -v --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=20 --junit-xml=integration-results.xml
+      # B-3: Upload JUnit XML for acceptance report generation
+      - name: Upload test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: integration-results.xml
 
   # H-10: Security tests -- 独立 job，不加 marker 过滤
   test-security:
@@ -242,6 +256,13 @@ jobs:
       - run: python -m alembic upgrade head
       # H-10: 安全测试独立执行，不加 marker 过滤
       - run: python -m pytest tests/security/ -v --junit-xml=security-results.xml
+      # B-3: Upload JUnit XML for acceptance report generation
+      - name: Upload test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: security-test-results
+          path: security-results.xml
 
   # H-10: Recovery tests -- 独立 job，不加 marker 过滤
   test-recovery:
@@ -302,6 +323,13 @@ jobs:
       - run: python -m alembic upgrade head
       # H-10: 恢复测试独立执行，不加 marker 过滤
       - run: python -m pytest tests/recovery/ -v --junit-xml=recovery-results.xml
+      # B-3: Upload JUnit XML for acceptance report generation
+      - name: Upload test results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: recovery-test-results
+          path: recovery-results.xml
 
   # F-17: Acceptance tests -- 独立 job
   test-acceptance:
@@ -474,6 +502,11 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
+      # B-3: Download JUnit XML artifacts from test jobs for acceptance report
+      - name: Download test results
+        uses: actions/download-artifact@dcd2f8529f3eb1c6fa6c5e3aaf1d816438656f62  # v4
+        with:
+          path: test-results
       - name: Generate source code stats
         run: python scripts/generate-stats.py --output deliverables/source-stats.md
       - name: Generate acceptance report

@@ -19,6 +19,7 @@ import {
   CloseOutlined,
 } from '@ant-design/icons';
 import { apiListProducts, apiDeleteInsight, apiDeleteDataset, apiDeleteView, apiAcceptCandidate, apiRejectCandidate, apiRejectAnyCandidate, apiGetCandidates, apiCreateDataset, type ProductSummary, type CandidateProduct } from '@/api/researchProducts';
+import type { InsightCandidate } from '@/api/research';
 import { ProductDetailView } from './ProductDetailView';
 import { PublishButton } from './PublishButton';
 
@@ -27,7 +28,7 @@ const { Text } = Typography;
 export type ResearchShowcasePanelProps = {
   workspaceId: string;
   // Insight 候选（来自中栏分析流程）
-  insightCandidate: any | null;
+  insightCandidate: InsightCandidate | null;
   insightCandidateId: string | null;
   insightRunId: string | null;
   onInsightAccepted: () => void;

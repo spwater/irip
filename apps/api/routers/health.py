@@ -15,7 +15,7 @@
 """
 
 import os
-from typing import Any, Annotated
+from typing import Annotated
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends

@@ -449,10 +449,7 @@ class CandidateService(ScopedSessionMixin):
             actor_id = self._require_actor()
             async with self._scoped_session() as session:
                 await session.execute(
-                    sa.text(
-                        "DELETE FROM research_run_artifact "
-                        "WHERE id = :aid AND run_id = :rid"
-                    ),
+                    sa.text("DELETE FROM research_run_artifact WHERE id = :aid AND run_id = :rid"),
                     {"aid": str(candidate_id), "rid": str(run_id)},
                 )
                 await AuditRecorder.record(
