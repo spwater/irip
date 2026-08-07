@@ -14,6 +14,10 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
+from packages.ai.numeric.contracts import (
+    DESCRIBE_SERIES_SCHEMA,
+    EVALUATE_EXPRESSION_SCHEMA,
+)
 from packages.common.errors import AppError
 
 
@@ -73,7 +77,7 @@ class ToolInvocation:
     confirmed: bool = False
 
 
-#: 8 个白名单工具（只读）。
+#: 10 个白名单工具（只读）。
 WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name="search_standards",
@@ -188,6 +192,35 @@ WHITELIST_TOOLS: tuple[ToolSpec, ...] = (
             },
             "required": ["path", "prompt", "schema"],
         },
+    ),
+    ToolSpec(
+        name="evaluate_expression",
+        display_name="数值表达式计算",
+        description=(
+            "对标量和序列执行精确的数学表达式计算。"
+            "支持算术运算（+、-、*、/、**、%）和白名单函数"
+            "（abs/sqrt/exp/log/log10/sin/cos/tan/asin/acos/atan/atan2/"
+            "floor/ceil/round/minimum/maximum/clip/where/"
+            "count/sum/mean/min/max/median/var/std/quantile）。"
+            "可引用所选 Fact/Artifact 的序列（传稳定 ID，不要复制大型数组）。"
+            "需要单个最终值时应在表达式中聚合（如 sum(x)、mean(x)）。"
+            "不要复制大型平台数组到内联参数。"
+        ),
+        required_permission="assistant:use",
+        parameters_schema=EVALUATE_EXPRESSION_SCHEMA,
+    ),
+    ToolSpec(
+        name="describe_series",
+        display_name="序列描述统计",
+        description=(
+            "计算序列的描述统计量：count、sum、mean、"
+            "总体/样本方差、标准差、min、max、median、分位数、"
+            "偏度和峰度，以及缺失值计数。"
+            "方差口径不明确时使用 variance_mode=both 并在回答中解释差异。"
+            "默认严格处理缺失值（null_policy=fail）。"
+        ),
+        required_permission="assistant:use",
+        parameters_schema=DESCRIBE_SERIES_SCHEMA,
     ),
 )
 

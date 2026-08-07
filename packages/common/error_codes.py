@@ -107,6 +107,19 @@ class ErrorCode(enum.Enum):
     INVALID_STATE = ("invalid_state", 409)
     OUTSIDE_APPLICABILITY_DOMAIN = ("outside_applicability_domain", 422)
 
+    # ---- 422/413/500 补充：AI 数值计算工具 ----
+    NUMERIC_EXPRESSION_REJECTED = ("numeric_expression_rejected", 422)
+    NUMERIC_INVALID_SOURCE = ("numeric_invalid_source", 422)
+    NUMERIC_FIELD_NOT_FOUND = ("numeric_field_not_found", 422)
+    NUMERIC_NON_NUMERIC = ("numeric_non_numeric", 422)
+    NUMERIC_DOMAIN_ERROR = ("numeric_domain_error", 422)
+    NUMERIC_DIVIDE_BY_ZERO = ("numeric_divide_by_zero", 422)
+    NUMERIC_UNIT_CONFLICT = ("numeric_unit_conflict", 422)
+    NUMERIC_SIZE_LIMIT = ("numeric_size_limit", 413)
+    NUMERIC_NON_FINITE_RESULT = ("numeric_non_finite_result", 422)
+    NUMERIC_TIMEOUT = ("numeric_timeout", 422)
+    NUMERIC_INTERNAL_ERROR = ("numeric_internal_error", 500)
+
     # ---- 403 补充：研究发布权限 ----
     ACL_EXCEEDS_ENVELOPE = ("acl_exceeds_envelope", 403)
 

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.ai.tools import ToolRegistry
 from packages.common.database import scoped_session
+from packages.common.errors import AppError
 
 
 class ToolExecutor:
@@ -47,6 +48,7 @@ class ToolExecutor:
         model_service: Any | None = None,
         provenance_service: Any | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
+        numeric_tools: Any | None = None,
     ) -> None:
         """初始化工具执行器。
 
@@ -57,6 +59,7 @@ class ToolExecutor:
             model_service: 模型服务（工具执行用，可选）。
             provenance_service: 溯源服务（工具执行用，可选）。
             session_factory: 异步会话工厂（部分 handler 直接查询数据库，可选）。
+            numeric_tools: NumericToolFacade 实例（数值工具执行用，可选）。
         """
         self._tool_registry = tool_registry
         self._fact_service = fact_service
@@ -64,6 +67,43 @@ class ToolExecutor:
         self._model_service = model_service
         self._provenance_service = provenance_service
         self._factory = session_factory
+        self._numeric_tools = numeric_tools
+
+    def _require_numeric_tools(self) -> Any:
+        """获取 NumericToolFacade，不存在时抛 internal_error。"""
+        if self._numeric_tools is None:
+            raise AppError(
+                code="numeric_internal_error",
+                message="numeric tools not configured",
+                retryable=False,
+            )
+        return self._numeric_tools
+
+    def _build_numeric_principal(self, user: Any, org_id: UUID) -> Any:
+        """从请求上下文构造 NumericPrincipal（不从工具参数构造）。
+
+        Args:
+            user: 当前用户（需有 user_id, roles 属性）。
+            org_id: 当前部门 ID。
+
+        Returns:
+            NumericPrincipal: 调用主体。
+        """
+        from packages.ai.numeric.contracts import NumericPrincipal
+
+        user_id = getattr(user, "user_id", None)
+        if user_id is None:
+            raise AppError(
+                code="numeric_internal_error",
+                message="user_id is required for numeric tools",
+                retryable=False,
+            )
+        roles = tuple(user.roles) if hasattr(user, "roles") else ()
+        return NumericPrincipal(
+            user_id=user_id,
+            department_id=org_id,
+            roles=roles,
+        )
 
     def check_role_permission(self, user: Any, action: str) -> bool:
         """检查用户角色是否拥有指定权限（角色级，非对象级）。
@@ -151,6 +191,24 @@ class ToolExecutor:
             return await self._handle_draft_report(args, org_id)
         elif tool_name == "extract_data":
             return await self._handle_extract_data(args, org_id)
+        elif tool_name == "evaluate_expression":
+            principal = self._build_numeric_principal(user, org_id)
+            result = await self._require_numeric_tools().evaluate_expression(args, principal)
+            return {
+                "summary": result.summary,
+                "data": result.llm_data,
+                "audit": result.audit_data,
+                "citation_params": result.citation_params,
+            }
+        elif tool_name == "describe_series":
+            principal = self._build_numeric_principal(user, org_id)
+            result = await self._require_numeric_tools().describe_series(args, principal)
+            return {
+                "summary": result.summary,
+                "data": result.llm_data,
+                "audit": result.audit_data,
+                "citation_params": result.citation_params,
+            }
         else:
             return {
                 "summary": f"未实现的工具: {tool_name}",

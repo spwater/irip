@@ -85,6 +85,7 @@ class AIService:
         auth_service: Any | None = None,
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         clock: Clock | None = None,
+        numeric_tools: Any | None = None,
     ) -> None:
         """初始化 AI 编排服务。
 
@@ -99,6 +100,8 @@ class AIService:
                 可选）。None 时仅检查角色级权限。
             session_factory: 异步会话工厂（对话持久化，可选）。
             clock: 时钟依赖，默认 SystemClock。
+            numeric_tools: NumericToolFacade 实例（数值工具执行用，可选）。
+                生产环境必须注入；测试可不注入。
         """
         self._provider = provider
         self._tool_registry = tool_registry
@@ -120,6 +123,7 @@ class AIService:
             model_service=model_service,
             provenance_service=provenance_service,
             session_factory=session_factory,
+            numeric_tools=numeric_tools,
         )
         self._persistence = MessagePersistence(self._factory, self._clock, provider)
         self._ask_svc = AskService(

@@ -62,10 +62,46 @@ def register(ctx: CompositionContext) -> None:
         else:
             provider = OfflineProvider()
         tool_registry = ToolRegistry()
+
+        # 构建 NumericToolFacade（注入 session_factory、Fact 查询能力、限制配置）
+        from packages.ai.numeric import (
+            NumericDataResolver,
+            NumericLimits,
+            NumericPrincipal,
+            NumericToolFacade,
+            SafeExpressionEngine,
+            SeriesStatisticsService,
+        )
+
+        def _fact_query_factory(principal: NumericPrincipal) -> object:
+            """基于 NumericPrincipal 构建 FactQueryService 实例。"""
+            from packages.facts.query_service import FactQueryService
+
+            return FactQueryService(
+                session_factory=ctx.session_factory,
+                department_id=principal.department_id,
+                actor_id=principal.user_id,
+                s3_repo=ctx.s3_repo,
+            )
+
+        limits = NumericLimits()
+        data_resolver = NumericDataResolver(
+            fact_query_factory=_fact_query_factory,
+            limits=limits,
+        )
+        numeric_tools = NumericToolFacade(
+            data_resolver=data_resolver,
+            expression_engine=SafeExpressionEngine(limits),
+            statistics_service=SeriesStatisticsService(limits),
+            limits=limits,
+            max_concurrent=4,
+        )
+
         return AIService(
             provider=provider,
             tool_registry=tool_registry,
             session_factory=ctx.session_factory,
+            numeric_tools=numeric_tools,
         )
 
     ctx.app.dependency_overrides[get_ai_service] = _get_ai_service_dep

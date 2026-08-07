@@ -1,12 +1,14 @@
-"""AI 工具种子数据：表空时写入 12 条内置工具。
+"""AI 工具种子数据：逐个补齐缺失的内置工具。
 
-``seed_tools_if_empty(session)`` 在应用启动 lifespan 中调用（幂等）：
-- 仅当 ``ai_tool`` 表行数为 0 时执行 INSERT；
-- 种子源为 ``packages.ai.tools.ALL_TOOLS``（保留不变的硬编码元组）；
-- 写入时 ``enabled=True``、``lock_version=0``、``updated_by=None``；
-- 重复启动不重复写入；管理员后续修改不会被种子覆盖。
+``seed_missing_builtin_tools(session)`` 在应用启动 lifespan 中调用（幂等）：
+- 遍历 ``packages.ai.tools.ALL_TOOLS``，逐个按 name 检查是否存在；
+- 缺失则 INSERT，已存在的不更新（管理员编辑不被覆盖）；
+- 返回本次新插入的行数。
 
-设计约定（架构设计文档 §7.5 / Q-3）。
+设计约定：
+- 0079 迁移为已有环境插入两个数值工具；
+- 本函数为新安装在跑完迁移后补齐全部代码内置工具；
+- 未来新增工具不再依赖"表必须为空"的偶然条件。
 """
 
 import sqlalchemy as sa
@@ -17,25 +19,35 @@ from packages.ai.tools import ALL_TOOLS, ToolSpec
 from packages.common.ids import new_id
 
 
-async def seed_tools_if_empty(session: AsyncSession) -> int:
-    """表空时写入全部内置工具，幂等。
+async def seed_missing_builtin_tools(session: AsyncSession) -> int:
+    """逐个补齐缺失的内置工具，幂等。
+
+    遍历 ALL_TOOLS，对每个工具按 name 检查是否已存在，
+    缺失则 INSERT，已存在的不更新。
 
     Args:
         session: 异步会话（由调用方管理事务）。
 
     Returns:
-        int: 本次写入的行数（表非空时返回 0）。
+        int: 本次新插入的行数。
     """
-    count_result = await session.execute(sa.select(sa.func.count()).select_from(AITool))
-    count: int = count_result.scalar_one()
-    if count > 0:
-        return 0
+    inserted = 0
 
     for spec in ALL_TOOLS:
-        _insert_one(session, spec)
+        # 按 name 检查是否已存在
+        existing = await session.execute(
+            sa.select(AITool.id).where(AITool.name == spec.name)
+        )
+        if existing.scalar_one_or_none() is not None:
+            continue  # 已存在，不覆盖
 
-    await session.flush()
-    return len(ALL_TOOLS)
+        _insert_one(session, spec)
+        inserted += 1
+
+    if inserted > 0:
+        await session.flush()
+
+    return inserted
 
 
 def _insert_one(session: AsyncSession, spec: ToolSpec) -> None:

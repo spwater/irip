@@ -145,12 +145,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     register_all(ctx)
 
-    # ---- 6. AI 工具种子数据（表空时写入 12 条内置工具，幂等） ----
-    from packages.ai.tool_seeding import seed_tools_if_empty
+    # ---- 6. AI 工具种子数据（逐个补齐缺失的内置工具，幂等） ----
+    from packages.ai.tool_seeding import seed_missing_builtin_tools
     from packages.common.database import session_scope
 
     async with session_scope(session_factory) as session:
-        await seed_tools_if_empty(session)
+        await seed_missing_builtin_tools(session)
 
     yield
 

@@ -341,13 +341,29 @@ class AskService:
                     tool_name, tool_args, user, ctx.org_id
                 )
                 result_summary = str(tool_result.get("summary", ""))
+
+                # 工具结果归一化：检测数值工具的三路分流
+                has_numeric_audit = (
+                    isinstance(tool_result, dict)
+                    and "audit" in tool_result
+                    and "citation_params" in tool_result
+                )
+                if has_numeric_audit:
+                    llm_payload = tool_result.get("data", {})
+                    persisted_result = tool_result.get("audit", {})
+                    citation_payload = tool_result.get("citation_params", tool_args)
+                else:
+                    llm_payload = tool_result.get("data", tool_result)
+                    persisted_result = tool_result.get("data")
+                    citation_payload = tool_args
+
                 executed_tool_calls.append(
                     {
                         "tool": tool_name,
                         "args": tool_args,
                         "summary": result_summary or f"已执行 {spec.display_name}",
                         "status": "executed",
-                        "result": tool_result.get("data"),
+                        "result": persisted_result,
                     }
                 )
                 tool_result_messages.append(
@@ -355,7 +371,7 @@ class AskService:
                         "role": "tool",
                         "tool_call_id": tool_call_id,
                         "content": json.dumps(
-                            tool_result.get("data", tool_result),
+                            llm_payload,
                             ensure_ascii=False,
                             default=str,
                             separators=(",", ":"),
@@ -366,7 +382,7 @@ class AskService:
                 citation_gen = CitationGenerator()
                 signed_citation = citation_gen.generate(
                     tool_name=tool_name,
-                    query_params=tool_args,
+                    query_params=citation_payload,
                     result_summary=result_summary or "工具执行完成",
                 )
                 all_citations.append(signed_citation)
