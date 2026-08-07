@@ -399,6 +399,12 @@ class ProvenanceEdge(Base):
         sa.ForeignKey("derivation_run.id", ondelete="CASCADE"),
         nullable=False,
     )
+    department_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("department.id"),
+        nullable=False,
+        comment="所属部门 ID",
+    )
     source_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     source_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     target_type: Mapped[str] = mapped_column(sa.Text, nullable=False)

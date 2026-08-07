@@ -20,6 +20,9 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+# 确保 experiment_project 表的 ORM 模型被注册到 Base.metadata
+# （flow_definition.project_id 有 FK 到 experiment_project.id）
+import packages.experiment_project.entities  # noqa: F401
 from packages.common.database import Base
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.ids import new_id
