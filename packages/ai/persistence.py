@@ -192,16 +192,45 @@ class MessagePersistence:
             )
             session.add(user_msg)
 
-            # AI 消息
-            tool_calls_list: list[dict[str, Any]] = [
-                {
-                    "tool": tc.get("tool", ""),
-                    "args": tc.get("args", {}),
-                    "summary": tc.get("summary", ""),
-                    "status": tc.get("status", ""),
-                }
-                for tc in response.tool_calls
-            ]
+            # AI 消息 — 持久化审计数据，裁剪大型 inline 数组
+            tool_calls_list: list[dict[str, Any]] = []
+            for tc in response.tool_calls:
+                raw_args = tc.get("args", {})
+                # 裁剪大型 inline 数组：只保留摘要信息
+                trimmed_args: dict[str, Any] = {}
+                if isinstance(raw_args, dict):
+                    for k, v in raw_args.items():
+                        if isinstance(v, list) and len(v) > 20:
+                            trimmed_args[k] = f"[{len(v)} items]"
+                        elif isinstance(v, dict):
+                            # 检查 variables 里的 inline 数组
+                            if k == "variables" and isinstance(v, list):
+                                trimmed_vars: list[Any] = []
+                                for var in v:
+                                    if isinstance(var, dict):
+                                        trimmed_var: dict[str, Any] = {}
+                                        for vk, vv in var.items():
+                                            if isinstance(vv, list) and len(vv) > 20:
+                                                trimmed_var[vk] = f"[{len(vv)} items]"
+                                            else:
+                                                trimmed_var[vk] = vv
+                                        trimmed_vars.append(trimmed_var)
+                                    else:
+                                        trimmed_vars.append(var)
+                                trimmed_args[k] = trimmed_vars
+                            else:
+                                trimmed_args[k] = v
+                        else:
+                            trimmed_args[k] = v
+                tool_calls_list.append(
+                    {
+                        "tool": tc.get("tool", ""),
+                        "args": trimmed_args,
+                        "summary": tc.get("summary", ""),
+                        "status": tc.get("status", ""),
+                        "audit": tc.get("audit"),
+                    }
+                )
             citations_list: list[dict[str, str]] = []
             for c in response.citations:
                 if isinstance(c, Citation):

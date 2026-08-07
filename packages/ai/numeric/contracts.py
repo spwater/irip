@@ -431,7 +431,7 @@ _VARIABLE_SOURCE_SCHEMA: dict[str, Any] = {
         },
         "source_type": {
             "type": "string",
-            "enum": ["scalar", "inline", "fact_series", "artifact_series"],
+            "enum": ["scalar", "inline", "fact_series"],
             "description": "数据来源类型",
         },
         "value": {

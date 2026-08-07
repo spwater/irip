@@ -164,39 +164,8 @@ class TestScalarResolution:
 
 
 # =============================================================================
-# artifact_series stub
+# artifact_series 已从 Schema 移除（未实现前不对外暴露）
 # =============================================================================
-
-
-class TestArtifactSeriesStub:
-    """artifact_series stub 返回 numeric_invalid_source。"""
-
-    def test_artifact_series_returns_invalid_source(self) -> None:
-        source = NumericSource(
-            name="x",
-            source_type="artifact_series",
-            artifact_id="018f0000-0000-7000-8000-000000000002",
-            series_index=0,
-            column_name="value",
-        )
-        # lab_director has artifact:read
-        with pytest.raises(NumericError) as exc_info:
-            resolve_sync(source)
-        assert exc_info.value.code == "numeric_invalid_source"
-        assert "not yet supported" in exc_info.value.message
-
-    def test_artifact_series_no_permission(self) -> None:
-        source = NumericSource(
-            name="x",
-            source_type="artifact_series",
-            artifact_id="018f0000-0000-7000-8000-000000000002",
-            series_index=0,
-            column_name="value",
-        )
-        # Use a role that definitely doesn't have artifact:read
-        with pytest.raises(NumericError) as exc_info:
-            resolve_sync(source, principal=make_principal(roles=("unknown_role",)))
-        assert exc_info.value.code == "numeric_field_not_found"
 
 
 # =============================================================================
@@ -243,12 +212,12 @@ class TestFactSeriesResolution:
                         {
                             "columns": ["value"],
                             "units": {"value": "MPa"},
+                            "rows": [
+                                {"value": 1.0},
+                                {"value": 2.0},
+                                {"value": 3.0},
+                            ],
                         }
-                    ],
-                    "points": [
-                        {"value": 1.0},
-                        {"value": 2.0},
-                        {"value": 3.0},
                     ],
                 }
 

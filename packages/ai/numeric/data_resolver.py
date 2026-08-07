@@ -331,24 +331,24 @@ class NumericDataResolver:
 
         col_idx = columns.index(source.column_name)
 
-        # 提取数值列
-        points = fact_data.get("points", [])
-        if not isinstance(points, list):
+        # 提取数值列 — 从 series["rows"] 读取（IRIP 标准结构）
+        rows = series.get("rows", [])
+        if not isinstance(rows, list):
             raise NumericError(
                 code="numeric_invalid_source",
-                message="fact data has no valid points array",
+                message="series has no valid rows array",
                 path=f"variables.{source.name}",
             )
 
         float_values: list[float] = []
         nulls: list[bool] = []
 
-        for i, point in enumerate(points):
+        for i, row in enumerate(rows):
             val: Any = None
-            if isinstance(point, dict):
-                val = point.get(source.column_name)
-            elif isinstance(point, (list, tuple)):
-                val = point[col_idx] if col_idx < len(point) else None
+            if isinstance(row, dict):
+                val = row.get(source.column_name)
+            elif isinstance(row, (list, tuple)):
+                val = row[col_idx] if col_idx < len(row) else None
             else:
                 val = None
 

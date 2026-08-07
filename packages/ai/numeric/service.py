@@ -120,13 +120,26 @@ class NumericToolFacade:
                 for source in variable_sources:
                     resolved[source.name] = await self._resolver.resolve(source, principal)
 
-                # 3. 执行表达式（同步 CPU 计算，在线程中执行）
-                result: NumericValue = await asyncio.to_thread(
-                    self._expression_engine.evaluate,
-                    expression,
-                    resolved,
-                    options,
-                )
+                # 3. 执行表达式（同步 CPU 计算，在线程中执行 + 超时保护）
+                try:
+                    result: NumericValue = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            self._expression_engine.evaluate,
+                            expression,
+                            resolved,
+                            options,
+                        ),
+                        timeout=self._limits.computation_timeout_seconds,
+                    )
+                except TimeoutError:
+                    raise NumericError(
+                        code="numeric_timeout",
+                        message=(
+                            f"computation exceeded "
+                            f"{self._limits.computation_timeout_seconds}s limit"
+                        ),
+                        path="expression",
+                    ) from None
 
                 # 4. 构建结果
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0

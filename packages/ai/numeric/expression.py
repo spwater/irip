@@ -1323,7 +1323,8 @@ class ExpressionInterpreter:
         if len(vals) == 0:
             self._warnings.append("empty_aggregate")
             return _EvalValue.scalar_val(0.0, propagate_aggregation(unit))
-        result = float(np.sum(vals))
+        # 使用 math.fsum 实现稳定求和（避免大数抵消导致精度丢失）
+        result = math.fsum(float(v) for v in vals)
         self._check_finite(result, "sum")
         return _EvalValue.scalar_val(self._normalize_zero(result), propagate_aggregation(unit))
 
