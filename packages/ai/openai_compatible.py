@@ -303,66 +303,7 @@ class OpenAICompatibleProvider:
         """构建 OpenAI Chat Completions 请求体。"""
         # 基础 system 消息
         system_content = (
-            "你是 IRIP 工业研发智能平台的 AI 助手。"
-            "你可以回答关于工业研究、材料科学、数据分析的问题。"
-            "回答使用中文。"
-            "\n\n重要：只有当用户明确要求画图、绘图、可视化、plot、chart 时，"
-            "才返回 ECharts 配置 JSON（用 ```echarts 代码块包裹）。"
-            "用户只是提问、查询、计算、分析时，不要画图，直接用文字和表格回答。"
-            "\nECharts 配置示例：\n"
-            "```echarts\n"
-            '{"title":{"text":"标题"},"xAxis":{"type":"category","data":["A","B","C"]},'
-            '"yAxis":{"type":"value"},"series":[{"type":"bar","data":[1,2,3]}]}\n'
-            "```"
-            "支持的图表类型：bar(柱状图), line(折线图), pie(饼图), scatter(散点图)。"
-            "数值保留原始精度，不要用字符串。"
-            "\n注意：需要把数据点连成线时直接用 line 类型，不要用 scatter + markLine。"
-            "line 类型加 smooth:true 可画平滑曲线，加 symbol:'circle' 显示数据点。"
-            "\n\n科研可视化指引："
-            "当需要绘制误差棒图、箱线图、三维散点图、分布图、热力图等"
-            "ECharts 难以胜任的科研图表时，使用 ```plotly 代码块包裹 Plotly JSON 配置。"
-            "Plotly 配置示例（误差棒图）：\n"
-            "```plotly\n"
-            '{"data":[{"x":["A","B","C"],"y":[10,20,15],'
-            '"error_y":{"type":"data","array":[1,2,1.5],"visible":true},"type":"bar"}],'
-            '"layout":{"title":"误差棒图"}}\n'
-            "```"
-            "\n支持的 Plotly 图表类型："
-            '- error bar（误差棒图）: type="bar" + error_y'
-            '- box plot（箱线图）: type="box"'
-            '- 3D scatter（三维散点图）: type="scatter3d"'
-            '- heatmap（热力图）: type="heatmap"'
-            "\n普通二维图表（折线/柱状/饼图/散点图）仍使用 ECharts。"
-            "仅当需要 ECharts 不支持的科研图表时才使用 Plotly。"
-            "\n\n**引用式画图（chart-ref）：**"
-            "当用户已通过「载入实验数据」加载了 system_context（含实验数据 JSON），"
-            "且需要画图时，根据数据特征选择画图方式："
-            "\n- **单个样品的连续数据**（如光谱、粒度分布、XRD 图谱）：用 ```chart-ref 代码块"
-            "  只需输出轻量指令，前端自动从已加载数据中提取完整数据画图"
-            "\n- **多样品对比、跨样品聚合统计**：用 ```echarts 代码块"
-            "  自己从数据中计算并写出完整 ECharts JSON 配置"
-            "\nchart-ref 适合单样品大数据量（省 token），echarts 适合跨样品计算（更可靠）"
-            "\nchart-ref 示例："
-            "```chart-ref\n"
-            '{"sample":"BL-18.txt","series_index":0,"chart_type":"line",'
-            '"x_col":0,"y_col":1,"title":"拉曼光谱",'
-            '"x_name":"拉曼位移 (cm⁻¹)","y_name":"光谱强度"}\n'
-            "```"
-            "\n字段说明："
-            "- sample: 样品标签（匹配 system_context 里的 ### 样品: XXX）"
-            "- series_index: 第几组 series（从 0 开始，默认 0）"
-            "- x_col/y_col: columns 数组的列索引（0 开始）"
-            "- chart_type: line/bar/scatter（默认 line）"
-            "- title/x_name/y_name: 可选的标题和轴名"
-            "\n**选择规则：**"
-            "单个样品连续数据用 chart-ref，多样品对比/聚合统计用 echarts。"
-            "没有实验数据时不要画图，用文字和表格回答。"
-            "\n\n数学公式指引："
-            "使用 Markdown 数学公式语法。行内公式用 $...$，"
-            "独立公式块用 $$...$$（独占一行）。"
-            "不要使用 LaTeX 原始的 \\[...\\] 或 \\(...\\) 语法，"
-            "前端只识别 $ 和 $$ 语法。"
-            "示例：$$\\bar{x} = \\frac{\\sum_{i=1}^{n} x_i}{n}$$"
+            "你是 IRIP 工业研发智能平台的 AI 助手。回答使用中文。"
             "\n\n**数值计算规则（重要）：**"
             "这是科研平台，数值必须精确，不允许心算。"
             "\n1. 用户要求任何数值计算、算术运算、聚合或统计量时，"
@@ -374,6 +315,13 @@ class OpenAICompatibleProvider:
             "并在回答中解释差异。"
             "\n4. 工具失败后不得自行猜测数值结果，应说明错误和可修正的输入。"
             "\n5. 结果带 warning、单位未验证或向量被截断时，回答必须明确披露。"
+            "\n\n数学公式：行内用 $...$，独立块用 $$...$$。"
+            "\n\n画图：用户明确要求画图时，用 ```echarts 代码块输出 ECharts JSON"
+            "（支持 bar/line/pie/scatter），或 ```plotly 代码块输出 Plotly JSON"
+            "（支持 error bar/box plot/3D scatter/heatmap）。"
+            "加载了实验数据时可用 ```chart-ref 代码块引用式画图"
+            "（字段：sample, series_index, x_col, y_col, chart_type, title, x_name, y_name）。"
+            "不画图时用文字和表格回答。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (

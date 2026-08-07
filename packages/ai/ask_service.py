@@ -25,6 +25,8 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
+
+import structlog
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
@@ -348,9 +350,12 @@ class AskService:
 
             # 白名单工具真实执行
             try:
+                _t_tool_start = time.monotonic()
                 tool_result = await self._tool_executor.execute_tool(
                     tool_name, tool_args, user, ctx.org_id
                 )
+                _t_tool_end = time.monotonic()
+                print(f"[TIMING] tool_exec: {tool_name}  duration={(_t_tool_end-_t_tool_start)*1000:.1f}ms", flush=True)
                 result_summary = str(tool_result.get("summary", ""))
 
                 # 工具结果归一化：检测数值工具的三路分流
@@ -464,9 +469,12 @@ class AskService:
                 self._provider._thinking_enabled = ctx.thinking_enabled and ctx.config_thinking_enabled
 
             try:
+                _t_r2_start = time.monotonic()
                 second_response: AIResponse = await self._provider.complete(
                     second_request, cancel_event=ctx.cancel_event
                 )
+                _t_r2_end = time.monotonic()
+                print(f"[TIMING] llm_round2={(_t_r2_end-_t_r2_start)*1000:.0f}ms", flush=True)
                 final_answer = self._persistence.redact_credentials(second_response.answer)
                 final_uncertainty = second_response.uncertainty
             except Exception:
@@ -591,9 +599,12 @@ class AskService:
 
         try:
             # 调用 Provider（支持取消）
+            _t1 = time.monotonic()
             response: AIResponse = await self._provider.complete(
                 ctx.ai_request, cancel_event=ctx.cancel_event
             )
+            _t2 = time.monotonic()
+            print(f"[TIMING] prepare={(_t1-_t0)*1000:.0f}ms  llm_round1={(_t2-_t1)*1000:.0f}ms  tools={len(response.tool_calls)}  thinking={thinking_enabled and ctx.config_thinking_enabled}", flush=True)
         except AppError as exc:
             if exc.code == "ai_cancelled":
                 await self._persistence.persist_messages(
@@ -659,6 +670,19 @@ class AskService:
             system_context=system_context,
             mentions=mentions,
         )
+        _t0 = time.monotonic()
+        print(f"[TIMING] stream_ask entered, question={question[:50]}", flush=True)
+        ctx = await self._prepare_ask(
+            user=user,
+            question=question,
+            conversation_id=conversation_id,
+            provider_name=provider_name,
+            thinking_enabled=thinking_enabled,
+            system_context=system_context,
+            mentions=mentions,
+        )
+        _t1 = time.monotonic()
+        print(f"[TIMING] prepare={(_t1-_t0)*1000:.0f}ms", flush=True)
 
         # 协作对话中仅 @人（不 @AI）：仅持久化用户消息，不调 AI
         if ctx.mention_only:
@@ -694,9 +718,12 @@ class AskService:
 
             if not has_stream:
                 # OfflineProvider 等不支持流式：一次性获取完整回答，作为单个 chunk yield
+                _t1 = time.monotonic()
                 response: AIResponse = await self._provider.complete(
                     ctx.ai_request, cancel_event=ctx.cancel_event
                 )
+                _t2 = time.monotonic()
+                print(f"[TIMING] stream_prepare={(_t1-_t0)*1000:.0f}ms  llm_round1={(_t2-_t1)*1000:.0f}ms  tools={len(response.tool_calls)}  thinking={thinking_enabled and ctx.config_thinking_enabled}", flush=True)
                 answer_text = self._persistence.redact_credentials(response.answer)
                 if answer_text:
                     yield {"type": "chunk", "content": answer_text}
@@ -705,6 +732,7 @@ class AskService:
                 final_response = await self._execute_and_finalize(response, ctx, user)
             else:
                 # 流式 Provider：逐 chunk 产出文本增量
+                _t1 = time.monotonic()
                 full_text = ""
                 streamed_tool_calls: list[dict[str, Any]] = []
                 stream_error = False
@@ -719,6 +747,8 @@ class AskService:
                         yield {"type": "chunk", "content": content}
                     elif event_type == "done":
                         streamed_tool_calls = event.get("tool_calls", [])
+                        _t2 = time.monotonic()
+                        print(f"[TIMING] stream_prepare={(_t1-_t0)*1000:.0f}ms  llm_round1={(_t2-_t1)*1000:.0f}ms  tools={len(streamed_tool_calls)}  thinking={thinking_enabled and ctx.config_thinking_enabled}", flush=True)
                     elif event_type == "error":
                         stream_error = True
                         yield event
