@@ -176,7 +176,7 @@ export function AIConfigPage(): JSX.Element {
         research_model_name: values.research_model_name,
         enabled: true,
         meta_prompt: existingPrompt,
-        thinking_enabled: thinkingEnabled,
+        model_thinking_enabled: thinkingEnabled,
       assistant_thinking_enabled: assistantThinkingEnabled,
       research_thinking_enabled: researchThinkingEnabled,
       });
