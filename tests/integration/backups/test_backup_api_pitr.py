@@ -116,6 +116,11 @@ def _cleanup_test_user(sync_engine, user_id: UUID) -> None:
             {"uid": str(user_id)},
         )
         if dept_id is not None:
+            # 先删该 department 的所有 backup_record（防止 FK 违反）
+            conn.execute(
+                sa.text("DELETE FROM backup_record WHERE department_id = :did"),
+                {"did": dept_id},
+            )
             conn.execute(
                 sa.text("DELETE FROM department WHERE id = :did"),
                 {"did": dept_id},
