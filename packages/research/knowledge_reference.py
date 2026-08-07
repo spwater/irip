@@ -150,9 +150,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
 
             # 如果长文本需要存 MinIO，此时已有 reference_id
             if inline_snippet is None:
-                storage_path = self._store_snippet(
-                    ref.id, snippet_text, workspace_id, run_id
-                )
+                storage_path = self._store_snippet(ref.id, snippet_text, workspace_id, run_id)
                 if storage_path is not None:
                     # 更新 snippet_storage_path（仅追加策略下，此处为初始化写入，允许）
                     await session.execute(
@@ -186,9 +184,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
         try:
             await self._lineage_writer.on_knowledge_referenced(ref.id, None)
         except Exception as exc:
-            logger.warning(
-                "on_knowledge_referenced hook failed: %s", exc
-            )
+            logger.warning("on_knowledge_referenced hook failed: %s", exc)
 
         return KnowledgeReferenceRef(
             reference_id=ref.id,
@@ -333,9 +329,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
             KnowledgeReferenceDetail | None: 引用快照详情，不存在时返回 None。
         """
         async with self._scoped_session() as session:
-            ref = await ResearchRepository.get_knowledge_reference(
-                session, reference_id
-            )
+            ref = await ResearchRepository.get_knowledge_reference(session, reference_id)
             if ref is None:
                 return None
 

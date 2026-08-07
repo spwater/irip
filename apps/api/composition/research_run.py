@@ -21,10 +21,10 @@ from fastapi import Depends
 from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.research_run import (
+    _set_artifact_service,
     get_conversation_service,
     get_plan_service,
     get_run_service,
-    _set_artifact_service,
 )
 
 
@@ -81,7 +81,9 @@ def register(ctx: CompositionContext) -> None:
         if _ai_config and _ai_config.get("base_url") and _ai_config.get("api_key"):
             from packages.ai.openai_compatible import OpenAICompatibleProvider
 
-            research_model_name = _ai_config.get("research_model_name") or _ai_config.get("model_name", "")
+            research_model_name = _ai_config.get("research_model_name") or _ai_config.get(
+                "model_name", ""
+            )
             _thinking = _ai_config.get("thinking_enabled", False)
             ai_provider = OpenAICompatibleProvider(
                 api_key=_ai_config["api_key"],
@@ -89,7 +91,12 @@ def register(ctx: CompositionContext) -> None:
                 model=research_model_name,
                 thinking_enabled=_thinking,
             )
-            _logger.info("API AI provider initialized: model=%s, base_url=%s, thinking=%s", research_model_name, _ai_config["base_url"], _thinking)
+            _logger.info(
+                "API AI provider initialized: model=%s, base_url=%s, thinking=%s",
+                research_model_name,
+                _ai_config["base_url"],
+                _thinking,
+            )
         else:
             _logger.warning("No active AI config found, PlanService will use mock provider")
     except Exception as exc:
@@ -120,7 +127,7 @@ def register(ctx: CompositionContext) -> None:
         session_factory=ctx.session_factory,
         s3_repo=ctx.s3_repo,
     )
-    memory_service = ResearchMemoryService(session_factory=ctx.session_factory)
+    ResearchMemoryService(session_factory=ctx.session_factory)
 
     # 注册工件服务（供路由端点使用）
     _set_artifact_service(artifact_service)
@@ -130,9 +137,9 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> PlanService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        from packages.research.core_adapter import CoreFactProviderImpl
-        from packages.facts.query_service import FactQueryService
         from apps.api.dependencies.dept_scope import get_rls_dept_id
+        from packages.facts.query_service import FactQueryService
+        from packages.research.core_adapter import CoreFactProviderImpl
 
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         fact_query_service = FactQueryService(

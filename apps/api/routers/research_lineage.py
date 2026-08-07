@@ -22,7 +22,6 @@ POST   /provenance/graph/export              — 导出溯源图
 """
 
 import json
-from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -44,9 +43,7 @@ ManageUserDep = Annotated[CurrentUser, Depends(require_permission("research:mana
 
 def get_provenance_service() -> object:
     """获取 UnifiedProvenanceQueryService 实例（由 DI 容器覆盖提供）。"""
-    raise NotImplementedError(
-        "get_provenance_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_provenance_service must be overridden via dependency_overrides")
 
 
 ProvenanceServiceDep = Annotated[object, Depends(get_provenance_service)]
@@ -59,9 +56,7 @@ def get_knowledge_provider_service() -> object:
     )
 
 
-KnowledgeProviderServiceDep = Annotated[
-    object, Depends(get_knowledge_provider_service)
-]
+KnowledgeProviderServiceDep = Annotated[object, Depends(get_knowledge_provider_service)]
 
 
 def get_knowledge_reference_service() -> object:
@@ -71,9 +66,7 @@ def get_knowledge_reference_service() -> object:
     )
 
 
-KnowledgeReferenceServiceDep = Annotated[
-    object, Depends(get_knowledge_reference_service)
-]
+KnowledgeReferenceServiceDep = Annotated[object, Depends(get_knowledge_reference_service)]
 
 
 # ---- Pydantic 请求/响应模型 ----
@@ -498,7 +491,9 @@ async def list_knowledge_references_by_insight(
     current_user: ResearchUserDep,
     service: KnowledgeReferenceServiceDep,
     insight_id: UUID,
-    full_content: bool = Query(default=False, description="是否包含完整段落文本（需 research:manage）"),
+    full_content: bool = Query(
+        default=False, description="是否包含完整段落文本（需 research:manage）"
+    ),
 ) -> list[KnowledgeReferenceDetailResponse]:
     """查看 Insight 关联的知识引用快照列表。
 
@@ -527,7 +522,9 @@ async def get_knowledge_reference(
     current_user: ResearchUserDep,
     service: KnowledgeReferenceServiceDep,
     reference_id: UUID,
-    full_content: bool = Query(default=False, description="是否包含完整段落文本（需 research:manage）"),
+    full_content: bool = Query(
+        default=False, description="是否包含完整段落文本（需 research:manage）"
+    ),
 ) -> KnowledgeReferenceDetailResponse:
     """查看单个知识引用快照详情。
 

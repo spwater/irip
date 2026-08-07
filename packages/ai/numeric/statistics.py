@@ -20,7 +20,6 @@ from typing import Any
 import numpy as np
 
 from packages.ai.numeric.contracts import (
-    DEFAULT_STATISTICS,
     DescribeSeriesRequest,
     NumericError,
     NumericLimits,
@@ -72,7 +71,11 @@ class SeriesStatisticsService:
 
         # 提取有效值
         if source.is_scalar:
-            valid_vals = np.array([], dtype=np.float64) if null_mask else np.array([float(values)], dtype=np.float64)
+            valid_vals = (
+                np.array([], dtype=np.float64)
+                if null_mask
+                else np.array([float(values)], dtype=np.float64)
+            )
         else:
             if null_mask.size > 0:
                 valid_vals = values[~null_mask]
@@ -84,7 +87,9 @@ class SeriesStatisticsService:
             if request.null_policy == "fail":
                 raise NumericError(
                     code="numeric_invalid_source",
-                    message=f"series contains {missing_count} null values and null_policy is 'fail'",
+                    message=(
+                        f"series contains {missing_count} null values and null_policy is 'fail'"
+                    ),
                     path="series",
                     details={"missing_count": missing_count},
                 )
@@ -224,7 +229,9 @@ class SeriesStatisticsService:
         """计算指定 ddof 的方差。"""
         min_n = 1 if ddof == 0 else 2
         if n < min_n:
-            warnings.append(f"insufficient_samples:variance_{('population' if ddof == 0 else 'sample')}")
+            warnings.append(
+                f"insufficient_samples:variance_{('population' if ddof == 0 else 'sample')}"
+            )
             return None
         result = float(np.var(vals, ddof=ddof))
         if result == 0.0:
@@ -284,8 +291,8 @@ class SeriesStatisticsService:
             return None
         # g1 = (n / ((n-1)*(n-2))) * sum(((x_i - mean)/s)^3)
         centered = vals - mean
-        m3 = float(np.mean(centered ** 3))
-        g1 = (m3 / (s ** 3)) * (n ** 2 / ((n - 1) * (n - 2)))
+        m3 = float(np.mean(centered**3))
+        g1 = (m3 / (s**3)) * (n**2 / ((n - 1) * (n - 2)))
         if g1 == 0.0:
             g1 = 0.0
         return g1
@@ -303,8 +310,8 @@ class SeriesStatisticsService:
         # G2 = (n-1)/((n-2)(n-3)) * ((n+1)*g2 + 6)
         # where g2 = m4/m2^2 - 3 is the biased sample excess kurtosis
         centered = vals - mean
-        m4 = float(np.mean(centered ** 4))
-        g2_biased = m4 / (m2 ** 2) - 3.0
+        m4 = float(np.mean(centered**4))
+        g2_biased = m4 / (m2**2) - 3.0
         g2 = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * g2_biased + 6.0)
         if g2 == 0.0:
             g2 = 0.0

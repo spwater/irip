@@ -86,7 +86,7 @@ class InsightExtractor:
         if not step_output or not step_output.strip():
             return None
 
-        prompt = self._build_insight_prompt(step_output, research_context)
+        self._build_insight_prompt(step_output, research_context)
 
         try:
             response = await self._model_gateway.call(
@@ -180,9 +180,7 @@ class InsightExtractor:
                 method_refs=data.get("method_refs", []),
                 confidence_level=str(data.get("confidence_level", "")),
                 limitations=str(data.get("limitations", "")),
-                evidence_source_label=str(
-                    data.get("evidence_source_label", "model_inference")
-                ),
+                evidence_source_label=str(data.get("evidence_source_label", "model_inference")),
                 ai_raw_text=raw_response,
                 extraction_failed=True,
             )
@@ -225,9 +223,14 @@ class InsightExtractor:
                 return False
             if isinstance(val, str) and not val.strip():
                 return False
-            if isinstance(val, (list, dict)) and len(val) == 0 and field_name in (
-                "evidence_refs",
-                "method_refs",
+            if (
+                isinstance(val, (list, dict))
+                and len(val) == 0
+                and field_name
+                in (
+                    "evidence_refs",
+                    "method_refs",
+                )
             ):
                 # evidence_refs 和 method_refs 允许为空列表
                 continue

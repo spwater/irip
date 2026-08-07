@@ -19,11 +19,10 @@ import importlib
 import importlib.util
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-
 
 # ============================================================
 # 1. ThreeSegmentValidator 测试（纯逻辑，最高优先级）
@@ -145,9 +144,9 @@ class TestThreeSegmentValidator:
         """接受 bytes JSON 输入并正确解析。"""
         from packages.research.validation import ThreeSegmentValidator
 
-        data = json.dumps(
-            {"metadata": {"key": "value"}, "points": [], "series": []}
-        ).encode("utf-8")
+        data = json.dumps({"metadata": {"key": "value"}, "points": [], "series": []}).encode(
+            "utf-8"
+        )
         result = ThreeSegmentValidator.validate(data)
         assert result.valid is True
 
@@ -315,12 +314,8 @@ class TestThreeSegmentValidator:
         """不同数据生成不同哈希。"""
         from packages.research.validation import ThreeSegmentValidator
 
-        h1 = ThreeSegmentValidator.compute_content_hash(
-            {"key": "v1"}, [], []
-        )
-        h2 = ThreeSegmentValidator.compute_content_hash(
-            {"key": "v2"}, [], []
-        )
+        h1 = ThreeSegmentValidator.compute_content_hash({"key": "v1"}, [], [])
+        h2 = ThreeSegmentValidator.compute_content_hash({"key": "v2"}, [], [])
         assert h1 != h2
 
     def test_compute_content_hash_matches_manual_sha256(self):
@@ -348,12 +343,8 @@ class TestThreeSegmentValidator:
         """metadata key 顺序不影响哈希（sort_keys=True）。"""
         from packages.research.validation import ThreeSegmentValidator
 
-        h1 = ThreeSegmentValidator.compute_content_hash(
-            {"a": 1, "b": 2}, [], []
-        )
-        h2 = ThreeSegmentValidator.compute_content_hash(
-            {"b": 2, "a": 1}, [], []
-        )
+        h1 = ThreeSegmentValidator.compute_content_hash({"a": 1, "b": 2}, [], [])
+        h2 = ThreeSegmentValidator.compute_content_hash({"b": 2, "a": 1}, [], [])
         assert h1 == h2
 
 
@@ -376,15 +367,17 @@ class TestInsightExtractor:
         """合法 JSON 返回 InsightCandidateData，extraction_failed=False。"""
         from packages.research.models import InsightCandidateData
 
-        raw = json.dumps({
-            "conclusion": "批次B-003的峰值异常源于温度波动",
-            "scope": "2026-Q2 生产的铝合金批次",
-            "evidence_refs": [{"type": "dataset", "name": "批次特征", "version": 1}],
-            "method_refs": [{"run_id": "r1", "step_key": "step2"}],
-            "confidence_level": "medium",
-            "limitations": "单批次验证，需扩大样本",
-            "evidence_source_label": "experimental_data",
-        })
+        raw = json.dumps(
+            {
+                "conclusion": "批次B-003的峰值异常源于温度波动",
+                "scope": "2026-Q2 生产的铝合金批次",
+                "evidence_refs": [{"type": "dataset", "name": "批次特征", "version": 1}],
+                "method_refs": [{"run_id": "r1", "step_key": "step2"}],
+                "confidence_level": "medium",
+                "limitations": "单批次验证，需扩大样本",
+                "evidence_source_label": "experimental_data",
+            }
+        )
         result = extractor._parse_insight_json(raw)
         assert result is not None
         assert isinstance(result, InsightCandidateData)
@@ -414,7 +407,12 @@ class TestInsightExtractor:
 
     def test_parse_insight_json_markdown_wrapped(self, extractor):
         """markdown 代码块包裹的 JSON 正确解析。"""
-        raw = '```json\n{"conclusion": "test", "scope": "scope", "evidence_refs": [], "method_refs": [], "confidence_level": "high", "limitations": "none", "evidence_source_label": "model_inference"}\n```'
+        raw = (
+            '```json\n{"conclusion": "test", "scope": "scope", '
+            '"evidence_refs": [], "method_refs": [], '
+            '"confidence_level": "high", "limitations": "none", '
+            '"evidence_source_label": "model_inference"}\n```'
+        )
         result = extractor._parse_insight_json(raw)
         assert result is not None
         assert result.extraction_failed is False
@@ -429,11 +427,14 @@ class TestInsightExtractor:
 
     def test_parse_insight_json_missing_field_returns_failed(self, extractor):
         """缺少必填字段返回 extraction_failed=True。"""
-        raw = json.dumps({
-            "conclusion": "test",
-            "scope": "scope",
-            # missing evidence_refs, method_refs, confidence_level, limitations, evidence_source_label
-        })
+        raw = json.dumps(
+            {
+                "conclusion": "test",
+                "scope": "scope",
+                # missing evidence_refs, method_refs,
+                # confidence_level, limitations, evidence_source_label
+            }
+        )
         result = extractor._parse_insight_json(raw)
         assert result is not None
         assert result.extraction_failed is True
@@ -476,10 +477,18 @@ class TestInsightExtractor:
         }
         assert extractor._validate_fields(data) is True
 
-    @pytest.mark.parametrize("missing_field", [
-        "conclusion", "scope", "evidence_refs", "method_refs",
-        "confidence_level", "limitations", "evidence_source_label",
-    ])
+    @pytest.mark.parametrize(
+        "missing_field",
+        [
+            "conclusion",
+            "scope",
+            "evidence_refs",
+            "method_refs",
+            "confidence_level",
+            "limitations",
+            "evidence_source_label",
+        ],
+    )
     def test_validate_fields_missing_any_field(self, extractor, missing_field):
         """缺少任一必填字段返回 False。"""
         data = {
@@ -520,9 +529,14 @@ class TestInsightExtractor:
         }
         assert extractor._validate_fields(data) is False
 
-    @pytest.mark.parametrize("label", [
-        "experimental_data", "knowledge_base", "model_inference",
-    ])
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "experimental_data",
+            "knowledge_base",
+            "model_inference",
+        ],
+    )
     def test_validate_fields_valid_source_labels(self, extractor, label):
         """三种合法 evidence_source_label 均通过。"""
         data = {
@@ -540,18 +554,14 @@ class TestInsightExtractor:
         """空步骤输出返回 None。"""
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(
-            extractor.extract("", "context")
-        )
+        result = asyncio.get_event_loop().run_until_complete(extractor.extract("", "context"))
         assert result is None
 
     def test_extract_whitespace_step_output_returns_none(self, extractor):
         """纯空白步骤输出返回 None。"""
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(
-            extractor.extract("   ", "context")
-        )
+        result = asyncio.get_event_loop().run_until_complete(extractor.extract("   ", "context"))
         assert result is None
 
     def test_prompt_version_constant(self, extractor):
@@ -562,8 +572,13 @@ class TestInsightExtractor:
         """提示词包含 6 个必填字段 + evidence_source_label。"""
         prompt = extractor.INSIGHT_EXTRACTION_PROMPT
         for field in [
-            "conclusion", "scope", "evidence_refs", "method_refs",
-            "confidence_level", "limitations", "evidence_source_label",
+            "conclusion",
+            "scope",
+            "evidence_refs",
+            "method_refs",
+            "confidence_level",
+            "limitations",
+            "evidence_source_label",
         ]:
             assert field in prompt
 
@@ -583,9 +598,7 @@ class TestMigration0076:
         files = list(self.MIGRATIONS_DIR.glob("0076_*.py"))
         assert files, "找不到 0076 迁移文件"
         assert len(files) == 1, f"0076 匹配到多个文件: {files}"
-        spec = importlib.util.spec_from_file_location(
-            "migration_0076", files[0]
-        )
+        spec = importlib.util.spec_from_file_location("migration_0076", files[0])
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -612,12 +625,8 @@ class TestMigration0076:
         with patch.object(mod, "op", _MockOp()):
             mod.upgrade()
 
-        create_tables = [
-            s for s in executed_sqls if "CREATE TABLE" in s.upper()
-        ]
-        assert len(create_tables) == 7, (
-            f"期望 7 张表，实际 {len(create_tables)}"
-        )
+        create_tables = [s for s in executed_sqls if "CREATE TABLE" in s.upper()]
+        assert len(create_tables) == 7, f"期望 7 张表，实际 {len(create_tables)}"
 
         all_sql = " ".join(executed_sqls)
         expected_tables = [
@@ -643,21 +652,17 @@ class TestMigration0076:
                 executed_sqls.append(str(sql))
 
         from unittest.mock import patch
+
         with patch.object(mod, "op", _MockOp()):
             mod.upgrade()
 
-        unique_indexes = [
-            s for s in executed_sqls
-            if "CREATE UNIQUE INDEX" in s.upper()
-        ]
-        assert len(unique_indexes) == 3, (
-            f"期望 3 个唯一索引，实际 {len(unique_indexes)}"
-        )
+        unique_indexes = [s for s in executed_sqls if "CREATE UNIQUE INDEX" in s.upper()]
+        assert len(unique_indexes) == 3, f"期望 3 个唯一索引，实际 {len(unique_indexes)}"
 
         all_sql = " ".join(executed_sqls)
         assert "uq_rddv_dataset_version" in all_sql  # dataset_id + version_number
-        assert "uq_rvv_view_version" in all_sql      # view_id + version_number
-        assert "uq_riv_insight_version" in all_sql   # insight_id + version_number
+        assert "uq_rvv_view_version" in all_sql  # view_id + version_number
+        assert "uq_riv_insight_version" in all_sql  # insight_id + version_number
 
     def test_upgrade_creates_indexes(self):
         """upgrade 创建普通索引。"""
@@ -670,16 +675,14 @@ class TestMigration0076:
                 executed_sqls.append(str(sql))
 
         from unittest.mock import patch
+
         with patch.object(mod, "op", _MockOp()):
             mod.upgrade()
 
         create_indexes = [
-            s for s in executed_sqls
-            if "CREATE INDEX" in s.upper() and "UNIQUE" not in s.upper()
+            s for s in executed_sqls if "CREATE INDEX" in s.upper() and "UNIQUE" not in s.upper()
         ]
-        assert len(create_indexes) >= 8, (
-            f"期望至少 8 个普通索引，实际 {len(create_indexes)}"
-        )
+        assert len(create_indexes) >= 8, f"期望至少 8 个普通索引，实际 {len(create_indexes)}"
 
     def test_downgrade_drops_all_tables(self):
         """downgrade 按反序删除 7 张表。"""
@@ -692,13 +695,12 @@ class TestMigration0076:
                 executed_sqls.append(str(sql))
 
         from unittest.mock import patch
+
         with patch.object(mod, "op", _MockOp()):
             mod.downgrade()
 
         drop_tables = [s for s in executed_sqls if "DROP TABLE" in s.upper()]
-        assert len(drop_tables) == 7, (
-            f"期望 7 个 DROP TABLE，实际 {len(drop_tables)}"
-        )
+        assert len(drop_tables) == 7, f"期望 7 个 DROP TABLE，实际 {len(drop_tables)}"
 
     def test_migration_file_revision_down_revision_text(self):
         """从文件文本验证 revision 和 down_revision。"""
@@ -750,9 +752,12 @@ class TestProductEntities:
         )
 
         for cls in [
-            ResearchDerivedDataset, ResearchDerivedDatasetVersion,
-            ResearchView, ResearchViewVersion,
-            ResearchInsight, ResearchInsightVersion,
+            ResearchDerivedDataset,
+            ResearchDerivedDatasetVersion,
+            ResearchView,
+            ResearchViewVersion,
+            ResearchInsight,
+            ResearchInsightVersion,
             ResearchInsightCandidate,
         ]:
             assert issubclass(cls, Base)
@@ -770,9 +775,12 @@ class TestProductEntities:
         )
 
         for cls in [
-            ResearchDerivedDataset, ResearchDerivedDatasetVersion,
-            ResearchView, ResearchViewVersion,
-            ResearchInsight, ResearchInsightVersion,
+            ResearchDerivedDataset,
+            ResearchDerivedDatasetVersion,
+            ResearchView,
+            ResearchViewVersion,
+            ResearchInsight,
+            ResearchInsightVersion,
             ResearchInsightCandidate,
         ]:
             assert cls.__tablename__.startswith("research_")
@@ -780,6 +788,7 @@ class TestProductEntities:
     def test_derived_dataset_columns(self):
         """ResearchDerivedDataset 字段约束。"""
         from sqlalchemy.dialects.postgresql import JSONB
+
         from packages.research.entities import ResearchDerivedDataset
 
         cols = ResearchDerivedDataset.__table__.columns
@@ -797,6 +806,7 @@ class TestProductEntities:
     def test_derived_dataset_version_columns(self):
         """ResearchDerivedDatasetVersion 字段约束。"""
         from sqlalchemy.dialects.postgresql import JSONB
+
         from packages.research.entities import ResearchDerivedDatasetVersion
 
         cols = ResearchDerivedDatasetVersion.__table__.columns
@@ -827,6 +837,7 @@ class TestProductEntities:
     def test_insight_version_columns(self):
         """ResearchInsightVersion 字段约束。"""
         from sqlalchemy.dialects.postgresql import JSONB
+
         from packages.research.entities import ResearchInsightVersion
 
         cols = ResearchInsightVersion.__table__.columns
@@ -946,29 +957,19 @@ class TestProductAPI:
         """research_products_router 至少 25 个端点。"""
         from apps.api.routers.research_products import research_products_router
 
-        routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "methods") and r.methods
-        ]
-        assert len(routes) >= 25, (
-            f"期望至少 25 个端点，实际 {len(routes)}"
-        )
+        routes = [r for r in research_products_router.routes if hasattr(r, "methods") and r.methods]
+        assert len(routes) >= 25, f"期望至少 25 个端点，实际 {len(routes)}"
 
     def test_all_endpoints_use_research_use_permission(self):
         """所有端点使用 require_permission("research:use") 依赖。"""
-        from apps.api.routers.research_products import research_products_router
 
         # 检查路由模块中 ResearchUserDep 使用了 require_permission
-        from apps.api.routers.research_products import ResearchUserDep
-        from apps.api.dependencies.authorization import require_permission
+        from apps.api.routers.research_products import research_products_router
 
         # ResearchUserDep 应该是 Annotated[CurrentUser, Depends(require_permission("research:use"))]
         # 验证 require_permission 被调用且参数正确
         # 通过检查依赖链中的 require_permission 调用
-        routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "methods") and r.methods
-        ]
+        routes = [r for r in research_products_router.routes if hasattr(r, "methods") and r.methods]
         assert len(routes) > 0
 
         # 检查每个路由的依赖中包含 ResearchUserDep
@@ -983,17 +984,14 @@ class TestProductAPI:
                 if dep.name == "_user":
                     has_user_dep = True
                     break
-            assert has_user_dep, (
-                f"端点 {route.path} 缺少 _user (ResearchUserDep) 依赖"
-            )
+            assert has_user_dep, f"端点 {route.path} 缺少 _user (ResearchUserDep) 依赖"
 
     def test_image_download_endpoint_exists(self):
         """图片下载端点存在。"""
         from apps.api.routers.research_products import research_products_router
 
         image_routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "path") and "/image" in r.path
+            r for r in research_products_router.routes if hasattr(r, "path") and "/image" in r.path
         ]
         assert len(image_routes) >= 1, "缺少图片下载端点"
 
@@ -1002,7 +1000,8 @@ class TestProductAPI:
         from apps.api.routers.research_products import research_products_router
 
         catalog_routes = [
-            r for r in research_products_router.routes
+            r
+            for r in research_products_router.routes
             if hasattr(r, "path") and "/catalog/search" in r.path
         ]
         assert len(catalog_routes) >= 1, "缺少 catalog/search 端点"
@@ -1012,7 +1011,8 @@ class TestProductAPI:
         from apps.api.routers.research_products import research_products_router
 
         product_routes = [
-            r for r in research_products_router.routes
+            r
+            for r in research_products_router.routes
             if hasattr(r, "path") and r.path.endswith("/products")
         ]
         assert len(product_routes) >= 1, "缺少 products 列表端点"
@@ -1021,26 +1021,19 @@ class TestProductAPI:
         """写端点（POST/PATCH）数量正确。"""
         from apps.api.routers.research_products import research_products_router
 
-        routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "methods") and r.methods
-        ]
-        write_routes = [
-            r for r in routes
-            if "POST" in r.methods or "PATCH" in r.methods
-        ]
+        routes = [r for r in research_products_router.routes if hasattr(r, "methods") and r.methods]
+        write_routes = [r for r in routes if "POST" in r.methods or "PATCH" in r.methods]
         # POST: create_dataset, create_view, accept, modify, reject(insight), reject(any) = 6
         # PATCH: update_dataset, update_view, update_insight = 3
-        assert len(write_routes) == 9, (
-            f"期望 9 个写端点，实际 {len(write_routes)}"
-        )
+        assert len(write_routes) == 9, f"期望 9 个写端点，实际 {len(write_routes)}"
 
     def test_candidate_endpoints_exist(self):
         """候选产物端点存在。"""
         from apps.api.routers.research_products import research_products_router
 
         candidate_routes = [
-            r for r in research_products_router.routes
+            r
+            for r in research_products_router.routes
             if hasattr(r, "path") and "/candidates" in r.path
         ]
         assert len(candidate_routes) >= 2, "缺少候选产物端点"
@@ -1050,51 +1043,44 @@ class TestProductAPI:
         from apps.api.routers.research_products import research_products_router
 
         ic_routes = [
-            r for r in research_products_router.routes
+            r
+            for r in research_products_router.routes
             if hasattr(r, "path") and "/insight-candidates" in r.path
         ]
-        assert len(ic_routes) >= 5, (
-            f"期望 5 个 insight-candidate 端点，实际 {len(ic_routes)}"
-        )
+        assert len(ic_routes) >= 5, f"期望 5 个 insight-candidate 端点，实际 {len(ic_routes)}"
 
     def test_derived_dataset_endpoints_exist(self):
         """DerivedDataset 端点存在（create, list, detail, edit, versions, version detail）。"""
         from apps.api.routers.research_products import research_products_router
 
         ds_routes = [
-            r for r in research_products_router.routes
+            r
+            for r in research_products_router.routes
             if hasattr(r, "path") and "/derived-datasets" in r.path
         ]
-        assert len(ds_routes) >= 6, (
-            f"期望 6 个 derived-datasets 端点，实际 {len(ds_routes)}"
-        )
+        assert len(ds_routes) >= 6, f"期望 6 个 derived-datasets 端点，实际 {len(ds_routes)}"
 
     def test_view_endpoints_exist(self):
         """ResearchView 端点存在（create, list, detail, edit, versions, version detail, image）。"""
         from apps.api.routers.research_products import research_products_router
 
         view_routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "path")
-            and "/views" in r.path
-            and "/derived-datasets" not in r.path
+            r
+            for r in research_products_router.routes
+            if hasattr(r, "path") and "/views" in r.path and "/derived-datasets" not in r.path
         ]
-        assert len(view_routes) >= 7, (
-            f"期望 7 个 views 端点，实际 {len(view_routes)}"
-        )
+        assert len(view_routes) >= 7, f"期望 7 个 views 端点，实际 {len(view_routes)}"
 
     def test_insight_endpoints_exist(self):
         """Insight 端点存在（list, detail, edit, versions）。"""
         from apps.api.routers.research_products import research_products_router
 
         insight_routes = [
-            r for r in research_products_router.routes
-            if hasattr(r, "path") and "/insights" in r.path
-            and "insight-candidates" not in r.path
+            r
+            for r in research_products_router.routes
+            if hasattr(r, "path") and "/insights" in r.path and "insight-candidates" not in r.path
         ]
-        assert len(insight_routes) >= 4, (
-            f"期望 4 个 insights 端点，实际 {len(insight_routes)}"
-        )
+        assert len(insight_routes) >= 4, f"期望 4 个 insights 端点，实际 {len(insight_routes)}"
 
 
 # ============================================================
@@ -1108,21 +1094,26 @@ class TestProductComposition:
     def test_composition_file_exists(self):
         """Composition 文件存在且可导入。"""
         from apps.api.composition import research_products as comp
+
         assert hasattr(comp, "register")
 
     def test_register_function_signature(self):
         """register 函数接受 CompositionContext。"""
-        from apps.api.composition.research_products import register
         import inspect
+
+        from apps.api.composition.research_products import register
 
         sig = inspect.signature(register)
         assert "ctx" in sig.parameters
 
     def test_composition_imports_services(self):
-        """Composition 导入 ProductService / CandidateService / ResearchCatalogImpl / InsightExtractor。"""
-        import apps.api.composition.research_products as comp
+        """Composition 导入 ProductService / CandidateService
+        / ResearchCatalogImpl / InsightExtractor。"""
         # 读取源码验证导入（通过模块文件内容）
         import inspect
+
+        import apps.api.composition.research_products as comp
+
         source = inspect.getsource(comp)
         assert "ProductService" in source
         assert "CandidateService" in source
@@ -1132,7 +1123,9 @@ class TestProductComposition:
     def test_composition_registers_product_service(self):
         """Composition 注册 ProductService 依赖覆盖。"""
         import inspect
+
         from apps.api.composition.research_products import register
+
         source = inspect.getsource(register)
         assert "get_product_service" in source
         assert "dependency_overrides" in source
@@ -1140,14 +1133,18 @@ class TestProductComposition:
     def test_composition_registers_candidate_service(self):
         """Composition 注册 CandidateService 依赖覆盖。"""
         import inspect
+
         from apps.api.composition.research_products import register
+
         source = inspect.getsource(register)
         assert "get_candidate_service" in source
 
     def test_composition_registers_catalog(self):
         """Composition 注册 ResearchCatalogImpl（替换 Stub）。"""
         import inspect
+
         from apps.api.composition.research_products import register
+
         source = inspect.getsource(register)
         assert "get_catalog" in source
         assert "ResearchCatalogImpl" in source
@@ -1155,7 +1152,9 @@ class TestProductComposition:
     def test_composition_registers_insight_extractor(self):
         """Composition 构建 InsightExtractor 供 Orchestrator 使用。"""
         import inspect
+
         from apps.api.composition.research_products import register
+
         source = inspect.getsource(register)
         assert "InsightExtractor" in source
         assert "_insight_extractor" in source
@@ -1195,9 +1194,7 @@ class TestFrontendAPI:
             "CatalogSearchResult",
         ]
         for t in types:
-            assert f"type {t}" in source or f"export type {t}" in source, (
-                f"缺少类型定义: {t}"
-            )
+            assert f"type {t}" in source or f"export type {t}" in source, f"缺少类型定义: {t}"
 
     def test_api_functions_exist(self):
         """API 函数存在。"""
@@ -1382,37 +1379,41 @@ class TestResearchCatalogImpl:
     def test_catalog_impl_exists(self):
         """ResearchCatalogImpl 类存在。"""
         from packages.research.catalog import ResearchCatalogImpl
+
         assert ResearchCatalogImpl is not None
 
     def test_catalog_stub_exists(self):
         """ResearchCatalogStub 类仍存在（向后兼容）。"""
         from packages.research.catalog import ResearchCatalogStub
+
         assert ResearchCatalogStub is not None
 
     def test_catalog_protocol_exists(self):
         """ResearchCatalog Protocol 接口存在。"""
         from packages.research.catalog import ResearchCatalog
+
         assert ResearchCatalog is not None
 
     def test_catalog_impl_has_search_derived_data(self):
         """ResearchCatalogImpl 有 search_derived_data 方法。"""
         from packages.research.catalog import ResearchCatalogImpl
+
         assert hasattr(ResearchCatalogImpl, "search_derived_data")
 
     def test_catalog_stub_returns_empty(self):
         """ResearchCatalogStub.search_derived_data 返回空列表。"""
         import asyncio
+
         from packages.research.catalog import ResearchCatalogStub
 
         stub = ResearchCatalogStub()
-        result = asyncio.get_event_loop().run_until_complete(
-            stub.search_derived_data("query")
-        )
+        result = asyncio.get_event_loop().run_until_complete(stub.search_derived_data("query"))
         assert result == []
 
     def test_catalog_impl_constructor_params(self):
         """ResearchCatalogImpl 构造函数参数正确。"""
         import inspect
+
         from packages.research.catalog import ResearchCatalogImpl
 
         sig = inspect.signature(ResearchCatalogImpl.__init__)
@@ -1431,36 +1432,43 @@ class TestProductServiceStructure:
     def test_product_service_exists(self):
         """ProductService 类存在。"""
         from packages.research.products import ProductService
+
         assert ProductService is not None
 
     def test_product_service_has_create_dataset(self):
         """ProductService 有 create_dataset 方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "create_dataset")
 
     def test_product_service_has_create_view(self):
         """ProductService 有 create_view 方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "create_view")
 
     def test_product_service_has_create_insight_from_accept(self):
         """ProductService 有 create_insight_from_accept 方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "create_insight_from_accept")
 
     def test_product_service_has_create_insight_from_modify(self):
         """ProductService 有 create_insight_from_modify 方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "create_insight_from_modify")
 
     def test_product_service_has_list_products(self):
         """ProductService 有 list_products 方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "list_products")
 
     def test_product_service_has_update_metadata_methods(self):
         """ProductService 有 update_metadata 方法（仅 stable identity）。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "update_dataset_metadata")
         assert hasattr(ProductService, "update_view_metadata")
         assert hasattr(ProductService, "update_insight_metadata")
@@ -1468,6 +1476,7 @@ class TestProductServiceStructure:
     def test_product_service_has_version_history_methods(self):
         """ProductService 有版本历史方法。"""
         from packages.research.products import ProductService
+
         assert hasattr(ProductService, "list_dataset_versions")
         assert hasattr(ProductService, "list_view_versions")
         assert hasattr(ProductService, "list_insight_versions")
@@ -1475,21 +1484,25 @@ class TestProductServiceStructure:
     def test_candidate_service_exists(self):
         """CandidateService 类存在。"""
         from packages.research.candidates import CandidateService
+
         assert CandidateService is not None
 
     def test_candidate_service_has_identify_candidates(self):
         """CandidateService 有 identify_candidates 方法。"""
         from packages.research.candidates import CandidateService
+
         assert hasattr(CandidateService, "identify_candidates")
 
     def test_candidate_service_has_get_candidate_detail(self):
         """CandidateService 有 get_candidate_detail 方法。"""
         from packages.research.candidates import CandidateService
+
         assert hasattr(CandidateService, "get_candidate_detail")
 
     def test_candidate_service_has_reject_insight_candidate(self):
         """CandidateService 有 reject_insight_candidate 方法。"""
         from packages.research.candidates import CandidateService
+
         assert hasattr(CandidateService, "reject_insight_candidate")
 
 
@@ -1535,8 +1548,12 @@ class TestProductDataModels:
         from packages.research.models import InsightCandidateData
 
         data = InsightCandidateData(
-            conclusion="c", scope="s", evidence_refs=[], method_refs=[],
-            confidence_level="high", limitations="l",
+            conclusion="c",
+            scope="s",
+            evidence_refs=[],
+            method_refs=[],
+            confidence_level="high",
+            limitations="l",
             evidence_source_label="experimental_data",
             ai_raw_text="raw",
         )
@@ -1544,7 +1561,6 @@ class TestProductDataModels:
 
     def test_product_summary_is_frozen(self):
         """ProductSummary 为 frozen dataclass。"""
-        from uuid import uuid4
         from packages.research.models import ProductSummary
 
         summary = ProductSummary(
@@ -1559,7 +1575,6 @@ class TestProductDataModels:
 
     def test_candidate_product_summary_has_error_reason(self):
         """CandidateProductSummary 有 error_reason 字段，默认空字符串。"""
-        from uuid import uuid4
         from packages.research.models import CandidateProductSummary
 
         summary = CandidateProductSummary(

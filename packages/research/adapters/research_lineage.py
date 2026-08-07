@@ -20,13 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.research.entities import (
     ResearchDerivedDataset,
-    ResearchDerivedDatasetVersion,
     ResearchEvidenceSnapshot,
     ResearchInsight,
-    ResearchInsightVersion,
     ResearchKnowledgeReference,
     ResearchLineageEdge,
-    ResearchResultVersion,
     ResearchView,
     ResearchViewVersion,
     ResearchWorkspace,
@@ -53,15 +50,11 @@ class ResearchLineageAdapter(Protocol):
         """查询单个研究域节点的展示信息。"""
         ...
 
-    async def query_incoming_edges(
-        self, namespace: str, node_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def query_incoming_edges(self, namespace: str, node_id: UUID) -> list[ProvenanceEdge]:
         """查询节点的入边（上游来源）。"""
         ...
 
-    async def check_permission(
-        self, namespace: str, node_id: UUID, principal: object
-    ) -> bool:
+    async def check_permission(self, namespace: str, node_id: UUID, principal: object) -> bool:
         """校验 principal 对研究域节点的访问权限。"""
         ...
 
@@ -156,9 +149,7 @@ class ResearchLineageAdapterImpl:
             return None
         return await handler(node_id)
 
-    async def query_incoming_edges(
-        self, namespace: str, node_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def query_incoming_edges(self, namespace: str, node_id: UUID) -> list[ProvenanceEdge]:
         """查询节点的入边（上游来源）。
 
         从 research_lineage_edge 表查询 target_namespace + target_id 匹配的边。
@@ -172,14 +163,10 @@ class ResearchLineageAdapterImpl:
             list[ProvenanceEdge]: 入边列表。
         """
         async with self._factory() as session:
-            edges = await ResearchRepository.list_edges_by_target(
-                session, namespace, node_id
-            )
+            edges = await ResearchRepository.list_edges_by_target(session, namespace, node_id)
         return [_edge_to_provenance_edge(e) for e in edges]
 
-    async def check_permission(
-        self, namespace: str, node_id: UUID, principal: object
-    ) -> bool:
+    async def check_permission(self, namespace: str, node_id: UUID, principal: object) -> bool:
         """校验 principal 对研究域节点的访问权限。
 
         复用阶段 1-4 权限校验逻辑。
@@ -275,9 +262,7 @@ class ResearchLineageAdapterImpl:
         """查询分析步骤节点。"""
         async with self._factory() as session:
             result = await session.execute(
-                sa.select(ResearchAnalysisStep).where(
-                    ResearchAnalysisStep.id == step_id
-                )
+                sa.select(ResearchAnalysisStep).where(ResearchAnalysisStep.id == step_id)
             )
             step = result.scalar_one_or_none()
 
@@ -303,9 +288,7 @@ class ResearchLineageAdapterImpl:
         """查询衍生数据集节点。"""
         async with self._factory() as session:
             result = await session.execute(
-                sa.select(ResearchDerivedDataset).where(
-                    ResearchDerivedDataset.id == dataset_id
-                )
+                sa.select(ResearchDerivedDataset).where(ResearchDerivedDataset.id == dataset_id)
             )
             ds = result.scalar_one_or_none()
 
@@ -327,14 +310,10 @@ class ResearchLineageAdapterImpl:
             is_restricted=False,
         )
 
-    async def _query_derived_dataset_version(
-        self, dataset_id: UUID
-    ) -> ProvenanceNode | None:
+    async def _query_derived_dataset_version(self, dataset_id: UUID) -> ProvenanceNode | None:
         """查询衍生数据集版本节点（取最新版本）。"""
         async with self._factory() as session:
-            version = await ResearchRepository.get_latest_dataset_version(
-                session, dataset_id
-            )
+            version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
         if version is None:
             return None
 
@@ -361,16 +340,12 @@ class ResearchLineageAdapterImpl:
         """
         async with self._factory() as session:
             ds_result = await session.execute(
-                sa.select(ResearchDerivedDataset).where(
-                    ResearchDerivedDataset.id == dataset_id
-                )
+                sa.select(ResearchDerivedDataset).where(ResearchDerivedDataset.id == dataset_id)
             )
             ds = ds_result.scalar_one_or_none()
             if ds is None:
                 return None
-            version = await ResearchRepository.get_latest_dataset_version(
-                session, dataset_id
-            )
+            version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
 
         return ProvenanceNode(
             namespace="research:dataset_version",
@@ -469,9 +444,7 @@ class ResearchLineageAdapterImpl:
     async def _query_insight_version(self, insight_id: UUID) -> ProvenanceNode | None:
         """查询 Insight 版本节点（取最新版本）。"""
         async with self._factory() as session:
-            version = await ResearchRepository.get_latest_insight_version(
-                session, insight_id
-            )
+            version = await ResearchRepository.get_latest_insight_version(session, insight_id)
         if version is None:
             return None
 
@@ -493,9 +466,7 @@ class ResearchLineageAdapterImpl:
     async def _query_result_version(self, result_id: UUID) -> ProvenanceNode | None:
         """查询成果版本节点（取最新版本）。"""
         async with self._factory() as session:
-            version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            version = await ResearchRepository.get_latest_result_version(session, result_id)
         if version is None:
             return None
 
@@ -588,17 +559,13 @@ class ResearchLineageAdapterImpl:
                 if row is None:
                     return False
                 workspace_id = row[0]
-                ws = await ResearchRepository.get_workspace(
-                    session, workspace_id, user_id
-                )
+                ws = await ResearchRepository.get_workspace(session, workspace_id, user_id)
                 return ws is not None
         except Exception as exc:
             logger.warning("Snapshot permission check failed: %s", exc)
             return False
 
-    async def _check_analysis_run_permission(
-        self, run_id: UUID, principal: object
-    ) -> bool:
+    async def _check_analysis_run_permission(self, run_id: UUID, principal: object) -> bool:
         """校验分析运行权限（通过 Workspace 归属）。"""
         try:
             user_id = getattr(principal, "user_id", None)
@@ -632,9 +599,7 @@ class ResearchLineageAdapterImpl:
                     workspace_id = run_result[0]
                 else:
                     workspace_id = row[0]
-                ws = await ResearchRepository.get_workspace(
-                    session, workspace_id, user_id
-                )
+                ws = await ResearchRepository.get_workspace(session, workspace_id, user_id)
                 return ws is not None
         except Exception as exc:
             logger.warning("Analysis run permission check failed: %s", exc)
@@ -661,36 +626,28 @@ class ResearchLineageAdapterImpl:
                         workspace_id = row[0]
                 elif "view" in namespace:
                     result = await session.execute(
-                        sa.select(ResearchView.workspace_id).where(
-                            ResearchView.id == node_id
-                        )
+                        sa.select(ResearchView.workspace_id).where(ResearchView.id == node_id)
                     )
                     row = result.first()
                     if row is not None:
                         workspace_id = row[0]
                 elif "insight" in namespace:
                     result = await session.execute(
-                        sa.select(ResearchInsight.workspace_id).where(
-                            ResearchInsight.id == node_id
-                        )
+                        sa.select(ResearchInsight.workspace_id).where(ResearchInsight.id == node_id)
                     )
                     row = result.first()
                     if row is not None:
                         workspace_id = row[0]
 
                 if workspace_id is not None:
-                    ws = await ResearchRepository.get_workspace(
-                        session, workspace_id, user_id
-                    )
+                    ws = await ResearchRepository.get_workspace(session, workspace_id, user_id)
                     return ws is not None
                 return False
         except Exception as exc:
             logger.warning("Product permission check failed: %s", exc)
             return False
 
-    async def _check_result_version_permission(
-        self, result_id: UUID, principal: object
-    ) -> bool:
+    async def _check_result_version_permission(self, result_id: UUID, principal: object) -> bool:
         """校验成果版本权限（成果包已发布即可见）。"""
         try:
             async with self._factory() as session:
@@ -702,18 +659,14 @@ class ResearchLineageAdapterImpl:
             logger.warning("Result version permission check failed: %s", exc)
             return False
 
-    async def _check_workspace_permission(
-        self, workspace_id: UUID, principal: object
-    ) -> bool:
+    async def _check_workspace_permission(self, workspace_id: UUID, principal: object) -> bool:
         """校验工作空间权限（归属校验）。"""
         try:
             user_id = getattr(principal, "user_id", None)
             if user_id is None:
                 return False
             async with self._factory() as session:
-                ws = await ResearchRepository.get_workspace(
-                    session, workspace_id, user_id
-                )
+                ws = await ResearchRepository.get_workspace(session, workspace_id, user_id)
                 return ws is not None
         except Exception as exc:
             logger.warning("Workspace permission check failed: %s", exc)
@@ -728,15 +681,11 @@ class ResearchLineageAdapterImpl:
             if user_id is None:
                 return False
             async with self._factory() as session:
-                ref = await ResearchRepository.get_knowledge_reference(
-                    session, reference_id
-                )
+                ref = await ResearchRepository.get_knowledge_reference(session, reference_id)
                 if ref is None:
                     return False
                 # 通过 workspace_id 校验归属
-                ws = await ResearchRepository.get_workspace(
-                    session, ref.workspace_id, user_id
-                )
+                ws = await ResearchRepository.get_workspace(session, ref.workspace_id, user_id)
                 return ws is not None
         except Exception as exc:
             logger.warning("Knowledge reference permission check failed: %s", exc)

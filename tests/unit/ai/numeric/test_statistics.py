@@ -5,20 +5,16 @@
 
 from __future__ import annotations
 
-import math
-
 import numpy as np
 import pytest
 
 from packages.ai.numeric.contracts import (
-    DEFAULT_QUANTILES,
     DescribeSeriesRequest,
     NumericError,
     NumericSourceProvenance,
     ResolvedNumericInput,
 )
 from packages.ai.numeric.statistics import SeriesStatisticsService
-
 
 # =============================================================================
 # 辅助函数
@@ -318,7 +314,7 @@ class TestSkewness:
             s = float(np.std(arr, ddof=1))
             if s > 0:
                 m3 = float(np.mean((arr - mean) ** 3))
-                expected = (m3 / s ** 3) * (n ** 2 / ((n - 1) * (n - 2)))
+                expected = (m3 / s**3) * (n**2 / ((n - 1) * (n - 2)))
                 assert abs(result["skewness"] - expected) < 1e-10
 
 
@@ -370,7 +366,7 @@ class TestKurtosis:
             mean = float(np.mean(arr))
             m2 = float(np.var(arr, ddof=0))  # biased variance
             m4 = float(np.mean((arr - mean) ** 4))  # biased fourth moment
-            g2_biased = m4 / (m2 ** 2) - 3.0
+            g2_biased = m4 / (m2**2) - 3.0
             expected = (n - 1) / ((n - 2) * (n - 3)) * ((n + 1) * g2_biased + 6.0)
             assert abs(result["kurtosis"] - expected) < 1e-10
 

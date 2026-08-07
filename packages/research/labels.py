@@ -10,7 +10,6 @@ from uuid import UUID
 
 from packages.research.models import NodeDisplayLabel
 
-
 # 命名空间 → (类型标签, 图标) 映射表。
 _NAMESPACE_LABELS: dict[str, tuple[str, str]] = {
     "core:fact": ("实验事实", "🔬"),
@@ -101,7 +100,9 @@ class NodeDisplayLabelGenerator:
             version_summary = ""
 
         # 生成 jump_target
-        jump_target = NodeDisplayLabelGenerator.get_jump_target(namespace, node_data.get("node_id", UUID(int=0)))
+        jump_target = NodeDisplayLabelGenerator.get_jump_target(
+            namespace, node_data.get("node_id", UUID(int=0))
+        )
 
         return NodeDisplayLabel(
             display_label=name or type_label,

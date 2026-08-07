@@ -10,25 +10,20 @@
 参照架构设计 arch-research-publish.md 3.3 节。
 """
 
-import hashlib
-import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 
 from packages.research.envelope import PermissionEnvelopeCalculator
 from packages.research.models import (
-    EnvelopeValidationResult,
     PermissionEnvelope,
     ProductRefCollection,
     PublishRequest,
-    ResultVersionRef,
 )
 from packages.research.publication import PublicationService
 from packages.research.search import ResultSearchService
-
 
 # ============================================================
 # Helpers
@@ -132,9 +127,7 @@ class TestPermissionEnvelopeCalculator:
     @pytest.mark.asyncio
     async def test_calculate_envelope_no_snapshots(self):
         """无源数据时，包络应为 all（不限制）。"""
-        envelope = await PermissionEnvelopeCalculator.calculate_envelope(
-            [], session=AsyncMock()
-        )
+        envelope = await PermissionEnvelopeCalculator.calculate_envelope([], session=AsyncMock())
         assert envelope.acl_type == "all"
         assert envelope.source_details == []
 
@@ -246,9 +239,7 @@ class TestPermissionEnvelopeCalculator:
                 {"snapshot_id": "y", "acl_type": "all"},
             ],
         )
-        result = PermissionEnvelopeCalculator.validate_requested_acl(
-            "private", [], envelope
-        )
+        result = PermissionEnvelopeCalculator.validate_requested_acl("private", [], envelope)
         assert result.valid is True
         assert result.effective_acl == "private"
 
@@ -260,9 +251,7 @@ class TestPermissionEnvelopeCalculator:
                 {"snapshot_id": "x", "acl_type": "private"},
             ],
         )
-        result = PermissionEnvelopeCalculator.validate_requested_acl(
-            "tree", [], envelope
-        )
+        result = PermissionEnvelopeCalculator.validate_requested_acl("tree", [], envelope)
         assert result.valid is False
         assert result.effective_acl == "private"
         assert "exceeds" in result.reason.lower()
@@ -270,17 +259,13 @@ class TestPermissionEnvelopeCalculator:
     def test_validate_requested_acl_all_in_all_envelope(self):
         """请求 all 且包络为 all 时，校验通过。"""
         envelope = PermissionEnvelope(acl_type="all")
-        result = PermissionEnvelopeCalculator.validate_requested_acl(
-            "all", [], envelope
-        )
+        result = PermissionEnvelopeCalculator.validate_requested_acl("all", [], envelope)
         assert result.valid is True
 
     def test_validate_requested_acl_all_exceeds_tree_envelope(self):
         """请求 all 但包络为 tree 时，校验不通过。"""
         envelope = PermissionEnvelope(acl_type="tree")
-        result = PermissionEnvelopeCalculator.validate_requested_acl(
-            "all", [], envelope
-        )
+        result = PermissionEnvelopeCalculator.validate_requested_acl("all", [], envelope)
         assert result.valid is False
 
     def test_acl_rank_ordering(self):
@@ -306,9 +291,7 @@ class TestPermissionEnvelopeCalculator:
 
     def test_intersect_acl_types_mixed(self):
         """混合 ACL 类型的交集为最严格的。"""
-        result = PermissionEnvelopeCalculator._intersect_acl_types(
-            ["all", "private", "tree"]
-        )
+        result = PermissionEnvelopeCalculator._intersect_acl_types(["all", "private", "tree"])
         assert result == "private"
 
     def test_extract_acl_from_envelope_empty(self):
@@ -378,12 +361,8 @@ class TestPublicationServiceContentHash:
         """标题不同应产生不同的哈希。"""
         svc = self._make_service()
         refs = ProductRefCollection()
-        h1 = svc._compute_content_hash(
-            PublishRequest(title="Title A"), refs
-        )
-        h2 = svc._compute_content_hash(
-            PublishRequest(title="Title B"), refs
-        )
+        h1 = svc._compute_content_hash(PublishRequest(title="Title A"), refs)
+        h2 = svc._compute_content_hash(PublishRequest(title="Title B"), refs)
         assert h1 != h2
 
     def test_content_hash_differs_on_refs_change(self):
@@ -422,12 +401,8 @@ class TestPublicationServiceContentHash:
         svc = self._make_service()
         refs = ProductRefCollection()
 
-        h1 = svc._compute_content_hash(
-            PublishRequest(title="T", tags=["a", "b", "c"]), refs
-        )
-        h2 = svc._compute_content_hash(
-            PublishRequest(title="T", tags=["c", "b", "a"]), refs
-        )
+        h1 = svc._compute_content_hash(PublishRequest(title="T", tags=["a", "b", "c"]), refs)
+        h2 = svc._compute_content_hash(PublishRequest(title="T", tags=["c", "b", "a"]), refs)
         assert h1 == h2
 
 

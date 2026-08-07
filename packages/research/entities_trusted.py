@@ -24,9 +24,10 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+import packages.auth.entities  # noqa: F401 — app_user table
+
 # 导入阶段 1 实体，确保 FK 目标表注册到 Base.metadata
 import packages.research.entities  # noqa: F401 — research_workspace / snapshot tables
-import packages.auth.entities  # noqa: F401 — app_user table
 from packages.common.database import Base
 from packages.common.db_types import GUID, UTCDateTime
 from packages.common.ids import new_id
@@ -62,9 +63,7 @@ class ResearchAnalysisPlanVersion(Base):
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     dag_structure: Mapped[dict] = mapped_column(JSONB, nullable=False)
     coverage_declaration: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     confirmed_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
     confirmed_by: Mapped[UUID | None] = mapped_column(
         GUID, sa.ForeignKey("app_user.id"), nullable=True
@@ -72,9 +71,7 @@ class ResearchAnalysisPlanVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -100,7 +97,8 @@ class ResearchAnalysisRun(Base):
         plan_version_id: 计划版本 ID（FK→research_analysis_plan_version）。
         snapshot_id: 证据快照 ID（FK→research_evidence_snapshot）。
         run_number: Run 编号（从 1 开始递增）。
-        status: 状态（queued / planning / running / partially_succeeded / succeeded / failed / cancelled）。
+        status: 状态（queued / planning / running / partially_succeeded
+        / succeeded / failed / cancelled）。
         queue_position: 排队位置（排队中时有值）。
         submitted_at: 提交时间。
         started_at: 开始执行时间。
@@ -128,9 +126,7 @@ class ResearchAnalysisRun(Base):
         GUID, sa.ForeignKey("research_evidence_snapshot.id"), nullable=False
     )
     run_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'queued'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'queued'"))
     queue_position: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -144,9 +140,7 @@ class ResearchAnalysisRun(Base):
     error_summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     coverage_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     image_digest: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -169,7 +163,8 @@ class ResearchAnalysisStep(Base):
         step_index: 步骤序号（拓扑序）。
         status: 状态（pending / running / succeeded / failed / skipped / cancelled）。
         method: 执行方式（python / llm / knowledge / mixed）。
-        analysis_mode: 分析模式（full_compute / chunked_full_scan / direct_full_context / retrieval / mixed）。
+        analysis_mode: 分析模式（full_compute / chunked_full_scan
+        / direct_full_context / retrieval / mixed）。
         data_budget_tokens: 数据预算 token 数。
         coverage_rate: 数据覆盖率。
         llm_read_rate: LLM 阅读率。
@@ -350,9 +345,7 @@ class ResearchMemoryDocument(Base):
     document: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
-    version: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False, server_default=sa.text("1")
-    )
+    version: Mapped[int] = mapped_column(sa.Integer, nullable=False, server_default=sa.text("1"))
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

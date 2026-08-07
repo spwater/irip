@@ -32,15 +32,11 @@ class CoreProvenanceAdapter(Protocol):
         """查询单个核心节点的展示信息（不返回内容数据）。"""
         ...
 
-    async def query_incoming_edges(
-        self, namespace: str, node_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def query_incoming_edges(self, namespace: str, node_id: UUID) -> list[ProvenanceEdge]:
         """查询节点的入边（上游来源）。"""
         ...
 
-    async def check_permission(
-        self, namespace: str, node_id: UUID, principal: object
-    ) -> bool:
+    async def check_permission(self, namespace: str, node_id: UUID, principal: object) -> bool:
         """校验 principal 对核心节点的访问权限。"""
         ...
 
@@ -92,9 +88,7 @@ class CoreProvenanceAdapterImpl:
         logger.warning("Unknown core namespace: %s", namespace)
         return None
 
-    async def query_incoming_edges(
-        self, namespace: str, node_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def query_incoming_edges(self, namespace: str, node_id: UUID) -> list[ProvenanceEdge]:
         """查询节点的入边（上游来源）。
 
         - core:fact: 通常无上游（实验事实是溯源链的根）
@@ -117,9 +111,7 @@ class CoreProvenanceAdapterImpl:
             return await self._query_evidence_set_incoming_edges(node_id)
         return []
 
-    async def check_permission(
-        self, namespace: str, node_id: UUID, principal: object
-    ) -> bool:
+    async def check_permission(self, namespace: str, node_id: UUID, principal: object) -> bool:
         """校验 principal 对核心节点的访问权限。
 
         复用核心系统现有权限校验逻辑（Fact 的可见范围）。
@@ -198,9 +190,7 @@ class CoreProvenanceAdapterImpl:
         try:
             async with self._factory() as session:
                 result = await session.execute(
-                    sa.text(
-                        "SELECT id, status, created_at FROM derivation_run WHERE id = :rid"
-                    ),
+                    sa.text("SELECT id, status, created_at FROM derivation_run WHERE id = :rid"),
                     {"rid": str(run_id)},
                 )
                 row = result.first()
@@ -235,9 +225,7 @@ class CoreProvenanceAdapterImpl:
         try:
             async with self._factory() as session:
                 result = await session.execute(
-                    sa.text(
-                        "SELECT id, status, created_at FROM evidence_set WHERE id = :eid"
-                    ),
+                    sa.text("SELECT id, status, created_at FROM evidence_set WHERE id = :eid"),
                     {"eid": str(evidence_set_id)},
                 )
                 row = result.first()
@@ -260,9 +248,7 @@ class CoreProvenanceAdapterImpl:
             is_restricted=False,
         )
 
-    async def _query_derivation_run_incoming_edges(
-        self, run_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def _query_derivation_run_incoming_edges(self, run_id: UUID) -> list[ProvenanceEdge]:
         """查询 DerivationRun 的入边。
 
         上游为 EvidenceSet。
@@ -345,9 +331,7 @@ class CoreProvenanceAdapterImpl:
             logger.debug("Failed to query evidence_set incoming edges: %s", exc)
         return edges
 
-    async def _check_fact_permission(
-        self, fact_id: UUID, principal: object
-    ) -> bool:
+    async def _check_fact_permission(self, fact_id: UUID, principal: object) -> bool:
         """校验 Fact 访问权限。
 
         通过查询 Fact 是否存在且状态为 active 来判断。
@@ -377,9 +361,7 @@ class CoreProvenanceAdapterImpl:
             logger.warning("Fact permission check failed: %s", exc)
             return False
 
-    async def _check_derivation_run_permission(
-        self, run_id: UUID, principal: object
-    ) -> bool:
+    async def _check_derivation_run_permission(self, run_id: UUID, principal: object) -> bool:
         """校验 DerivationRun 访问权限。
 
         Args:
@@ -392,9 +374,7 @@ class CoreProvenanceAdapterImpl:
         try:
             async with self._factory() as session:
                 result = await session.execute(
-                    sa.text(
-                        "SELECT count(*) FROM derivation_run WHERE id = :rid"
-                    ),
+                    sa.text("SELECT count(*) FROM derivation_run WHERE id = :rid"),
                     {"rid": str(run_id)},
                 )
                 return int(result.scalar() or 0) > 0
@@ -416,9 +396,7 @@ class CoreProvenanceAdapterImpl:
         try:
             async with self._factory() as session:
                 result = await session.execute(
-                    sa.text(
-                        "SELECT count(*) FROM evidence_set WHERE id = :eid"
-                    ),
+                    sa.text("SELECT count(*) FROM evidence_set WHERE id = :eid"),
                     {"eid": str(evidence_set_id)},
                 )
                 return int(result.scalar() or 0) > 0

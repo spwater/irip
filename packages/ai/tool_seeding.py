@@ -35,9 +35,7 @@ async def seed_missing_builtin_tools(session: AsyncSession) -> int:
 
     for spec in ALL_TOOLS:
         # 按 name 检查是否已存在
-        existing = await session.execute(
-            sa.select(AITool.id).where(AITool.name == spec.name)
-        )
+        existing = await session.execute(sa.select(AITool.id).where(AITool.name == spec.name))
         if existing.scalar_one_or_none() is not None:
             continue  # 已存在，不覆盖
 

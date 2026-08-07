@@ -162,7 +162,6 @@ class WarmPoolManager:
         Returns:
             bool: 成功获取返回 True，已达上限返回 False。
         """
-        import redis as redis_lib
 
         # 检查当前保温容器数量
         count = self._redis.scard("research:warm_pool")
@@ -277,9 +276,7 @@ class DockerSandboxRuntime:
         """
         client = await self._get_client()
 
-        config = self._build_container_config(
-            input_package_path, image_digest, resource_limits
-        )
+        config = self._build_container_config(input_package_path, image_digest, resource_limits)
 
         container = await client.containers.create(config)
         container_id = container.id if hasattr(container, "id") else str(container._id)
@@ -313,7 +310,7 @@ class DockerSandboxRuntime:
         # 将脚本写入容器
         import base64
 
-        encoded_script = base64.b64encode(script_content.encode("utf-8")).decode("ascii")
+        base64.b64encode(script_content.encode("utf-8")).decode("ascii")
 
         try:
             # 用 base64 + python -c 写入脚本文件（最可靠方式）
@@ -321,7 +318,12 @@ class DockerSandboxRuntime:
 
             b64 = _b64.b64encode(script_content.encode("utf-8")).decode("ascii")
             exec_write = await container.exec(
-                ["python", "-c", f"import base64;open('/workspace/script.py','wb').write(base64.b64decode('{b64}'))"],
+                [
+                    "python",
+                    "-c",
+                    f"import base64;open('/workspace/script.py','wb')"
+                    f".write(base64.b64decode('{b64}'))",
+                ],
             )
             write_stream = exec_write.start()
             while True:
@@ -381,7 +383,7 @@ class DockerSandboxRuntime:
                     timed_out=False,
                     duration_seconds=duration,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 duration = int(time.time() - start_time)
                 logger.warning("Container execution timed out: %s", container_id)
                 return ExecutionResult(

@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import asyncio
-import math
 from uuid import UUID
 
 import numpy as np
@@ -14,12 +13,10 @@ import pytest
 
 from packages.ai.numeric.contracts import (
     NumericError,
-    NumericLimits,
     NumericPrincipal,
     NumericSource,
 )
 from packages.ai.numeric.data_resolver import NumericDataResolver
-
 
 # =============================================================================
 # 辅助函数
@@ -61,8 +58,8 @@ class TestInlineResolution:
     def test_inline_with_null(self) -> None:
         source = NumericSource(name="x", source_type="inline", values=[1.0, None, 3.0])
         result = resolve_sync(source)
-        assert result.null_mask[1] == True
-        assert result.null_mask[0] == False
+        assert result.null_mask[1]
+        assert not result.null_mask[0]
 
     def test_inline_with_unit(self) -> None:
         source = NumericSource(name="x", source_type="inline", values=[1.0, 2.0], unit="MPa")

@@ -17,13 +17,12 @@ DAG 拓扑排序使用 Kahn 算法。
 """
 
 import asyncio
-import hashlib
 import json
 import logging
 import os
 import tempfile
 from collections import deque
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -31,12 +30,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
-from packages.common.database import session_scope
 from packages.research.models_trusted import (
     CoverageDeclaration,
     ErrorClassification,
     ExecutionResult,
-    PlanStep,
     ResourceLimits,
     ScopeBoundary,
     ScopeCheckResult,
@@ -150,6 +147,8 @@ class ResearchOrchestrator:
         """
         logger.info("Starting execute_run: run_id=%s", run_id)
 
+        created_by: UUID | None = None
+
         # 设置租户上下文
         if self._factory is not None:
             async with self._factory() as session:
@@ -165,9 +164,7 @@ class ResearchOrchestrator:
                 created_by = run_orm.created_by
                 # 设置工件服务和记忆服务的租户上下文
                 if hasattr(self._artifact_service, "set_context"):
-                    self._artifact_service.set_context(
-                        run_orm.workspace_id, run_orm.created_by
-                    )
+                    self._artifact_service.set_context(run_orm.workspace_id, run_orm.created_by)
         else:
             run_orm = None
             workspace_id = None
@@ -198,13 +195,9 @@ class ResearchOrchestrator:
                     # 获取 Run 关联的 snapshot_id
                     async with self._factory() as session:
                         run_for_hook = await self._repo.get_run(session, run_id)
-                        snapshot_id_for_hook = (
-                            run_for_hook.snapshot_id if run_for_hook else None
-                        )
+                        snapshot_id_for_hook = run_for_hook.snapshot_id if run_for_hook else None
                     if snapshot_id_for_hook is not None:
-                        await self._lineage_writer.on_run_started(
-                            run_id, [snapshot_id_for_hook]
-                        )
+                        await self._lineage_writer.on_run_started(run_id, [snapshot_id_for_hook])
                 except Exception as exc:
                     logger.warning("on_run_started hook failed: %s", exc)
 
@@ -240,24 +233,23 @@ class ResearchOrchestrator:
                     }
                     for i, s in enumerate(sorted_steps)
                 ]
-                step_entities = await self._repo.batch_insert_steps(
-                    session, run_id, steps_data
-                )
+                step_entities = await self._repo.batch_insert_steps(session, run_id, steps_data)
                 step_map: dict[str, UUID] = {}
-                for sd, ent in zip(steps_data, step_entities):
+                for sd, ent in zip(steps_data, step_entities, strict=False):
                     step_map[sd["step_key"]] = ent.id
 
             # 验证 step 已写入数据库
             async with self._factory() as session:
                 from packages.research.entities_trusted import ResearchAnalysisStep
+
                 result = await session.execute(
-                    sa.select(ResearchAnalysisStep.id).where(
-                        ResearchAnalysisStep.run_id == run_id
-                    )
+                    sa.select(ResearchAnalysisStep.id).where(ResearchAnalysisStep.run_id == run_id)
                 )
                 db_step_ids = [row[0] for row in result.fetchall()]
             if not db_step_ids:
-                logger.error("Steps were not persisted to database after batch_insert! run_id=%s", run_id)
+                logger.error(
+                    "Steps were not persisted to database after batch_insert! run_id=%s", run_id
+                )
                 await self._fail_run(run_id, "步骤初始化失败：步骤未写入数据库")
                 return
             logger.info("Steps persisted: %d steps for run %s", len(db_step_ids), run_id)
@@ -304,7 +296,7 @@ class ResearchOrchestrator:
                 # 执行步骤
                 step_id = step_map.get(step_key)
                 step_result = await self._execute_step(
-                    run_id, step_id, step_def, step_map, plan
+                    run_id, step_id, step_def, step_map, plan, created_by
                 )
 
                 if step_result:
@@ -314,9 +306,7 @@ class ResearchOrchestrator:
                     failed_steps.add(step_key)
 
             # 聚合覆盖率 → 确定 Run 最终状态
-            final_status = self._determine_final_status(
-                sorted_steps, succeeded_steps, failed_steps
-            )
+            final_status = self._determine_final_status(sorted_steps, succeeded_steps, failed_steps)
             coverage_summary = self._aggregate_coverage(coverage_declarations)
 
             async with self._factory() as session:
@@ -324,7 +314,7 @@ class ResearchOrchestrator:
                     session,
                     run_id,
                     final_status,
-                    completed_at=datetime.now(timezone.utc),
+                    completed_at=datetime.now(UTC),
                     coverage_summary=coverage_summary,
                 )
 
@@ -363,20 +353,20 @@ class ResearchOrchestrator:
                             sa.text(f"SET LOCAL app.current_user_id = '{created_by}'")
                         )
                     await AuditRecorder.record(
-                    session,
-                    AuditEventData(
-                        department_id=workspace_id or UUID(int=0),
-                        actor_user_id=created_by,
-                        action="research.run.complete",
-                        resource_type="research_analysis_run",
-                        resource_id=run_id,
-                        payload={
-                            "status": final_status,
-                            "succeeded": len(succeeded_steps),
-                            "failed": len(failed_steps),
-                        },
-                    ),
-                )
+                        session,
+                        AuditEventData(
+                            department_id=workspace_id or UUID(int=0),
+                            actor_user_id=created_by,
+                            action="research.run.complete",
+                            resource_type="research_analysis_run",
+                            resource_id=run_id,
+                            payload={
+                                "status": final_status,
+                                "succeeded": len(succeeded_steps),
+                                "failed": len(failed_steps),
+                            },
+                        ),
+                    )
             except Exception as audit_err:
                 logger.warning("Audit record failed (non-blocking): %s", audit_err)
 
@@ -410,20 +400,16 @@ class ResearchOrchestrator:
                         session, step.id, StepStatus.CANCELLED.value
                     )
                 elif step.status == "pending":
-                    await self._repo.update_step_status(
-                        session, step.id, StepStatus.SKIPPED.value
-                    )
+                    await self._repo.update_step_status(session, step.id, StepStatus.SKIPPED.value)
 
             await self._repo.update_run_status(
                 session,
                 run_id,
                 "cancelled",
-                cancelled_at=datetime.now(timezone.utc),
+                cancelled_at=datetime.now(UTC),
             )
 
-        await self._publish_event(
-            run_id, "run.status_changed", {"status": "cancelled"}
-        )
+        await self._publish_event(run_id, "run.status_changed", {"status": "cancelled"})
 
     async def _execute_step(
         self,
@@ -432,6 +418,7 @@ class ResearchOrchestrator:
         step_def: dict,
         step_map: dict[str, UUID],
         plan: object,
+        created_by: UUID | None = None,
     ) -> dict | None:
         """执行单个步骤。
 
@@ -463,7 +450,7 @@ class ResearchOrchestrator:
                     session,
                     step_id,
                     StepStatus.RUNNING.value,
-                    started_at=datetime.now(timezone.utc),
+                    started_at=datetime.now(UTC),
                 )
 
         await self._publish_event(
@@ -477,12 +464,14 @@ class ResearchOrchestrator:
 
             if method == "python":
                 coverage = await self._execute_python_step(
-                    run_id, step_id, step_def, step_map, plan
+                    run_id, step_id, step_def, step_map, plan, created_by
                 )
             elif method == "llm":
                 coverage = await self._execute_llm_step(run_id, step_id, step_def, plan)
             elif method == "mixed":
-                coverage = await self._execute_mixed_step(run_id, step_id, step_def, step_map, plan)
+                coverage = await self._execute_mixed_step(
+                    run_id, step_id, step_def, step_map, plan, created_by
+                )
             elif method == "knowledge":
                 # 本期跳过知识库步骤（子项目 5 接入）
                 logger.warning("Knowledge step skipped (not implemented): %s", step_key)
@@ -508,7 +497,7 @@ class ResearchOrchestrator:
                             session,
                             step_id,
                             StepStatus.SUCCEEDED.value,
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                         )
                         await self._repo.update_step_progress(
                             session,
@@ -547,9 +536,7 @@ class ResearchOrchestrator:
                 # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
                 if self._lineage_writer is not None and step_id is not None:
                     try:
-                        await self._lineage_writer.on_step_completed(
-                            run_id, step_id
-                        )
+                        await self._lineage_writer.on_step_completed(run_id, step_id)
                     except Exception as exc:
                         logger.warning("on_step_completed hook failed: %s", exc)
 
@@ -562,7 +549,7 @@ class ResearchOrchestrator:
                             session,
                             step_id,
                             StepStatus.FAILED.value,
-                            completed_at=datetime.now(timezone.utc),
+                            completed_at=datetime.now(UTC),
                             error_message="步骤执行失败",
                             error_classification=ErrorClassification.UNKNOWN.value,
                         )
@@ -581,7 +568,7 @@ class ResearchOrchestrator:
                         session,
                         step_id,
                         StepStatus.FAILED.value,
-                        completed_at=datetime.now(timezone.utc),
+                        completed_at=datetime.now(UTC),
                         error_message=str(exc),
                         error_classification=ErrorClassification.UNKNOWN.value,
                     )
@@ -599,6 +586,7 @@ class ResearchOrchestrator:
         step_def: dict,
         step_map: dict[str, UUID],
         plan: object,
+        created_by: UUID | None = None,
     ) -> dict | None:
         """执行 Python 步骤：AI 生成代码 → 沙箱执行 → 收集输出。
 
@@ -674,20 +662,30 @@ class ResearchOrchestrator:
                         data_context="",
                         research_context=question,
                     )
-                    script_content = response.answer if hasattr(response, "answer") else str(response)
-                    logger.info("AI code gen response: %s, script_len=%d", type(response).__name__, len(script_content))
+                    script_content = (
+                        response.answer if hasattr(response, "answer") else str(response)
+                    )
+                    logger.info(
+                        "AI code gen response: %s, script_len=%d",
+                        type(response).__name__,
+                        len(script_content),
+                    )
 
                     # 清理 AI 返回中的 markdown 代码块包裹
                     script_content = script_content.strip()
                     if script_content.startswith("```python"):
-                        script_content = script_content[len("```python"):].strip()
+                        script_content = script_content[len("```python") :].strip()
                     elif script_content.startswith("```"):
                         script_content = script_content[3:].strip()
                     if script_content.endswith("```"):
                         script_content = script_content[:-3].strip()
 
                     # 检查是否为模拟响应或空回答 → 走 fallback
-                    if not script_content or script_content.startswith("[模拟响应]") or len(script_content) < 50:
+                    if (
+                        not script_content
+                        or script_content.startswith("[模拟响应]")
+                        or len(script_content) < 50
+                    ):
                         logger.warning("AI response too short or mock, using fallback script")
                         script_content = self._generate_fallback_script(question)
                 except Exception as exc:
@@ -826,6 +824,7 @@ class ResearchOrchestrator:
 
         # 构建步骤定义
         from packages.research.models_trusted import PlanStep as PlanStepDC
+
         plan_step = PlanStepDC(
             step_key=step_key,
             question=question,
@@ -838,6 +837,7 @@ class ResearchOrchestrator:
         )
 
         from packages.research.models_trusted import DataProfile
+
         data_profile = DataProfile(snapshot_id=snapshot_id)
 
         # 分析模式选择
@@ -853,9 +853,8 @@ class ResearchOrchestrator:
         if data_tokens > budget:
             # 超预算 → 分块全量扫描
             from packages.research.models_trusted import ChunkStrategy
-            chunks = self._context_router.chunk_data(
-                data_text, budget, ChunkStrategy.TOKEN_BUDGET
-            )
+
+            chunks = self._context_router.chunk_data(data_text, budget, ChunkStrategy.TOKEN_BUDGET)
             total_chunks = len(chunks)
             successful_chunks = 0
             chunk_responses: list[str] = []
@@ -886,8 +885,11 @@ class ResearchOrchestrator:
 
             # 计算覆盖率
             coverage = self._context_router.compute_coverage(
-                plan_step, chunks, data_profile.total_records,
-                analysis_mode, successful_chunks,
+                plan_step,
+                chunks,
+                data_profile.total_records,
+                analysis_mode,
+                successful_chunks,
             )
             # 保存分块 LLM 回答为工件
             if chunk_responses and self._artifact_service is not None and step_id is not None:
@@ -959,6 +961,7 @@ class ResearchOrchestrator:
         step_def: dict,
         step_map: dict[str, UUID],
         plan: object,
+        created_by: UUID | None = None,
     ) -> dict | None:
         """执行混合步骤：Python 先行计算 → LLM 阅读结果。
 
@@ -974,7 +977,7 @@ class ResearchOrchestrator:
         """
         # 先执行 Python 部分
         python_coverage = await self._execute_python_step(
-            run_id, step_id, step_def, step_map, plan
+            run_id, step_id, step_def, step_map, plan, created_by
         )
         if python_coverage is None:
             return None
@@ -1005,7 +1008,7 @@ class ResearchOrchestrator:
         """
         # 构建邻接表和入度表
         step_map: dict[str, dict] = {s.get("step_key", f"step_{i}"): s for i, s in enumerate(steps)}
-        in_degree: dict[str, int] = {k: 0 for k in step_map}
+        in_degree: dict[str, int] = dict.fromkeys(step_map, 0)
         adjacency: dict[str, list[str]] = {k: [] for k in step_map}
 
         for step in steps:
@@ -1113,7 +1116,8 @@ class ResearchOrchestrator:
         if self._factory is not None:
             async with self._factory() as session:
                 from packages.research.repository import ResearchRepository
-                snapshots = await ResearchRepository.list_snapshots(session, UUID(int=0))
+
+                await ResearchRepository.list_snapshots(session, UUID(int=0))
                 # 获取快照关联的证据引用
                 # 此处简化：实际需要通过 CoreFactProvider 获取数据
                 # 构建输入包结构
@@ -1127,8 +1131,11 @@ class ResearchOrchestrator:
                 ]
 
         # 写入 JSON 文件
-        with open(input_path, "w", encoding="utf-8") as f:
-            json.dump(input_data, f, ensure_ascii=False, indent=2)
+        def _write_input_file() -> None:
+            with open(input_path, "w", encoding="utf-8") as f:
+                json.dump(input_data, f, ensure_ascii=False, indent=2)
+
+        await asyncio.to_thread(_write_input_file)
 
         return tmp_dir
 
@@ -1145,11 +1152,12 @@ class ResearchOrchestrator:
             return ""
 
         async with self._factory() as session:
-            from packages.research.repository import ResearchRepository
             # 获取快照的字段清单和源引用
             # 简化：返回字段清单的 JSON 文本
-            from packages.research.entities import ResearchEvidenceSnapshot
             import sqlalchemy as sa
+
+            from packages.research.entities import ResearchEvidenceSnapshot
+
             result = await session.execute(
                 sa.select(ResearchEvidenceSnapshot).where(
                     ResearchEvidenceSnapshot.id == snapshot_id
@@ -1161,32 +1169,37 @@ class ResearchOrchestrator:
 
             # 读取每个证据引用的 Fact 完整数据
             evidence_data = []
-            for ref in (snapshot.source_refs or []):
+            for ref in snapshot.source_refs or []:
                 fact_id = ref.get("id")
                 namespace = ref.get("namespace", "")
                 if namespace == "core:fact" and fact_id:
                     try:
-                        from packages.research.core_adapter import CoreFactProviderImpl
                         # 通过 factory 创建 CoreFactProvider 并读取数据
                         from apps.api.main import _build_s3_repo
+                        from packages.research.core_adapter import CoreFactProviderImpl
+
                         s3_repo = _build_s3_repo()
                         provider = CoreFactProviderImpl(
                             session_factory=self._factory,
                             s3_repo=s3_repo,
                         )
                         fact_data = await provider.get_fact_data(UUID(fact_id))
-                        evidence_data.append({
-                            "fact_id": fact_id,
-                            "namespace": namespace,
-                            "data": fact_data,
-                        })
+                        evidence_data.append(
+                            {
+                                "fact_id": fact_id,
+                                "namespace": namespace,
+                                "data": fact_data,
+                            }
+                        )
                     except Exception as exc:
                         logger.warning("Failed to load fact data %s: %s", fact_id, exc)
-                        evidence_data.append({
-                            "fact_id": fact_id,
-                            "namespace": namespace,
-                            "error": str(exc)[:200],
-                        })
+                        evidence_data.append(
+                            {
+                                "fact_id": fact_id,
+                                "namespace": namespace,
+                                "error": str(exc)[:200],
+                            }
+                        )
 
             return json.dumps(
                 {
@@ -1291,7 +1304,7 @@ class ResearchOrchestrator:
                 session,
                 run_id,
                 "failed",
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(UTC),
                 error_summary=error_msg,
             )
         await self._publish_event(
@@ -1330,6 +1343,7 @@ class ResearchOrchestrator:
                 from packages.research.repository_trusted import (
                     ResearchRepositoryTrusted,
                 )
+
                 if step_id is not None:
                     artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
                         session, step_id

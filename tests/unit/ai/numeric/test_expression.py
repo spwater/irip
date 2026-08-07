@@ -14,13 +14,10 @@ import pytest
 from packages.ai.numeric.contracts import (
     ExpressionOptions,
     NumericError,
-    NumericLimits,
-    NumericSource,
     NumericSourceProvenance,
     ResolvedNumericInput,
 )
 from packages.ai.numeric.expression import SafeExpressionEngine
-
 
 # =============================================================================
 # 辅助函数
@@ -94,50 +91,53 @@ def eval_full(
 class TestASTSecurity:
     """AST 攻击语料全部被拒绝。"""
 
-    @pytest.mark.parametrize("attack_expr", [
-        "__import__('os').system('id')",
-        "x.__class__",
-        "(1).__class__.__mro__",
-        "open('/etc/passwd')",
-        "[v for v in x]",
-        "(lambda: 1)()",
-        "x[0]",
-        "globals()",
-        "eval('1+1')",
-        "exec('print(1)')",
-        "compile('1', '', 'eval')",
-        "import os",
-        "x.__class__.__bases__",
-        "getattr(x, '__class__')",
-        "type(x)",
-        "dir(x)",
-        "vars()",
-        "locals()",
-        "x.__dict__",
-        "[1, 2, 3]",
-        "(1, 2, 3)",
-        "{1: 2}",
-        "{1, 2, 3}",
-        "x if 1 else 0",
-        "x and y",
-        "x or y",
-        "not x",
-        "f'{x}'",
-        "'hello'",
-        "b'hello'",
-        "None",
-        "True",
-        "False",
-        "x[0:1]",
-        "x[::2]",
-        "**x",
-        "*x",
-        "f(x=1)",
-        "f(**{'x': 1})",
-        "f(*[1])",
-        "np.sin(x)",
-        "math.sin(x)",
-    ])
+    @pytest.mark.parametrize(
+        "attack_expr",
+        [
+            "__import__('os').system('id')",
+            "x.__class__",
+            "(1).__class__.__mro__",
+            "open('/etc/passwd')",
+            "[v for v in x]",
+            "(lambda: 1)()",
+            "x[0]",
+            "globals()",
+            "eval('1+1')",
+            "exec('print(1)')",
+            "compile('1', '', 'eval')",
+            "import os",
+            "x.__class__.__bases__",
+            "getattr(x, '__class__')",
+            "type(x)",
+            "dir(x)",
+            "vars()",
+            "locals()",
+            "x.__dict__",
+            "[1, 2, 3]",
+            "(1, 2, 3)",
+            "{1: 2}",
+            "{1, 2, 3}",
+            "x if 1 else 0",
+            "x and y",
+            "x or y",
+            "not x",
+            "f'{x}'",
+            "'hello'",
+            "b'hello'",
+            "None",
+            "True",
+            "False",
+            "x[0:1]",
+            "x[::2]",
+            "**x",
+            "*x",
+            "f(x=1)",
+            "f(**{'x': 1})",
+            "f(*[1])",
+            "np.sin(x)",
+            "math.sin(x)",
+        ],
+    )
     def test_attack_rejected(self, attack_expr: str) -> None:
         engine = SafeExpressionEngine()
         variables = {"x": make_scalar("x", 1.0)}
@@ -296,18 +296,24 @@ class TestBroadcasting:
         np.testing.assert_allclose(result, [2.0, 4.0, 6.0])
 
     def test_equal_length_vectors(self) -> None:
-        result = eval_expr("x + y", {
-            "x": make_vector("x", [1.0, 2.0, 3.0]),
-            "y": make_vector("y", [4.0, 5.0, 6.0]),
-        })
+        result = eval_expr(
+            "x + y",
+            {
+                "x": make_vector("x", [1.0, 2.0, 3.0]),
+                "y": make_vector("y", [4.0, 5.0, 6.0]),
+            },
+        )
         np.testing.assert_allclose(result, [5.0, 7.0, 9.0])
 
     def test_unequal_length_rejected(self) -> None:
         with pytest.raises(NumericError) as exc_info:
-            eval_expr("x + y", {
-                "x": make_vector("x", [1.0, 2.0, 3.0]),
-                "y": make_vector("y", [1.0, 2.0]),
-            })
+            eval_expr(
+                "x + y",
+                {
+                    "x": make_vector("x", [1.0, 2.0, 3.0]),
+                    "y": make_vector("y", [1.0, 2.0]),
+                },
+            )
         assert exc_info.value.code == "numeric_size_limit"
 
 
@@ -544,10 +550,13 @@ class TestDivideByZero:
 
     def test_vector_div_zero(self) -> None:
         with pytest.raises(NumericError) as exc_info:
-            eval_expr("x / y", {
-                "x": make_vector("x", [1.0, 2.0]),
-                "y": make_vector("y", [1.0, 0.0]),
-            })
+            eval_expr(
+                "x / y",
+                {
+                    "x": make_vector("x", [1.0, 2.0]),
+                    "y": make_vector("y", [1.0, 0.0]),
+                },
+            )
         assert exc_info.value.code == "numeric_divide_by_zero"
 
 
@@ -587,9 +596,10 @@ class TestVectorTruncation:
 
     def test_large_vector_truncated(self) -> None:
         # We need > 1000 elements — use the engine directly via facade
-        from packages.ai.numeric.service import NumericToolFacade
-        from packages.ai.numeric.data_resolver import NumericDataResolver
         import asyncio
+
+        from packages.ai.numeric.data_resolver import NumericDataResolver
+        from packages.ai.numeric.service import NumericToolFacade
 
         resolver = NumericDataResolver()
         facade = NumericToolFacade(resolver)
@@ -606,11 +616,16 @@ class TestVectorTruncation:
         }
 
         from uuid import UUID
-        principal = type("P", (), {
-            "user_id": UUID("018f0000-0000-7000-8000-000000000001"),
-            "department_id": UUID("018f0000-0000-7000-8000-000000000002"),
-            "roles": ("lab_member",),
-        })()
+
+        principal = type(
+            "P",
+            (),
+            {
+                "user_id": UUID("018f0000-0000-7000-8000-000000000001"),
+                "department_id": UUID("018f0000-0000-7000-8000-000000000002"),
+                "roles": ("lab_member",),
+            },
+        )()
 
         result = asyncio.run(facade.evaluate_expression(args, principal))
         llm_data = result.llm_data
@@ -680,8 +695,8 @@ class TestNullPolicy:
         )
         assert result.kind == "vector"
         assert result.null_mask is not None
-        assert result.null_mask[1] == True
-        assert result.null_mask[0] == False
+        assert result.null_mask[1]
+        assert not result.null_mask[0]
 
     def test_count_not_null_propagate(self) -> None:
         """count 在 propagate 策略下不返回 null，只算非 null 数。"""

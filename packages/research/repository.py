@@ -668,9 +668,7 @@ class ResearchRepository:
         Returns:
             ResearchDerivedDataset | None: 数据集实体。
         """
-        stmt = sa.select(ResearchDerivedDataset).where(
-            ResearchDerivedDataset.id == dataset_id
-        )
+        stmt = sa.select(ResearchDerivedDataset).where(ResearchDerivedDataset.id == dataset_id)
         if workspace_id is not None:
             stmt = stmt.where(ResearchDerivedDataset.workspace_id == workspace_id)
         result = await session.execute(stmt)
@@ -1475,9 +1473,7 @@ class ResearchRepository:
             ResearchInsightCandidate | None: 候选实体。
         """
         result = await session.execute(
-            sa.select(ResearchInsightCandidate).where(
-                ResearchInsightCandidate.id == candidate_id
-            )
+            sa.select(ResearchInsightCandidate).where(ResearchInsightCandidate.id == candidate_id)
         )
         return result.scalar_one_or_none()
 
@@ -1497,9 +1493,7 @@ class ResearchRepository:
         Returns:
             list[ResearchInsightCandidate]: 候选列表。
         """
-        stmt = sa.select(ResearchInsightCandidate).where(
-            ResearchInsightCandidate.run_id == run_id
-        )
+        stmt = sa.select(ResearchInsightCandidate).where(ResearchInsightCandidate.run_id == run_id)
         if status is not None:
             stmt = stmt.where(ResearchInsightCandidate.status == status)
         stmt = stmt.order_by(ResearchInsightCandidate.created_at.desc())
@@ -1606,9 +1600,7 @@ class ResearchRepository:
         Returns:
             ResearchResult | None: 成果包实体。
         """
-        res = await session.execute(
-            sa.select(ResearchResult).where(ResearchResult.id == result_id)
-        )
+        res = await session.execute(sa.select(ResearchResult).where(ResearchResult.id == result_id))
         return res.scalar_one_or_none()
 
     @staticmethod
@@ -1956,9 +1948,7 @@ class ResearchRepository:
         Returns:
             list[ResearchResultVersion]: 搜索结果列表。
         """
-        stmt = sa.select(ResearchResultVersion).where(
-            ResearchResultVersion.status == "active"
-        )
+        stmt = sa.select(ResearchResultVersion).where(ResearchResultVersion.status == "active")
         if query:
             pattern = f"%{query}%"
             stmt = stmt.where(
@@ -2270,8 +2260,9 @@ class ResearchRepository:
             list[UUID]: 成果包 ID 列表。
         """
         res = await session.execute(
-            sa.select(ResearchResultFavorite.result_id)
-            .where(ResearchResultFavorite.user_id == user_id)
+            sa.select(ResearchResultFavorite.result_id).where(
+                ResearchResultFavorite.user_id == user_id
+            )
         )
         return [row[0] for row in res.all()]
 

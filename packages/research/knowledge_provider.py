@@ -147,9 +147,9 @@ class KnowledgeProviderService:
             try:
                 result = await task
                 results.append(result)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Provider '%s' timed out after %ds", name, timeout)
-                self._handle_provider_error(name, asyncio.TimeoutError(), is_required=False)
+                self._handle_provider_error(name, TimeoutError(), is_required=False)
             except Exception as exc:
                 logger.warning("Provider '%s' search failed: %s", name, exc)
                 self._handle_provider_error(name, exc, is_required=False)
@@ -231,9 +231,7 @@ class KnowledgeProviderService:
         except Exception:
             pass
 
-    async def _audit_provider_degraded(
-        self, provider_name: str, error_msg: str
-    ) -> None:
+    async def _audit_provider_degraded(self, provider_name: str, error_msg: str) -> None:
         """审计知识库 Provider 降级事件。
 
         Args:
@@ -288,7 +286,9 @@ class MockKnowledgeProvider:
             "section": "第5章 疲劳性能",
             "page": 120,
             "source_uri": "https://knowledge.example.com/docs/mock_doc_002",
-            "snippet": "材料的疲劳极限与抗拉强度存在经验关系，通常疲劳极限约为抗拉强度的 0.4-0.5 倍。",
+            "snippet": (
+                "材料的疲劳极限与抗拉强度存在经验关系，通常疲劳极限约为抗拉强度的 0.4-0.5 倍。"
+            ),
         },
         {
             "document_id": "mock_doc_003",
@@ -336,9 +336,7 @@ class MockKnowledgeProvider:
             section = doc.get("section", "").lower()
 
             if any(kw in title or kw in snippet or kw in section for kw in query_lower.split()):
-                content_hash = hashlib.sha256(
-                    doc["snippet"].encode("utf-8")
-                ).hexdigest()
+                content_hash = hashlib.sha256(doc["snippet"].encode("utf-8")).hexdigest()
                 results.append(
                     KnowledgeSearchResult(
                         document_id=doc["document_id"],
@@ -357,9 +355,7 @@ class MockKnowledgeProvider:
         # 如果没有匹配，返回全部 Mock 文档（方便测试）
         if not results:
             for doc in self._MOCK_DOCUMENTS[:max_results]:
-                content_hash = hashlib.sha256(
-                    doc["snippet"].encode("utf-8")
-                ).hexdigest()
+                content_hash = hashlib.sha256(doc["snippet"].encode("utf-8")).hexdigest()
                 results.append(
                     KnowledgeSearchResult(
                         document_id=doc["document_id"],

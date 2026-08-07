@@ -21,7 +21,6 @@ from packages.ai.numeric.contracts import (
     NumericSource,
 )
 
-
 # =============================================================================
 # NumericLimits 默认值
 # =============================================================================
@@ -43,7 +42,7 @@ class TestNumericLimits:
 
     def test_limits_are_frozen(self) -> None:
         limits = NumericLimits()
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             limits.max_expression_length = 999  # type: ignore[misc]
 
 
@@ -65,10 +64,12 @@ class TestExpressionOptions:
         assert opts.numeric_type == "float64"
 
     def test_explicit_valid_options(self) -> None:
-        opts = ExpressionOptions.from_dict({
-            "angle_unit": "degree",
-            "null_policy": "propagate",
-        })
+        opts = ExpressionOptions.from_dict(
+            {
+                "angle_unit": "degree",
+                "null_policy": "propagate",
+            }
+        )
         assert opts.angle_unit == "degree"
         assert opts.null_policy == "propagate"
 
@@ -203,25 +204,39 @@ class TestNumericSourceFields:
 class TestVariableNamePattern:
     """变量名格式校验。"""
 
-    @pytest.mark.parametrize("valid_name", [
-        "x", "T", "_var", "my_var_2", "a" * 64,
-        "UPPER", "lower", "Mixed_Case",
-    ])
+    @pytest.mark.parametrize(
+        "valid_name",
+        [
+            "x",
+            "T",
+            "_var",
+            "my_var_2",
+            "a" * 64,
+            "UPPER",
+            "lower",
+            "Mixed_Case",
+        ],
+    )
     def test_valid_names(self, valid_name: str) -> None:
         import re
+
         assert re.match(VARIABLE_NAME_PATTERN, valid_name)
 
-    @pytest.mark.parametrize("invalid_name", [
-        "1abc",       # starts with digit
-        "",           # empty
-        "a" * 65,     # too long
-        "my-var",     # hyphen
-        "my.var",     # dot
-        "my var",     # space
-        "x!",         # special char
-    ])
+    @pytest.mark.parametrize(
+        "invalid_name",
+        [
+            "1abc",  # starts with digit
+            "",  # empty
+            "a" * 65,  # too long
+            "my-var",  # hyphen
+            "my.var",  # dot
+            "my var",  # space
+            "x!",  # special char
+        ],
+    )
     def test_invalid_names(self, invalid_name: str) -> None:
         import re
+
         assert not re.match(VARIABLE_NAME_PATTERN, invalid_name)
 
 
@@ -235,6 +250,7 @@ class TestSchemaConsistency:
 
     def test_evaluate_schema_in_tools(self) -> None:
         from packages.ai.tools import WHITELIST_TOOLS
+
         specs = {s.name: s for s in WHITELIST_TOOLS}
         assert "evaluate_expression" in specs
         spec = specs["evaluate_expression"]
@@ -242,6 +258,7 @@ class TestSchemaConsistency:
 
     def test_describe_schema_in_tools(self) -> None:
         from packages.ai.tools import WHITELIST_TOOLS
+
         specs = {s.name: s for s in WHITELIST_TOOLS}
         assert "describe_series" in specs
         spec = specs["describe_series"]
@@ -313,12 +330,14 @@ class TestSchemaConsistency:
 
     def test_tools_required_permission(self) -> None:
         from packages.ai.tools import WHITELIST_TOOLS
+
         specs = {s.name: s for s in WHITELIST_TOOLS}
         assert specs["evaluate_expression"].required_permission == "assistant:use"
         assert specs["describe_series"].required_permission == "assistant:use"
 
     def test_tools_category(self) -> None:
         from packages.ai.tools import WHITELIST_TOOLS
+
         specs = {s.name: s for s in WHITELIST_TOOLS}
         assert specs["evaluate_expression"].category == "ai_tool"
         assert specs["describe_series"].category == "ai_tool"
@@ -328,6 +347,7 @@ class TestSchemaConsistency:
 
     def test_error_codes_registered(self) -> None:
         from packages.common.error_codes import ErrorCode
+
         codes = ErrorCode.all_codes()
         for code in [
             "numeric_expression_rejected",
@@ -346,6 +366,7 @@ class TestSchemaConsistency:
 
     def test_error_code_http_status(self) -> None:
         from packages.common.error_codes import ErrorCode
+
         assert ErrorCode.NUMERIC_SIZE_LIMIT.http_status == 413
         assert ErrorCode.NUMERIC_INTERNAL_ERROR.http_status == 500
         assert ErrorCode.NUMERIC_DOMAIN_ERROR.http_status == 422
@@ -354,10 +375,12 @@ class TestSchemaConsistency:
 
     def test_all_tool_names_include_numeric(self) -> None:
         from packages.ai.tools import ALL_TOOL_NAMES
+
         assert "evaluate_expression" in ALL_TOOL_NAMES
         assert "describe_series" in ALL_TOOL_NAMES
 
     def test_ai_tool_names_include_numeric(self) -> None:
         from packages.ai.tools import AI_TOOL_NAMES
+
         assert "evaluate_expression" in AI_TOOL_NAMES
         assert "describe_series" in AI_TOOL_NAMES

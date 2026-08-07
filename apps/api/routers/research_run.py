@@ -23,7 +23,6 @@
 
 import json
 import os
-from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -47,9 +46,7 @@ ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:us
 
 def get_plan_service() -> PlanService:
     """获取 PlanService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_plan_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_plan_service must be overridden via dependency_overrides")
 
 
 PlanServiceDep = Annotated[PlanService, Depends(get_plan_service)]
@@ -57,9 +54,7 @@ PlanServiceDep = Annotated[PlanService, Depends(get_plan_service)]
 
 def get_run_service() -> AnalysisRunService:
     """获取 AnalysisRunService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_run_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_run_service must be overridden via dependency_overrides")
 
 
 RunServiceDep = Annotated[AnalysisRunService, Depends(get_run_service)]
@@ -494,9 +489,7 @@ async def submit_run(
     service: RunServiceDep,
 ) -> RunResponse:
     """提交分析 Run。"""
-    ref = await service.submit_run(
-        workspace_id, body.plan_version_id, body.snapshot_id
-    )
+    ref = await service.submit_run(workspace_id, body.plan_version_id, body.snapshot_id)
     return _run_ref_to_response(ref)
 
 
@@ -695,8 +688,8 @@ async def list_messages(
     workspace_id: UUID,
     current_user: ResearchUserDep,
     service: ConversationServiceDep,
-    run_id: UUID | None = Query(None, description="按 Run ID 过滤"),
-    limit: int = Query(50, ge=1, le=200, description="返回条数上限"),
+    run_id: UUID | None = Query(None, description="按 Run ID 过滤"),  # noqa: B008
+    limit: int = Query(50, ge=1, le=200, description="返回条数上限"),  # noqa: B008
 ) -> ConversationListResponse:
     """获取对话历史。"""
     messages = await service.list_messages(workspace_id, run_id=run_id, limit=limit)

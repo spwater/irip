@@ -73,9 +73,7 @@ class TestRouterCleanOfORM:
                 if pattern in line:
                     violations.append(f"  L{i}: {line.rstrip()}")
                     break
-        assert not violations, (
-            "Router 中发现疑似 ORM 代码:\n" + "\n".join(violations)
-        )
+        assert not violations, "Router 中发现疑似 ORM 代码:\n" + "\n".join(violations)
 
     def test_router_file_line_count_reduced(self) -> None:
         """Router 从 1246 行缩减到 ~400 行。"""
@@ -271,9 +269,9 @@ class TestArchiveSessionSemantics:
     def test_archive_uses_session_scope(self) -> None:
         """archive 方法源码中使用 session_scope 而非 _scoped_session。"""
         source = inspect.getsource(FactService.archive)
-        assert (
-            "session_scope(self._factory)" in source
-        ), "archive 应使用 session_scope(self._factory)"
+        assert "session_scope(self._factory)" in source, (
+            "archive 应使用 session_scope(self._factory)"
+        )
         assert "_scoped_session" not in source, "archive 不应使用 _scoped_session"
 
     def test_get_fact_meta_uses_scoped_session(self) -> None:

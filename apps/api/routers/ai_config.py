@@ -53,9 +53,15 @@ _ai_config_table = sa.Table(
     sa.Column("research_model_name", sa.Text, nullable=True),
     sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
     sa.Column("meta_prompt", sa.Text, nullable=True),
-    sa.Column("model_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
-    sa.Column("assistant_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
-    sa.Column("research_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
+    sa.Column(
+        "model_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
+    ),
+    sa.Column(
+        "assistant_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
+    ),
+    sa.Column(
+        "research_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
+    ),
     sa.Column("updated_at", UTCDateTime, server_default=sa.func.now(), nullable=False),
     sa.Column("updated_by", GUID, nullable=True),
     extend_existing=True,
@@ -77,7 +83,9 @@ class AIConfigUpdateRequest(BaseModel):
         "", max_length=200, description="AI助手模型名称，如 qwen-plus"
     )
     research_model_name: str = Field(
-        "", max_length=200, description="研发助手模型名称（研究分析沙箱代码生成），留空则与数据提取模型相同"
+        "",
+        max_length=200,
+        description="研发助手模型名称（研究分析沙箱代码生成），留空则与数据提取模型相同",
     )
     enabled: bool = Field(True, description="是否启用")
     meta_prompt: str | None = Field(None, description="提示词推荐的系统提示词，留空则用内置默认")

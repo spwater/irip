@@ -48,7 +48,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from packages.experiment_project.entities import (
     ExperimentProject,
@@ -161,6 +160,7 @@ class ExperimentProjectService(ScopedSessionMixin):
             # 自动生成编码（和现有项目格式一致：proj_ + UUID 短码）
             if not code or not code.strip():
                 from packages.common.ids import new_id
+
                 code = f"proj_{str(new_id())[:8]}"
             existing = await ExperimentProjectRepository.select_by_dept_and_code(
                 session, department_id, code

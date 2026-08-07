@@ -11,7 +11,6 @@ from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-
 # ============================================================
 # 枚举定义
 # ============================================================
@@ -523,7 +522,8 @@ class ScopeCheckResult:
 
     Attributes:
         is_within_scope: 是否在范围内。
-        violation_type: 越界类型（如 snapshot_changed / question_changed / knowledge_first_use / resource_upgraded）。
+        violation_type: 越界类型（如 snapshot_changed / question_changed
+        / knowledge_first_use / resource_upgraded）。
         message: 描述消息。
     """
 

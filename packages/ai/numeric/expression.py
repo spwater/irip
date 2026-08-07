@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import ast
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
@@ -32,13 +33,13 @@ from packages.ai.numeric.contracts import (
 )
 from packages.ai.numeric.units import (
     UnitTag,
+    check_clip_bounds,
     combine_additive,
     combine_division,
+    combine_minimum_maximum,
     combine_multiplication,
     combine_power,
     combine_where,
-    combine_minimum_maximum,
-    check_clip_bounds,
     constant_unit,
     literal_unit,
     propagate_abs,
@@ -57,19 +58,43 @@ from packages.ai.numeric.units import (
 # =============================================================================
 
 #: 初等函数（逐元素）
-_ELEMENTWISE_FUNCS: frozenset[str] = frozenset({
-    "abs", "sqrt", "exp", "log", "log10",
-    "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-    "floor", "ceil", "round",
-})
+_ELEMENTWISE_FUNCS: frozenset[str] = frozenset(
+    {
+        "abs",
+        "sqrt",
+        "exp",
+        "log",
+        "log10",
+        "sin",
+        "cos",
+        "tan",
+        "asin",
+        "acos",
+        "atan",
+        "atan2",
+        "floor",
+        "ceil",
+        "round",
+    }
+)
 
 #: 逐元素选择/裁剪函数
 _SELECT_FUNCS: frozenset[str] = frozenset({"minimum", "maximum", "clip", "where"})
 
 #: 聚合函数
-_AGGREGATE_FUNCS: frozenset[str] = frozenset({
-    "count", "sum", "mean", "min", "max", "median", "var", "std", "quantile",
-})
+_AGGREGATE_FUNCS: frozenset[str] = frozenset(
+    {
+        "count",
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "median",
+        "var",
+        "std",
+        "quantile",
+    }
+)
 
 #: 全部白名单函数
 _ALL_FUNCS: frozenset[str] = _ELEMENTWISE_FUNCS | _SELECT_FUNCS | _AGGREGATE_FUNCS
@@ -296,7 +321,10 @@ class ExpressionValidator:
                     if actual < expected[0] or actual > expected[1]:
                         raise NumericError(
                             code="numeric_expression_rejected",
-                            message=f"{func_name} expects {expected[0]}-{expected[1]} arguments, got {actual}",
+                            message=(
+                                f"{func_name} expects {expected[0]}-{expected[1]}"
+                                f" arguments, got {actual}"
+                            ),
                         )
 
             # 递归子节点
@@ -567,7 +595,9 @@ class ExpressionInterpreter:
         if len(shape) == 0:
             return np.float64(val.scalar if not val.is_null_scalar else 0.0)
         if val.kind == "scalar":
-            return np.full(shape[0], val.scalar if not val.is_null_scalar else 0.0, dtype=np.float64)
+            return np.full(
+                shape[0], val.scalar if not val.is_null_scalar else 0.0, dtype=np.float64
+            )
         return val.vector.astype(np.float64)  # type: ignore[union-attr]
 
     def _binop_add(self, left: _EvalValue, right: _EvalValue) -> _EvalValue:
@@ -626,7 +656,10 @@ class ExpressionInterpreter:
             return _EvalValue.scalar_val(result, unit)
 
         return self._vector_binop(
-            left, right, shape, unit,
+            left,
+            right,
+            shape,
+            unit,
             lambda a, b: self._safe_div(a, b, "division"),
             "division",
             check_div_zero=True,
@@ -649,7 +682,10 @@ class ExpressionInterpreter:
             return _EvalValue.scalar_val(result, unit)
 
         return self._vector_binop(
-            left, right, shape, unit,
+            left,
+            right,
+            shape,
+            unit,
             lambda a, b: self._safe_mod(a, b, "modulo"),
             "modulo",
             check_div_zero=True,
@@ -661,13 +697,20 @@ class ExpressionInterpreter:
         # 判断指数是否为整数字面量
         exponent_is_int = False
         exponent_int_val: int | None = None
-        if isinstance(node.right, ast.Constant) and isinstance(node.right.value, int) and not isinstance(node.right.value, bool):
+        if (
+            isinstance(node.right, ast.Constant)
+            and isinstance(node.right.value, int)
+            and not isinstance(node.right.value, bool)
+        ):
             exponent_is_int = True
             exponent_int_val = node.right.value
             if abs(exponent_int_val) > self._limits.max_pow_exponent_abs:
                 raise NumericError(
                     code="numeric_size_limit",
-                    message=f"power exponent absolute value exceeds limit ({self._limits.max_pow_exponent_abs})",
+                    message=(
+                        f"power exponent absolute value exceeds limit"
+                        f" ({self._limits.max_pow_exponent_abs})"
+                    ),
                 )
 
         unit, w = combine_power(left.unit, right.unit, exponent_is_int, exponent_int_val)
@@ -679,12 +722,15 @@ class ExpressionInterpreter:
             base_val = left.scalar  # type: ignore[assignment]
             exp_val = right.scalar  # type: ignore[assignment]
             self._check_pow_domain_scalar(base_val, exp_val, exponent_is_int)
-            result = base_val ** exp_val
+            result = base_val**exp_val
             self._check_finite(result, "power")
             return _EvalValue.scalar_val(result, unit)
 
         return self._vector_binop(
-            left, right, shape, unit,
+            left,
+            right,
+            shape,
+            unit,
             lambda a, b: self._safe_pow(a, b, "power", exponent_is_int),
             "power",
             check_pow=True,
@@ -788,7 +834,9 @@ class ExpressionInterpreter:
             return float(a != b)
         raise NumericError(code="numeric_expression_rejected", message=f"unknown comparison: {op}")
 
-    def _compare_vector(self, a: np.ndarray, b: np.ndarray, op: str, mask: np.ndarray) -> np.ndarray:
+    def _compare_vector(
+        self, a: np.ndarray, b: np.ndarray, op: str, mask: np.ndarray
+    ) -> np.ndarray:
         av = a[mask]
         bv = b[mask]
         if op == "<":
@@ -1007,7 +1055,11 @@ class ExpressionInterpreter:
         if abs(digits) > self._limits.max_round_digits:
             raise NumericError(
                 code="numeric_expression_rejected",
-                message=f"round digits out of range [-{self._limits.max_round_digits}, {self._limits.max_round_digits}]",
+                message=(
+                    f"round digits out of range"
+                    f" [-{self._limits.max_round_digits},"
+                    f" {self._limits.max_round_digits}]"
+                ),
             )
 
         unit = propagate_floor_ceil_round(x.unit)
@@ -1018,7 +1070,11 @@ class ExpressionInterpreter:
             result = round(x.scalar, digits)  # type: ignore[arg-type]
             return _EvalValue.scalar_val(result, unit)
 
-        null_mask = x.null_mask.astype(np.bool_) if self._null_policy == "propagate" else np.zeros(len(x.vector), dtype=np.bool_)  # type: ignore[union-attr]
+        null_mask = (
+            x.null_mask.astype(np.bool_)
+            if self._null_policy == "propagate"
+            else np.zeros(len(x.vector), dtype=np.bool_)
+        )  # type: ignore[union-attr]
         result = np.zeros_like(x.vector)  # type: ignore[union-attr]
         non_null = ~null_mask
         if np.any(non_null):
@@ -1045,7 +1101,11 @@ class ExpressionInterpreter:
             return _EvalValue.scalar_val(result, unit)
 
         # vector
-        null_mask = x.null_mask.astype(np.bool_) if self._null_policy == "propagate" else np.zeros(len(x.vector), dtype=np.bool_)  # type: ignore[union-attr]
+        null_mask = (
+            x.null_mask.astype(np.bool_)
+            if self._null_policy == "propagate"
+            else np.zeros(len(x.vector), dtype=np.bool_)
+        )  # type: ignore[union-attr]
         non_null = ~null_mask
         result = np.zeros(len(x.vector), dtype=np.float64)  # type: ignore[union-attr]
 
@@ -1070,7 +1130,9 @@ class ExpressionInterpreter:
             return self._call_clip(args)
         if name == "where":
             return self._call_where(args)
-        raise NumericError(code="numeric_expression_rejected", message=f"unknown select function: {name}")
+        raise NumericError(
+            code="numeric_expression_rejected", message=f"unknown select function: {name}"
+        )
 
     def _call_min_max(self, args: list[_EvalValue], name: str, is_min: bool) -> _EvalValue:
         a = args[0]
@@ -1144,7 +1206,11 @@ class ExpressionInterpreter:
             result = max(low_val, min(x.scalar, high_val))  # type: ignore[arg-type]
             return _EvalValue.scalar_val(float(result), unit)
 
-        null_mask = x.null_mask.astype(np.bool_) if self._null_policy == "propagate" else np.zeros(len(x.vector), dtype=np.bool_)  # type: ignore[union-attr]
+        null_mask = (
+            x.null_mask.astype(np.bool_)
+            if self._null_policy == "propagate"
+            else np.zeros(len(x.vector), dtype=np.bool_)
+        )  # type: ignore[union-attr]
         result = np.zeros(len(x.vector), dtype=np.float64)  # type: ignore[union-attr]
         non_null = ~null_mask
         if np.any(non_null):
@@ -1186,9 +1252,7 @@ class ExpressionInterpreter:
 
         if self._null_policy == "propagate":
             null_mask = (
-                self._get_mask(cond, shape)
-                | self._get_mask(a, shape)
-                | self._get_mask(b, shape)
+                self._get_mask(cond, shape) | self._get_mask(a, shape) | self._get_mask(b, shape)
             )
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
@@ -1222,7 +1286,7 @@ class ExpressionInterpreter:
 
         # 获取有效值（非 null）
         valid_vals = self._get_valid_values(x)
-        n = len(valid_vals)
+        len(valid_vals)
 
         if name == "sum":
             return self._aggregate_sum(valid_vals, x.unit)
@@ -1332,7 +1396,9 @@ class ExpressionInterpreter:
         self._check_finite(result, "std")
         return _EvalValue.scalar_val(self._normalize_zero(result), propagate_std(unit))
 
-    def _aggregate_quantile(self, args: list[_EvalValue], vals: np.ndarray, unit: UnitTag, node: ast.Call) -> _EvalValue:
+    def _aggregate_quantile(
+        self, args: list[_EvalValue], vals: np.ndarray, unit: UnitTag, node: ast.Call
+    ) -> _EvalValue:
         q_val = args[1]
         if q_val.kind != "scalar" or q_val.is_null_scalar:
             raise NumericError(
@@ -1444,7 +1510,9 @@ class ExpressionInterpreter:
     def _safe_mod(self, a: np.ndarray, b: np.ndarray, op_name: str) -> np.ndarray:
         return np.mod(a, b)
 
-    def _safe_pow(self, a: np.ndarray, b: np.ndarray, op_name: str, exponent_is_int: bool) -> np.ndarray:
+    def _safe_pow(
+        self, a: np.ndarray, b: np.ndarray, op_name: str, exponent_is_int: bool
+    ) -> np.ndarray:
         return np.power(a, b)
 
     def _check_sqrt_domain(self, val: Any, name: str) -> None:
@@ -1542,7 +1610,9 @@ class ExpressionInterpreter:
             v = np.radians(v)
         return func(v)
 
-    def _inverse_trig(self, v: np.ndarray, func: Any, name: str, check_domain: str | None) -> np.ndarray:
+    def _inverse_trig(
+        self, v: np.ndarray, func: Any, name: str, check_domain: str | None
+    ) -> np.ndarray:
         result = func(v)
         if self._options.angle_unit == "degree":
             result = np.degrees(result)
@@ -1634,9 +1704,7 @@ class SafeExpressionEngine:
         # 转换为 NumericValue
         return self._to_numeric_value(result, interpreter.warnings)
 
-    def _to_numeric_value(
-        self, val: _EvalValue, warnings: list[str]
-    ) -> NumericValue:
+    def _to_numeric_value(self, val: _EvalValue, warnings: list[str]) -> NumericValue:
         """将内部 _EvalValue 转换为对外 NumericValue。"""
         unit_str = val.unit.to_output()
 

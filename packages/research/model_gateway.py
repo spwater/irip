@@ -15,8 +15,8 @@ ModelGateway 不修改现有 AIProvider Protocol 签名，通过封装层增加�
 """
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from packages.research.models_trusted import ModelConfig, ModelResponse, TaskType
@@ -71,9 +71,7 @@ class DataBudgetExceeded(Exception):
             data_size: 实际数据大小（token）。
             budget: 预算上限（token）。
         """
-        super().__init__(
-            f"数据预算超限: {data_size} > {budget}（500K 硬上限）"
-        )
+        super().__init__(f"数据预算超限: {data_size} > {budget}（500K 硬上限）")
         self.data_size = data_size
         self.budget = budget
 
@@ -199,7 +197,10 @@ class ModelGateway:
 
         messages = (
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"研究上下文:\n{research_context}\n\n数据:\n{data_context}"},
+            {
+                "role": "user",
+                "content": f"研究上下文:\n{research_context}\n\n数据:\n{data_context}",
+            },
         )
 
         request = AIRequest(
@@ -229,7 +230,7 @@ class ModelGateway:
                 provider=model_config.provider,
                 model=model_config.model,
                 model_version=model_config.version,
-                called_at=datetime.now(timezone.utc).isoformat(),
+                called_at=datetime.now(UTC).isoformat(),
                 tokens_used=data_tokens,
             )
         )
@@ -267,9 +268,7 @@ class ModelGateway:
             ModelResponse: 模型响应（含 failover_used 标记）。
         """
         try:
-            return await self.call(
-                task_type, system_prompt, data_context, research_context, tools
-            )
+            return await self.call(task_type, system_prompt, data_context, research_context, tools)
         except DataBudgetExceeded:
             # 预算超限不切换，直接抛出
             raise
@@ -291,7 +290,10 @@ class ModelGateway:
 
             messages = (
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"研究上下文:\n{research_context}\n\n数据:\n{data_context}"},
+                {
+                    "role": "user",
+                    "content": f"研究上下文:\n{research_context}\n\n数据:\n{data_context}",
+                },
             )
 
             request = AIRequest(
@@ -309,7 +311,7 @@ class ModelGateway:
                     provider=backup_config.provider,
                     model=backup_config.model,
                     model_version=backup_config.version,
-                    called_at=datetime.now(timezone.utc).isoformat(),
+                    called_at=datetime.now(UTC).isoformat(),
                     tokens_used=len(data_context) // 4,
                     failover=True,
                 )

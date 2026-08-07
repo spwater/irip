@@ -59,6 +59,7 @@ def register(ctx: CompositionContext) -> None:
         fact_provider = _build_fact_provider(current_user)
         # 阶段 3：注入 ResearchCatalogImpl（用于 research:derived 证据校验）
         from packages.research.catalog import ResearchCatalogImpl
+
         research_catalog = ResearchCatalogImpl(
             session_factory=ctx.session_factory,
             actor_id=current_user.user_id,

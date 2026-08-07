@@ -15,8 +15,6 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.audit.events import AuditEventData
-from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.research.models_trusted import ConversationMessage, TaskType
@@ -98,7 +96,7 @@ class AIConversationService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 持久化用户消息
-            user_msg = await ResearchRepositoryTrusted.insert_conversation_message(
+            await ResearchRepositoryTrusted.insert_conversation_message(
                 session,
                 workspace_id=workspace_id,
                 role="user",
@@ -134,12 +132,11 @@ class AIConversationService(ScopedSessionMixin):
                 )
                 ai_answer = response.answer if hasattr(response, "answer") else str(response)
                 code_blocks = []
-                tool_calls = list(response.tool_calls) if hasattr(response, "tool_calls") else []
+                list(response.tool_calls) if hasattr(response, "tool_calls") else []
             except Exception as exc:
                 logger.warning("AI conversation call failed: %s", exc)
                 ai_answer = "抱歉，AI 助手暂时无法响应。请稍后重试。"
                 code_blocks = []
-                tool_calls = []
 
             # 5. 持久化 AI 回复
             ai_content: dict = {"text": ai_answer}
@@ -217,7 +214,9 @@ class AIConversationService(ScopedSessionMixin):
 
         lines: list[str] = []
         for msg in history:
-            role_label = "用户" if msg.role == "user" else "AI 助手" if msg.role == "assistant" else "系统"
+            role_label = (
+                "用户" if msg.role == "user" else "AI 助手" if msg.role == "assistant" else "系统"
+            )
             content = msg.content if isinstance(msg.content, dict) else {}
             text = content.get("text", "")
             lines.append(f"{role_label}: {text}")

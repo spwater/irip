@@ -15,7 +15,6 @@ import hashlib
 import logging
 from uuid import UUID
 
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
@@ -178,9 +177,7 @@ class RunArtifactService(ScopedSessionMixin):
         """
         async with self._scoped_session() as session:
             if step_id is not None:
-                artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
-                    session, step_id
-                )
+                artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(session, step_id)
             else:
                 artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(
                     session, run_id, artifact_type
@@ -293,25 +290,19 @@ class RunArtifactService(ScopedSessionMixin):
             ValueError: 当扫描不通过时。
         """
         if artifact_type not in ARTIFACT_TYPE_WHITELIST:
-            raise ValueError(
-                f"工件类型 '{artifact_type}' 不在白名单中: {ARTIFACT_TYPE_WHITELIST}"
-            )
+            raise ValueError(f"工件类型 '{artifact_type}' 不在白名单中: {ARTIFACT_TYPE_WHITELIST}")
 
         # 检查路径穿越
         for pattern in FORBIDDEN_PATH_PATTERNS:
             if pattern in artifact_key:
-                raise ValueError(
-                    f"工件键名包含禁止的路径模式 '{pattern}': {artifact_key}"
-                )
+                raise ValueError(f"工件键名包含禁止的路径模式 '{pattern}': {artifact_key}")
 
         # 检查文件扩展名
         ext = ""
         if "." in artifact_key:
             ext = "." + artifact_key.rsplit(".", 1)[-1].lower()
         if ext and ext not in FILE_EXTENSION_WHITELIST:
-            raise ValueError(
-                f"文件扩展名 '{ext}' 不在白名单中: {FILE_EXTENSION_WHITELIST}"
-            )
+            raise ValueError(f"文件扩展名 '{ext}' 不在白名单中: {FILE_EXTENSION_WHITELIST}")
 
     async def _upload_to_minio(self, storage_path: str, content: bytes) -> None:
         """上传内容到 MinIO。

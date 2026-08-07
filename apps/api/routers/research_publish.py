@@ -41,7 +41,6 @@ GET    /catalog/search-published                      — 搜索已发布 Derive
 参照 apps/api/routers/research_products.py 的 DI 占位 + Pydantic 模型模式。
 """
 
-from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -61,9 +60,7 @@ ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:us
 PublishUserDep = Annotated[CurrentUser, Depends(require_permission("research:publish"))]
 
 #: 需 research:declassify 权限的当前用户依赖。
-DeclassifyUserDep = Annotated[
-    CurrentUser, Depends(require_permission("research:declassify"))
-]
+DeclassifyUserDep = Annotated[CurrentUser, Depends(require_permission("research:declassify"))]
 
 
 # ---- DI 占位 ----
@@ -71,21 +68,15 @@ DeclassifyUserDep = Annotated[
 
 def get_publication_service() -> PublicationService:
     """获取 PublicationService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_publication_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_publication_service must be overridden via dependency_overrides")
 
 
-PublicationServiceDep = Annotated[
-    PublicationService, Depends(get_publication_service)
-]
+PublicationServiceDep = Annotated[PublicationService, Depends(get_publication_service)]
 
 
 def get_search_service() -> ResultSearchService:
     """获取 ResultSearchService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_search_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_search_service must be overridden via dependency_overrides")
 
 
 SearchServiceDep = Annotated[ResultSearchService, Depends(get_search_service)]
@@ -93,9 +84,7 @@ SearchServiceDep = Annotated[ResultSearchService, Depends(get_search_service)]
 
 def get_publish_catalog() -> ResearchCatalogImpl:
     """获取 ResearchCatalog 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_publish_catalog must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_publish_catalog must be overridden via dependency_overrides")
 
 
 PublishCatalogDep = Annotated[ResearchCatalogImpl, Depends(get_publish_catalog)]
@@ -305,9 +294,7 @@ async def list_workspace_results(
 
     # 使用 PublicationService 的 session 获取数据
     async with service._scoped_session() as session:
-        results = await ResearchRepository.list_results_by_workspace(
-            session, workspace_id
-        )
+        results = await ResearchRepository.list_results_by_workspace(session, workspace_id)
         return [
             {
                 "result_id": str(r.id),
@@ -321,9 +308,7 @@ async def list_workspace_results(
         ]
 
 
-@research_publish_router.get(
-    "/workspaces/{workspace_id}/results/{result_id}"
-)
+@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}")
 async def get_workspace_result(
     workspace_id: UUID,
     result_id: UUID,
@@ -335,23 +320,15 @@ async def get_workspace_result(
     return {
         "result": _result_ref_to_dict(detail.result_ref),
         "current_version": (
-            _version_detail_to_dict(detail.current_version)
-            if detail.current_version
-            else None
+            _version_detail_to_dict(detail.current_version) if detail.current_version else None
         ),
-        "version_history": [
-            _version_ref_to_dict(v) for v in detail.version_history
-        ],
-        "acl_revisions": [
-            _acl_revision_to_dict(r) for r in detail.acl_revisions
-        ],
+        "version_history": [_version_ref_to_dict(v) for v in detail.version_history],
+        "acl_revisions": [_acl_revision_to_dict(r) for r in detail.acl_revisions],
         "is_favorited": detail.is_favorited,
     }
 
 
-@research_publish_router.patch(
-    "/workspaces/{workspace_id}/results/{result_id}"
-)
+@research_publish_router.patch("/workspaces/{workspace_id}/results/{result_id}")
 async def update_result_metadata(
     workspace_id: UUID,
     result_id: UUID,
@@ -364,9 +341,7 @@ async def update_result_metadata(
     return _result_ref_to_dict(ref)
 
 
-@research_publish_router.post(
-    "/workspaces/{workspace_id}/results/{result_id}/versions"
-)
+@research_publish_router.post("/workspaces/{workspace_id}/results/{result_id}/versions")
 async def publish_new_version(
     workspace_id: UUID,
     result_id: UUID,
@@ -394,9 +369,7 @@ async def publish_new_version(
     return _version_ref_to_dict(ref)
 
 
-@research_publish_router.get(
-    "/workspaces/{workspace_id}/results/{result_id}/versions"
-)
+@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}/versions")
 async def list_versions(
     workspace_id: UUID,
     result_id: UUID,
@@ -444,9 +417,7 @@ async def withdraw_version(
     return {"status": "withdrawn"}
 
 
-@research_publish_router.patch(
-    "/publications/{result_id}/withdraw"
-)
+@research_publish_router.patch("/publications/{result_id}/withdraw")
 async def withdraw_publication(
     result_id: UUID,
     request: WithdrawVersionRequest,
@@ -463,9 +434,7 @@ async def withdraw_publication(
 # ============================================================
 
 
-@research_publish_router.get(
-    "/workspaces/{workspace_id}/results/{result_id}/acl"
-)
+@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}/acl")
 async def get_acl(
     workspace_id: UUID,
     result_id: UUID,
@@ -479,9 +448,7 @@ async def get_acl(
     }
 
 
-@research_publish_router.put(
-    "/workspaces/{workspace_id}/results/{result_id}/acl"
-)
+@research_publish_router.put("/workspaces/{workspace_id}/results/{result_id}/acl")
 async def update_acl(
     workspace_id: UUID,
     result_id: UUID,
@@ -501,9 +468,7 @@ async def update_acl(
     return _acl_revision_to_dict(ref)
 
 
-@research_publish_router.post(
-    "/workspaces/{workspace_id}/results/{result_id}/declassify"
-)
+@research_publish_router.post("/workspaces/{workspace_id}/results/{result_id}/declassify")
 async def declassify(
     workspace_id: UUID,
     result_id: UUID,
@@ -533,12 +498,12 @@ async def search_publications(
     service: SearchServiceDep,
     user: ResearchUserDep,
     query: str | None = Query(default=None),
-    publisher: UUID | None = Query(default=None),
+    publisher: UUID | None = Query(default=None),  # noqa: B008
     tags: str | None = Query(default=None),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     data_type: str | None = Query(default=None),
-    workspace_id: UUID | None = Query(default=None),
+    workspace_id: UUID | None = Query(default=None),  # noqa: B008
     view_mode: str = Query(default="all"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
@@ -584,23 +549,15 @@ async def get_publication_detail(
     return {
         "result": _result_ref_to_dict(detail.result_ref),
         "current_version": (
-            _version_detail_to_dict(detail.current_version)
-            if detail.current_version
-            else None
+            _version_detail_to_dict(detail.current_version) if detail.current_version else None
         ),
-        "version_history": [
-            _version_ref_to_dict(v) for v in detail.version_history
-        ],
-        "acl_revisions": [
-            _acl_revision_to_dict(r) for r in detail.acl_revisions
-        ],
+        "version_history": [_version_ref_to_dict(v) for v in detail.version_history],
+        "acl_revisions": [_acl_revision_to_dict(r) for r in detail.acl_revisions],
         "is_favorited": detail.is_favorited,
     }
 
 
-@research_publish_router.get(
-    "/publications/{result_id}/versions/{version_number}"
-)
+@research_publish_router.get("/publications/{result_id}/versions/{version_number}")
 async def get_publication_version(
     result_id: UUID,
     version_number: int,
@@ -612,9 +569,7 @@ async def get_publication_version(
     return _version_detail_to_dict(detail)
 
 
-@research_publish_router.get(
-    "/publications/{result_id}/items/{item_type}/{item_id}"
-)
+@research_publish_router.get("/publications/{result_id}/items/{item_type}/{item_id}")
 async def get_publication_item(
     result_id: UUID,
     item_type: str,
@@ -623,14 +578,10 @@ async def get_publication_item(
     user: ResearchUserDep,
 ) -> dict:
     """成果包内部对象独立引用详情。"""
-    return await service.get_result_internal_object(
-        result_id, item_type, item_id
-    )
+    return await service.get_result_internal_object(result_id, item_type, item_id)
 
 
-@research_publish_router.get(
-    "/publications/{result_id}/provenance"
-)
+@research_publish_router.get("/publications/{result_id}/provenance")
 async def get_publication_provenance(
     result_id: UUID,
     service: PublicationServiceDep,
@@ -644,9 +595,12 @@ async def get_publication_provenance(
     snapshot_labels: list[dict] = []
     run_labels: list[dict] = []
     if current_version:
-        from sqlalchemy import text as _sa_text
-        from packages.common.database import build_session_factory
         import os as _os
+
+        from sqlalchemy import text as _sa_text
+
+        from packages.common.database import build_session_factory
+
         _db_url = _os.getenv("IRIP_DATABASE_URL", "")
         _async_url = _db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://")
         factory = build_session_factory(_async_url)
@@ -654,7 +608,10 @@ async def get_publication_provenance(
             for sid in current_version.evidence_snapshot_ids:
                 try:
                     r = await session.execute(
-                        _sa_text("SELECT snapshot_number, workspace_id FROM research_evidence_snapshot WHERE id = :sid"),
+                        _sa_text(
+                            "SELECT snapshot_number, workspace_id"
+                            " FROM research_evidence_snapshot WHERE id = :sid"
+                        ),
                         {"sid": str(sid)},
                     )
                     row = r.fetchone()
@@ -678,20 +635,12 @@ async def get_publication_provenance(
         "result_id": str(result_id),
         "name": detail.result_ref.name,
         "current_version": detail.result_ref.current_version,
-        "evidence_snapshot_ids": (
-            [s["id"] for s in snapshot_labels]
-        ),
+        "evidence_snapshot_ids": ([s["id"] for s in snapshot_labels]),
         "evidence_snapshot_labels": snapshot_labels,
-        "analysis_run_ids": (
-            [r["id"] for r in run_labels]
-        ),
+        "analysis_run_ids": ([r["id"] for r in run_labels]),
         "analysis_run_labels": run_labels,
-        "source_run_statuses": (
-            current_version.source_run_statuses if current_version else {}
-        ),
-        "publisher": (
-            current_version.publisher if current_version else None
-        ),
+        "source_run_statuses": (current_version.source_run_statuses if current_version else {}),
+        "publisher": (current_version.publisher if current_version else None),
         "published_at": (
             current_version.published_at.isoformat()
             if current_version and current_version.published_at
@@ -705,9 +654,7 @@ async def get_publication_provenance(
 # ============================================================
 
 
-@research_publish_router.post(
-    "/workspaces/{workspace_id}/evidence/from-publication"
-)
+@research_publish_router.post("/workspaces/{workspace_id}/evidence/from-publication")
 async def add_evidence_from_publication(
     workspace_id: UUID,
     request: AddFromPublicationRequest,
@@ -731,9 +678,7 @@ async def add_evidence_from_publication(
     }
 
 
-@research_publish_router.post(
-    "/workspaces/from-publication/{result_id}"
-)
+@research_publish_router.post("/workspaces/from-publication/{result_id}")
 async def new_workspace_from_publication(
     result_id: UUID,
     request: NewWorkspaceFromPublicationRequest,
@@ -808,7 +753,7 @@ async def search_published_catalog(
     catalog: PublishCatalogDep,
     user: ResearchUserDep,
     query: str | None = Query(default=None),
-    result_id: UUID | None = Query(default=None),
+    result_id: UUID | None = Query(default=None),  # noqa: B008
 ) -> dict:
     """搜索已发布成果包中的 DerivedDataset（跨用户，ACL 过滤）。"""
     filters: dict = {}

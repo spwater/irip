@@ -98,9 +98,7 @@ class ContextRouter:
 
         # 全量计算（Python 全量处理，不需要 LLM 语义理解）
         if step.requires_full and not step.per_record_semantic and not step.cross_record_reasoning:
-            return AnalysisMode.FULL_COMPUTE.value, (
-                "数据需 Python 全量计算，无需逐条语义阅读"
-            )
+            return AnalysisMode.FULL_COMPUTE.value, ("数据需 Python 全量计算，无需逐条语义阅读")
 
         # 逐条语义阅读 + 全量要求 → 分块全量扫描
         if step.requires_full and step.per_record_semantic:
@@ -123,15 +121,11 @@ class ContextRouter:
                 return AnalysisMode.CHUNKED_FULL_SCAN.value, (
                     "数据超预算且不允许抽样，分块全量扫描后分层归并"
                 )
-            return AnalysisMode.RETRIEVAL.value, (
-                "数据超预算且允许抽样，检索探索模式"
-            )
+            return AnalysisMode.RETRIEVAL.value, ("数据超预算且允许抽样，检索探索模式")
 
         # 混合需求
         if step.method == "mixed":
-            return AnalysisMode.MIXED.value, (
-                "步骤需 Python 全量计算 + LLM 语义分析混合"
-            )
+            return AnalysisMode.MIXED.value, ("步骤需 Python 全量计算 + LLM 语义分析混合")
 
         # 默认：检索探索
         return AnalysisMode.RETRIEVAL.value, "默认检索探索模式"

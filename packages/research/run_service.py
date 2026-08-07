@@ -16,10 +16,10 @@ queued / running → cancelled
 """
 
 import logging
-from datetime import datetime, timezone
+import os
+from datetime import UTC, datetime
 from uuid import UUID
 
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
@@ -31,15 +31,12 @@ from packages.research.models_trusted import (
     EligibilityResult,
     QueuePosition,
     RunProgress,
+    RunRef,
     StepProgress,
 )
-from packages.research.repository import ResearchRepository
 from packages.research.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.run_service")
-
-#: 科学计算镜像 digest 默认值（通过环境变量覆盖）。
-import os
 
 DEFAULT_IMAGE_DIGEST: str = os.getenv(
     "RESEARCH_SANDBOX_IMAGE_DIGEST",
@@ -121,7 +118,6 @@ class AnalysisRunService(ScopedSessionMixin):
             AppError: code="not_found"，当计划不存在或未确认时。
             AppError: code="validation_failed"，当已有活跃 Run 时。
         """
-        from packages.research.models_trusted import RunRef
 
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
@@ -158,9 +154,7 @@ class AnalysisRunService(ScopedSessionMixin):
                 )
 
             # 3. 获取 run_number
-            run_number = await ResearchRepositoryTrusted.get_next_run_number(
-                session, workspace_id
-            )
+            run_number = await ResearchRepositoryTrusted.get_next_run_number(session, workspace_id)
 
             # 4. 插入 Run
             run = await ResearchRepositoryTrusted.insert_run(
@@ -174,9 +168,7 @@ class AnalysisRunService(ScopedSessionMixin):
             )
 
             # 5. 调度
-            acquired, position = await self._scheduler.acquire_slot(
-                str(actor_id), str(run.id)
-            )
+            acquired, position = await self._scheduler.acquire_slot(str(actor_id), str(run.id))
 
             if acquired:
                 # 有槽位：立即开始执行
@@ -184,15 +176,13 @@ class AnalysisRunService(ScopedSessionMixin):
                     session,
                     run.id,
                     "running",
-                    started_at=datetime.now(timezone.utc),
+                    started_at=datetime.now(UTC),
                 )
                 # 发送 Celery 任务（在事务提交后发送）
                 # 注意：send_task 在事务外调用，避免事务回滚后任务已发出
             else:
                 # 无槽位：排队等待
-                await ResearchRepositoryTrusted.update_run_queue_position(
-                    session, run.id, position
-                )
+                await ResearchRepositoryTrusted.update_run_queue_position(session, run.id, position)
 
             # 6. 审计
             await AuditRecorder.record(
@@ -269,7 +259,7 @@ class AnalysisRunService(ScopedSessionMixin):
                     fields={"run_id": str(run_id), "status": run.status},
                 )
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             await ResearchRepositoryTrusted.update_run_status(
                 session,
                 run_id,
@@ -508,9 +498,11 @@ class AnalysisRunService(ScopedSessionMixin):
             step_status_map: dict[str, str] = {s.step_key: s.status for s in steps}
 
             # 确定要校验的步骤集合
-            target_keys = set(step_keys) if step_keys else {
-                k for k, v in step_status_map.items() if v == "succeeded"
-            }
+            target_keys = (
+                set(step_keys)
+                if step_keys
+                else {k for k, v in step_status_map.items() if v == "succeeded"}
+            )
 
             # 检查每个目标步骤的依赖闭包
             failed_deps: list[str] = []
@@ -532,7 +524,11 @@ class AnalysisRunService(ScopedSessionMixin):
             )
 
             if not is_eligible:
-                msg = "依赖闭包不完整，存在失败步骤" if failed_deps else f"Run 状态为 {run.status}，不可发布"
+                msg = (
+                    "依赖闭包不完整，存在失败步骤"
+                    if failed_deps
+                    else f"Run 状态为 {run.status}，不可发布"
+                )
             elif is_partial:
                 msg = "可发布（源 Run 部分成功，仅发布成功步骤输出）"
             else:
@@ -545,9 +541,7 @@ class AnalysisRunService(ScopedSessionMixin):
                 message=msg,
             )
 
-    def _get_dependency_closure(
-        self, step_key: str, dep_map: dict[str, list[str]]
-    ) -> set[str]:
+    def _get_dependency_closure(self, step_key: str, dep_map: dict[str, list[str]]) -> set[str]:
         """获取步骤的全部依赖闭包（递归）。
 
         Args:

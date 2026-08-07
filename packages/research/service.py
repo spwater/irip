@@ -151,7 +151,7 @@ class WorkspaceService(ScopedSessionMixin):
             )
 
             # 2. 插入问题版本 v1
-            question = await ResearchRepository.insert_question_version(
+            await ResearchRepository.insert_question_version(
                 session,
                 workspace_id=workspace.id,
                 version_number=1,
@@ -161,9 +161,7 @@ class WorkspaceService(ScopedSessionMixin):
             )
 
             # 3. 更新工作空间当前版本号
-            await ResearchRepository.update_workspace_current_version(
-                session, workspace.id, 1
-            )
+            await ResearchRepository.update_workspace_current_version(session, workspace.id, 1)
 
             # 4. 审计
             await AuditRecorder.record(
@@ -242,9 +240,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -253,9 +249,7 @@ class WorkspaceService(ScopedSessionMixin):
                     fields={"workspace_id": str(workspace_id)},
                 )
 
-            await ResearchRepository.update_workspace_name(
-                session, workspace_id, name
-            )
+            await ResearchRepository.update_workspace_name(session, workspace_id, name)
 
             await AuditRecorder.record(
                 session,
@@ -291,9 +285,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -355,9 +347,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -366,9 +356,7 @@ class WorkspaceService(ScopedSessionMixin):
                     fields={"workspace_id": str(workspace_id)},
                 )
 
-            await ResearchRepository.update_workspace_status(
-                session, workspace_id, "archived"
-            )
+            await ResearchRepository.update_workspace_status(session, workspace_id, "archived")
 
             await AuditRecorder.record(
                 session,
@@ -395,9 +383,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -414,8 +400,7 @@ class WorkspaceService(ScopedSessionMixin):
                 raise AppError(
                     code="conflict",
                     message=(
-                        f"工作空间存在 {published_count} 个已发布成果包，"
-                        f"无法删除，请改为归档"
+                        f"工作空间存在 {published_count} 个已发布成果包，无法删除，请改为归档"
                     ),
                     retryable=False,
                     fields={
@@ -459,9 +444,7 @@ class WorkspaceService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 读取源工作空间
-            source = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            source = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if source is None:
                 raise AppError(
                     code="not_found",
@@ -511,9 +494,7 @@ class WorkspaceService(ScopedSessionMixin):
                 )
 
             # 更新工作空间版本号
-            await ResearchRepository.update_workspace_current_version(
-                session, new_ws.id, 1
-            )
+            await ResearchRepository.update_workspace_current_version(session, new_ws.id, 1)
 
             # 6. 复制证据引用（副本而非共享引用）
             for ref in evidence_refs:
@@ -569,9 +550,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -645,9 +624,7 @@ class WorkspaceService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 校验工作空间归属
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -702,10 +679,7 @@ class WorkspaceService(ScopedSessionMixin):
                     filters={"dataset_id_filter": str(source_id)},
                 )
                 # 手动过滤 dataset_id
-                matching = [
-                    r for r in results
-                    if r.get("dataset_id") == str(source_id)
-                ]
+                matching = [r for r in results if r.get("dataset_id") == str(source_id)]
                 if not matching:
                     raise AppError(
                         code="forbidden",
@@ -715,9 +689,7 @@ class WorkspaceService(ScopedSessionMixin):
                     )
                 dataset_info = matching[0]
                 source_name = dataset_info.get("dataset_name", "已发布衍生数据")
-                source_version = str(
-                    dataset_info.get("dataset_version_number", "1")
-                )
+                source_version = str(dataset_info.get("dataset_version_number", "1"))
 
             else:
                 raise AppError(
@@ -779,9 +751,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -799,9 +769,7 @@ class WorkspaceService(ScopedSessionMixin):
                     fields={"ref_id": str(ref_id)},
                 )
 
-            await ResearchRepository.update_evidence_ref_status(
-                session, ref_id, "removed"
-            )
+            await ResearchRepository.update_evidence_ref_status(session, ref_id, "removed")
 
             await AuditRecorder.record(
                 session,
@@ -831,9 +799,7 @@ class WorkspaceService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",

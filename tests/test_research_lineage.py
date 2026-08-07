@@ -11,9 +11,6 @@
 参照架构设计 arch-research-lineage.md 3.3 节。
 """
 
-import hashlib
-from collections import deque
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -28,7 +25,6 @@ from packages.research.knowledge_reference import (
 from packages.research.labels import NodeDisplayLabelGenerator
 from packages.research.lineage_writer import LineageWriterService
 from packages.research.models import (
-    KnowledgeSearchResult,
     ProvenanceEdge,
     ProvenanceNode,
     ProvenanceQueryOptions,
@@ -37,7 +33,6 @@ from packages.research.provenance import (
     DEFAULT_MAX_DEPTH,
     UnifiedProvenanceQueryService,
 )
-
 
 # ============================================================
 # Helpers
@@ -60,14 +55,10 @@ class MockAdapter:
     async def query_node(self, namespace: str, node_id: UUID) -> ProvenanceNode | None:
         return self._nodes.get((namespace, node_id))
 
-    async def query_incoming_edges(
-        self, namespace: str, node_id: UUID
-    ) -> list[ProvenanceEdge]:
+    async def query_incoming_edges(self, namespace: str, node_id: UUID) -> list[ProvenanceEdge]:
         return list(self._edges.get((namespace, node_id), []))
 
-    async def check_permission(
-        self, namespace: str, node_id: UUID, principal: object
-    ) -> bool:
+    async def check_permission(self, namespace: str, node_id: UUID, principal: object) -> bool:
         return self._permissions.get((namespace, node_id), True)
 
 
@@ -175,17 +166,29 @@ class TestUnifiedProvenanceQueryService:
         # 节点
         nodes = {
             ("research:insight", c_id): _make_node("research:insight", c_id, "insight"),
-            ("research:analysis_run", b_id): _make_node("research:analysis_run", b_id, "analysis_run"),
-            ("research:evidence_snapshot", a_id): _make_node("research:evidence_snapshot", a_id, "evidence_snapshot"),
+            ("research:analysis_run", b_id): _make_node(
+                "research:analysis_run", b_id, "analysis_run"
+            ),
+            ("research:evidence_snapshot", a_id): _make_node(
+                "research:evidence_snapshot", a_id, "evidence_snapshot"
+            ),
         }
 
         # 边：C 的上游是 B，B 的上游是 A
         edges = {
             ("research:insight", c_id): [
-                _make_edge("research:analysis_run", b_id, "research:insight", c_id, "run_to_insight"),
+                _make_edge(
+                    "research:analysis_run", b_id, "research:insight", c_id, "run_to_insight"
+                ),
             ],
             ("research:analysis_run", b_id): [
-                _make_edge("research:evidence_snapshot", a_id, "research:analysis_run", b_id, "snapshot_to_run"),
+                _make_edge(
+                    "research:evidence_snapshot",
+                    a_id,
+                    "research:analysis_run",
+                    b_id,
+                    "snapshot_to_run",
+                ),
             ],
             ("research:evidence_snapshot", a_id): [],
         }
@@ -207,7 +210,9 @@ class TestUnifiedProvenanceQueryService:
 
         nodes = {
             ("research:insight", a_id): _make_node("research:insight", a_id, "insight"),
-            ("research:analysis_run", b_id): _make_node("research:analysis_run", b_id, "analysis_run"),
+            ("research:analysis_run", b_id): _make_node(
+                "research:analysis_run", b_id, "analysis_run"
+            ),
         }
 
         # A ← B, B ← A（循环）
@@ -243,8 +248,7 @@ class TestUnifiedProvenanceQueryService:
         ]
 
         nodes = {
-            (namespaces[i], node_ids[i]): _make_node(namespaces[i], node_ids[i])
-            for i in range(5)
+            (namespaces[i], node_ids[i]): _make_node(namespaces[i], node_ids[i]) for i in range(5)
         }
 
         edges = {}
@@ -259,7 +263,8 @@ class TestUnifiedProvenanceQueryService:
 
         # 从 E 开始溯源，max_depth=2 应只到达 3 层
         graph = await svc.query_provenance_graph(
-            namespaces[4], node_ids[4],
+            namespaces[4],
+            node_ids[4],
             options=ProvenanceQueryOptions(max_depth=2),
         )
 
@@ -281,7 +286,9 @@ class TestUnifiedProvenanceQueryService:
 
         nodes = {
             ("research:insight", target_id): _make_node("research:insight", target_id, "insight"),
-            ("research:analysis_run", upstream_id): _make_node("research:analysis_run", upstream_id, "analysis_run"),
+            ("research:analysis_run", upstream_id): _make_node(
+                "research:analysis_run", upstream_id, "analysis_run"
+            ),
         }
         edges = {
             ("research:insight", target_id): [
@@ -317,8 +324,12 @@ class TestUnifiedProvenanceQueryService:
 
         nodes = {
             ("research:insight", target_id): _make_node("research:insight", target_id, "insight"),
-            ("research:analysis_run", mid_id): _make_node("research:analysis_run", mid_id, "analysis_run"),
-            ("research:evidence_snapshot", top_id): _make_node("research:evidence_snapshot", top_id, "evidence_snapshot"),
+            ("research:analysis_run", mid_id): _make_node(
+                "research:analysis_run", mid_id, "analysis_run"
+            ),
+            ("research:evidence_snapshot", top_id): _make_node(
+                "research:evidence_snapshot", top_id, "evidence_snapshot"
+            ),
         }
         edges = {
             ("research:insight", target_id): [
@@ -339,7 +350,8 @@ class TestUnifiedProvenanceQueryService:
         svc = _make_provenance_service(MockAdapter(), research_adapter)
 
         graph = await svc.query_provenance_graph(
-            "research:insight", target_id,
+            "research:insight",
+            target_id,
             options=ProvenanceQueryOptions(truncate_branch=True),
         )
 
@@ -362,7 +374,13 @@ class TestUnifiedProvenanceQueryService:
         }
         research_edges = {
             ("research:evidence_snapshot", snapshot_id): [
-                _make_edge("core:fact", fact_id, "research:evidence_snapshot", snapshot_id, "fact_to_snapshot"),
+                _make_edge(
+                    "core:fact",
+                    fact_id,
+                    "research:evidence_snapshot",
+                    snapshot_id,
+                    "fact_to_snapshot",
+                ),
             ],
         }
 
@@ -456,7 +474,8 @@ class TestKnowledgeReferenceService:
     """知识引用快照管理服务测试。"""
 
     def _make_service(
-        self, s3: FakeS3 | None = None,
+        self,
+        s3: FakeS3 | None = None,
     ) -> KnowledgeReferenceService:
         return KnowledgeReferenceService(
             session_factory=MagicMock(),

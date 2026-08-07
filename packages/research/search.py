@@ -106,22 +106,15 @@ class ResultSearchService(ScopedSessionMixin):
                 results = [r for r in results if r.owner_user_id == actor_id]
             elif view_mode == "favorites":
                 # 我收藏的
-                favorite_ids = await ResearchRepository.list_favorite_result_ids(
-                    session, actor_id
-                )
+                favorite_ids = await ResearchRepository.list_favorite_result_ids(session, actor_id)
                 results = await ResearchRepository.list_published_results(session)
-                results = [
-                    r for r in results if r.id in favorite_ids
-                ]
+                results = [r for r in results if r.id in favorite_ids]
             else:
                 # 全部成果
                 results = await ResearchRepository.list_published_results(session)
 
             # 2. 权限过滤
-            results = [
-                r for r in results
-                if self._check_result_visible(r, actor_id)
-            ]
+            results = [r for r in results if self._check_result_visible(r, actor_id)]
 
             # 3. 获取每个成果包的当前版本（用于搜索和筛选）
             result_ids = [r.id for r in results]
@@ -133,9 +126,7 @@ class ResultSearchService(ScopedSessionMixin):
             # 查询版本信息
             versions_map: dict[UUID, object] = {}
             for result in results:
-                latest = await ResearchRepository.get_latest_result_version(
-                    session, result.id
-                )
+                latest = await ResearchRepository.get_latest_result_version(session, result.id)
                 if latest is not None and latest.status == "active":
                     versions_map[result.id] = latest
 
@@ -146,9 +137,7 @@ class ResultSearchService(ScopedSessionMixin):
                     if self._match_query(version, query):
                         filtered_ids.add(rid)
                 results = [r for r in results if r.id in filtered_ids]
-                versions_map = {
-                    k: v for k, v in versions_map.items() if k in filtered_ids
-                }
+                versions_map = {k: v for k, v in versions_map.items() if k in filtered_ids}
 
             # 5. 筛选器应用
             if filters:
@@ -326,6 +315,7 @@ class ResultSearchService(ScopedSessionMixin):
                     continue
                 try:
                     from datetime import datetime
+
                     fromisoformat = datetime.fromisoformat
                     filter_date = fromisoformat(str(date_from))
                     if version.published_at < filter_date:
@@ -339,6 +329,7 @@ class ResultSearchService(ScopedSessionMixin):
                     continue
                 try:
                     from datetime import datetime
+
                     fromisoformat = datetime.fromisoformat
                     filter_date = fromisoformat(str(date_to))
                     if version.published_at > filter_date:
@@ -349,7 +340,7 @@ class ResultSearchService(ScopedSessionMixin):
             # tags 过滤（匹配任一）
             if tags is not None and isinstance(tags, list) and tags:
                 version_tags = set()
-                for t in (version.tags or []):
+                for t in version.tags or []:
                     if isinstance(t, str):
                         version_tags.add(t.lower())
                 filter_tags = {str(t).lower() for t in tags}

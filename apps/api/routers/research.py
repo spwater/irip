@@ -20,7 +20,6 @@
 参照 apps/api/routers/facts.py 的 DI 占位 + Pydantic 模型模式。
 """
 
-from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -49,9 +48,7 @@ ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:us
 
 def get_workspace_service() -> WorkspaceService:
     """获取 WorkspaceService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_workspace_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_workspace_service must be overridden via dependency_overrides")
 
 
 WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)]
@@ -59,9 +56,7 @@ WorkspaceServiceDep = Annotated[WorkspaceService, Depends(get_workspace_service)
 
 def get_snapshot_service() -> EvidenceSnapshotService:
     """获取 EvidenceSnapshotService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_snapshot_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_snapshot_service must be overridden via dependency_overrides")
 
 
 SnapshotServiceDep = Annotated[EvidenceSnapshotService, Depends(get_snapshot_service)]
@@ -263,9 +258,7 @@ def _workspace_detail_to_response(detail: WorkspaceDetail) -> WorkspaceDetailRes
         name=detail.name,
         status=detail.status,
         current_question=(
-            _question_ref_to_response(detail.current_question)
-            if detail.current_question
-            else None
+            _question_ref_to_response(detail.current_question) if detail.current_question else None
         ),
         evidence_count=detail.evidence_count,
         snapshots=[_snapshot_ref_to_response(s) for s in detail.snapshots],

@@ -68,9 +68,7 @@ ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:us
 
 def get_product_service() -> ProductService:
     """获取 ProductService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_product_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_product_service must be overridden via dependency_overrides")
 
 
 ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
@@ -78,9 +76,7 @@ ProductServiceDep = Annotated[ProductService, Depends(get_product_service)]
 
 def get_candidate_service() -> CandidateService:
     """获取 CandidateService 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_candidate_service must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_candidate_service must be overridden via dependency_overrides")
 
 
 CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)]
@@ -88,9 +84,7 @@ CandidateServiceDep = Annotated[CandidateService, Depends(get_candidate_service)
 
 def get_catalog() -> ResearchCatalogImpl:
     """获取 ResearchCatalog 实例（由 DI 容器或测试覆盖提供）。"""
-    raise NotImplementedError(
-        "get_catalog must be overridden via dependency_overrides"
-    )
+    raise NotImplementedError("get_catalog must be overridden via dependency_overrides")
 
 
 CatalogDep = Annotated[ResearchCatalogImpl, Depends(get_catalog)]
@@ -235,9 +229,7 @@ async def get_candidate(
     candidate_service: CandidateServiceDep,
 ) -> dict:
     """获取候选产物详情。"""
-    detail = await candidate_service.get_candidate_detail(
-        workspace_id, run_id, candidate_id
-    )
+    detail = await candidate_service.get_candidate_detail(workspace_id, run_id, candidate_id)
     return {
         "candidate_type": detail.candidate_type,
         "candidate_id": str(detail.candidate_id),
@@ -391,9 +383,7 @@ async def get_dataset_version(
     product_service: ProductServiceDep,
 ) -> dict:
     """版本详情（含三段式数据 + field_manifest）。"""
-    detail = await product_service.get_dataset_version(
-        workspace_id, dataset_id, version_number
-    )
+    detail = await product_service.get_dataset_version(workspace_id, dataset_id, version_number)
     return {
         "version_id": str(detail.version_id),
         "dataset_id": str(detail.dataset_id),
@@ -557,9 +547,7 @@ async def get_view_version(
     product_service: ProductServiceDep,
 ) -> dict:
     """版本详情。"""
-    detail = await product_service.get_view_version(
-        workspace_id, view_id, version_number
-    )
+    detail = await product_service.get_view_version(workspace_id, view_id, version_number)
     return {
         "version_id": str(detail.version_id),
         "view_id": str(detail.view_id),
@@ -569,12 +557,16 @@ async def get_view_version(
         "image_width": detail.image_width,
         "image_height": detail.image_height,
         "image_content_hash": detail.image_content_hash,
-        "chart_code_artifact_id": str(detail.chart_code_artifact_id) if detail.chart_code_artifact_id else None,
+        "chart_code_artifact_id": str(detail.chart_code_artifact_id)
+        if detail.chart_code_artifact_id
+        else None,
         "image_digest": detail.image_digest,
         "source_run_id": str(detail.source_run_id),
         "source_step_id": str(detail.source_step_id) if detail.source_step_id else None,
         "source_artifact_id": str(detail.source_artifact_id) if detail.source_artifact_id else None,
-        "bound_dataset_version_id": str(detail.bound_dataset_version_id) if detail.bound_dataset_version_id else None,
+        "bound_dataset_version_id": str(detail.bound_dataset_version_id)
+        if detail.bound_dataset_version_id
+        else None,
         "chart_description": detail.chart_description,
         "created_at": detail.created_at.isoformat() if detail.created_at else None,
     }
@@ -591,9 +583,7 @@ async def download_view_image(
     product_service: ProductServiceDep,
 ) -> Response:
     """下载图片（PNG/PDF）。"""
-    detail = await product_service.get_view_version(
-        workspace_id, view_id, version_number
-    )
+    detail = await product_service.get_view_version(workspace_id, view_id, version_number)
     media_type = "image/png" if detail.image_format == "png" else "application/pdf"
     # 返回存储路径信息，前端通过 artifact 下载端点获取实际内容
     # 实际实现中可通过 RunArtifactService 下载
@@ -795,9 +785,7 @@ async def get_insight_candidate(
     candidate_service: CandidateServiceDep,
 ) -> dict:
     """候选详情。"""
-    detail = await candidate_service.get_candidate_detail(
-        workspace_id, run_id, candidate_id
-    )
+    detail = await candidate_service.get_candidate_detail(workspace_id, run_id, candidate_id)
     return {
         "candidate_type": detail.candidate_type,
         "candidate_id": str(detail.candidate_id),
@@ -888,9 +876,14 @@ async def reject_candidate(
 ) -> None:
     """拒绝任意类型候选 → 物理删除 artifact 或 insight 候选。"""
     import os
+
     from sqlalchemy import text as sa_text
+
     from packages.common.database import build_session_factory, session_scope
-    url = os.getenv("IRIP_DATABASE_URL", "").replace("postgresql+psycopg://", "postgresql+psycopg_async://")
+
+    url = os.getenv("IRIP_DATABASE_URL", "").replace(
+        "postgresql+psycopg://", "postgresql+psycopg_async://"
+    )
     factory = build_session_factory(url)
     # 先查是否为 insight 候选
     async with session_scope(factory, principal=_user) as session:
@@ -978,7 +971,7 @@ async def search_catalog(
     _user: ResearchUserDep,
     catalog: CatalogDep,
     query: str = Query(default=""),
-    workspace_id: UUID | None = Query(default=None),
+    workspace_id: UUID | None = Query(default=None),  # noqa: B008
 ) -> dict:
     """搜索当前用户已确认 DerivedDataset。"""
     filters: dict = {}

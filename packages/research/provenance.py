@@ -25,7 +25,6 @@ from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.research.labels import NodeDisplayLabelGenerator
 from packages.research.models import (
-    NodeDisplayLabel,
     ProvenanceEdge,
     ProvenanceGraph,
     ProvenanceGraphStats,
@@ -111,9 +110,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
         )
 
         # 2. 权限裁剪
-        nodes, edges = await self._prune_permissions(
-            nodes, edges, opts.truncate_branch
-        )
+        nodes, edges = await self._prune_permissions(nodes, edges, opts.truncate_branch)
 
         # 3. 生成展示标签
         labeled_nodes = self._generate_display_labels(nodes)
@@ -147,9 +144,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
 
         return ProvenanceGraph(nodes=labeled_nodes, edges=edges, stats=stats)
 
-    async def query_node_detail(
-        self, namespace: str, node_id: UUID
-    ) -> ProvenanceNode | None:
+    async def query_node_detail(self, namespace: str, node_id: UUID) -> ProvenanceNode | None:
         """查询单个溯源节点详情（校验权限）。
 
         Args:
@@ -298,9 +293,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
         for i, node in enumerate(nodes):
             adapter = self._route_adapter(node.namespace)
             try:
-                has_perm = await adapter.check_permission(
-                    node.namespace, node.node_id, principal
-                )
+                has_perm = await adapter.check_permission(node.namespace, node.node_id, principal)
             except Exception as exc:
                 logger.warning(
                     "Permission check failed for %s:%s: %s",
@@ -346,9 +339,10 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
             key = (node.namespace, node.node_id)
             if key in to_remove:
                 temp_id = restricted_id_map.get(key, f"restricted_{i}")
-                restricted = self._create_restricted_node(i)
+                self._create_restricted_node(i)
                 # 用受限节点替换（保持列表位置），每个受限节点用唯一 UUID 避免图渲染冲突
                 import uuid as _uuid
+
                 restricted_uuid = _uuid.uuid5(_uuid.NAMESPACE_OID, temp_id)
                 new_nodes.append(
                     ProvenanceNode(
@@ -393,9 +387,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
             temp_id=f"restricted_{index}",
         )
 
-    def _generate_display_labels(
-        self, nodes: list[ProvenanceNode]
-    ) -> list[ProvenanceNode]:
+    def _generate_display_labels(self, nodes: list[ProvenanceNode]) -> list[ProvenanceNode]:
         """为每个可见节点生成展示标签。
 
         Args:

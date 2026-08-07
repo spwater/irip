@@ -31,7 +31,6 @@ import copy
 import logging
 from uuid import UUID
 
-import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
@@ -146,10 +145,12 @@ class ResearchMemoryService(ScopedSessionMixin):
             if event_type == "run.started":
                 run_id = event_data.get("run_id", "")
                 if run_id and run_id not in document["completed_runs"]:
-                    document["completed_runs"].append({
-                        "run_id": run_id,
-                        "status": "started",
-                    })
+                    document["completed_runs"].append(
+                        {
+                            "run_id": run_id,
+                            "status": "started",
+                        }
+                    )
 
             elif event_type == "run.completed":
                 run_id = event_data.get("run_id", "")
@@ -165,11 +166,13 @@ class ResearchMemoryService(ScopedSessionMixin):
                         found = True
                         break
                 if not found:
-                    document["completed_runs"].append({
-                        "run_id": run_id,
-                        "status": status,
-                        "coverage": coverage,
-                    })
+                    document["completed_runs"].append(
+                        {
+                            "run_id": run_id,
+                            "status": status,
+                            "coverage": coverage,
+                        }
+                    )
 
                 # 提取关键方法
                 if coverage and "analysis_mode" in coverage:
@@ -236,12 +239,14 @@ class ResearchMemoryService(ScopedSessionMixin):
             runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
             for run in runs:
                 if run.status in ("succeeded", "partially_succeeded", "failed"):
-                    document["completed_runs"].append({
-                        "run_id": str(run.id),
-                        "status": run.status,
-                        "run_number": run.run_number,
-                        "coverage": run.coverage_summary or {},
-                    })
+                    document["completed_runs"].append(
+                        {
+                            "run_id": str(run.id),
+                            "status": run.status,
+                            "run_number": run.run_number,
+                            "coverage": run.coverage_summary or {},
+                        }
+                    )
 
         # 更新文档
         async with self._scoped_session() as session:

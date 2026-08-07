@@ -111,9 +111,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 校验工作空间归属
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -171,9 +169,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                             status="confirmed",
                             department_name=None,
                         )
-                        fact_fields_map[ref.source_id] = derived_data.get(
-                            "field_names", []
-                        )
+                        fact_fields_map[ref.source_id] = derived_data.get("field_names", [])
 
                 elif ref.source_namespace == "research:published_derived":
                     # 阶段 4：从已发布成果包的 DerivedDatasetVersion 获取 content_hash
@@ -189,9 +185,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                             status="published",
                             department_name=None,
                         )
-                        fact_fields_map[ref.source_id] = published_data.get(
-                            "field_names", []
-                        )
+                        fact_fields_map[ref.source_id] = published_data.get("field_names", [])
 
             # 3. 计算内容哈希
             content_hash = self._compute_content_hash(
@@ -199,9 +193,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
             )
 
             # 4. 构建权限包络
-            permission_envelope = self._build_permission_envelope(
-                refs, fact_summaries
-            )
+            permission_envelope = self._build_permission_envelope(refs, fact_summaries)
 
             # 5. 构建字段清单
             field_manifest = self._build_field_manifest(refs, fact_fields_map)
@@ -261,9 +253,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # ── 阶段 5：溯源边写入 Hook（不阻断主流程） ──
         if self._lineage_writer is not None:
             try:
-                await self._lineage_writer.on_snapshot_frozen(
-                    _hook_snapshot_id, _hook_source_refs
-                )
+                await self._lineage_writer.on_snapshot_frozen(_hook_snapshot_id, _hook_source_refs)
             except Exception as exc:
                 logger.warning("on_snapshot_frozen hook failed: %s", exc)
 
@@ -283,9 +273,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -365,9 +353,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
             )
             if version is None:
                 # 尝试获取最新版本
-                version = await ResearchRepository.get_latest_dataset_version(
-                    session, dataset_id
-                )
+                version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
                 if version is None:
                     return None
 
@@ -436,7 +422,10 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         for ref in refs:
             fact_id = ref.source_id
 
-            if ref.source_namespace == "research:derived" or ref.source_namespace == "research:published_derived":
+            if (
+                ref.source_namespace == "research:derived"
+                or ref.source_namespace == "research:published_derived"
+            ):
                 # 阶段 3：DerivedDataset 数据纳入哈希
                 derived_data = (derived_data_map or {}).get(fact_id, {})
                 fields = derived_data.get("field_names", [])

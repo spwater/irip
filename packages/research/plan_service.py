@@ -12,9 +12,8 @@ PlanService 负责：
 参照 packages/research/snapshots.py 的 ScopedSessionMixin 模式。
 """
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -42,7 +41,8 @@ logger = logging.getLogger("research.plan_service")
 class PlanService(ScopedSessionMixin):
     """分析计划生成与确认服务。
 
-    依赖注入 session_factory / department_id / actor_id / model_gateway / context_router / fact_provider。
+    依赖注入 session_factory / department_id / actor_id
+    / model_gateway / context_router / fact_provider。
 
     Attributes:
         _factory: 异步会话工厂。
@@ -121,9 +121,7 @@ class PlanService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 校验工作空间归属
-            workspace = await ResearchRepository.get_workspace(
-                session, workspace_id, actor_id
-            )
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
             if workspace is None:
                 raise AppError(
                     code="not_found",
@@ -151,9 +149,7 @@ class PlanService(ScopedSessionMixin):
             data_profile = await self._build_data_profile(session, snapshot)
 
             # 4. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(
-                session, workspace_id
-            )
+            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
             research_question = question.question_text if question else ""
             sub_questions = question.sub_questions if question and question.sub_questions else []
 
@@ -184,9 +180,7 @@ class PlanService(ScopedSessionMixin):
 
             # 10. 旧版本标记为 superseded
             if latest_plan is not None:
-                await ResearchRepositoryTrusted.supersede_old_plans(
-                    session, workspace_id, plan.id
-                )
+                await ResearchRepositoryTrusted.supersede_old_plans(session, workspace_id, plan.id)
 
             # 11. 审计
             await AuditRecorder.record(
@@ -257,7 +251,7 @@ class PlanService(ScopedSessionMixin):
                     fields={"plan_id": str(plan_id), "status": plan.status},
                 )
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             await ResearchRepositoryTrusted.update_plan_status(
                 session,
                 plan_id,
@@ -443,15 +437,15 @@ class PlanService(ScopedSessionMixin):
                     fact_data = await get_data(source_id)
                     if isinstance(fact_data, dict):
                         compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
-                        sample_label = fact_name or f"source_{_idx+1}"
-                        compact_data_parts.append(f"### 样品: {sample_label}\n```json\n{compact}\n```")
+                        sample_label = fact_name or f"source_{_idx + 1}"
+                        compact_data_parts.append(
+                            f"### 样品: {sample_label}\n```json\n{compact}\n```"
+                        )
 
             full_data_text = "\n\n".join(compact_data_parts)
 
             # 4. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(
-                session, workspace_id
-            )
+            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
             research_question = question.question_text if question else ""
             sub_questions = question.sub_questions if question and question.sub_questions else []
 
@@ -465,7 +459,9 @@ class PlanService(ScopedSessionMixin):
             if sub_questions:
                 sub_q_lines = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
                 sub_q_section = f"子问题:\n{sub_q_lines}\n"
-                sub_q_instruction = f"\n\n**你必须逐个回答以下子问题，每个子问题给出明确结论：**\n{sub_q_lines}\n"
+                sub_q_instruction = (
+                    f"\n\n**你必须逐个回答以下子问题，每个子问题给出明确结论：**\n{sub_q_lines}\n"
+                )
             analysis_system_prompt = (
                 "你是一个数据分析专家。请根据以下分析建议，对提供的完整数据进行实际分析。\n"
                 f"要求：\n"
@@ -474,23 +470,26 @@ class PlanService(ScopedSessionMixin):
                 "3. 识别关键差异和特征\n"
                 "4. 根据分析建议中的可视化方案画出对应图表\n"
                 "   - 单个样品的连续数据（如光谱、粒度分布）用 ```chart-ref 代码块\n"
-                "     格式：{\"sample\":\"样品标签\",\"series_index\":0,\"x_col\":0,\"y_col\":1,\"chart_type\":\"line\",\"title\":\"标题\"}\n"
+                '     格式：{"sample":"样品标签","series_index":0,'
+                '"x_col":0,"y_col":1,"chart_type":"line","title":"标题"}\n'
                 "     前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点\n"
                 "   - 多样品对比、聚合统计等需要跨样品计算的场景用 ```echarts 代码块\n"
                 "     必须是合法的 JSON，不能用 JavaScript 函数\n"
-                "     tooltip formatter 用字符串模板如 \"{b}: {c}%\"，不要用 function\n"
+                '     tooltip formatter 用字符串模板如 "{b}: {c}%"，不要用 function\n'
                 "     支持 bar/line/pie/scatter 类型，数值用原始数字\n"
                 "   - 柱状图用于成分对比，折线图用于趋势/累积分布，散点图用于相关性\n"
                 "5. 对比数据用 Markdown 表格\n"
                 "6. 用中文回答，给出有数据支撑的结论\n"
                 "7. 请根据问题内容，判断合适的结构化输出数据。对每个问题和子问题都执行一次：\n"
                 "   - 在报告末尾为每个问题/子问题分别附加一个 ```data 代码块\n"
-                "   - 代码块内为三段式 JSON：{\"metadata\": {}, \"points\": [], \"series\": []}\n"
+                '   - 代码块内为三段式 JSON：{"metadata": {}, "points": [], "series": []}\n'
                 "   - metadata: 报告级单值信息（如分析范围、方法、时间等）\n"
-                "   - points: 独立单值指标 [{\"name\": \"指标名\", \"value\": 数值, \"unit\": \"单位\"}]\n"
-                "   - series: 表格/序列数据 [{\"name\": \"表名\", \"columns\": [\"列1\", \"列2\"], \"rows\": [[值1, 值2], ...]}]\n"
+                '   - points: 独立单值指标 [{"name": "指标名", "value": 数值, "unit": "单位"}]\n'
+                '   - series: 表格/序列数据 [{"name": "表名",'
+                ' "columns": ["列1", "列2"], "rows": [[值1, 值2], ...]}]\n'
                 "   - 数据必须来自实际分析结果，不要臆造\n"
-                "   - 如果某个问题/子问题不适合结构化输出（如纯定性判断），可跳过该问题的 ```data 块\n"
+                "   - 如果某个问题/子问题不适合结构化输出（如纯定性判断），"
+                "可跳过该问题的 ```data 块\n"
                 f"{sub_q_instruction}"
             )
             analysis_context = (
@@ -511,20 +510,25 @@ class PlanService(ScopedSessionMixin):
                 analysis_result = response.answer if hasattr(response, "answer") else str(response)
                 # 清洗 echarts
                 import re as _re
+
                 def _clean_echarts_block(match):
                     block = match.group(1)
                     block = _re.sub(
                         r'"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}',
-                        '"formatter": "{b}: {c}"', block,
+                        '"formatter": "{b}: {c}"',
+                        block,
                     )
                     block = _re.sub(
                         r'"formatter"\s*:\s*function[\s\S]*?\}',
-                        '"formatter": "{b}: {c}"', block,
+                        '"formatter": "{b}: {c}"',
+                        block,
                     )
                     return "```echarts\n" + block + "\n```"
+
                 analysis_result = _re.sub(
-                    r'```echarts\n([\s\S]*?)```',
-                    _clean_echarts_block, analysis_result,
+                    r"```echarts\n([\s\S]*?)```",
+                    _clean_echarts_block,
+                    analysis_result,
                 )
             except Exception as exc:
                 logger.warning("Analysis step failed: %s", exc)
@@ -550,20 +554,27 @@ class PlanService(ScopedSessionMixin):
 
             # 8. 解析 ```data 块 → 存为 RunArtifact (type=data, is_publishable=true)
             import re as _re2
-            data_blocks = _re2.findall(r'```data\s*\n([\s\S]*?)```', analysis_result)
-            echarts_blocks = _re2.findall(r'```echarts\s*\n([\s\S]*?)```', analysis_result)
+
+            data_blocks = _re2.findall(r"```data\s*\n([\s\S]*?)```", analysis_result)
+            echarts_blocks = _re2.findall(r"```echarts\s*\n([\s\S]*?)```", analysis_result)
             run_id = None
             if data_blocks or echarts_blocks:
-                from packages.research.validation import ThreeSegmentValidator
-                from packages.common.s3_repository import S3Repository
+                import hashlib
+                import os as _os
+
                 from packages.common.ids import new_id
-                import hashlib, os as _os
+                from packages.common.s3_repository import S3Repository
+                from packages.research.validation import ThreeSegmentValidator
+
                 # 查找 run
                 runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
                 run_id = runs[0].id if runs else None
                 if run_id is None:
                     run_id = await ResearchRepositoryTrusted.insert_run(
-                        session, workspace_id=workspace_id, plan_id=plan_id, status="succeeded",
+                        session,
+                        workspace_id=workspace_id,
+                        plan_id=plan_id,
+                        status="succeeded",
                     )
                 # 构建 S3 client
                 _endpoint = _os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
@@ -584,15 +595,18 @@ class PlanService(ScopedSessionMixin):
                             content_bytes = block.encode("utf-8")
                             content_hash = hashlib.sha256(content_bytes).hexdigest()
                             artifact_id = new_id()
-                            artifact_key = f"analysis_data_{idx+1}.json"
+                            artifact_key = f"analysis_data_{idx + 1}.json"
                             s3_key = f"research/artifacts/{run_id}/{artifact_id}/{artifact_key}"
                             _s3.put_object(s3_key, content_bytes, "application/json")
                             await session.execute(
                                 sa.text(
                                     "INSERT INTO research_run_artifact "
-                                    "(id, run_id, step_id, artifact_type, artifact_key, "
-                                    "storage_path, content_hash, size_bytes, is_publishable, created_at) "
-                                    "VALUES (:id, :run_id, NULL, 'data', :key, :path, :hash, :size, true, now())"
+                                    "(id, run_id, step_id, artifact_type, "
+                                    "artifact_key, storage_path, content_hash, "
+                                    "size_bytes, is_publishable, created_at) "
+                                    "VALUES (:id, :run_id, NULL, "
+                                    "'data', :key, :path, :hash, "
+                                    ":size, true, now())"
                                 ),
                                 {
                                     "id": str(artifact_id),
@@ -610,9 +624,10 @@ class PlanService(ScopedSessionMixin):
                 # 8b. 存 echarts 块
                 for idx, block in enumerate(echarts_blocks):
                     try:
-                        title = f"图表 {idx+1}"
+                        title = f"图表 {idx + 1}"
                         try:
                             import json as _json
+
                             echarts_json = _json.loads(block.strip())
                             t = echarts_json.get("title", {})
                             if isinstance(t, dict):
@@ -625,15 +640,19 @@ class PlanService(ScopedSessionMixin):
                         content_bytes = block.encode("utf-8")
                         content_hash = hashlib.sha256(content_bytes).hexdigest()
                         artifact_id = new_id()
-                        artifact_key = f"analysis_chart_{idx+1}.json"
+                        artifact_key = f"analysis_chart_{idx + 1}.json"
                         s3_key = f"research/artifacts/{run_id}/{artifact_id}/{artifact_key}"
                         _s3.put_object(s3_key, content_bytes, "application/json")
                         await session.execute(
                             sa.text(
                                 "INSERT INTO research_run_artifact "
-                                "(id, run_id, step_id, artifact_type, artifact_key, "
-                                "storage_path, content_hash, size_bytes, is_publishable, created_at) "
-                                "VALUES (:id, :run_id, NULL, 'chart', :key, :path, :hash, :size, true, now())"
+                                "(id, run_id, step_id, artifact_type, "
+                                "artifact_key, storage_path, "
+                                "content_hash, size_bytes, "
+                                "is_publishable, created_at) "
+                                "VALUES (:id, :run_id, NULL, "
+                                "'chart', :key, :path, :hash, "
+                                ":size, true, now())"
                             ),
                             {
                                 "id": str(artifact_id),
@@ -664,11 +683,13 @@ class PlanService(ScopedSessionMixin):
             snapshot_id: 证据快照 ID。
 
         Returns:
-            dict: {insight_candidate: dict | None, insight_candidate_id: str | None, run_id: str | None}
+            dict: {insight_candidate: dict | None,
+                   insight_candidate_id: str | None,
+                   run_id: str | None}
         """
         from packages.research.models_trusted import TaskType
 
-        actor_id = self._require_actor()
+        self._require_actor()
         async with self._scoped_session() as session:
             # 1. 获取计划 + 已有分析结果
             plan = await ResearchRepositoryTrusted.get_plan(session, plan_id)
@@ -693,9 +714,7 @@ class PlanService(ScopedSessionMixin):
                 )
 
             # 2. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(
-                session, workspace_id
-            )
+            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
             research_question = question.question_text if question else ""
             sub_questions = question.sub_questions if question and question.sub_questions else []
             sub_q_section = ""
@@ -730,6 +749,7 @@ class PlanService(ScopedSessionMixin):
                 )
                 answer = response.answer if hasattr(response, "answer") else str(response)
                 import json as _json
+
                 clean = answer.strip()
                 if clean.startswith("```"):
                     clean = clean.split("\n", 1)[-1]
@@ -746,7 +766,9 @@ class PlanService(ScopedSessionMixin):
             if insight_candidate:
                 try:
                     import json as _json
+
                     from packages.common.ids import new_id
+
                     insight_candidate_id = new_id()
                     # 复用最新 run（analyze_data 已创建），不新建 run
                     runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
@@ -754,7 +776,10 @@ class PlanService(ScopedSessionMixin):
                         run_id = runs[0].id
                     else:
                         run_id = await ResearchRepositoryTrusted.insert_run(
-                            session, workspace_id=workspace_id, plan_id=plan_id, status="succeeded",
+                            session,
+                            workspace_id=workspace_id,
+                            plan_id=plan_id,
+                            status="succeeded",
                         )
                     insight_run_id = str(run_id)
                     await session.execute(
@@ -768,14 +793,20 @@ class PlanService(ScopedSessionMixin):
                             ":evidence_label, :ai_raw, 'pending', now())"
                         ),
                         {
-                            "id": str(insight_candidate_id), "wid": str(workspace_id),
+                            "id": str(insight_candidate_id),
+                            "wid": str(workspace_id),
                             "run_id": str(run_id),
                             "conclusion": insight_candidate.get("conclusion", ""),
                             "scope": insight_candidate.get("scope", ""),
-                            "method_refs": _json.dumps(insight_candidate.get("method_refs", [{"step_key": "analysis"}]), ensure_ascii=False),
+                            "method_refs": _json.dumps(
+                                insight_candidate.get("method_refs", [{"step_key": "analysis"}]),
+                                ensure_ascii=False,
+                            ),
                             "confidence": insight_candidate.get("confidence_level", "medium"),
                             "limitations": insight_candidate.get("limitations", ""),
-                            "evidence_label": insight_candidate.get("evidence_source_label", "experimental_data"),
+                            "evidence_label": insight_candidate.get(
+                                "evidence_source_label", "experimental_data"
+                            ),
                             "ai_raw": analysis_result[:8000],
                         },
                     )
@@ -788,11 +819,13 @@ class PlanService(ScopedSessionMixin):
             # analyze_data 步骤可能因清理等原因丢失工件，extract_insight 时自动补建
             if insight_run_id:
                 try:
+                    import hashlib
+                    import os as _os3
                     import re as _re3
-                    import hashlib, os as _os3
-                    from packages.research.validation import ThreeSegmentValidator
-                    from packages.common.s3_repository import S3Repository
+
                     from packages.common.ids import new_id as _new_id
+                    from packages.common.s3_repository import S3Repository
+                    from packages.research.validation import ThreeSegmentValidator
 
                     # 检查当前 run 已有的 data/chart 工件数量
                     existing_result = await session.execute(
@@ -806,8 +839,10 @@ class PlanService(ScopedSessionMixin):
 
                     if existing_count == 0:
                         # 重新解析 analysis_result 中的 ```data 和 ```echarts 块
-                        data_blocks = _re3.findall(r'```data\s*\n([\s\S]*?)```', analysis_result)
-                        echarts_blocks = _re3.findall(r'```echarts\s*\n([\s\S]*?)```', analysis_result)
+                        data_blocks = _re3.findall(r"```data\s*\n([\s\S]*?)```", analysis_result)
+                        echarts_blocks = _re3.findall(
+                            r"```echarts\s*\n([\s\S]*?)```", analysis_result
+                        )
 
                         if data_blocks or echarts_blocks:
                             _endpoint = _os3.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
@@ -816,7 +851,9 @@ class PlanService(ScopedSessionMixin):
                             _s3 = S3Repository(
                                 endpoint_url=_endpoint,
                                 access_key=_os3.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-                                secret_key=_os3.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+                                secret_key=_os3.getenv(
+                                    "IRIP_MINIO_SECRET_KEY", "irip_dev_password"
+                                ),
                                 bucket_name=_os3.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
                                 region=_os3.getenv("IRIP_MINIO_REGION", "us-east-1"),
                             )
@@ -828,15 +865,23 @@ class PlanService(ScopedSessionMixin):
                                         content_bytes = block.encode("utf-8")
                                         content_hash = hashlib.sha256(content_bytes).hexdigest()
                                         artifact_id = _new_id()
-                                        artifact_key = f"analysis_data_{idx+1}.json"
-                                        s3_key = f"research/artifacts/{insight_run_id}/{artifact_id}/{artifact_key}"
+                                        artifact_key = f"analysis_data_{idx + 1}.json"
+                                        s3_key = (
+                                            f"research/artifacts/{insight_run_id}"
+                                            f"/{artifact_id}/{artifact_key}"
+                                        )
                                         _s3.put_object(s3_key, content_bytes, "application/json")
                                         await session.execute(
                                             sa.text(
                                                 "INSERT INTO research_run_artifact "
-                                                "(id, run_id, step_id, artifact_type, artifact_key, "
-                                                "storage_path, content_hash, size_bytes, is_publishable, created_at) "
-                                                "VALUES (:id, :run_id, NULL, 'data', :key, :path, :hash, :size, true, now())"
+                                                "(id, run_id, step_id, "
+                                                "artifact_type, artifact_key, "
+                                                "storage_path, content_hash, "
+                                                "size_bytes, is_publishable, "
+                                                "created_at) "
+                                                "VALUES (:id, :run_id, NULL, "
+                                                "'data', :key, :path, :hash, "
+                                                ":size, true, now())"
                                             ),
                                             {
                                                 "id": str(artifact_id),
@@ -847,15 +892,20 @@ class PlanService(ScopedSessionMixin):
                                                 "size": len(content_bytes),
                                             },
                                         )
-                                        logger.info("Rebuilt data artifact %s for run %s", artifact_id, insight_run_id)
+                                        logger.info(
+                                            "Rebuilt data artifact %s for run %s",
+                                            artifact_id,
+                                            insight_run_id,
+                                        )
                                 except Exception as exc:
                                     logger.warning("Failed to rebuild data block: %s", exc)
 
                             for idx, block in enumerate(echarts_blocks):
                                 try:
-                                    title = f"图表 {idx+1}"
+                                    title = f"图表 {idx + 1}"
                                     try:
                                         import json as _json3
+
                                         echarts_json = _json3.loads(block.strip())
                                         t = echarts_json.get("title", {})
                                         if isinstance(t, dict):
@@ -868,15 +918,23 @@ class PlanService(ScopedSessionMixin):
                                     content_bytes = block.encode("utf-8")
                                     content_hash = hashlib.sha256(content_bytes).hexdigest()
                                     artifact_id = _new_id()
-                                    artifact_key = f"analysis_chart_{idx+1}.json"
-                                    s3_key = f"research/artifacts/{insight_run_id}/{artifact_id}/{artifact_key}"
+                                    artifact_key = f"analysis_chart_{idx + 1}.json"
+                                    s3_key = (
+                                        f"research/artifacts/{insight_run_id}"
+                                        f"/{artifact_id}/{artifact_key}"
+                                    )
                                     _s3.put_object(s3_key, content_bytes, "application/json")
                                     await session.execute(
                                         sa.text(
                                             "INSERT INTO research_run_artifact "
-                                            "(id, run_id, step_id, artifact_type, artifact_key, "
-                                            "storage_path, content_hash, size_bytes, is_publishable, created_at) "
-                                            "VALUES (:id, :run_id, NULL, 'chart', :key, :path, :hash, :size, true, now())"
+                                            "(id, run_id, step_id, "
+                                            "artifact_type, artifact_key, "
+                                            "storage_path, content_hash, "
+                                            "size_bytes, is_publishable, "
+                                            "created_at) "
+                                            "VALUES (:id, :run_id, NULL, "
+                                            "'chart', :key, :path, :hash, "
+                                            ":size, true, now())"
                                         ),
                                         {
                                             "id": str(artifact_id),
@@ -887,7 +945,11 @@ class PlanService(ScopedSessionMixin):
                                             "size": len(content_bytes),
                                         },
                                     )
-                                    logger.info("Rebuilt chart artifact %s for run %s", artifact_id, insight_run_id)
+                                    logger.info(
+                                        "Rebuilt chart artifact %s for run %s",
+                                        artifact_id,
+                                        insight_run_id,
+                                    )
                                 except Exception as exc:
                                     logger.warning("Failed to rebuild chart block: %s", exc)
                 except Exception as exc:
@@ -896,6 +958,7 @@ class PlanService(ScopedSessionMixin):
             # 5. 持久化候选信息到 dag_structure
             try:
                 import json as _json
+
                 stored_steps = plan.dag_structure.get("steps", []) if plan.dag_structure else []
                 if stored_steps:
                     if insight_candidate:
@@ -1010,6 +1073,7 @@ class PlanService(ScopedSessionMixin):
             fact_name = ""
             try:
                 from sqlalchemy import text as _sql_text
+
                 async with self._factory() as _ns:
                     _result = await _ns.execute(
                         _sql_text("SELECT task_name FROM fact WHERE id = :fid"),
@@ -1037,28 +1101,41 @@ class PlanService(ScopedSessionMixin):
                     if isinstance(series, list):
                         for s in series:
                             if isinstance(s, dict):
-                                cols = s.get("columns", [])
+                                s.get("columns", [])
                                 rows = s.get("rows", [])
                                 record_count += len(rows) if isinstance(rows, list) else 0
                     total_records += record_count
 
                     # 构建数据摘要：包含实际数据内容
                     summary_lines = [
-                        f"数据源 {_idx+1}/{len(source_refs)}: 来源={fact_name}, 样品={metadata.get('样品名') or metadata.get('样品', '?')}, {len(fields)} 字段, {record_count} 条记录",
+                        f"数据源 {_idx + 1}/{len(source_refs)}:"
+                        f" 来源={fact_name},"
+                        f" 样品={metadata.get('样品名') or metadata.get('样品', '?')},"
+                        f" {len(fields)} 字段, {record_count} 条记录",
                     ]
                     if metadata:
-                        summary_lines.append(f"  元数据: {_json.dumps(metadata, ensure_ascii=False)[:500]}")
+                        summary_lines.append(
+                            f"  元数据: {_json.dumps(metadata, ensure_ascii=False)[:500]}"
+                        )
                     if isinstance(points, list) and points:
-                        summary_lines.append(f"  数据点(前5条): {_json.dumps(points[:5], ensure_ascii=False)[:500]}")
+                        summary_lines.append(
+                            f"  数据点(前5条): {_json.dumps(points[:5], ensure_ascii=False)[:500]}"
+                        )
                     if isinstance(series, list) and series:
                         for s in series[:3]:
                             if isinstance(s, dict):
                                 sname = s.get("name", "")
                                 scols = s.get("columns", [])
                                 srows = s.get("rows", [])
-                                summary_lines.append(f"  数据组[{sname}] 列={scols} 行数={len(srows) if isinstance(srows, list) else 0}")
+                                summary_lines.append(
+                                    f"  数据组[{sname}] 列={scols}"
+                                    f" 行数={len(srows) if isinstance(srows, list) else 0}"
+                                )
                                 if isinstance(srows, list) and srows:
-                                    summary_lines.append(f"    前5行: {_json.dumps(srows[:5], ensure_ascii=False)[:800]}")
+                                    summary_lines.append(
+                                        f"    前5行:"
+                                        f" {_json.dumps(srows[:5], ensure_ascii=False)[:800]}"
+                                    )
                     data_summary_parts.append("\n".join(summary_lines))
 
         # 估算总 token 数（粗略：每条记录约 500 token）
@@ -1108,7 +1185,9 @@ class PlanService(ScopedSessionMixin):
         )
         if sub_questions:
             sub_q_text = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
-            research_context = f"研究问题: {research_question}\n子问题:\n{sub_q_text}\n数据摘要:\n{data_text}"
+            research_context = (
+                f"研究问题: {research_question}\n子问题:\n{sub_q_text}\n数据摘要:\n{data_text}"
+            )
         else:
             research_context = f"研究问题: {research_question}\n数据摘要:\n{data_text}"
 

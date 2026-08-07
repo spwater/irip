@@ -31,10 +31,9 @@ from packages.research.lineage import LineageEdgeService
 from packages.research.models import (
     AclRevisionRef,
     EvidenceRefDTO,
-    PermissionEnvelope,
     ProductRefCollection,
-    PublishRequest,
     PublishPreviewResult,
+    PublishRequest,
     ResultDetail,
     ResultRef,
     ResultVersionDetail,
@@ -143,9 +142,7 @@ class PublicationService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 收集产物引用 + 校验
-            product_refs = await self._collect_product_refs(
-                session, workspace_id, request
-            )
+            product_refs = await self._collect_product_refs(session, workspace_id, request)
 
             # 2. 校验至少包含一个 Dataset 或 View
             if not product_refs.dataset_version_refs and not product_refs.view_version_refs:
@@ -160,10 +157,7 @@ class PublicationService(ScopedSessionMixin):
             await self._validate_run_statuses(session, product_refs)
 
             # 4. 计算权限包络
-            source_snapshot_ids = [
-                UUID(sid) for sid in product_refs.evidence_snapshot_ids
-                if sid
-            ]
+            source_snapshot_ids = [UUID(sid) for sid in product_refs.evidence_snapshot_ids if sid]
             envelope = await PermissionEnvelopeCalculator.calculate_envelope(
                 source_snapshot_ids, session
             )
@@ -181,10 +175,7 @@ class PublicationService(ScopedSessionMixin):
                 else:
                     raise AppError(
                         code="acl_exceeds_envelope",
-                        message=(
-                            f"请求的 ACL 超出权限包络: "
-                            f"{validation.reason}"
-                        ),
+                        message=(f"请求的 ACL 超出权限包络: {validation.reason}"),
                         retryable=False,
                         fields={
                             "requested_acl": request.requested_acl,
@@ -205,9 +196,7 @@ class PublicationService(ScopedSessionMixin):
                 status="published",
                 current_version=0,
                 current_acl_type=request.requested_acl,
-                current_explicit_user_ids=[
-                    str(uid) for uid in request.explicit_user_ids
-                ],
+                current_explicit_user_ids=[str(uid) for uid in request.explicit_user_ids],
             )
 
             # 8. 创建 ResearchResultVersion v1
@@ -237,7 +226,7 @@ class PublicationService(ScopedSessionMixin):
 
             # 9. 创建初始 ACL Revision
             explicit_ids_str = [str(uid) for uid in request.explicit_user_ids]
-            revision = await ResearchRepository.insert_acl_revision(
+            await ResearchRepository.insert_acl_revision(
                 session,
                 result_id=result.id,
                 revision_number=1,
@@ -267,9 +256,7 @@ class PublicationService(ScopedSessionMixin):
 
             # 12. 审计
             audit_action = (
-                "research.result.declassify"
-                if request.is_declassify
-                else "research.result.publish"
+                "research.result.declassify" if request.is_declassify else "research.result.publish"
             )
             await AuditRecorder.record(
                 session,
@@ -344,9 +331,7 @@ class PublicationService(ScopedSessionMixin):
                 )
 
             # 2. 收集产物引用 + 校验
-            product_refs = await self._collect_product_refs(
-                session, workspace_id, request
-            )
+            product_refs = await self._collect_product_refs(session, workspace_id, request)
 
             # 3. 校验至少包含一个 Dataset 或 View
             if not product_refs.dataset_version_refs and not product_refs.view_version_refs:
@@ -361,10 +346,7 @@ class PublicationService(ScopedSessionMixin):
             await self._validate_run_statuses(session, product_refs)
 
             # 5. 计算权限包络
-            source_snapshot_ids = [
-                UUID(sid) for sid in product_refs.evidence_snapshot_ids
-                if sid
-            ]
+            source_snapshot_ids = [UUID(sid) for sid in product_refs.evidence_snapshot_ids if sid]
             envelope = await PermissionEnvelopeCalculator.calculate_envelope(
                 source_snapshot_ids, session
             )
@@ -391,9 +373,7 @@ class PublicationService(ScopedSessionMixin):
             content_hash = self._compute_content_hash(request, product_refs)
 
             # 8. 标记旧版本为 superseded
-            old_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            old_version = await ResearchRepository.get_latest_result_version(session, result_id)
             if old_version is not None and old_version.status == "active":
                 await ResearchRepository.update_result_version_status(
                     session, old_version.id, "superseded"
@@ -476,15 +456,10 @@ class PublicationService(ScopedSessionMixin):
         Returns:
             PublishPreviewResult: 预览结果。
         """
-        actor_id = self._require_actor()
+        self._require_actor()
         async with self._scoped_session() as session:
-            product_refs = await self._collect_product_refs(
-                session, workspace_id, request
-            )
-            source_snapshot_ids = [
-                UUID(sid) for sid in product_refs.evidence_snapshot_ids
-                if sid
-            ]
+            product_refs = await self._collect_product_refs(session, workspace_id, request)
+            source_snapshot_ids = [UUID(sid) for sid in product_refs.evidence_snapshot_ids if sid]
             envelope = await PermissionEnvelopeCalculator.calculate_envelope(
                 source_snapshot_ids, session
             )
@@ -552,9 +527,7 @@ class PublicationService(ScopedSessionMixin):
                 )
 
             # 获取最新版本以取得 evidence_snapshot_ids
-            latest_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            latest_version = await ResearchRepository.get_latest_result_version(session, result_id)
             snapshot_ids: list[UUID] = []
             if latest_version is not None:
                 for sid in latest_version.evidence_snapshot_ids or []:
@@ -564,9 +537,7 @@ class PublicationService(ScopedSessionMixin):
                         pass
 
             # 计算权限包络
-            envelope = await PermissionEnvelopeCalculator.calculate_envelope(
-                snapshot_ids, session
-            )
+            envelope = await PermissionEnvelopeCalculator.calculate_envelope(snapshot_ids, session)
 
             # 校验新 ACL
             effective_explicit_ids = explicit_user_ids or []
@@ -588,16 +559,10 @@ class PublicationService(ScopedSessionMixin):
                     )
 
             # 获取当前最新 ACL Revision
-            latest_revision = await ResearchRepository.get_latest_acl_revision(
-                session, result_id
-            )
-            previous_acl_type = (
-                latest_revision.acl_type if latest_revision else None
-            )
+            latest_revision = await ResearchRepository.get_latest_acl_revision(session, result_id)
+            previous_acl_type = latest_revision.acl_type if latest_revision else None
             previous_explicit_ids = (
-                list(latest_revision.explicit_user_ids)
-                if latest_revision
-                else None
+                list(latest_revision.explicit_user_ids) if latest_revision else None
             )
 
             # 创建新 Revision
@@ -624,9 +589,7 @@ class PublicationService(ScopedSessionMixin):
 
             # 审计
             audit_action = (
-                "research.result.declassify"
-                if is_declassify
-                else "research.result.acl_change"
+                "research.result.declassify" if is_declassify else "research.result.acl_change"
             )
             await AuditRecorder.record(
                 session,
@@ -731,17 +694,13 @@ class PublicationService(ScopedSessionMixin):
                 )
             else:
                 # 撤回全部版本
-                versions = await ResearchRepository.list_result_versions(
-                    session, result_id
-                )
+                versions = await ResearchRepository.list_result_versions(session, result_id)
                 for v in versions:
                     if v.status == "active":
                         await ResearchRepository.update_result_version_status(
                             session, v.id, "withdrawn"
                         )
-                await ResearchRepository.update_result_status(
-                    session, result_id, "withdrawn"
-                )
+                await ResearchRepository.update_result_status(session, result_id, "withdrawn")
                 await AuditRecorder.record(
                     session,
                     AuditEventData(
@@ -787,9 +746,7 @@ class PublicationService(ScopedSessionMixin):
                     fields={},
                 )
 
-            await ResearchRepository.update_result_metadata(
-                session, result_id, name
-            )
+            await ResearchRepository.update_result_metadata(session, result_id, name)
             await AuditRecorder.record(
                 session,
                 AuditEventData(
@@ -844,17 +801,13 @@ class PublicationService(ScopedSessionMixin):
                 )
 
             # 获取当前版本
-            latest_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            latest_version = await ResearchRepository.get_latest_result_version(session, result_id)
             current_version_detail: ResultVersionDetail | None = None
             if latest_version is not None:
                 current_version_detail = await self._version_to_detail(session, latest_version)
 
             # 版本历史
-            versions = await ResearchRepository.list_result_versions(
-                session, result_id
-            )
+            versions = await ResearchRepository.list_result_versions(session, result_id)
             version_history = [
                 ResultVersionRef(
                     result_id=result_id,
@@ -867,9 +820,7 @@ class PublicationService(ScopedSessionMixin):
             ]
 
             # ACL 变更记录
-            revisions = await ResearchRepository.list_acl_revisions(
-                session, result_id
-            )
+            revisions = await ResearchRepository.list_acl_revisions(session, result_id)
             acl_revisions = [
                 AclRevisionRef(
                     revision_number=r.revision_number,
@@ -891,9 +842,7 @@ class PublicationService(ScopedSessionMixin):
             ]
 
             # 收藏状态
-            is_favorited = await ResearchRepository.check_favorite(
-                session, result_id, actor_id
-            )
+            is_favorited = await ResearchRepository.check_favorite(session, result_id, actor_id)
 
             return ResultDetail(
                 result_ref=ResultRef(
@@ -983,9 +932,7 @@ class PublicationService(ScopedSessionMixin):
                     fields={},
                 )
 
-            versions = await ResearchRepository.list_result_versions(
-                session, result_id
-            )
+            versions = await ResearchRepository.list_result_versions(session, result_id)
             return [
                 ResultVersionRef(
                     result_id=result_id,
@@ -1025,9 +972,7 @@ class PublicationService(ScopedSessionMixin):
                     fields={},
                 )
 
-            revisions = await ResearchRepository.list_acl_revisions(
-                session, result_id
-            )
+            revisions = await ResearchRepository.list_acl_revisions(session, result_id)
             return [
                 AclRevisionRef(
                     revision_number=r.revision_number,
@@ -1088,9 +1033,7 @@ class PublicationService(ScopedSessionMixin):
                 )
 
             # 获取最新版本以校验 object_id 在引用中
-            latest_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            latest_version = await ResearchRepository.get_latest_result_version(session, result_id)
             if latest_version is None:
                 raise AppError(
                     code="not_found",
@@ -1135,17 +1078,11 @@ class PublicationService(ScopedSessionMixin):
 
             # 通过 ProductService 获取产物详情
             if object_type == "dataset":
-                return await self._get_dataset_detail(
-                    session, object_id, version_number or 1
-                )
+                return await self._get_dataset_detail(session, object_id, version_number or 1)
             elif object_type == "view":
-                return await self._get_view_detail(
-                    session, object_id, version_number or 1
-                )
+                return await self._get_view_detail(session, object_id, version_number or 1)
             else:
-                return await self._get_insight_detail(
-                    session, object_id, version_number or 1
-                )
+                return await self._get_insight_detail(session, object_id, version_number or 1)
 
     # ============================================================
     # 复用
@@ -1162,7 +1099,8 @@ class PublicationService(ScopedSessionMixin):
 
         1. 校验成果包 ACL（当前用户有权查看）
         2. 校验 dataset_id 在成果包版本的 dataset_version_refs 中
-        3. 通过 WorkspaceService.add_evidence() 加入（source_namespace="research:published_derived"）
+        3. 通过 WorkspaceService.add_evidence() 加入
+           （source_namespace="research:published_derived"）
         4. 审计
 
         Args:
@@ -1194,9 +1132,7 @@ class PublicationService(ScopedSessionMixin):
                 )
 
             # 获取最新版本
-            latest_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            latest_version = await ResearchRepository.get_latest_result_version(session, result_id)
             if latest_version is None:
                 raise AppError(
                     code="not_found",
@@ -1298,9 +1234,7 @@ class PublicationService(ScopedSessionMixin):
                     fields={},
                 )
 
-            latest_version = await ResearchRepository.get_latest_result_version(
-                session, result_id
-            )
+            latest_version = await ResearchRepository.get_latest_result_version(session, result_id)
             if latest_version is None:
                 raise AppError(
                     code="not_found",
@@ -1327,9 +1261,7 @@ class PublicationService(ScopedSessionMixin):
                 sub_questions=[],
                 created_by=actor_id,
             )
-            await ResearchRepository.update_workspace_current_version(
-                session, new_ws.id, 1
-            )
+            await ResearchRepository.update_workspace_current_version(session, new_ws.id, 1)
 
             # 将全部 DerivedDataset 作为证据加入
             for ref in latest_version.dataset_version_refs or []:
@@ -1400,9 +1332,7 @@ class PublicationService(ScopedSessionMixin):
 
             if is_favorite:
                 # 检查是否已收藏
-                already = await ResearchRepository.check_favorite(
-                    session, result_id, actor_id
-                )
+                already = await ResearchRepository.check_favorite(session, result_id, actor_id)
                 if not already:
                     await ResearchRepository.insert_favorite(
                         session,
@@ -1411,9 +1341,7 @@ class PublicationService(ScopedSessionMixin):
                     )
                 action = "research.result.favorite"
             else:
-                await ResearchRepository.delete_favorite(
-                    session, result_id, actor_id
-                )
+                await ResearchRepository.delete_favorite(session, result_id, actor_id)
                 action = "research.result.unfavorite"
 
             await AuditRecorder.record(
@@ -1460,9 +1388,7 @@ class PublicationService(ScopedSessionMixin):
 
         # 收集 DerivedDataset 引用
         for dataset_id in request.dataset_ids:
-            dataset = await ResearchRepository.get_dataset(
-                session, dataset_id, workspace_id
-            )
+            dataset = await ResearchRepository.get_dataset(session, dataset_id, workspace_id)
             if dataset is None:
                 raise AppError(
                     code="validation_failed",
@@ -1478,9 +1404,7 @@ class PublicationService(ScopedSessionMixin):
                     fields={"dataset_id": str(dataset_id)},
                 )
 
-            version = await ResearchRepository.get_latest_dataset_version(
-                session, dataset_id
-            )
+            version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
             if version is None:
                 raise AppError(
                     code="validation_failed",
@@ -1503,17 +1427,13 @@ class PublicationService(ScopedSessionMixin):
                 snapshot_ids.add(str(dataset.source_snapshot_id))
             run_ids.add(str(dataset.source_run_id))
             # 获取 run 状态
-            run_status = await self._get_run_status(
-                session, dataset.source_run_id
-            )
+            run_status = await self._get_run_status(session, dataset.source_run_id)
             if run_status is not None:
                 run_statuses[str(dataset.source_run_id)] = run_status
 
         # 收集 ResearchView 引用
         for view_id in request.view_ids:
-            view = await ResearchRepository.get_view(
-                session, view_id, workspace_id
-            )
+            view = await ResearchRepository.get_view(session, view_id, workspace_id)
             if view is None:
                 raise AppError(
                     code="validation_failed",
@@ -1534,9 +1454,7 @@ class PublicationService(ScopedSessionMixin):
             )
             if view_version is None:
                 # 尝试获取最新版本
-                view_versions = await ResearchRepository.list_view_versions(
-                    session, view_id
-                )
+                view_versions = await ResearchRepository.list_view_versions(session, view_id)
                 if not view_versions:
                     raise AppError(
                         code="validation_failed",
@@ -1556,17 +1474,13 @@ class PublicationService(ScopedSessionMixin):
             )
 
             run_ids.add(str(view.source_run_id))
-            run_status = await self._get_run_status(
-                session, view.source_run_id
-            )
+            run_status = await self._get_run_status(session, view.source_run_id)
             if run_status is not None:
                 run_statuses[str(view.source_run_id)] = run_status
 
         # 收集 Insight 引用
         for insight_id in request.insight_ids:
-            insight = await ResearchRepository.get_insight(
-                session, insight_id, workspace_id
-            )
+            insight = await ResearchRepository.get_insight(session, insight_id, workspace_id)
             if insight is None:
                 raise AppError(
                     code="validation_failed",
@@ -1603,9 +1517,7 @@ class PublicationService(ScopedSessionMixin):
 
             if insight.source_run_id is not None:
                 run_ids.add(str(insight.source_run_id))
-                run_status = await self._get_run_status(
-                    session, insight.source_run_id
-                )
+                run_status = await self._get_run_status(session, insight.source_run_id)
                 if run_status is not None:
                     run_statuses[str(insight.source_run_id)] = run_status
 
@@ -1670,19 +1582,18 @@ class PublicationService(ScopedSessionMixin):
         """
         try:
             from packages.research.entities_trusted import ResearchAnalysisRun
+
             res = await session.execute(
-                sa.select(ResearchAnalysisRun.status).where(
-                    ResearchAnalysisRun.id == run_id
-                )
+                sa.select(ResearchAnalysisRun.status).where(ResearchAnalysisRun.id == run_id)
             )
             row = res.first()
             return row[0] if row else None
         except ImportError:
             # entities_trusted 不可用时使用原生 SQL
             res = await session.execute(
-                sa.text(
-                    "SELECT status FROM research_analysis_run WHERE id = :rid"
-                ).bindparams(rid=run_id),
+                sa.text("SELECT status FROM research_analysis_run WHERE id = :rid").bindparams(
+                    rid=run_id
+                ),
             )
             row = res.first()
             return row[0] if row else None
@@ -1808,6 +1719,7 @@ class PublicationService(ScopedSessionMixin):
         publisher_display = str(version.publisher)
         try:
             from sqlalchemy import text as _sa_text
+
             r = await session.execute(
                 _sa_text("SELECT display_name FROM app_user WHERE id = :uid"),
                 {"uid": str(version.publisher)},
@@ -1834,9 +1746,7 @@ class PublicationService(ScopedSessionMixin):
             publisher=publisher_display,
             published_at=version.published_at,
             content_hash=version.content_hash,
-            published_permission_envelope=dict(
-                version.published_permission_envelope or {}
-            ),
+            published_permission_envelope=dict(version.published_permission_envelope or {}),
             status=version.status,
         )
 
@@ -1857,9 +1767,7 @@ class PublicationService(ScopedSessionMixin):
             dict: 数据集详情。
         """
         dataset = await ResearchRepository.get_dataset(session, dataset_id)
-        version = await ResearchRepository.get_dataset_version(
-            session, dataset_id, version_number
-        )
+        version = await ResearchRepository.get_dataset_version(session, dataset_id, version_number)
         if dataset is None or version is None:
             raise AppError(
                 code="not_found",
@@ -1896,9 +1804,7 @@ class PublicationService(ScopedSessionMixin):
             dict: 视图详情。
         """
         view = await ResearchRepository.get_view(session, view_id)
-        view_version = await ResearchRepository.get_view_version(
-            session, view_id, version_number
-        )
+        view_version = await ResearchRepository.get_view_version(session, view_id, version_number)
         if view is None or view_version is None:
             raise AppError(
                 code="not_found",

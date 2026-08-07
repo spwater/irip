@@ -95,10 +95,10 @@ class PermissionEnvelopeCalculator:
             # permission_envelope 格式: {fact_id: {fact_type, status, department_name}}
             # 首期简化：基于 snapshot 冻结时的 permission_envelope 计算交集
             # 如果 envelope 为空，视为不限制
-            envelope_acl = PermissionEnvelopeCalculator._extract_acl_from_envelope(
-                envelope
+            envelope_acl = PermissionEnvelopeCalculator._extract_acl_from_envelope(envelope)
+            snapshot_number = (
+                envelope.get("_snapshot_number") if isinstance(envelope, dict) else None
             )
-            snapshot_number = envelope.get("_snapshot_number") if isinstance(envelope, dict) else None
             source_name = f"快照 #{snapshot_number}" if snapshot_number else str(snapshot_id)[:8]
             acl_types.append(envelope_acl)
             source_details.append(
@@ -106,7 +106,9 @@ class PermissionEnvelopeCalculator:
                     "snapshot_id": str(snapshot_id),
                     "source_name": source_name,
                     "acl_type": envelope_acl,
-                    "envelope": {k: v for k, v in (envelope or {}).items() if not k.startswith("_")},
+                    "envelope": {
+                        k: v for k, v in (envelope or {}).items() if not k.startswith("_")
+                    },
                 }
             )
 
@@ -154,19 +156,15 @@ class PermissionEnvelopeCalculator:
 
         # 请求超出包络
         limiting_sources = [
-            s for s in envelope.source_details
-            if PermissionEnvelopeCalculator._acl_rank(
-                s.get("acl_type", "private")
-            ) < requested_rank
+            s
+            for s in envelope.source_details
+            if PermissionEnvelopeCalculator._acl_rank(s.get("acl_type", "private")) < requested_rank
         ]
 
         return EnvelopeValidationResult(
             valid=False,
             effective_acl=envelope.acl_type,
-            reason=(
-                f"requested ACL '{requested_acl}' exceeds envelope "
-                f"'{envelope.acl_type}'"
-            ),
+            reason=(f"requested ACL '{requested_acl}' exceeds envelope '{envelope.acl_type}'"),
             limiting_sources=limiting_sources,
         )
 
@@ -218,9 +216,7 @@ class PermissionEnvelopeCalculator:
                 ResearchEvidenceSnapshot.permission_envelope,
                 ResearchEvidenceSnapshot.snapshot_number,
                 ResearchEvidenceSnapshot.workspace_id,
-            ).where(
-                ResearchEvidenceSnapshot.id == snapshot_id
-            )
+            ).where(ResearchEvidenceSnapshot.id == snapshot_id)
         )
         row = res.first()
         if row is None:

@@ -11,15 +11,14 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from packages.ai.tools import ALL_TOOLS, WHITELIST_TOOLS
-
 
 # Load the migration module (filename starts with digits, needs importlib)
 _MIGRATION_PATH = (
     Path(__file__).resolve().parent.parent.parent.parent
-    / "migrations" / "versions" / "0079_ai_numeric_tools.py"
+    / "migrations"
+    / "versions"
+    / "0079_ai_numeric_tools.py"
 )
 
 
@@ -123,7 +122,13 @@ class TestSeedMissingBuiltinTools:
 
         async def mock_execute(stmt):
             result = MagicMock()
-            result.scalar_one_or_none = lambda: "exists" if existing_set and _check_stmt_is_select(stmt) and _stmt_tool_name(stmt) in existing_set else None
+            result.scalar_one_or_none = lambda: (
+                "exists"
+                if existing_set
+                and _check_stmt_is_select(stmt)
+                and _stmt_tool_name(stmt) in existing_set
+                else None
+            )
             return result
 
         def _check_stmt_is_select(stmt):
@@ -192,6 +197,7 @@ class TestMigration0079:
             DESCRIBE_SERIES_SCHEMA,
             EVALUATE_EXPRESSION_SCHEMA,
         )
+
         assert eval_dict == EVALUATE_EXPRESSION_SCHEMA
         assert desc_dict == DESCRIBE_SERIES_SCHEMA
 
@@ -239,12 +245,14 @@ class TestToolRegistryWithNumeric:
 
     def test_registry_has_numeric_tools(self) -> None:
         from packages.ai.tools import ToolRegistry
+
         registry = ToolRegistry()
         assert registry.is_registered("evaluate_expression")
         assert registry.is_registered("describe_series")
 
     def test_registry_list_enabled_includes_numeric(self) -> None:
         from packages.ai.tools import ToolRegistry
+
         registry = ToolRegistry()
         enabled = registry.enabled_names()
         assert "evaluate_expression" in enabled
@@ -252,6 +260,7 @@ class TestToolRegistryWithNumeric:
 
     def test_registry_validate_numeric(self) -> None:
         from packages.ai.tools import ToolRegistry
+
         registry = ToolRegistry()
         spec = registry.validate("evaluate_expression")
         assert spec.name == "evaluate_expression"
@@ -260,6 +269,7 @@ class TestToolRegistryWithNumeric:
 
     def test_registry_get_numeric_schema(self) -> None:
         from packages.ai.tools import ToolRegistry
+
         registry = ToolRegistry()
         spec = registry.get("evaluate_expression")
         assert spec.parameters_schema is not None
@@ -267,8 +277,9 @@ class TestToolRegistryWithNumeric:
 
     def test_build_tool_schemas_includes_numeric(self) -> None:
         """build_tool_schemas 包含数值工具。"""
-        from packages.ai.tools import ToolRegistry
         from packages.ai.tool_executor import ToolExecutor
+        from packages.ai.tools import ToolRegistry
+
         registry = ToolRegistry()
         executor = ToolExecutor(registry)
         schemas = executor.build_tool_schemas()

@@ -1,7 +1,8 @@
 """候选产物识别服务：CandidateService。
 
 CandidateService 负责：
-- Run 完成后识别候选产物（data 工件 → 候选 DerivedDataset / chart 工件 → 候选 ResearchView / Insight 候选）
+- Run 完成后识别候选产物（data 工件 → 候选 DerivedDataset /
+  chart 工件 → 候选 ResearchView / Insight 候选）
 - 组装预览数据（三段式摘要 / 图表元数据 / Insight 结构化字段）
 - 处理 Insight 候选拒绝
 
@@ -85,7 +86,8 @@ class CandidateService(ScopedSessionMixin):
 
         流程：
         1. 查询 research_run_artifact WHERE run_id=? AND is_publishable=true
-        2. data 工件 → 下载内容 → ThreeSegmentValidator.validate() → 校验通过标记为候选 DerivedDataset，失败标记为不可用
+        2. data 工件 → 下载内容 → ThreeSegmentValidator.validate()
+           → 校验通过标记为候选 DerivedDataset，失败标记为不可用
         3. chart 工件 → 读取元数据 → 标记为候选 ResearchView
         4. 查询 research_insight_candidate WHERE run_id=? AND status='pending'
         5. 汇总返回候选列表
@@ -101,9 +103,7 @@ class CandidateService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # 1. 查询 publishable 工件
-            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(
-                session, run_id
-            )
+            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(session, run_id)
             # 获取步骤信息用于展示
             steps = await ResearchRepositoryTrusted.list_steps_by_run(session, run_id)
             step_map: dict[UUID, object] = {s.id: s for s in steps}
@@ -113,14 +113,10 @@ class CandidateService(ScopedSessionMixin):
                 if not artifact.is_publishable:
                     continue
                 if artifact.artifact_type == "data":
-                    candidate = await self._identify_data_candidate(
-                        artifact, step_map
-                    )
+                    candidate = await self._identify_data_candidate(artifact, step_map)
                     candidates.append(candidate)
                 elif artifact.artifact_type == "chart":
-                    candidate = self._identify_chart_candidate(
-                        artifact, step_map
-                    )
+                    candidate = self._identify_chart_candidate(artifact, step_map)
                     candidates.append(candidate)
 
             # 3. 查询 Insight 候选
@@ -231,12 +227,10 @@ class CandidateService(ScopedSessionMixin):
                 }
                 for sr in result.data.series
             ]
-            metadata_keys = list(result.data.metadata.keys()) if isinstance(
-                result.data.metadata, dict
-            ) else []
-            field_names = [
-                fm.get("field_name", "") for fm in result.field_manifest
-            ]
+            metadata_keys = (
+                list(result.data.metadata.keys()) if isinstance(result.data.metadata, dict) else []
+            )
+            field_names = [fm.get("field_name", "") for fm in result.field_manifest]
 
             return CandidateProductSummary(
                 candidate_type="derived_dataset",
@@ -342,9 +336,7 @@ class CandidateService(ScopedSessionMixin):
         """
         async with self._scoped_session() as session:
             # 先检查是否为 Insight 候选
-            candidate = await ResearchRepository.get_insight_candidate(
-                session, candidate_id
-            )
+            candidate = await ResearchRepository.get_insight_candidate(session, candidate_id)
             if candidate is not None and candidate.run_id == run_id:
                 return CandidateDetail(
                     candidate_type="insight",
@@ -365,9 +357,7 @@ class CandidateService(ScopedSessionMixin):
                 )
 
             # 否则检查是否为工件候选
-            artifact = await ResearchRepositoryTrusted.get_artifact(
-                session, candidate_id
-            )
+            artifact = await ResearchRepositoryTrusted.get_artifact(session, candidate_id)
             if artifact is not None and artifact.run_id == run_id:
                 candidate_type = (
                     "derived_dataset"
@@ -386,13 +376,9 @@ class CandidateService(ScopedSessionMixin):
                 # 如果是 data 工件，尝试下载并校验
                 if artifact.artifact_type == "data":
                     try:
-                        artifact_content = await self._artifact_service.get_artifact(
-                            candidate_id
-                        )
+                        artifact_content = await self._artifact_service.get_artifact(candidate_id)
                         if artifact_content is not None:
-                            result = ThreeSegmentValidator.validate(
-                                artifact_content.content
-                            )
+                            result = ThreeSegmentValidator.validate(artifact_content.content)
                             if result.valid and result.data is not None:
                                 preview_data["metadata"] = result.data.metadata
                                 preview_data["points"] = result.data.points
@@ -433,22 +419,24 @@ class CandidateService(ScopedSessionMixin):
             candidate_id: 候选 ID。
             reason: 拒绝原因（可选）。
         """
-        import json as _json
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 物理删除候选（幂等：不存在则无操作）
             await session.execute(
-                sa.delete(ResearchInsightCandidate)
-                .where(ResearchInsightCandidate.id == candidate_id)
+                sa.delete(ResearchInsightCandidate).where(
+                    ResearchInsightCandidate.id == candidate_id
+                )
             )
 
             # 2. 清除 plan dag_structure 中的 insight_candidate 信息
             #    防止刷新页面后从 dag_structure 恢复已拒绝的候选
             from packages.research.entities_trusted import ResearchAnalysisPlanVersion
+
             plan_result = await session.execute(
-                sa.select(ResearchAnalysisPlanVersion).where(
-                    ResearchAnalysisPlanVersion.workspace_id == workspace_id
-                ).order_by(ResearchAnalysisPlanVersion.created_at.desc()).limit(1)
+                sa.select(ResearchAnalysisPlanVersion)
+                .where(ResearchAnalysisPlanVersion.workspace_id == workspace_id)
+                .order_by(ResearchAnalysisPlanVersion.created_at.desc())
+                .limit(1)
             )
             plan = plan_result.scalar_one_or_none()
             if plan is not None and plan.dag_structure:
@@ -457,8 +445,12 @@ class CandidateService(ScopedSessionMixin):
                 changed = False
                 for i, step in enumerate(steps):
                     if step.get("insight_candidate_id") == str(candidate_id):
-                        steps[i] = {k: v for k, v in step.items()
-                                    if k not in ("insight_candidate", "insight_candidate_id", "insight_run_id")}
+                        steps[i] = {
+                            k: v
+                            for k, v in step.items()
+                            if k
+                            not in ("insight_candidate", "insight_candidate_id", "insight_run_id")
+                        }
                         changed = True
                 if changed:
                     dag["steps"] = steps
@@ -495,9 +487,7 @@ class CandidateService(ScopedSessionMixin):
             list[InsightCandidateRef]: 候选引用列表。
         """
         async with self._scoped_session() as session:
-            candidates = await ResearchRepository.list_insight_candidates(
-                session, run_id
-            )
+            candidates = await ResearchRepository.list_insight_candidates(session, run_id)
             return [
                 InsightCandidateRef(
                     candidate_id=c.id,

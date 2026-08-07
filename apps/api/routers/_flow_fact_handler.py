@@ -150,8 +150,7 @@ async def persist_run_as_fact_handler(
                     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     ".xls": "application/vnd.ms-excel",
                     ".docx": (
-                        "application/vnd.openxmlformats-officedocument"
-                        ".wordprocessingml.document"
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     ),
                     ".doc": "application/msword",
                     ".txt": "text/plain",

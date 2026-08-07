@@ -446,7 +446,7 @@ _VARIABLE_SOURCE_SCHEMA: dict[str, Any] = {
         "unit": {
             "type": "string",
             "maxLength": 64,
-            "description": "单位标签（仅 scalar/inline；省略=未知，\"1\"=无量纲）",
+            "description": '单位标签（仅 scalar/inline；省略=未知，"1"=无量纲）',
         },
         "fact_id": {
             "type": "string",

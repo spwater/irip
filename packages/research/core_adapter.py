@@ -12,9 +12,10 @@ CoreFactProviderImpl：实现类，内部封装 FactQueryService 的只读方法
 （tsvector 的 simple 分词器对中文不友好，"拉曼"匹配不到"拉曼样品"）。
 """
 
-import sqlalchemy as sa
 from typing import Protocol
 from uuid import UUID
+
+import sqlalchemy as sa
 
 from packages.common.database import scoped_session
 from packages.research.models import FactSummary
@@ -148,11 +149,18 @@ class CoreFactProviderImpl:
         if len(items) > effective_size:
             items = items[:effective_size]
             last = items[-1]
-            import base64, json
-            cursor_str = base64.b64encode(json.dumps({
-                "created_at": str(last["fact_id"]),
-                "id": str(last["fact_id"]),
-            }, ensure_ascii=False).encode()).decode()
+            import base64
+            import json
+
+            cursor_str = base64.b64encode(
+                json.dumps(
+                    {
+                        "created_at": str(last["fact_id"]),
+                        "id": str(last["fact_id"]),
+                    },
+                    ensure_ascii=False,
+                ).encode()
+            ).decode()
             next_cursor = cursor_str
 
         summaries = [

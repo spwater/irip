@@ -32,7 +32,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
 from packages.common.database import Base
@@ -50,7 +49,6 @@ from packages.research.models import (
     SnapshotRef,
     WorkspaceRef,
 )
-
 
 # ---------------------------------------------------------------------------
 # 辅助：mock ScopedSessionMixin._scoped_session
@@ -105,9 +103,16 @@ class TestORMEntities:
         cols = ResearchWorkspace.__table__.columns
         col_names = {c.name for c in cols}
         expected = {
-            "id", "owner_user_id", "department_id", "name", "status",
-            "current_question_version", "forked_from_id",
-            "created_at", "updated_at", "lock_version",
+            "id",
+            "owner_user_id",
+            "department_id",
+            "name",
+            "status",
+            "current_question_version",
+            "forked_from_id",
+            "created_at",
+            "updated_at",
+            "lock_version",
         }
         assert expected.issubset(col_names)
 
@@ -116,16 +121,12 @@ class TestORMEntities:
 
         # owner_user_id 不可为空且是 FK → app_user
         assert not cols["owner_user_id"].nullable
-        assert any(
-            fk.column.table.name == "app_user"
-            for fk in cols["owner_user_id"].foreign_keys
-        )
+        assert any(fk.column.table.name == "app_user" for fk in cols["owner_user_id"].foreign_keys)
 
         # department_id 不可为空且是 FK → department
         assert not cols["department_id"].nullable
         assert any(
-            fk.column.table.name == "department"
-            for fk in cols["department_id"].foreign_keys
+            fk.column.table.name == "department" for fk in cols["department_id"].foreign_keys
         )
 
         # name 不可为空
@@ -402,9 +403,7 @@ class TestRepositoryCursor:
 
         from packages.research.repository import _decode_cursor
 
-        payload = json.dumps(
-            {"v": "not-a-date", "id": str(uuid4())}
-        ).encode()
+        payload = json.dumps({"v": "not-a-date", "id": str(uuid4())}).encode()
         cursor = base64.urlsafe_b64encode(payload).decode("ascii")
         with pytest.raises(ValueError, match="不是合法 ISO 时间"):
             _decode_cursor(cursor)
@@ -415,9 +414,7 @@ class TestRepositoryCursor:
 
         from packages.research.repository import _decode_cursor
 
-        payload = json.dumps(
-            {"v": "2026-01-01T00:00:00", "id": "not-a-uuid"}
-        ).encode()
+        payload = json.dumps({"v": "2026-01-01T00:00:00", "id": "not-a-uuid"}).encode()
         cursor = base64.urlsafe_b64encode(payload).decode("ascii")
         with pytest.raises(ValueError, match="不是合法 UUID"):
             _decode_cursor(cursor)
@@ -887,9 +884,7 @@ class TestWorkspaceService:
                 new_callable=AsyncMock,
             ),
         ):
-            result = await service.update_question(
-                ws_id, "新研究问题", ["子问题A", "子问题B"]
-            )
+            result = await service.update_question(ws_id, "新研究问题", ["子问题A", "子问题B"])
 
         # 验证版本号递增
         assert isinstance(result, QuestionVersionRef)
@@ -915,9 +910,7 @@ class TestWorkspaceService:
                 status="active",
             )
         ]
-        mock_fact_provider.search_facts = AsyncMock(
-            return_value=(mock_facts, "next-cursor")
-        )
+        mock_fact_provider.search_facts = AsyncMock(return_value=(mock_facts, "next-cursor"))
 
         result_facts, cursor = await service.search_facts("Na2O", page_size=10)
 
@@ -1033,12 +1026,8 @@ class TestEvidenceSnapshotService:
             ref2.source_id: {"metadata": {"m_field": 3}},
         }
 
-        hash1 = snapshot_service._compute_content_hash(
-            [ref2, ref1], fact_fields_map, fact_data_map
-        )
-        hash2 = snapshot_service._compute_content_hash(
-            [ref1, ref2], fact_fields_map, fact_data_map
-        )
+        hash1 = snapshot_service._compute_content_hash([ref2, ref1], fact_fields_map, fact_data_map)
+        hash2 = snapshot_service._compute_content_hash([ref1, ref2], fact_fields_map, fact_data_map)
 
         # 不同顺序的 refs 应产生相同哈希（内部排序）
         assert hash1 == hash2
@@ -1052,12 +1041,8 @@ class TestEvidenceSnapshotService:
         fact_fields_map = {ref.source_id: ["field1"]}
         fact_data_map = {ref.source_id: {"metadata": {"field1": "value1"}}}
 
-        hash1 = snapshot_service._compute_content_hash(
-            [ref], fact_fields_map, fact_data_map
-        )
-        hash2 = snapshot_service._compute_content_hash(
-            [ref], fact_fields_map, fact_data_map
-        )
+        hash1 = snapshot_service._compute_content_hash([ref], fact_fields_map, fact_data_map)
+        hash2 = snapshot_service._compute_content_hash([ref], fact_fields_map, fact_data_map)
 
         assert hash1 == hash2
 
@@ -1315,9 +1300,7 @@ class TestCoreFactProvider:
         from packages.research.core_adapter import CoreFactProviderImpl
 
         mock_query_service = AsyncMock()
-        mock_query_service.get_fact_data = AsyncMock(
-            return_value={"metadata": {}, "points": []}
-        )
+        mock_query_service.get_fact_data = AsyncMock(return_value={"metadata": {}, "points": []})
 
         provider = CoreFactProviderImpl(query_service=mock_query_service)
         fields = await provider.get_fact_fields(uuid4())
@@ -1381,9 +1364,7 @@ class TestMigration0074:
         files = list(self.MIGRATIONS_DIR.glob("0074_*.py"))
         assert files, "找不到 0074 迁移文件"
         assert len(files) == 1, f"0074 匹配到多个文件: {files}"
-        spec = importlib.util.spec_from_file_location(
-            "migration_0074", files[0]
-        )
+        spec = importlib.util.spec_from_file_location("migration_0074", files[0])
         assert spec is not None and spec.loader is not None
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -1410,9 +1391,7 @@ class TestMigration0074:
             mod.upgrade()
 
         # 验证 4 张表的 CREATE TABLE
-        create_tables = [
-            s for s in executed_sqls if "CREATE TABLE" in s.upper()
-        ]
+        create_tables = [s for s in executed_sqls if "CREATE TABLE" in s.upper()]
         assert len(create_tables) == 4, f"期望 4 张表，实际 {len(create_tables)}"
 
         # 验证表名
@@ -1436,12 +1415,9 @@ class TestMigration0074:
             mod.upgrade()
 
         create_indexes = [
-            s for s in executed_sqls if "CREATE INDEX" in s.upper()
-            and "UNIQUE" not in s.upper()
+            s for s in executed_sqls if "CREATE INDEX" in s.upper() and "UNIQUE" not in s.upper()
         ]
-        assert len(create_indexes) == 4, (
-            f"期望 4 个普通索引，实际 {len(create_indexes)}"
-        )
+        assert len(create_indexes) == 4, f"期望 4 个普通索引，实际 {len(create_indexes)}"
 
         all_sql = " ".join(executed_sqls)
         assert "ix_research_workspace_owner_user_id" in all_sql
@@ -1462,13 +1438,8 @@ class TestMigration0074:
         with patch.object(mod, "op", _MockOp()):
             mod.upgrade()
 
-        unique_indexes = [
-            s for s in executed_sqls
-            if "CREATE UNIQUE INDEX" in s.upper()
-        ]
-        assert len(unique_indexes) == 2, (
-            f"期望 2 个唯一索引，实际 {len(unique_indexes)}"
-        )
+        unique_indexes = [s for s in executed_sqls if "CREATE UNIQUE INDEX" in s.upper()]
+        assert len(unique_indexes) == 2, f"期望 2 个唯一索引，实际 {len(unique_indexes)}"
 
         all_sql = " ".join(executed_sqls)
         # (workspace_id, version_number) 唯一约束
@@ -1490,9 +1461,7 @@ class TestMigration0074:
             mod.downgrade()
 
         drop_tables = [s for s in executed_sqls if "DROP TABLE" in s.upper()]
-        assert len(drop_tables) == 4, (
-            f"期望 4 个 DROP TABLE，实际 {len(drop_tables)}"
-        )
+        assert len(drop_tables) == 4, f"期望 4 个 DROP TABLE，实际 {len(drop_tables)}"
 
         # 验证反序删除
         all_sql = " ".join(executed_sqls)
@@ -1548,10 +1517,7 @@ class TestModuleIsolation:
         """研究域表名均以 research_ 前缀命名。"""
         import packages.research.entities  # noqa: F401
 
-        research_tables = {
-            t for t in Base.metadata.tables
-            if t.startswith("research_")
-        }
+        research_tables = {t for t in Base.metadata.tables if t.startswith("research_")}
         assert "research_workspace" in research_tables
         assert "research_question_version" in research_tables
         assert "research_workspace_evidence_ref" in research_tables
@@ -1587,10 +1553,7 @@ class TestResearchAPI:
         """research_router 包含 14 个端点。"""
         from apps.api.routers.research import research_router
 
-        routes = [
-            r for r in research_router.routes
-            if hasattr(r, "methods") and r.methods
-        ]
+        routes = [r for r in research_router.routes if hasattr(r, "methods") and r.methods]
         assert len(routes) == 14, f"期望 14 个端点，实际 {len(routes)}"
 
 

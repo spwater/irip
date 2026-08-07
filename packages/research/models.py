@@ -8,6 +8,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import Enum
 from uuid import UUID
 
 
@@ -146,8 +147,6 @@ class WorkspaceDetail:
 # ============================================================
 # 阶段 3：研究产物数据类
 # ============================================================
-
-from enum import Enum
 
 
 class EvidenceSourceLabel(Enum):

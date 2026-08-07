@@ -193,9 +193,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 5. 获取最新快照 ID（逻辑引用）
-            latest_snapshot = await ResearchRepository.get_latest_snapshot(
-                session, workspace_id
-            )
+            latest_snapshot = await ResearchRepository.get_latest_snapshot(session, workspace_id)
             source_snapshot_id = latest_snapshot.id if latest_snapshot else None
 
             # 6. 创建稳定身份
@@ -228,9 +226,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 8. 更新当前版本号
-            await ResearchRepository.update_dataset_current_version(
-                session, dataset.id, 1
-            )
+            await ResearchRepository.update_dataset_current_version(session, dataset.id, 1)
 
             # 9. 审计
             await AuditRecorder.record(
@@ -324,9 +320,7 @@ class ProductService(ScopedSessionMixin):
             AppError: code="not_found"，当数据集不存在时。
         """
         async with self._scoped_session() as session:
-            dataset = await ResearchRepository.get_dataset(
-                session, dataset_id, workspace_id
-            )
+            dataset = await ResearchRepository.get_dataset(session, dataset_id, workspace_id)
             if dataset is None:
                 raise AppError(
                     code="not_found",
@@ -337,9 +331,7 @@ class ProductService(ScopedSessionMixin):
 
             current_version_data: dict | None = None
             if dataset.current_version > 0:
-                version = await ResearchRepository.get_latest_dataset_version(
-                    session, dataset_id
-                )
+                version = await ResearchRepository.get_latest_dataset_version(session, dataset_id)
                 if version is not None:
                     current_version_data = {
                         "version_id": str(version.id),
@@ -392,9 +384,7 @@ class ProductService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            dataset = await ResearchRepository.get_dataset(
-                session, dataset_id, workspace_id
-            )
+            dataset = await ResearchRepository.get_dataset(session, dataset_id, workspace_id)
             if dataset is None:
                 raise AppError(
                     code="not_found",
@@ -450,9 +440,7 @@ class ProductService(ScopedSessionMixin):
             list[DatasetVersionRef]: 版本引用列表。
         """
         async with self._scoped_session() as session:
-            versions = await ResearchRepository.list_dataset_versions(
-                session, dataset_id
-            )
+            versions = await ResearchRepository.list_dataset_versions(session, dataset_id)
             return [
                 DatasetVersionRef(
                     version_id=v.id,
@@ -589,10 +577,8 @@ class ProductService(ScopedSessionMixin):
             # 3. 查找同步骤的 code 工件
             chart_code_artifact_id: UUID | None = None
             if artifact.step_id is not None:
-                step_artifacts = (
-                    await ResearchRepositoryTrusted.list_artifacts_by_step(
-                        session, artifact.step_id
-                    )
+                step_artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
+                    session, artifact.step_id
                 )
                 for a in step_artifacts:
                     if a.artifact_type == "code":
@@ -839,9 +825,7 @@ class ProductService(ScopedSessionMixin):
                 status=view.status,
                 current_version=view.current_version,
                 caption=caption if caption is not None else view.caption,
-                display_order=display_order
-                if display_order is not None
-                else view.display_order,
+                display_order=display_order if display_order is not None else view.display_order,
             )
 
     async def list_view_versions(
@@ -892,9 +876,7 @@ class ProductService(ScopedSessionMixin):
             AppError: code="not_found"，当版本不存在时。
         """
         async with self._scoped_session() as session:
-            version = await ResearchRepository.get_view_version(
-                session, view_id, version_number
-            )
+            version = await ResearchRepository.get_view_version(session, view_id, version_number)
             if version is None:
                 raise AppError(
                     code="not_found",
@@ -939,7 +921,8 @@ class ProductService(ScopedSessionMixin):
         流程：
         1. 获取 InsightCandidate（校验 status=pending）
         2. 创建 ResearchInsight（stable identity, name=conclusion 摘要）
-        3. 创建 ResearchInsightVersion v1（is_modified=false, ai_original_text=candidate.ai_raw_text）
+        3. 创建 ResearchInsightVersion v1（is_modified=false,
+           ai_original_text=candidate.ai_raw_text）
         4. 更新候选 status=accepted, accepted_insight_id, reviewed_at, reviewed_by
         5. 审计
 
@@ -957,9 +940,7 @@ class ProductService(ScopedSessionMixin):
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
             # 1. 获取候选并校验
-            candidate = await ResearchRepository.get_insight_candidate(
-                session, candidate_id
-            )
+            candidate = await ResearchRepository.get_insight_candidate(session, candidate_id)
             if candidate is None:
                 raise AppError(
                     code="not_found",
@@ -989,7 +970,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 3. 创建 v1 不可变版本（is_modified=false）
-            version = await ResearchRepository.insert_insight_version(
+            await ResearchRepository.insert_insight_version(
                 session,
                 insight_id=insight.id,
                 version_number=1,
@@ -1018,9 +999,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 5. 更新 Insight 当前版本号
-            await ResearchRepository.update_insight_current_version(
-                session, insight.id, 1
-            )
+            await ResearchRepository.update_insight_current_version(session, insight.id, 1)
 
             # 6. 审计
             await AuditRecorder.record(
@@ -1049,6 +1028,7 @@ class ProductService(ScopedSessionMixin):
             # 7. 清除 dag_structure 里的候选数据（避免刷新后重复显示）
             try:
                 import json as _json
+
                 result = await session.execute(
                     sa.text(
                         "SELECT id, dag_structure FROM research_analysis_plan_version "
@@ -1117,7 +1097,8 @@ class ProductService(ScopedSessionMixin):
         流程：
         1. 获取 InsightCandidate（校验 status=pending）
         2. 创建 ResearchInsight（stable identity）
-        3. 创建 ResearchInsightVersion v1（is_modified=true, ai_original_text, modification_note, 用户修改后的字段值）
+        3. 创建 ResearchInsightVersion v1（is_modified=true,
+           ai_original_text, modification_note, 用户修改后的字段值）
         4. 更新候选 status=modified, accepted_insight_id, reviewed_at, reviewed_by
         5. 审计
 
@@ -1146,9 +1127,7 @@ class ProductService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # 1. 获取候选并校验
-            candidate = await ResearchRepository.get_insight_candidate(
-                session, candidate_id
-            )
+            candidate = await ResearchRepository.get_insight_candidate(session, candidate_id)
             if candidate is None:
                 raise AppError(
                     code="not_found",
@@ -1165,26 +1144,16 @@ class ProductService(ScopedSessionMixin):
                 )
 
             # 合并修改字段（用户修改覆盖候选原始值）
-            conclusion = str(
-                modified_fields.get("conclusion", candidate.conclusion)
-            )
+            conclusion = str(modified_fields.get("conclusion", candidate.conclusion))
             scope = str(modified_fields.get("scope", candidate.scope))
-            evidence_refs = list(
-                modified_fields.get("evidence_refs", candidate.evidence_refs)
-            )
-            method_refs = list(
-                modified_fields.get("method_refs", candidate.method_refs)
-            )
+            evidence_refs = list(modified_fields.get("evidence_refs", candidate.evidence_refs))
+            method_refs = list(modified_fields.get("method_refs", candidate.method_refs))
             confidence_level = str(
                 modified_fields.get("confidence_level", candidate.confidence_level)
             )
-            limitations = str(
-                modified_fields.get("limitations", candidate.limitations)
-            )
+            limitations = str(modified_fields.get("limitations", candidate.limitations))
             evidence_source_label = str(
-                modified_fields.get(
-                    "evidence_source_label", candidate.evidence_source_label
-                )
+                modified_fields.get("evidence_source_label", candidate.evidence_source_label)
             )
 
             # 2. 创建稳定身份
@@ -1199,7 +1168,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 3. 创建 v1 不可变版本（is_modified=true）
-            version = await ResearchRepository.insert_insight_version(
+            await ResearchRepository.insert_insight_version(
                 session,
                 insight_id=insight.id,
                 version_number=1,
@@ -1228,9 +1197,7 @@ class ProductService(ScopedSessionMixin):
             )
 
             # 5. 更新 Insight 当前版本号
-            await ResearchRepository.update_insight_current_version(
-                session, insight.id, 1
-            )
+            await ResearchRepository.update_insight_current_version(session, insight.id, 1)
 
             # 6. 审计
             await AuditRecorder.record(
@@ -1321,9 +1288,7 @@ class ProductService(ScopedSessionMixin):
             AppError: code="not_found"，当 Insight 不存在时。
         """
         async with self._scoped_session() as session:
-            insight = await ResearchRepository.get_insight(
-                session, insight_id, workspace_id
-            )
+            insight = await ResearchRepository.get_insight(session, insight_id, workspace_id)
             if insight is None:
                 raise AppError(
                     code="not_found",
@@ -1334,9 +1299,7 @@ class ProductService(ScopedSessionMixin):
 
             current_version_data: dict | None = None
             if insight.current_version > 0:
-                version = await ResearchRepository.get_latest_insight_version(
-                    session, insight_id
-                )
+                version = await ResearchRepository.get_latest_insight_version(session, insight_id)
                 if version is not None:
                     current_version_data = {
                         "version_id": str(version.id),
@@ -1387,9 +1350,7 @@ class ProductService(ScopedSessionMixin):
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            insight = await ResearchRepository.get_insight(
-                session, insight_id, workspace_id
-            )
+            insight = await ResearchRepository.get_insight(session, insight_id, workspace_id)
             if insight is None:
                 raise AppError(
                     code="not_found",
@@ -1398,9 +1359,7 @@ class ProductService(ScopedSessionMixin):
                     fields={"insight_id": str(insight_id)},
                 )
 
-            await ResearchRepository.update_insight_metadata(
-                session, insight_id, name=name
-            )
+            await ResearchRepository.update_insight_metadata(session, insight_id, name=name)
 
             await AuditRecorder.record(
                 session,
@@ -1432,20 +1391,16 @@ class ProductService(ScopedSessionMixin):
             workspace_id: 工作空间 ID。
             insight_id: Insight ID。
         """
-        actor_id = self._require_actor()
+        self._require_actor()
         async with self._scoped_session() as session:
             # 删除版本
             await session.execute(
-                sa.text(
-                    "DELETE FROM research_insight_version WHERE insight_id = :iid"
-                ),
+                sa.text("DELETE FROM research_insight_version WHERE insight_id = :iid"),
                 {"iid": str(insight_id)},
             )
             # 删除 Insight
             await session.execute(
-                sa.text(
-                    "DELETE FROM research_insight WHERE id = :iid AND workspace_id = :wid"
-                ),
+                sa.text("DELETE FROM research_insight WHERE id = :iid AND workspace_id = :wid"),
                 {"iid": str(insight_id), "wid": str(workspace_id)},
             )
 
@@ -1461,7 +1416,9 @@ class ProductService(ScopedSessionMixin):
                 {"did": str(dataset_id)},
             )
             await session.execute(
-                sa.text("DELETE FROM research_derived_dataset WHERE id = :did AND workspace_id = :wid"),
+                sa.text(
+                    "DELETE FROM research_derived_dataset WHERE id = :did AND workspace_id = :wid"
+                ),
                 {"did": str(dataset_id), "wid": str(workspace_id)},
             )
 
@@ -1496,9 +1453,7 @@ class ProductService(ScopedSessionMixin):
             list[InsightVersionRef]: 版本引用列表。
         """
         async with self._scoped_session() as session:
-            versions = await ResearchRepository.list_insight_versions(
-                session, insight_id
-            )
+            versions = await ResearchRepository.list_insight_versions(session, insight_id)
             return [
                 InsightVersionRef(
                     version_id=v.id,

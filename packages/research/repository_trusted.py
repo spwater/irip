@@ -1,7 +1,8 @@
 """可信执行数据访问层扩展（阶段 2 新增方法）。
 
 ResearchRepositoryTrusted 封装阶段 2 新增的 6 张表的数据库操作：
-- 计划版本 CRUD（insert_plan_version / get_plan / list_plans / get_latest_plan_version / update_plan_status）
+- 计划版本 CRUD（insert_plan_version / get_plan / list_plans
+  / get_latest_plan_version / update_plan_status）
 - Run CRUD（insert_run / get_run / list_runs / update_run_status / update_run_queue_position /
   get_active_run_for_workspace / get_next_run_number）
 - 步骤 CRUD（insert_step / get_step / list_steps_by_run / update_step_status /
@@ -96,9 +97,7 @@ class ResearchRepositoryTrusted:
             ResearchAnalysisPlanVersion | None: 计划版本实体，不存在时返回 None。
         """
         result = await session.execute(
-            sa.select(ResearchAnalysisPlanVersion).where(
-                ResearchAnalysisPlanVersion.id == plan_id
-            )
+            sa.select(ResearchAnalysisPlanVersion).where(ResearchAnalysisPlanVersion.id == plan_id)
         )
         return result.scalar_one_or_none()
 
@@ -318,9 +317,7 @@ class ResearchRepositoryTrusted:
         if coverage_summary is not None:
             values["coverage_summary"] = coverage_summary
         await session.execute(
-            sa.update(ResearchAnalysisRun)
-            .where(ResearchAnalysisRun.id == run_id)
-            .values(**values)
+            sa.update(ResearchAnalysisRun).where(ResearchAnalysisRun.id == run_id).values(**values)
         )
 
     @staticmethod

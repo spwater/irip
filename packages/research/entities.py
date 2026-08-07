@@ -55,16 +55,12 @@ class ResearchWorkspace(Base):
     __tablename__ = "research_workspace"
 
     id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    owner_user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     department_id: Mapped[UUID] = mapped_column(
         GUID, sa.ForeignKey("department.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'draft'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
     current_question_version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
@@ -80,10 +76,7 @@ class ResearchWorkspace(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"ResearchWorkspace(id={self.id!r}, name={self.name!r}, "
-            f"status={self.status!r})"
-        )
+        return f"ResearchWorkspace(id={self.id!r}, name={self.name!r}, status={self.status!r})"
 
 
 class ResearchQuestionVersion(Base):
@@ -118,9 +111,7 @@ class ResearchQuestionVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -163,12 +154,8 @@ class WorkspaceEvidenceRef(Base):
     added_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    added_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    added_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
 
     def __repr__(self) -> str:
         return (
@@ -213,9 +200,7 @@ class ResearchEvidenceSnapshot(Base):
     permission_envelope: Mapped[dict] = mapped_column(JSONB, nullable=False)
     field_manifest: Mapped[dict] = mapped_column(JSONB, nullable=False)
     source_refs: Mapped[list] = mapped_column(JSONB, nullable=False)
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -260,14 +245,10 @@ class ResearchDerivedDataset(Base):
         sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
         nullable=False,
     )
-    owner_user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    tags: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
-    )
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'confirmed'")
     )
@@ -349,9 +330,7 @@ class ResearchDerivedDatasetVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -385,9 +364,7 @@ class ResearchView(Base):
         sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
         nullable=False,
     )
-    owner_user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     caption: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     display_order: Mapped[int] = mapped_column(
@@ -475,9 +452,7 @@ class ResearchViewVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -507,9 +482,7 @@ class ResearchInsight(Base):
         sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
         nullable=False,
     )
-    owner_user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'confirmed'")
@@ -547,8 +520,10 @@ class ResearchInsightVersion(Base):
         id: 版本 UUID（PK）。
         insight_id: Insight ID（FK→research_insight CASCADE）。
         version_number: 版本号。
-        conclusion / scope / evidence_refs / method_refs / confidence_level / limitations: 6 个必填字段。
-        evidence_source_label: 证据来源标签（experimental_data / knowledge_base / model_inference）。
+        conclusion / scope / evidence_refs / method_refs
+        / confidence_level / limitations: 6 个必填字段。
+        evidence_source_label: 证据来源标签
+        （experimental_data / knowledge_base / model_inference）。
         ai_original_text: AI 原稿（可空）。
         is_modified: 是否被用户修改。
         modification_note: 修改原因（可空）。
@@ -585,9 +560,7 @@ class ResearchInsightVersion(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
-    created_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
 
     def __repr__(self) -> str:
         return (
@@ -606,7 +579,8 @@ class ResearchInsightCandidate(Base):
     Attributes:
         id: 候选 UUID（PK）。
         workspace_id / run_id / step_id: 来源引用。
-        conclusion / scope / evidence_refs / method_refs / confidence_level / limitations: 6 个必填字段。
+        conclusion / scope / evidence_refs / method_refs
+        / confidence_level / limitations: 6 个必填字段。
         evidence_source_label: 证据来源标签。
         ai_raw_text: AI 原始回答文本。
         status: 状态（pending / accepted / modified / rejected）。
@@ -692,9 +666,7 @@ class ResearchResult(Base):
         sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
         nullable=False,
     )
-    owner_user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    owner_user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(
         sa.Text, nullable=False, server_default=sa.text("'published'")
@@ -764,9 +736,7 @@ class ResearchResultVersion(Base):
     version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     title: Mapped[str] = mapped_column(sa.Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    tags: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
-    )
+    tags: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=sa.text("'[]'::jsonb"))
     release_notes: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     dataset_version_refs: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
@@ -786,9 +756,7 @@ class ResearchResultVersion(Base):
     source_run_statuses: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
-    publisher: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    publisher: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     published_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -796,9 +764,7 @@ class ResearchResultVersion(Base):
     published_permission_envelope: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
     )
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'active'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'active'"))
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -847,9 +813,7 @@ class ResearchResultAclRevision(Base):
     )
     previous_acl_type: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     previous_explicit_user_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    changed_by: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    changed_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     changed_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -900,10 +864,7 @@ class ResearchLineageEdge(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"ResearchLineageEdge(id={self.id!r}, "
-            f"edge_type={self.edge_type!r})"
-        )
+        return f"ResearchLineageEdge(id={self.id!r}, edge_type={self.edge_type!r})"
 
 
 class ResearchResultFavorite(Base):
@@ -924,9 +885,7 @@ class ResearchResultFavorite(Base):
         sa.ForeignKey("research_result.id", ondelete="CASCADE"),
         nullable=False,
     )
-    user_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("app_user.id"), nullable=False
-    )
+    user_id: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

@@ -40,19 +40,28 @@ from packages.ai.numeric.contracts import (
     ResolvedNumericInput,
     StatisticsResult,
 )
-from packages.ai.numeric.data_resolver import NumericDataResolver, FactQueryFactory
+from packages.ai.numeric.data_resolver import NumericDataResolver
 from packages.ai.numeric.expression import SafeExpressionEngine
 from packages.ai.numeric.statistics import SeriesStatisticsService
 
 #: 允许的 source_type 集合
-_VALID_SOURCE_TYPES: frozenset[str] = frozenset({
-    "scalar", "inline", "fact_series", "artifact_series",
-})
+_VALID_SOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "scalar",
+        "inline",
+        "fact_series",
+        "artifact_series",
+    }
+)
 
 #: describe_series 允许的 source_type（不含 scalar）
-_SERIES_SOURCE_TYPES: frozenset[str] = frozenset({
-    "inline", "fact_series", "artifact_series",
-})
+_SERIES_SOURCE_TYPES: frozenset[str] = frozenset(
+    {
+        "inline",
+        "fact_series",
+        "artifact_series",
+    }
+)
 
 
 class NumericToolFacade:
@@ -114,21 +123,32 @@ class NumericToolFacade:
                 # 3. 执行表达式（同步 CPU 计算，在线程中执行）
                 result: NumericValue = await asyncio.to_thread(
                     self._expression_engine.evaluate,
-                    expression, resolved, options,
+                    expression,
+                    resolved,
+                    options,
                 )
 
                 # 4. 构建结果
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
                 return self._build_evaluate_result(
-                    expression, expression_sha256, resolved, result,
-                    options, elapsed_ms,
+                    expression,
+                    expression_sha256,
+                    resolved,
+                    result,
+                    options,
+                    elapsed_ms,
                 )
 
             except NumericError as exc:
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
                 return self._build_error_result(
-                    "evaluate_expression", expression, expression_sha256,
-                    variable_sources, exc, options.to_audit_dict(), elapsed_ms,
+                    "evaluate_expression",
+                    expression,
+                    expression_sha256,
+                    variable_sources,
+                    exc,
+                    options.to_audit_dict(),
+                    elapsed_ms,
                 )
             except Exception:
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
@@ -137,8 +157,13 @@ class NumericToolFacade:
                     message="unexpected internal error",
                 )
                 return self._build_error_result(
-                    "evaluate_expression", expression, expression_sha256,
-                    variable_sources, internal_err, options.to_audit_dict(), elapsed_ms,
+                    "evaluate_expression",
+                    expression,
+                    expression_sha256,
+                    variable_sources,
+                    internal_err,
+                    options.to_audit_dict(),
+                    elapsed_ms,
                 )
 
     # ---- describe_series ----
@@ -171,19 +196,27 @@ class NumericToolFacade:
                 # 3. 执行统计（同步 CPU 计算，在线程中执行）
                 stats_result: StatisticsResult = await asyncio.to_thread(
                     self._statistics_service.describe,
-                    resolved, request,
+                    resolved,
+                    request,
                 )
 
                 # 4. 构建结果
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
                 return self._build_describe_result(
-                    series_source, resolved, stats_result, request, elapsed_ms,
+                    series_source,
+                    resolved,
+                    stats_result,
+                    request,
+                    elapsed_ms,
                 )
 
             except NumericError as exc:
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
                 return self._build_describe_error_result(
-                    series_source, exc, request.to_audit_dict(), elapsed_ms,
+                    series_source,
+                    exc,
+                    request.to_audit_dict(),
+                    elapsed_ms,
                 )
             except Exception:
                 elapsed_ms = (time.monotonic() - start_time) * 1000.0
@@ -192,7 +225,10 @@ class NumericToolFacade:
                     message="unexpected internal error",
                 )
                 return self._build_describe_error_result(
-                    series_source, internal_err, request.to_audit_dict(), elapsed_ms,
+                    series_source,
+                    internal_err,
+                    request.to_audit_dict(),
+                    elapsed_ms,
                 )
 
     # ---- 参数解析 ----
@@ -286,8 +322,15 @@ class NumericToolFacade:
         """解析单个数据来源对象。"""
         # 检查未知字段
         allowed_keys = {
-            "name", "source_type", "value", "values", "unit",
-            "fact_id", "artifact_id", "series_index", "column_name",
+            "name",
+            "source_type",
+            "value",
+            "values",
+            "unit",
+            "fact_id",
+            "artifact_id",
+            "series_index",
+            "column_name",
         }
         unknown_keys = set(var.keys()) - allowed_keys
         if unknown_keys:
@@ -306,6 +349,7 @@ class NumericToolFacade:
             )
         # 变量名格式检查
         import re
+
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$", name):
             raise NumericError(
                 code="numeric_invalid_source",
@@ -400,7 +444,11 @@ class NumericToolFacade:
                     message="fact_series must not have 'value' or 'values'",
                     path=f"{path_prefix}",
                 )
-            if not isinstance(series_index, int) or isinstance(series_index, bool) or series_index < 0:
+            if (
+                not isinstance(series_index, int)
+                or isinstance(series_index, bool)
+                or series_index < 0
+            ):
                 raise NumericError(
                     code="numeric_invalid_source",
                     message="series_index must be a non-negative integer",
@@ -437,7 +485,11 @@ class NumericToolFacade:
                     message="platform source must not specify 'unit'",
                     path=f"{path_prefix}.unit",
                 )
-            if not isinstance(series_index, int) or isinstance(series_index, bool) or series_index < 0:
+            if (
+                not isinstance(series_index, int)
+                or isinstance(series_index, bool)
+                or series_index < 0
+            ):
                 raise NumericError(
                     code="numeric_invalid_source",
                     message="series_index must be a non-negative integer",
@@ -462,12 +514,16 @@ class NumericToolFacade:
         return NumericSource(
             name=name,
             source_type=source_type,
-            value=value if isinstance(value, (int, float)) and not isinstance(value, bool) else None,
+            value=value
+            if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None,
             values=values if isinstance(values, list) else None,
             unit=unit if isinstance(unit, str) else None,
             fact_id=fact_id if isinstance(fact_id, str) else None,
             artifact_id=artifact_id if isinstance(artifact_id, str) else None,
-            series_index=series_index if isinstance(series_index, int) and not isinstance(series_index, bool) else None,
+            series_index=series_index
+            if isinstance(series_index, int) and not isinstance(series_index, bool)
+            else None,
             column_name=column_name if isinstance(column_name, str) else None,
         )
 
@@ -559,14 +615,22 @@ class NumericToolFacade:
 
         # 生成审计数据
         audit_data = self._build_evaluate_audit(
-            expression, expression_sha256, resolved, result,
-            result_digest, options, elapsed_ms,
+            expression,
+            expression_sha256,
+            resolved,
+            result,
+            result_digest,
+            options,
+            elapsed_ms,
         )
 
         # 生成 citation_params
         citation_params = self._build_evaluate_citation(
-            expression, expression_sha256, resolved,
-            result_digest, options,
+            expression,
+            expression_sha256,
+            resolved,
+            result_digest,
+            options,
         )
 
         # 生成 summary
@@ -577,8 +641,10 @@ class NumericToolFacade:
                 summary = f"evaluate_expression: {result.scalar} (expression: {expression[:80]})"
         else:
             count = len(result.vector) if result.vector is not None else 0
-            truncated = count > self._limits.vector_preview_threshold
-            summary = f"evaluate_expression: vector result with {count} values (expression: {expression[:80]})"
+            summary = (
+                f"evaluate_expression: vector result with {count} values"
+                f" (expression: {expression[:80]})"
+            )
 
         return NumericExecutionResult(
             summary=summary,
@@ -599,7 +665,6 @@ class NumericToolFacade:
 
         # vector
         vector = result.vector
-        null_mask = result.null_mask
         count = len(vector) if vector is not None else 0
 
         if count <= self._limits.vector_preview_threshold:
@@ -642,17 +707,23 @@ class NumericToolFacade:
         """构建审计数据（不含原始数组）。"""
         sources_audit = []
         for name, inp in resolved.items():
-            sources_audit.append({
-                "name": name,
-                "source_type": inp.source_provenance.source_type,
-                "count": inp.length,
-                "unit": inp.unit,
-                "input_sha256": inp.input_digest,
-                "fact_id": str(inp.source_provenance.fact_id) if inp.source_provenance.fact_id else None,
-                "artifact_id": str(inp.source_provenance.artifact_id) if inp.source_provenance.artifact_id else None,
-                "series_index": inp.source_provenance.series_index,
-                "column_name": inp.source_provenance.column_name,
-            })
+            sources_audit.append(
+                {
+                    "name": name,
+                    "source_type": inp.source_provenance.source_type,
+                    "count": inp.length,
+                    "unit": inp.unit,
+                    "input_sha256": inp.input_digest,
+                    "fact_id": str(inp.source_provenance.fact_id)
+                    if inp.source_provenance.fact_id
+                    else None,
+                    "artifact_id": str(inp.source_provenance.artifact_id)
+                    if inp.source_provenance.artifact_id
+                    else None,
+                    "series_index": inp.source_provenance.series_index,
+                    "column_name": inp.source_provenance.column_name,
+                }
+            )
 
         result_type = result.kind
         truncated = False
@@ -687,15 +758,21 @@ class NumericToolFacade:
         sources_cite = []
         for name in sorted(resolved.keys()):
             inp = resolved[name]
-            sources_cite.append({
-                "name": name,
-                "source_type": inp.source_provenance.source_type,
-                "input_sha256": inp.input_digest,
-                "fact_id": str(inp.source_provenance.fact_id) if inp.source_provenance.fact_id else None,
-                "artifact_id": str(inp.source_provenance.artifact_id) if inp.source_provenance.artifact_id else None,
-                "series_index": inp.source_provenance.series_index,
-                "column_name": inp.source_provenance.column_name,
-            })
+            sources_cite.append(
+                {
+                    "name": name,
+                    "source_type": inp.source_provenance.source_type,
+                    "input_sha256": inp.input_digest,
+                    "fact_id": str(inp.source_provenance.fact_id)
+                    if inp.source_provenance.fact_id
+                    else None,
+                    "artifact_id": str(inp.source_provenance.artifact_id)
+                    if inp.source_provenance.artifact_id
+                    else None,
+                    "series_index": inp.source_provenance.series_index,
+                    "column_name": inp.source_provenance.column_name,
+                }
+            )
 
         return {
             "engine_version": NUMERIC_ENGINE_VERSION,
@@ -730,17 +807,23 @@ class NumericToolFacade:
         audit_data = {
             "engine_version": NUMERIC_ENGINE_VERSION,
             "tool": "describe_series",
-            "sources": [{
-                "name": resolved.name,
-                "source_type": resolved.source_provenance.source_type,
-                "count": resolved.length,
-                "unit": resolved.unit,
-                "input_sha256": resolved.input_digest,
-                "fact_id": str(resolved.source_provenance.fact_id) if resolved.source_provenance.fact_id else None,
-                "artifact_id": str(resolved.source_provenance.artifact_id) if resolved.source_provenance.artifact_id else None,
-                "series_index": resolved.source_provenance.series_index,
-                "column_name": resolved.source_provenance.column_name,
-            }],
+            "sources": [
+                {
+                    "name": resolved.name,
+                    "source_type": resolved.source_provenance.source_type,
+                    "count": resolved.length,
+                    "unit": resolved.unit,
+                    "input_sha256": resolved.input_digest,
+                    "fact_id": str(resolved.source_provenance.fact_id)
+                    if resolved.source_provenance.fact_id
+                    else None,
+                    "artifact_id": str(resolved.source_provenance.artifact_id)
+                    if resolved.source_provenance.artifact_id
+                    else None,
+                    "series_index": resolved.source_provenance.series_index,
+                    "column_name": resolved.source_provenance.column_name,
+                }
+            ],
             "policies": request.to_audit_dict(),
             "statistics_requested": list(request.effective_statistics),
             "quantiles": list(request.quantiles),
@@ -756,22 +839,30 @@ class NumericToolFacade:
         citation_params = {
             "engine_version": NUMERIC_ENGINE_VERSION,
             "tool": "describe_series",
-            "sources": [{
-                "name": resolved.name,
-                "source_type": resolved.source_provenance.source_type,
-                "input_sha256": resolved.input_digest,
-                "fact_id": str(resolved.source_provenance.fact_id) if resolved.source_provenance.fact_id else None,
-                "artifact_id": str(resolved.source_provenance.artifact_id) if resolved.source_provenance.artifact_id else None,
-                "series_index": resolved.source_provenance.series_index,
-                "column_name": resolved.source_provenance.column_name,
-            }],
+            "sources": [
+                {
+                    "name": resolved.name,
+                    "source_type": resolved.source_provenance.source_type,
+                    "input_sha256": resolved.input_digest,
+                    "fact_id": str(resolved.source_provenance.fact_id)
+                    if resolved.source_provenance.fact_id
+                    else None,
+                    "artifact_id": str(resolved.source_provenance.artifact_id)
+                    if resolved.source_provenance.artifact_id
+                    else None,
+                    "series_index": resolved.source_provenance.series_index,
+                    "column_name": resolved.source_provenance.column_name,
+                }
+            ],
             "policies": request.to_audit_dict(),
             "result_sha256": stats_result.result_digest,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # summary
-        summary = f"describe_series: {resolved.length} values, {len(stats_result.values)} statistics"
+        summary = (
+            f"describe_series: {resolved.length} values, {len(stats_result.values)} statistics"
+        )
 
         return NumericExecutionResult(
             summary=summary,
@@ -886,9 +977,7 @@ class NumericToolFacade:
         """计算向量 digest。"""
         if vector is None:
             return hashlib.sha256(b"empty").hexdigest()
-        return hashlib.sha256(
-            np.ascontiguousarray(vector.astype(np.float64)).tobytes()
-        ).hexdigest()
+        return hashlib.sha256(np.ascontiguousarray(vector.astype(np.float64)).tobytes()).hexdigest()
 
     def _normalize_zero(self, val: float) -> float:
         """规范化 -0.0 为 0.0。"""

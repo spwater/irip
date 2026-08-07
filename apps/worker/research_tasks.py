@@ -38,10 +38,11 @@ def _build_orchestrator():
     Returns:
         ResearchOrchestrator: 已注入全部依赖的编排器实例。
     """
+    import redis as redis_lib
+
     from packages.common.database import build_session_factory
-    from packages.research.context_router import ContextRouter
     from packages.research.artifact_service import RunArtifactService
-    from packages.research.conversation_service import AIConversationService
+    from packages.research.context_router import ContextRouter
     from packages.research.memory_service import ResearchMemoryService
     from packages.research.model_gateway import ModelGateway
     from packages.research.models_trusted import ModelConfig, TaskType
@@ -49,8 +50,6 @@ def _build_orchestrator():
     from packages.research.repository_trusted import ResearchRepositoryTrusted
     from packages.research.sandbox import DockerSandboxRuntime, WarmPoolManager
     from packages.research.scheduler import ResearchScheduler
-
-    import redis as redis_lib
 
     db_url = os.getenv("IRIP_DATABASE_URL", "")
     if db_url.startswith("postgresql+psycopg://"):
@@ -67,6 +66,7 @@ def _build_orchestrator():
     research_model_name = None
     try:
         from apps.api.routers.ai_config import get_active_ai_config, set_session_factory
+
         set_session_factory(factory)
 
         async def _load_ai_config():
@@ -76,7 +76,9 @@ def _build_orchestrator():
         if ai_config and ai_config.get("base_url") and ai_config.get("api_key"):
             from packages.ai.openai_compatible import OpenAICompatibleProvider
 
-            research_model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
+            research_model_name = ai_config.get("research_model_name") or ai_config.get(
+                "model_name", ""
+            )
             _thinking = ai_config.get("thinking_enabled", False)
             ai_provider = OpenAICompatibleProvider(
                 api_key=ai_config["api_key"],
@@ -84,7 +86,12 @@ def _build_orchestrator():
                 model=research_model_name,
                 thinking_enabled=_thinking,
             )
-            logger.info("AI provider initialized: model=%s, base_url=%s, thinking=%s", research_model_name, ai_config["base_url"], _thinking)
+            logger.info(
+                "AI provider initialized: model=%s, base_url=%s, thinking=%s",
+                research_model_name,
+                ai_config["base_url"],
+                _thinking,
+            )
         else:
             logger.warning("No active AI config found, using mock provider")
     except Exception as exc:
@@ -140,6 +147,7 @@ def _build_orchestrator():
 
     # 构建 Insight 提取器（复用 AI provider）
     from packages.research.insight_extractor import InsightExtractor
+
     insight_extractor = InsightExtractor(model_gateway=model_gateway) if ai_provider else None
 
     # 构建编排器
@@ -197,10 +205,11 @@ def check_run_heartbeat() -> int:
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
     r = redis_lib.from_url(redis_url)
 
+    import sqlalchemy as sa
+
     from packages.common.database import build_session_factory
     from packages.research.repository_trusted import ResearchRepositoryTrusted
     from packages.research.scheduler import ResearchScheduler
-    import sqlalchemy as sa
 
     db_url = os.getenv("IRIP_DATABASE_URL", "")
     if db_url.startswith("postgresql+psycopg://"):
@@ -291,8 +300,17 @@ def promote_queued_runs() -> int:
             # 检查 Run 状态，跳过已取消/失败的
             async with factory() as session:
                 run = await ResearchRepositoryTrusted.get_run(session, UUID(run_id_str))
-                if run is None or run.status in ("failed", "cancelled", "succeeded", "partially_succeeded"):
-                    logger.info("Skipping promoted run %s (status=%s)", run_id_str, run.status if run else "not_found")
+                if run is None or run.status in (
+                    "failed",
+                    "cancelled",
+                    "succeeded",
+                    "partially_succeeded",
+                ):
+                    logger.info(
+                        "Skipping promoted run %s (status=%s)",
+                        run_id_str,
+                        run.status if run else "not_found",
+                    )
                     continue
             celery_app.send_task("research.run.execute", kwargs={"run_id": run_id_str})
             valid_promoted += 1

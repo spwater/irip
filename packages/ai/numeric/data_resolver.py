@@ -160,7 +160,10 @@ class NumericDataResolver:
         if len(raw_values) > self._limits.max_inline_series_length:
             raise NumericError(
                 code="numeric_size_limit",
-                message=f"inline series length {len(raw_values)} exceeds limit ({self._limits.max_inline_series_length})",
+                message=(
+                    f"inline series length {len(raw_values)} exceeds limit"
+                    f" ({self._limits.max_inline_series_length})"
+                ),
                 path=f"variables.{source.name}.values",
                 details={"count": len(raw_values), "limit": self._limits.max_inline_series_length},
             )
@@ -267,7 +270,7 @@ class NumericDataResolver:
                 code="numeric_invalid_source",
                 message=f"invalid fact_id: {source.fact_id}",
                 path=f"variables.{source.name}.fact_id",
-            )
+            ) from None
 
         # 构建 FactQueryService
         if self._fact_query_factory is None:
@@ -287,7 +290,7 @@ class NumericDataResolver:
                 code="numeric_field_not_found",
                 message=f"fact not found: {source.fact_id}",
                 path=f"variables.{source.name}.fact_id",
-            )
+            ) from None
 
         # 定位 series
         series_list = fact_data.get("series", [])
@@ -301,7 +304,9 @@ class NumericDataResolver:
         if source.series_index < 0 or source.series_index >= len(series_list):
             raise NumericError(
                 code="numeric_field_not_found",
-                message=f"series_index {source.series_index} not found (have {len(series_list)} series)",
+                message=(
+                    f"series_index {source.series_index} not found (have {len(series_list)} series)"
+                ),
                 path=f"variables.{source.name}.series_index",
                 details={"series_index": source.series_index, "series_count": len(series_list)},
             )
@@ -375,9 +380,15 @@ class NumericDataResolver:
         if len(float_values) > self._limits.max_platform_series_length:
             raise NumericError(
                 code="numeric_size_limit",
-                message=f"platform series length {len(float_values)} exceeds limit ({self._limits.max_platform_series_length})",
+                message=(
+                    f"platform series length {len(float_values)} exceeds limit"
+                    f" ({self._limits.max_platform_series_length})"
+                ),
                 path=f"variables.{source.name}",
-                details={"count": len(float_values), "limit": self._limits.max_platform_series_length},
+                details={
+                    "count": len(float_values),
+                    "limit": self._limits.max_platform_series_length,
+                },
             )
 
         values = np.array(float_values, dtype=np.float64)
@@ -445,9 +456,7 @@ class NumericDataResolver:
         """检查主体是否拥有指定权限。"""
         from packages.auth.permissions import has_role_permission
 
-        has_perm = any(
-            has_role_permission(role, permission) for role in principal.roles
-        )
+        has_perm = any(has_role_permission(role, permission) for role in principal.roles)
         if not has_perm:
             raise NumericError(
                 code="numeric_field_not_found",
@@ -491,7 +500,6 @@ class NumericDataResolver:
     ) -> tuple[UUID | None, str | None]:
         """从 FactQueryService 查询 artifact id 和 sha256。"""
         try:
-            from packages.common.artifacts import Artifact
             from packages.facts.repository import FactRepository
 
             # 使用 FactQueryService 的 scoped session 查询 artifact 记录
