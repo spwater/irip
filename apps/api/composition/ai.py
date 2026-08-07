@@ -57,7 +57,7 @@ def register(ctx: CompositionContext) -> None:
                 api_key=config["api_key"],
                 base_url=config["base_url"],
                 model=config.get("assistant_model_name") or config["model_name"],
-                thinking_enabled=config.get("thinking_enabled", False),
+                thinking_enabled=config.get("assistant_thinking_enabled", False),
             )
         else:
             provider = OfflineProvider()

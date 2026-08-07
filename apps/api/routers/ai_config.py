@@ -78,7 +78,9 @@ class AIConfigUpdateRequest(BaseModel):
     )
     enabled: bool = Field(True, description="是否启用")
     meta_prompt: str | None = Field(None, description="提示词推荐的系统提示词，留空则用内置默认")
-    thinking_enabled: bool = Field(False, description="大模型配置层面的思考模式开关")
+    model_thinking_enabled: bool = Field(False, description="数据提取模型思考模式开关")
+    assistant_thinking_enabled: bool = Field(False, description="AI助手模型思考模式开关")
+    research_thinking_enabled: bool = Field(False, description="研发助手模型思考模式开关")
 
 
 class AIConfigResponse(BaseModel):
@@ -91,7 +93,9 @@ class AIConfigResponse(BaseModel):
     research_model_name: str = ""
     enabled: bool
     meta_prompt: str | None = None
-    thinking_enabled: bool = False
+    model_thinking_enabled: bool = False
+    assistant_thinking_enabled: bool = False
+    research_thinking_enabled: bool = False
     updated_at: str | None = None
 
 
@@ -222,7 +226,9 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
                 assistant_model_name="",
                 enabled=False,
                 meta_prompt=_DEFAULT_META_PROMPT,
-                thinking_enabled=False,
+                model_thinking_enabled=False,
+                assistant_thinking_enabled=False,
+                research_thinking_enabled=False,
             )
         return AIConfigResponse(
             base_url=row["base_url"],
@@ -232,7 +238,9 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
             research_model_name=row.get("research_model_name") or "",
             enabled=row["enabled"],
             meta_prompt=row.get("meta_prompt") or _DEFAULT_META_PROMPT,
-            thinking_enabled=row.get("thinking_enabled") or False,
+            model_thinking_enabled=row.get("model_thinking_enabled") or False,
+            assistant_thinking_enabled=row.get("assistant_thinking_enabled") or False,
+            research_thinking_enabled=row.get("research_thinking_enabled") or False,
             updated_at=str(row["updated_at"]) if row["updated_at"] else None,
         )
 
@@ -297,7 +305,9 @@ async def update_ai_config(
                     research_model_name=body.research_model_name,
                     enabled=body.enabled,
                     meta_prompt=body.meta_prompt,
-                    thinking_enabled=body.thinking_enabled,
+                    model_thinking_enabled=body.model_thinking_enabled,
+                    assistant_thinking_enabled=body.assistant_thinking_enabled,
+                    research_thinking_enabled=body.research_thinking_enabled,
                     updated_at=now,
                     updated_by=current_user.user_id,
                 )
@@ -314,7 +324,9 @@ async def update_ai_config(
                     research_model_name=body.research_model_name,
                     enabled=body.enabled,
                     meta_prompt=body.meta_prompt,
-                    thinking_enabled=body.thinking_enabled,
+                    model_thinking_enabled=body.model_thinking_enabled,
+                    assistant_thinking_enabled=body.assistant_thinking_enabled,
+                    research_thinking_enabled=body.research_thinking_enabled,
                     updated_at=now,
                     updated_by=current_user.user_id,
                 )
@@ -510,7 +522,9 @@ async def get_active_ai_config() -> dict[str, str] | None:
             "assistant_model_name": row.get("assistant_model_name") or row["model_name"],
             "research_model_name": row.get("research_model_name") or row["model_name"],
             "meta_prompt": row.get("meta_prompt") or "",
-            "thinking_enabled": row.get("thinking_enabled") or False,
+            "model_thinking_enabled": row.get("model_thinking_enabled") or False,
+            "assistant_thinking_enabled": row.get("assistant_thinking_enabled") or False,
+            "research_thinking_enabled": row.get("research_thinking_enabled") or False,
         }
 
 

@@ -23,7 +23,9 @@ type AIConfig = {
   research_model_name: string;
   enabled: boolean;
   meta_prompt: string | null;
-  thinking_enabled: boolean;
+  model_thinking_enabled: boolean;
+  assistant_thinking_enabled: boolean;
+  research_thinking_enabled: boolean;
   updated_at: string | null;
 };
 
@@ -45,6 +47,8 @@ export function AIConfigPage(): JSX.Element {
   const [testAssistantLoading, setTestAssistantLoading] = useState(false);
   const [testResearchLoading, setTestResearchLoading] = useState(false);
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [assistantThinkingEnabled, setAssistantThinkingEnabled] = useState(false);
+  const [researchThinkingEnabled, setResearchThinkingEnabled] = useState(false);
 
   const { data: config } = useQuery({
     queryKey: ['ai-config'],
@@ -67,7 +71,9 @@ export function AIConfigPage(): JSX.Element {
         assistant_model_name: config.assistant_model_name || config.model_name || '',
         research_model_name: config.research_model_name || config.model_name || '',
       });
-      setThinkingEnabled(config.thinking_enabled ?? false);
+      setThinkingEnabled(config.model_thinking_enabled ?? false);
+      setAssistantThinkingEnabled(config.assistant_thinking_enabled ?? false);
+      setResearchThinkingEnabled(config.research_thinking_enabled ?? false);
     }
   }, [config, form]);
 
@@ -90,7 +96,9 @@ export function AIConfigPage(): JSX.Element {
       research_model_name: string;
       enabled: boolean;
       meta_prompt: string;
-      thinking_enabled: boolean;
+      model_thinking_enabled: boolean;
+      assistant_thinking_enabled: boolean;
+      research_thinking_enabled: boolean;
     }) => {
       const res = await http.put<AIConfig>('/ai-config', values);
       return res.data;
@@ -169,6 +177,8 @@ export function AIConfigPage(): JSX.Element {
         enabled: true,
         meta_prompt: existingPrompt,
         thinking_enabled: thinkingEnabled,
+      assistant_thinking_enabled: assistantThinkingEnabled,
+      research_thinking_enabled: researchThinkingEnabled,
       });
     } catch {
       // 校验失败
@@ -207,19 +217,14 @@ export function AIConfigPage(): JSX.Element {
         >
           <Input.Password placeholder="sk-..." />
         </Form.Item>
-        <Form.Item label="思考模式">
-          <Space align="center">
-            <Switch
-              checked={thinkingEnabled}
-              onChange={setThinkingEnabled}
-            />
-            <span style={{ fontSize: 12, color: 'var(--ocean-text-secondary)' }}>
-              {thinkingEnabled ? '已开启 — 模型支持思考模式（如 Qwen3）' : '已关闭 — AI 助手中的思考滑钮将不生效'}
-            </span>
-          </Space>
-        </Form.Item>
         <Form.Item label="数据提取模型">
           <Space.Compact style={{ width: '100%' }}>
+            <Switch
+              size="small"
+              checked={thinkingEnabled}
+              onChange={setThinkingEnabled}
+              style={{ marginRight: 8, alignSelf: 'center' }}
+            />
             <Form.Item
               name="model_name"
               noStyle
@@ -237,6 +242,12 @@ export function AIConfigPage(): JSX.Element {
         </Form.Item>
         <Form.Item label="AI助手模型">
           <Space.Compact style={{ width: '100%' }}>
+            <Switch
+              size="small"
+              checked={assistantThinkingEnabled}
+              onChange={setAssistantThinkingEnabled}
+              style={{ marginRight: 8, alignSelf: 'center' }}
+            />
             <Form.Item name="assistant_model_name" noStyle>
               <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
             </Form.Item>
@@ -250,6 +261,12 @@ export function AIConfigPage(): JSX.Element {
         </Form.Item>
         <Form.Item label="研发助手模型">
           <Space.Compact style={{ width: '100%' }}>
+            <Switch
+              size="small"
+              checked={researchThinkingEnabled}
+              onChange={setResearchThinkingEnabled}
+              style={{ marginRight: 8, alignSelf: 'center' }}
+            />
             <Form.Item name="research_model_name" noStyle>
               <Input placeholder="qwen-plus / gpt-4o / deepseek-chat" />
             </Form.Item>
