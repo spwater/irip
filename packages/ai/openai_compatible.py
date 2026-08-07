@@ -363,6 +363,17 @@ class OpenAICompatibleProvider:
             "不要使用 LaTeX 原始的 \\[...\\] 或 \\(...\\) 语法，"
             "前端只识别 $ 和 $$ 语法。"
             "示例：$$\\bar{x} = \\frac{\\sum_{i=1}^{n} x_i}{n}$$"
+            "\n\n**数值计算规则（重要）：**"
+            "这是科研平台，数值必须精确，不允许心算。"
+            "\n1. 用户要求任何数值计算、算术运算、聚合或统计量时，"
+            "**必须**调用 evaluate_expression 或 describe_series 工具，"
+            "不得靠语言模型自身心算——即使看起来很简单（如 3+5）。"
+            "\n2. 已有 Fact/Artifact 引用时，优先传稳定 ID（fact_id + series_index + column_name），"
+            "不要复制大型数组到内联参数。"
+            "\n3. 用户未说明"总体还是样本方差"时，describe_series 使用 variance_mode=both "
+            "并在回答中解释差异。"
+            "\n4. 工具失败后不得自行猜测数值结果，应说明错误和可修正的输入。"
+            "\n5. 结果带 warning、单位未验证或向量被截断时，回答必须明确披露。"
         )
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (
