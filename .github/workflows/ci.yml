@@ -618,7 +618,7 @@ jobs:
       - run: pip install -e ".[dev]"
       # B-3: Download JUnit XML artifacts from test jobs for acceptance report
       - name: Download test results
-        uses: actions/download-artifact@dcd2f8529f3eb1c6fa6c5e3aaf1d816438656f62  # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: test-results
       - name: Generate source code stats
