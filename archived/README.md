@@ -22,4 +22,15 @@
 - `archived/deliverables/`：既往交付稿、整改稿与图表；
 - `archived/code-assessment-2026-08-08.md`、`archived/squash-report.md`：原根目录阶段性报告。
 
+## 休眠工作线
+
+### 水泥质量事件室
+
+该方向停留在商业设计与实施规划阶段，未进入代码实施，于 2026-08-08 归档：
+
+- 商业设计：`archived/docs/superpowers/specs/2026-08-08-cement-quality-incident-commercial-entry-design.md`；
+- 闭环 MVP 计划：`archived/docs/superpowers/plans/2026-08-08-quality-incident-room-closed-loop-mvp.md`。
+
+未来若重新启动，应以届时的客户问题、代码基线、数据条件和市场事实重新评审，不把上述材料直接恢复为当前计划。
+
 若后续产生新的阶段性分析，请在其结论合并进 `docs/STAGE_DELIVERY.md` 后归档，不要重新形成多个并行的“最新”入口。

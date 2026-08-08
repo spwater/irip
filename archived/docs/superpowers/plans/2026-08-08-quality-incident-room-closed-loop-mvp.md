@@ -1,5 +1,7 @@
 # IRIP Quality Incident Room Closed-Loop MVP Implementation Plan
 
+> **归档状态：未实施。** 该工作线于 2026-08-08 暂停并移入历史资料区，不作为当前开发入口；若未来重新启动，应先按当时的代码、客户和市场事实重新评审，不直接照此计划执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver a sellable first-stage “IRIP 质量事件室” workflow in which a user can create a cement quality incident, bind and freeze an evidence snapshot, record evidence-backed hypotheses and expert reviews, assign corrective actions, approve an immutable report version, close the incident, and retrieve it from the historical case library.
