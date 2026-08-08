@@ -357,7 +357,7 @@ def test_release_gate_contains_compose_project_name() -> None:
 def test_final_release_doc_contains_version() -> None:
     """验证最终验收文档包含版本号。"""
     content = _read_file("docs/acceptance/final-release.md")
-    assert "0.1.0" in content, "最终验收文档缺少版本号"
+    assert "0.8.0" in content, "最终验收文档缺少版本号"
 
 
 @pytest.mark.acceptance

@@ -657,7 +657,7 @@ jobs:
     continue-on-error: true
     services:
       postgres:
-        image: docker.m.daocloud.io/postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: irip
           POSTGRES_PASSWORD: test-password
