@@ -97,6 +97,7 @@ class EquipmentService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._actor_id = actor_id
         self._clock = clock or SystemClock()
 

@@ -95,6 +95,7 @@ class DepartmentService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._clock = clock or SystemClock()
 
     @property

@@ -79,6 +79,7 @@ class UserDepartmentService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
 
     async def set_user_departments(
         self,

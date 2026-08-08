@@ -114,7 +114,7 @@ async def session_scope(
 
 @asynccontextmanager
 async def scoped_session(
-    factory: async_sessionmaker[AsyncSession],
+    factory: async_sessionmaker[AsyncSession] | None,
     dept_id: UUID | None = None,
     user_id: UUID | None = None,
 ) -> AsyncIterator[AsyncSession]:
@@ -135,13 +135,15 @@ async def scoped_session(
     RLS 保护的表上 fail-closed（返回空），不会泄露跨租户数据。
 
     Args:
-        factory: build_session_factory() 返回的会话工厂。
+        factory: build_session_factory() 返回的会话工厂。None 时抛 RuntimeError。
         dept_id: 部门 UUID，None 时不设 GUC（保持空串 fail-closed）。
         user_id: 用户 UUID，None 时不设 GUC（保持空串 fail-closed）。
 
     Yields:
         AsyncSession: 已开启事务并设置好 GUC 的异步会话。
     """
+    if factory is None:
+        raise RuntimeError("scoped_session: session_factory is None")
     async with factory() as session:
         async with session.begin():
             if dept_id is not None:

@@ -68,7 +68,7 @@ class ConversationService:
         if not title:
             title = f"对话 {now.strftime('%Y-%m-%d %H:%M')}"
 
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = AIConversation(
                 id=conv_id,
                 user_id=user_id,
@@ -134,7 +134,7 @@ class ConversationService:
         elif not include_archived:
             conditions.append(AIConversation.archived == sa.false())
 
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             result = await session.execute(
                 sa.select(AIConversation)
                 .where(*conditions)
@@ -174,7 +174,7 @@ class ConversationService:
         Returns:
             ConversationRef | None: 对话引用，不存在时返回 None。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             r = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -212,7 +212,7 @@ class ConversationService:
             bool: 新的置顶状态。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -248,7 +248,7 @@ class ConversationService:
             bool: 新的归档状态。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -284,7 +284,7 @@ class ConversationService:
             AppError: code="not_found"，对话不存在或无权操作。
             AppError: code="forbidden"，对话未归档，不允许删除。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(
                     AIConversation.id == conversation_id,
@@ -330,7 +330,7 @@ class ConversationService:
             AppError: code="forbidden"，当对话不属于当前用户且非参与者时。
             AppError: code="not_found"，当对话不存在时。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             conv = await session.scalar(
                 sa.select(AIConversation).where(AIConversation.id == conversation_id)
             )
@@ -429,7 +429,7 @@ class ConversationService:
         )
         conditions.append(title_or_msg_cond)
 
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             result = await session.execute(
                 sa.select(AIConversation)
                 .where(*conditions)

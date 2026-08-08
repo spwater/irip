@@ -122,6 +122,7 @@ class FactService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._actor_id = actor_id
 
     # ---- 公开只读属性（替代路由直接访问私有属性） ----

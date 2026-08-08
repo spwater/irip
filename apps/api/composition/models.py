@@ -44,7 +44,7 @@ def register(ctx: CompositionContext) -> None:
             actor_id=current_user.user_id,
         )
         if rls_dept_id is not None:
-            fact_svc._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            fact_svc._rls_dept_id = rls_dept_id
         model_svc = ModelService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
@@ -53,7 +53,7 @@ def register(ctx: CompositionContext) -> None:
             fact_service=fact_svc,
         )
         if rls_dept_id is not None:
-            model_svc._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            model_svc._rls_dept_id = rls_dept_id
         return model_svc
 
     ctx.app.dependency_overrides[get_model_service] = _get_model_service_dep

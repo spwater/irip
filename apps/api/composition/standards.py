@@ -50,7 +50,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_object_graph_service] = _get_object_graph_service_dep
@@ -66,7 +66,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_department_service] = _get_department_service_dep
@@ -82,7 +82,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_equipment_service] = _get_equipment_service_dep
@@ -97,7 +97,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_user_department_service] = _get_user_department_service_dep
@@ -116,7 +116,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_experiment_project_service] = (

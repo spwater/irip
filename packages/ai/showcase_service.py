@@ -114,7 +114,7 @@ class ShowcaseService:
             AppError: code="not_found"，对话不存在或无权操作。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -209,7 +209,7 @@ class ShowcaseService:
         Raises:
             AppError: code="not_found"，对话不存在或无权操作。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -263,7 +263,7 @@ class ShowcaseService:
             AppError: code="not_found"，卡片不存在或无权操作。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             item = await session.scalar(sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id))
             if item is None:
                 raise AppError(
@@ -314,7 +314,7 @@ class ShowcaseService:
         Raises:
             AppError: code="not_found"，卡片不存在或无权操作。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             item = await session.scalar(sa.select(ShowcaseItem).where(ShowcaseItem.id == item_id))
             if item is None:
                 raise AppError(
@@ -355,7 +355,7 @@ class ShowcaseService:
             AppError: code="not_found"，对话不存在或无权操作。
         """
         now = self._clock.now()
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属（创建者或参与者均可）
             has_access = await self._check_conversation_access(session, conversation_id, user_id)
             if not has_access:
@@ -396,7 +396,7 @@ class ShowcaseService:
         Raises:
             AppError: code="not_found"，对话不存在或无权操作。
         """
-        async with scoped_session(self._factory, None, user_id) as session:  # type: ignore[arg-type]
+        async with scoped_session(self._factory, None, user_id) as session:
             # 校验对话归属
             conv = await session.scalar(
                 sa.select(AIConversation).where(

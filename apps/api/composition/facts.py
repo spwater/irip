@@ -49,7 +49,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_fact_service] = _get_fact_service_dep
@@ -83,7 +83,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_evidence_service] = _get_evidence_service_dep
@@ -100,7 +100,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_recipe_service] = _get_recipe_service_dep
@@ -117,7 +117,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_derivation_service] = _get_derivation_service_dep
@@ -134,7 +134,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            service._rls_dept_id = rls_dept_id
         return service
 
     ctx.app.dependency_overrides[get_provenance_graph_service] = _get_provenance_graph_service_dep
