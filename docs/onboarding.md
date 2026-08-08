@@ -1,7 +1,7 @@
 # IRIP 新人上手指南
 
 > 10 分钟读完这篇，你就知道这个项目是什么、怎么跑起来、关键概念怎么关联。
-> 详细架构见 `docs/irip-design-overview.md`，编码规范见 `docs/conventions.md`。
+> 当前状态从 `docs/STAGE_DELIVERY.md` 开始，稳定架构见 `docs/architecture/system-overview.md`，编码规范见 `docs/conventions.md`。
 
 ---
 
@@ -145,9 +145,9 @@ root（公共，= 机构）
 ## 5. 改代码前必读
 
 1. **`docs/conventions.md`** — 编码约定，命名规范，错误格式，分层规则
-2. **`docs/decision-log.md`** — 关键设计决策，知道"为什么这么写"
-3. **`docs/arch-department-tenant.md`** — 多租户模型（改任何数据可见性相关代码前必读）
-4. **`docs/todo-list.md`** — 当前技术债和待办
+2. **`docs/architecture/system-overview.md`** — 当前模块、基础设施与数据流
+3. **`docs/architecture/domain-invariants.md`** — 改租户、事实、发布或 AI 边界前必读
+4. **`docs/STAGE_DELIVERY.md` 的风险与下一阶段章节** — 当前技术债和工作顺序
 
 ### 几个容易踩坑的地方
 
@@ -178,12 +178,9 @@ pnpm --dir apps/web build
 
 | 文档 | 内容 |
 |---|---|
-| `docs/irip-design-overview.md` | 完整设计概要（哲学/架构/特色功能） |
+| `docs/STAGE_DELIVERY.md` | 当前能力、验证基线、风险与下一阶段入口 |
 | `docs/conventions.md` | 编码约定 |
-| `docs/decision-log.md` | 关键决策记录 |
-| `docs/todo-list.md` | P0-P3 技术债清单 |
-| `docs/arch-v0.md` | V0 骨架架构 |
-| `docs/arch-department-tenant.md` | 多租户 ADR |
-| `docs/arch-ai-showcase.md` | AI 橱窗架构 |
-| `docs/arch-converter-refactor.md` | Converter 插件架构 |
+| `docs/architecture/system-overview.md` | 当前稳定架构与数据流 |
+| `docs/architecture/domain-invariants.md` | 不可变性、租户、审计和 AI 边界 |
 | `docs/tideline-design-language.md` | UI 设计语言 |
+| `archived/README.md` | 历史 PRD、设计、评审与发布资料索引 |

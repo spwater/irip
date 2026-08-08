@@ -1,8 +1,7 @@
 # IRIP 系统架构概览
 
 > 版本：0.8.0 · 覆盖 Phase V0–V3
-> 关联文档：`docs/arch-v0.md`、`docs/arch/v2-architecture.md`、`docs/arch/v3-architecture.md`
-> 关联图表：`docs/class-diagram.mermaid`、`docs/sequence-diagram.mermaid`
+> 当前状态与验证基线见 `docs/STAGE_DELIVERY.md`；领域约束见 `docs/architecture/domain-invariants.md`。旧版分阶段架构稿与图表已归档到 `archived/docs/`。
 
 ---
 
@@ -236,6 +235,6 @@ AIService.send_message()
 | 阶段 | 交付内容 | 验收门 |
 |------|---------|--------|
 | V0 | 平台骨架（认证/授权/工件/作业/Outbox/前端外壳） | `tests/integration/test_v0_bootstrap.py` + E2E |
-| V1 | 粒度分析全链路（L1→L2→L2.5→L3 证据链） | `docs/acceptance/v1-particle-size.md` |
+| V1 | 粒度分析全链路（L1→L2→L2.5→L3 证据链） | 历史验收快照见 `archived/docs/acceptance/v1-particle-size.md` |
 | V2 | 组件系统 + 流程引擎 + 模型生命周期 + 篦冷机 ROM | `tests/acceptance/test_v2_model_execution.py` |
-| V3 | AI 助手 + 治理控制台 + 备份恢复 + 安全/恢复/性能测试 | `docs/acceptance/final-release.md` + `scripts/release-gate.sh` |
+| V3 | AI 助手 + 治理控制台 + 备份恢复 + 安全/恢复/性能测试 | 当前验证见 `docs/STAGE_DELIVERY.md`；发布门为 `scripts/release-gate.sh` |

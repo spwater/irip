@@ -196,14 +196,17 @@ bash scripts/release-gate.sh
 
 ## 文档索引
 
+### 当前交付基线
+
+| 文档 | 内容 |
+|------|------|
+| [阶段性交付文档](docs/STAGE_DELIVERY.md) | **后续开发的默认入口**：当前能力、实际架构、验证结果、调试结论、风险与下一阶段顺序 |
+
 ### 架构文档
 | 文档 | 内容 |
 |------|------|
 | [系统架构概览](docs/architecture/system-overview.md) | 模块化单体 + Worker 架构、基础设施、V0–V3 各层职责、数据流 |
 | [领域不变量](docs/architecture/domain-invariants.md) | 不可变版本化、确定性回放、证据链完整性、AI 工具只读边界等约束基线 |
-| [V0 架构设计](docs/arch-v0.md) | 平台骨架设计（认证/授权/工件/作业/Outbox） |
-| [V2 架构设计](docs/arch/v2-architecture.md) | 组件系统 + 流程引擎 + 模型生命周期设计 |
-| [V3 架构设计](docs/arch/v3-architecture.md) | AI 助手 + 治理控制台 + 备份恢复设计 |
 
 ### 用户指南
 | 文档 | 内容 |
@@ -224,12 +227,15 @@ bash scripts/release-gate.sh
 | [监控运维](docs/operations/monitoring.md) | 健康检查端点、日志收集、性能指标、告警配置 |
 | [备份恢复](docs/operations/backup-restore.md) | 备份策略、完整性校验、灾难恢复 Runbook |
 
-### 验收文档
+### 开发约定
+
 | 文档 | 内容 |
 |------|------|
-| [V3 最终发布验收](docs/acceptance/final-release.md) | V0–V3 功能清单、验收测试结果、已知限制、发布版本号 |
-| [V1 粒度验收报告](docs/acceptance/v1-particle-size.md) | L1→L3 证据链验收门 |
-| [安全恢复验收报告](docs/acceptance/security-recovery.md) | V3-T04 安全/恢复/性能测试套件验收 |
+| [新人上手](docs/onboarding.md) | 本地启动、关键概念、代码导航和质量检查 |
+| [编码约定](docs/conventions.md) | 数据库、后端、前端、插件、测试和 Git 规则 |
+| [Tideline 设计语言](docs/tideline-design-language.md) | 当前 UI 视觉、组件、动效和可访问性约束 |
+
+历史 PRD、架构稿、评审、发布记录和验收快照见 [历史资料归档](archived/README.md)。历史内容不代表当前实现状态。
 
 ---
 
@@ -237,7 +243,7 @@ bash scripts/release-gate.sh
 
 - **语言**：稳定代码 / 错误码 / API 字段使用英文；UI 显示文本使用中文。
 - **时间**：一律 UTC `timestamptz`；ID 一律 UUID。
-- **错误格式**：`{error: {code, message, retryable, fields}}`（见 `docs/arch-v0.md` §7.2）。
+- **错误格式**：`{error: {code, message, retryable, fields}}`（见 `docs/conventions.md`）。
 - **审计**：仅追加，`REVOKE UPDATE, DELETE ON audit_event`。
 - **备份**：每个组件附带 SHA-256 校验和，恢复前必须验证。
 
@@ -262,7 +268,8 @@ packages/components/ 组件系统（SDK/注册表/执行器/流程引擎）
 packages/models/      模型生命周期（契约/适配器/服务/适用域）
 packages/ai/          AI 助手（Provider/工具白名单/引用/服务）
 deployments/compose/  Docker 部署（Dockerfile/Compose/bootstrap/backup/restore）
-docs/                 架构设计、用户指南、运维指南、验收文档
+docs/                 当前交付基线、稳定架构、开发约定、用户与运维指南
+archived/             历史 PRD、设计、评审、发布、验收与阶段性报告
 tests/                单元/集成/契约/安全/恢复/性能/验收测试
 scripts/              发布门脚本
 examples/             粒度分析 + 篦冷机 ROM 示例

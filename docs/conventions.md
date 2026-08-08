@@ -168,4 +168,4 @@ entities.py (ORM) → repository.py (数据访问) → service.py (业务编排)
 - 提交消息格式：`<type>: <中文描述>`（type = feat / fix / refactor / docs / chore / test / style）
 - 版本号在 `pyproject.toml` 和 `apps/web/package.json` 同步更新
 - 发布时创建 annotated tag（`git tag -a v0.x -m "..."`）
-- release 文档放 `docs/release-YYYY-MM-DD-vX.X.md`
+- 阶段状态更新 `docs/STAGE_DELIVERY.md`；一次性 release 快照完成后放入 `archived/docs/`
