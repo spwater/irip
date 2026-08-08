@@ -21,7 +21,7 @@ import { test, expect } from '@playwright/test';
 
 /** 管理员凭据（bootstrap 创建） */
 const ADMIN_EMAIL = 'admin@irip.local';
-const ADMIN_PASSWORD = 'agsdgfsdg21r34sf';
+const ADMIN_PASSWORD = process.env.IRIP_BOOTSTRAP_ADMIN_PASSWORD ?? 'agsdgfsdg21r34sf';
 
 /** 登录成功后允许的受保护路由前缀 */
 const PROTECTED_ROUTE_RE = /\/(workbench|standards|lab-ops|platform)/;

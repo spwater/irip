@@ -546,6 +546,7 @@ jobs:
       # 种子数据：创建哨兵部门 + 管理员用户（幂等，重复运行不报错）
       - run: python -m deployments.compose.bootstrap || true
       - run: corepack enable pnpm
+      - run: corepack prepare pnpm@11.15.1 --activate
       - run: pnpm --dir apps/web install --frozen-lockfile
       - run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - name: Start API + Web servers and run E2E tests

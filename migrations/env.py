@@ -111,6 +111,6 @@ else:
     else:
         # Already inside a running event loop (e.g., pytest-asyncio tests).
         # Run in a separate thread so asyncio.run() can create its own loop.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(asyncio.run, run_migrations_online())
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(asyncio.run, run_migrations_online())
             future.result()
