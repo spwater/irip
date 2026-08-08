@@ -137,7 +137,7 @@ def _register_handlers(executor: JobExecutor) -> None:
         job_id = str(job.id)
         payload = job.payload or {}
         try:
-            return await _resume_flow_async(payload)  # type: ignore[call-arg, return-value, arg-type]
+            return await _resume_flow_async(payload)  # type: ignore[return-value, call-arg, arg-type]
         except Exception as exc:
             # H-03: 失败必须 raise，不返回 error dict
             try:

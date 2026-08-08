@@ -1183,8 +1183,8 @@ class ResearchOrchestrator:
                         from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
                         s3_repo = _build_s3_repo()
-                        provider = CoreFactProviderImpl(
-                            session_factory=self._factory,  # type: ignore[call-arg]
+                        provider = CoreFactProviderImpl(  # type: ignore[call-arg]
+                            session_factory=self._factory,
                             s3_repo=s3_repo,
                         )
                         fact_data = await provider.get_fact_data(UUID(fact_id))
