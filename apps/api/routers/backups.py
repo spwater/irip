@@ -26,7 +26,6 @@ from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -405,58 +404,16 @@ async def get_backup_stats(
     Returns:
         BackupStatsResponse: 备份汇总统计。
     """
-    async with session_factory() as session:
-        total_count: int = (
-            await session.scalar(sa.select(sa.func.count()).select_from(BackupRecord)) or 0
-        )
-        total_size: int = (
-            await session.scalar(
-                sa.select(sa.func.coalesce(sa.func.sum(BackupRecord.file_size), 0)).select_from(
-                    BackupRecord
-                )
-            )
-            or 0
-        )
-        daily_count: int = (
-            await session.scalar(
-                sa.select(sa.func.count())
-                .select_from(BackupRecord)
-                .where(BackupRecord.backup_type == BackupType.DAILY.value)
-            )
-            or 0
-        )
-        milestone_count: int = (
-            await session.scalar(
-                sa.select(sa.func.count())
-                .select_from(BackupRecord)
-                .where(BackupRecord.backup_type == BackupType.MILESTONE.value)
-            )
-            or 0
-        )
-        succeeded_count: int = (
-            await session.scalar(
-                sa.select(sa.func.count())
-                .select_from(BackupRecord)
-                .where(BackupRecord.status == BackupStatus.SUCCEEDED.value)
-            )
-            or 0
-        )
-        failed_count: int = (
-            await session.scalar(
-                sa.select(sa.func.count())
-                .select_from(BackupRecord)
-                .where(BackupRecord.status == BackupStatus.FAILED.value)
-            )
-            or 0
-        )
+    backup_service: BackupRecordService = BackupRecordService(session_factory)
+    stats = await backup_service.get_stats()
 
     return BackupStatsResponse(
-        total_count=total_count,
-        total_size_bytes=total_size,
-        daily_count=daily_count,
-        milestone_count=milestone_count,
-        succeeded_count=succeeded_count,
-        failed_count=failed_count,
+        total_count=stats["total_count"],
+        total_size_bytes=stats["total_size_bytes"],
+        daily_count=stats["daily_count"],
+        milestone_count=stats["milestone_count"],
+        succeeded_count=stats["succeeded_count"],
+        failed_count=stats["failed_count"],
     )
 
 

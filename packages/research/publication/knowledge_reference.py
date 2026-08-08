@@ -411,7 +411,7 @@ class KnowledgeReferenceService(ScopedSessionMixin):
             # S3Repository 方法为同步，直接调用
             content = self._s3.get_object(snippet_storage_path)
             data = json.loads(content.decode("utf-8"))
-            return data.get("snippet_text", "")
+            return str(data.get("snippet_text", ""))
         except Exception as exc:
             logger.error("Failed to retrieve snippet from MinIO: %s", exc)
             return ""

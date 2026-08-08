@@ -312,7 +312,8 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         # 此处通过 duck typing 调用 get_fact_data 方法（由 CoreFactProviderImpl 实现）。
         get_data = getattr(self._fact_provider, "get_fact_data", None)
         if get_data is not None:
-            return await get_data(fact_id)
+            data = await get_data(fact_id)
+            return data  # type: ignore[no-any-return]
         # 如果 fact_provider 不提供 get_fact_data，返回空字典（哈希仅基于字段名）
         return {}
 

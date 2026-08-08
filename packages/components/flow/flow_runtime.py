@@ -55,13 +55,24 @@ from packages.components.flow.serialization import (
     serialize_input_summary,
     serialize_output_summary,
 )
-from packages.components.registry import (  # type: ignore[attr-defined]
+from packages.components.registry import (
     ComponentRegistryService,
 )
 from packages.components.sdk import ComponentRunner
 from packages.departments.entities import (
     Department,  # noqa: F401 — ensure FK target registered in metadata
 )
+
+__all__ = [
+    "PROTECTED_PARAMS",
+    "FlowDefinition",
+    "FlowDefinitionVersionORM",
+    "FlowNodeExecution",
+    "FlowRun",
+    "FlowFactService",
+    "TaskSnapshot",
+    "FlowRuntimeService",
+]
 
 # ---- 向后兼容别名（原内部函数移出后的旧名称映射） ----
 _topological_sort = topological_sort

@@ -13,6 +13,7 @@
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -205,7 +206,7 @@ class DepartmentRepository:
             """
         )
         count_result = await session.execute(batch_sql, {"dept_ids": dept_ids})
-        count_map: dict = {row[0]: (int(row[1]), int(row[2])) for row in count_result}
+        count_map: dict[Any, Any] = {row[0]: (int(row[1]), int(row[2])) for row in count_result}
 
         for row in rows:
             dept = row[0]

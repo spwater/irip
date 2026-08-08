@@ -811,3 +811,41 @@ class ComponentRegistryService(ScopedSessionMixin):
                 )
             )
             await session.flush()
+
+    async def get_industrial_object_by_code(self, code: str) -> object | None:
+        """按编码查询工业对象（供组件发布时校验实验对象编码是否存在）。
+
+        Args:
+            code: 工业对象编码。
+
+        Returns:
+            IndustrialObject | None: 工业对象实体，不存在时返回 None。
+        """
+        from packages.standards.objects import IndustrialObject
+
+        async with self._scoped_session() as session:
+            return await session.scalar(
+                sa.select(IndustrialObject).where(IndustrialObject.code == code)
+            )
+
+    async def update_component_fields(
+        self,
+        component_id: UUID,
+        department_id: UUID | None = None,
+        visible_departments: list[str] | None = None,
+    ) -> None:
+        """更新组件归属部门和可见单位列表。
+
+        Args:
+            component_id: 组件主记录 UUID。
+            department_id: 新归属部门 UUID（None 表示不修改）。
+            visible_departments: 新可见单位 UUID 列表（None 表示不修改）。
+        """
+        async with self._scoped_session() as session:
+            comp = await session.scalar(sa.select(Component).where(Component.id == component_id))
+            if comp is not None:
+                if department_id is not None:
+                    comp.department_id = department_id
+                if visible_departments is not None:
+                    comp.visible_departments = visible_departments
+                await session.flush()

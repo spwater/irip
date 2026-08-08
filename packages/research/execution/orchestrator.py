@@ -22,6 +22,7 @@ import logging
 import os
 import tempfile
 from collections import deque
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -31,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
-from packages.research.models_trusted import (
+from packages.research.execution.models_trusted import (
     CoverageDeclaration,
     ErrorClassification,
     ExecutionResult,
@@ -120,7 +121,7 @@ class ResearchOrchestrator:
         from contextlib import asynccontextmanager as _acm
 
         @_acm
-        async def _auto_commit_session() -> None:
+        async def _auto_commit_session() -> AsyncIterator[AsyncSession]:
             if _original_factory is None:
                 raise RuntimeError("session_factory is None")
             async with _original_factory() as session:
@@ -241,7 +242,7 @@ class ResearchOrchestrator:
 
             # 验证 step 已写入数据库
             async with self._factory() as session:
-                from packages.research.entities_trusted import ResearchAnalysisStep
+                from packages.research.execution.entities_trusted import ResearchAnalysisStep
 
                 result = await session.execute(
                     sa.select(ResearchAnalysisStep.id).where(ResearchAnalysisStep.run_id == run_id)
@@ -824,7 +825,7 @@ class ResearchOrchestrator:
         data_text = await self._load_snapshot_data(snapshot_id)
 
         # 构建步骤定义
-        from packages.research.models_trusted import PlanStep as PlanStepDC
+        from packages.research.execution.models_trusted import PlanStep as PlanStepDC
 
         plan_step = PlanStepDC(
             step_key=step_key,
@@ -837,7 +838,7 @@ class ResearchOrchestrator:
             estimated_tokens=step_def.get("estimated_tokens", 0),
         )
 
-        from packages.research.models_trusted import DataProfile
+        from packages.research.execution.models_trusted import DataProfile
 
         data_profile = DataProfile(snapshot_id=snapshot_id)
 
@@ -853,7 +854,7 @@ class ResearchOrchestrator:
         data_tokens = len(data_text) // 4  # 粗略估算
         if data_tokens > budget:
             # 超预算 → 分块全量扫描
-            from packages.research.models_trusted import ChunkStrategy
+            from packages.research.execution.models_trusted import ChunkStrategy
 
             chunks = self._context_router.chunk_data(data_text, budget, ChunkStrategy.TOKEN_BUDGET)
             total_chunks = len(chunks)
@@ -953,7 +954,7 @@ class ResearchOrchestrator:
                     mode_reason=coverage.mode_reason,
                 )
 
-        return coverage.to_dict()
+        return coverage.to_dict()  # type: ignore[no-any-return]
 
     async def _execute_mixed_step(
         self,
@@ -1179,11 +1180,11 @@ class ResearchOrchestrator:
                     try:
                         # 通过 factory 创建 CoreFactProvider 并读取数据
                         from apps.api.main import _build_s3_repo
-                        from packages.research.core_adapter import CoreFactProviderImpl
+                        from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
                         s3_repo = _build_s3_repo()
                         provider = CoreFactProviderImpl(
-                            session_factory=self._factory,
+                            session_factory=self._factory,  # type: ignore[call-arg]
                             s3_repo=s3_repo,
                         )
                         fact_data = await provider.get_fact_data(UUID(fact_id))
@@ -1230,7 +1231,7 @@ class ResearchOrchestrator:
             import redis as redis_lib
 
             redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-            r = redis_lib.from_url(redis_url)
+            r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
             channel = f"research:run:{run_id}:events"
             message = json.dumps(
                 {"event": event_type, "data": json.dumps(payload, ensure_ascii=False)},
@@ -1343,7 +1344,7 @@ class ResearchOrchestrator:
             # LLM 步骤的输出即为模型回答
             # 从最近的工件中获取输出文本
             async with self._factory() as session:
-                from packages.research.repository_trusted import (
+                from packages.research.execution.repository_trusted import (
                     ResearchRepositoryTrusted,
                 )
 

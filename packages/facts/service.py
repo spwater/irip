@@ -22,7 +22,7 @@ from packages.common.database import ScopedSessionMixin, session_scope
 from packages.common.errors import AppError
 from packages.facts.observations import FactMeta, FactRef
 from packages.facts.repository import FactRepository
-from packages.standards.objects import IndustrialObject  # type: ignore[attr-defined]
+from packages.standards.objects import IndustrialObject
 
 
 class FactType(StrEnum):

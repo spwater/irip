@@ -41,32 +41,32 @@ ManageUserDep = Annotated[CurrentUser, Depends(require_permission("research:mana
 # ---- DI 占位 ----
 
 
-def get_provenance_service() -> object:
+def get_provenance_service() -> Any:
     """获取 UnifiedProvenanceQueryService 实例（由 DI 容器覆盖提供）。"""
     raise NotImplementedError("get_provenance_service must be overridden via dependency_overrides")
 
 
-ProvenanceServiceDep = Annotated[object, Depends(get_provenance_service)]
+ProvenanceServiceDep = Annotated[Any, Depends(get_provenance_service)]
 
 
-def get_knowledge_provider_service() -> object:
+def get_knowledge_provider_service() -> Any:
     """获取 KnowledgeProviderService 实例（由 DI 容器覆盖提供）。"""
     raise NotImplementedError(
         "get_knowledge_provider_service must be overridden via dependency_overrides"
     )
 
 
-KnowledgeProviderServiceDep = Annotated[object, Depends(get_knowledge_provider_service)]
+KnowledgeProviderServiceDep = Annotated[Any, Depends(get_knowledge_provider_service)]
 
 
-def get_knowledge_reference_service() -> object:
+def get_knowledge_reference_service() -> Any:
     """获取 KnowledgeReferenceService 实例（由 DI 容器覆盖提供）。"""
     raise NotImplementedError(
         "get_knowledge_reference_service must be overridden via dependency_overrides"
     )
 
 
-KnowledgeReferenceServiceDep = Annotated[object, Depends(get_knowledge_reference_service)]
+KnowledgeReferenceServiceDep = Annotated[Any, Depends(get_knowledge_reference_service)]
 
 
 # ---- Pydantic 请求/响应模型 ----
@@ -192,7 +192,7 @@ research_lineage_router = APIRouter(
 )
 
 
-def _node_to_response(node: object) -> ProvenanceNodeResponse:
+def _node_to_response(node: Any) -> ProvenanceNodeResponse:
     """将 ProvenanceNode dataclass 转换为响应模型。
 
     Args:
@@ -222,7 +222,7 @@ def _node_to_response(node: object) -> ProvenanceNodeResponse:
     )
 
 
-def _edge_to_response(edge: object) -> ProvenanceEdgeResponse:
+def _edge_to_response(edge: Any) -> ProvenanceEdgeResponse:
     """将 ProvenanceEdge dataclass 转换为响应模型。
 
     Args:
@@ -243,7 +243,7 @@ def _edge_to_response(edge: object) -> ProvenanceEdgeResponse:
     )
 
 
-def _graph_to_response(graph: object) -> ProvenanceGraphResponse:
+def _graph_to_response(graph: Any) -> ProvenanceGraphResponse:
     """将 ProvenanceGraph dataclass 转换为响应模型。
 
     Args:
@@ -264,7 +264,7 @@ def _graph_to_response(graph: object) -> ProvenanceGraphResponse:
     )
 
 
-def _ref_to_response(ref: object) -> KnowledgeReferenceRefResponse:
+def _ref_to_response(ref: Any) -> KnowledgeReferenceRefResponse:
     """将 KnowledgeReferenceRef dataclass 转换为响应模型。"""
     return KnowledgeReferenceRefResponse(
         reference_id=str(ref.reference_id),
@@ -282,7 +282,7 @@ def _ref_to_response(ref: object) -> KnowledgeReferenceRefResponse:
     )
 
 
-def _detail_to_response(detail: object) -> KnowledgeReferenceDetailResponse:
+def _detail_to_response(detail: Any) -> KnowledgeReferenceDetailResponse:
     """将 KnowledgeReferenceDetail dataclass 转换为响应模型。"""
     return KnowledgeReferenceDetailResponse(
         ref=_ref_to_response(detail.ref),

@@ -38,7 +38,7 @@ from packages.components.flow.flows import (
 )
 from packages.components.flow.manifest_utils import build_manifest_from_version
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import (  # type: ignore[attr-defined]
+from packages.components.registry import (
     ComponentRegistryService,
     ComponentVersion,
 )

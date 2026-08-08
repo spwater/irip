@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.equipment.entities import Equipment
 from packages.equipment.service import EquipmentService
 
 #: 路由实例。
@@ -128,7 +129,7 @@ class EquipmentListResponse(BaseModel):
 # ---- 辅助函数 ----
 
 
-def _to_response(equip: object) -> EquipmentResponse:
+def _to_response(equip: Equipment) -> EquipmentResponse:
     """将 Equipment ORM 实体转换为响应模型。"""
     return EquipmentResponse(
         id=str(equip.id),

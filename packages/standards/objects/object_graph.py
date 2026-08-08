@@ -18,7 +18,7 @@ from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.common.pagination import MAX_PAGE_SIZE
-from packages.standards.objects import (  # type: ignore[attr-defined]
+from packages.standards.objects import (
     IndustrialObject,
 )
 
@@ -49,6 +49,11 @@ class ObjectGraphService(ScopedSessionMixin):
         self._factory = session_factory
         self._dept_id = department_id
         self._actor_id = actor_id
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问，替代 ``service._factory``）。"""
+        return self._factory
 
     # ---- 对象 CRUD ----
 
@@ -242,6 +247,23 @@ class ObjectGraphService(ScopedSessionMixin):
             # 物理删除
             await session.delete(obj)
             await session.flush()
+
+    async def count_facts_by_object(self, object_id: UUID) -> int:
+        """统计对象关联的 fact 数据数量（外键约束保护）。
+
+        Args:
+            object_id: 对象 UUID。
+
+        Returns:
+            int: 关联的 fact 数据数量。
+        """
+        from packages.facts.entities import Fact
+
+        async with self._scoped_session() as session:
+            count_result = await session.execute(
+                sa.select(sa.func.count(Fact.id)).where(Fact.object_id == object_id)
+            )
+            return int(count_result.scalar() or 0)
 
     async def get_object_by_code(
         self,

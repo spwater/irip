@@ -444,13 +444,13 @@ class FactRepository:
         Returns:
             dict[UUID, FactSnapshotRow]: fact_id → 快照行映射。
         """
-        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow_runtime import (
             FlowDefinition as _FD,
         )
-        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow_runtime import (
             FlowDefinitionVersionORM as _FV,
         )
-        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow_runtime import (
             FlowRun as _FR,
         )
 
@@ -804,6 +804,6 @@ class FactRepository:
             session: 异步会话。
             flow_run_ids: 流程运行 ID 列表。
         """
-        from packages.components.flow_runtime import FlowRun  # type: ignore[attr-defined]
+        from packages.components.flow_runtime import FlowRun
 
         await session.execute(sa.delete(FlowRun).where(FlowRun.id.in_(flow_run_ids)))

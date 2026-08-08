@@ -37,7 +37,7 @@ def register(ctx: CompositionContext) -> None:
     from packages.departments.service import DepartmentService
     from packages.departments.user_departments import UserDepartmentService
     from packages.equipment.service import EquipmentService
-    from packages.standards.object_graph import ObjectGraphService  # type: ignore[attr-defined]
+    from packages.standards.object_graph import ObjectGraphService
 
     # 工业对象图服务
     async def _get_object_graph_service_dep(

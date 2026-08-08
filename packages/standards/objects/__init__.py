@@ -9,3 +9,12 @@ from packages.standards.objects.objects import (
 )
 from packages.standards.objects.object_graph import ObjectGraphService
 from packages.standards.objects.object_type_dict import ObjectTypeDict
+
+__all__ = [
+    "HIERARCHICAL_RELATIONS",
+    "IndustrialObject",
+    "ObjectType",
+    "RelationType",
+    "ObjectGraphService",
+    "ObjectTypeDict",
+]

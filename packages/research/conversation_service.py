@@ -18,8 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.models_trusted import ConversationMessage, TaskType
-from packages.research.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.models_trusted import ConversationMessage, TaskType
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.conversation")
 

@@ -35,7 +35,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.research.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.memory")
 

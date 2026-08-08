@@ -1,6 +1,6 @@
 """流程引擎子包。"""
 
-from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]  # noqa: F401
+from packages.components.flow.flow_runtime import (  # noqa: F401
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,
@@ -28,3 +28,28 @@ from packages.components.flow.flows import (  # noqa: F401
     nodes_from_json,
     nodes_to_json,
 )
+
+__all__ = [
+    "PROTECTED_PARAMS",
+    "FlowDefinition",
+    "FlowDefinitionVersionORM",
+    "FlowFactService",
+    "FlowNodeExecution",
+    "FlowRun",
+    "FlowRuntimeService",
+    "TaskSnapshot",
+    "FlowValidationService",
+    "ValidationResult",
+    "FlowDefinitionVersion",
+    "FlowEdge",
+    "FlowNode",
+    "compute_flow_digest",
+    "edge_from_dict",
+    "edge_to_dict",
+    "edges_from_json",
+    "edges_to_json",
+    "node_from_dict",
+    "node_to_dict",
+    "nodes_from_json",
+    "nodes_to_json",
+]

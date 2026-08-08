@@ -316,6 +316,23 @@ class ExperimentProjectService(ScopedSessionMixin):
             )
         return project, task_count, fact_count
 
+    async def get_owner_display_name(self, owner_user_id: UUID) -> str | None:
+        """查询项目负责人的 display_name。
+
+        Args:
+            owner_user_id: 负责人用户 UUID。
+
+        Returns:
+            str | None: 负责人显示名，不存在时返回 None。
+        """
+        from packages.auth.entities import AppUser
+
+        async with self._scoped_session() as session:
+            result = await session.scalar(
+                sa.select(AppUser.display_name).where(AppUser.id == owner_user_id)
+            )
+            return result  # type: ignore[no-any-return]
+
     async def update(
         self,
         project_id: UUID,
@@ -464,16 +481,16 @@ class ExperimentProjectService(ScopedSessionMixin):
                     fields={"status": project.status},
                 )
             # 级联删除项目下的所有任务及其关联数据
-            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow.flow_runtime import (
                 FlowDefinition as FD,
             )
-            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow.flow_runtime import (
                 FlowDefinitionVersionORM as FV,
             )
-            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow.flow_runtime import (
                 FlowNodeExecution as FNE,
             )
-            from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow.flow_runtime import (
                 FlowRun as FR,
             )
 

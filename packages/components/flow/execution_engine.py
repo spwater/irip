@@ -50,7 +50,7 @@ from packages.components.flow.serialization import (
     serialize_output_summary,
 )
 from packages.components.manifest import ComponentManifest
-from packages.components.registry import (  # type: ignore[attr-defined]
+from packages.components.registry import (
     ComponentRegistryService,
     ComponentVersion,
 )

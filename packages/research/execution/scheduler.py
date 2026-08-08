@@ -20,7 +20,7 @@ import os
 import time
 from typing import Any
 
-from packages.research.models_trusted import QueuePosition
+from packages.research.execution.models_trusted import QueuePosition
 
 logger = logging.getLogger("research.scheduler")
 

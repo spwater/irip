@@ -23,13 +23,11 @@ H-13 增强：
 import os
 from typing import Annotated
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
-from packages.auth.entities import AppUser
 from packages.auth.permissions import BUILTIN_ROLES
 from packages.auth.service import AuthService
 from packages.auth.tokens import TokenPair
@@ -210,17 +208,14 @@ async def logout(
 @me_router.get("/api/v1/me", response_model=MeResponse)
 async def me(
     current_user: CurrentUserDep,
-    session_factory: Annotated[async_sessionmaker[AsyncSession], Depends(get_me_session_factory)],
+    service: AuthServiceDep,
 ) -> MeResponse:
     """获取当前用户信息。
 
     需要 Authorization: Bearer <jwt> header。
     从数据库查询 display_name 和角色权限。
     """
-    async with session_factory() as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == current_user.user_id)
-        )
+    user = await service.get_user_by_id(current_user.user_id)
 
     display_name = user.display_name if user is not None else current_user.email
     roles = current_user.roles if current_user.roles else []

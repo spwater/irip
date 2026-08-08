@@ -27,7 +27,7 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.models_trusted import (
+from packages.research.execution.models_trusted import (
     CoverageDeclaration,
     EligibilityResult,
     QueuePosition,
@@ -35,7 +35,7 @@ from packages.research.models_trusted import (
     RunRef,
     StepProgress,
 )
-from packages.research.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.run_service")
 
@@ -314,7 +314,7 @@ class AnalysisRunService(ScopedSessionMixin):
         Raises:
             AppError: code="not_found"，当 Run 不存在时。
         """
-        from packages.research.models_trusted import RunRef
+        from packages.research.execution.models_trusted import RunRef
 
         async with self._scoped_session() as session:
             run = await ResearchRepositoryTrusted.get_run(session, run_id)
@@ -412,7 +412,7 @@ class AnalysisRunService(ScopedSessionMixin):
         Returns:
             list[RunRef]: Run 引用列表。
         """
-        from packages.research.models_trusted import RunRef
+        from packages.research.execution.models_trusted import RunRef
 
         async with self._scoped_session() as session:
             runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
@@ -452,7 +452,8 @@ class AnalysisRunService(ScopedSessionMixin):
             if run.status != "queued":
                 return QueuePosition(position=0, ahead_count=0, estimated_wait_seconds=0)
 
-            return await self._scheduler.get_queue_position(str(run_id))
+            result = await self._scheduler.get_queue_position(str(run_id))
+            return result  # type: ignore[no-any-return]
 
     async def check_publish_eligibility(
         self,

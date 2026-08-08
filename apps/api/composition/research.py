@@ -27,7 +27,7 @@ def register(ctx: CompositionContext) -> None:
     """
     from apps.api.dependencies.dept_scope import get_rls_dept_id
     from packages.facts.query_service import FactQueryService
-    from packages.research.core_adapter import CoreFactProviderImpl
+    from packages.research.lineage.core_adapter import CoreFactProviderImpl
     from packages.research.service import WorkspaceService
     from packages.research.snapshots import EvidenceSnapshotService
 
@@ -58,7 +58,7 @@ def register(ctx: CompositionContext) -> None:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         fact_provider = _build_fact_provider(current_user)
         # 阶段 3：注入 ResearchCatalogImpl（用于 research:derived 证据校验）
-        from packages.research.catalog import ResearchCatalogImpl
+        from packages.research.products.catalog import ResearchCatalogImpl
 
         research_catalog = ResearchCatalogImpl(
             session_factory=ctx.session_factory,

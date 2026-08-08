@@ -24,8 +24,7 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.context_router import ContextRouter
-from packages.research.models_trusted import (
+from packages.research.execution.models_trusted import (
     CoverageDeclaration,
     DataProfile,
     PlanDetail,
@@ -33,8 +32,9 @@ from packages.research.models_trusted import (
     PlanVersionRef,
     ScopeBoundary,
 )
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+from packages.research.planning.context_router import ContextRouter
 from packages.research.repository import ResearchRepository
-from packages.research.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.plan_service")
 
@@ -387,7 +387,7 @@ class PlanService(ScopedSessionMixin):
         Returns:
             dict: {analysis_result: str}
         """
-        from packages.research.models_trusted import TaskType
+        from packages.research.execution.models_trusted import TaskType
 
         async with self._scoped_session() as session:
             # 1. 获取计划
@@ -652,7 +652,7 @@ class PlanService(ScopedSessionMixin):
                 # 清洗 echarts
                 import re as _re
 
-                def _clean_echarts_block(match) -> None:
+                def _clean_echarts_block(match: Any) -> None:
                     block = match.group(1)
                     block = _re.sub(
                         r'"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}',
@@ -705,7 +705,7 @@ class PlanService(ScopedSessionMixin):
 
                 from packages.common.ids import new_id
                 from packages.common.s3_repository import S3Repository
-                from packages.research.validation import ThreeSegmentValidator
+                from packages.research.execution.validation import ThreeSegmentValidator
 
                 # 查找 run
                 runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
@@ -828,7 +828,7 @@ class PlanService(ScopedSessionMixin):
                    insight_candidate_id: str | None,
                    run_id: str | None}
         """
-        from packages.research.models_trusted import TaskType
+        from packages.research.execution.models_trusted import TaskType
 
         self._require_actor()
         async with self._scoped_session() as session:
@@ -966,7 +966,7 @@ class PlanService(ScopedSessionMixin):
 
                     from packages.common.ids import new_id as _new_id
                     from packages.common.s3_repository import S3Repository
-                    from packages.research.validation import ThreeSegmentValidator
+                    from packages.research.execution.validation import ThreeSegmentValidator
 
                     # 检查当前 run 已有的 data/chart 工件数量
                     existing_result = await session.execute(
@@ -1184,7 +1184,7 @@ class PlanService(ScopedSessionMixin):
     async def _build_data_profile(
         self,
         session: AsyncSession,
-        snapshot: object,
+        snapshot: Any,
     ) -> DataProfile:
         """构建证据快照的数据 Profile。
 
@@ -1307,7 +1307,7 @@ class PlanService(ScopedSessionMixin):
         Returns:
             dict: 含单步 advice 的 DAG 结构（兼容已有存储格式）。
         """
-        from packages.research.models_trusted import TaskType
+        from packages.research.execution.models_trusted import TaskType
 
         # 构建传给 AI 的数据描述：基本信息 + 实际数据内容
         basic_summary = self._context_router.build_data_profile_summary(data_profile)

@@ -21,7 +21,6 @@ from datetime import datetime
 from typing import Annotated, Any
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -29,7 +28,6 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.ai.service import AIService
-from packages.common.database import session_scope as _ai_session_scope
 from packages.common.errors import AppError
 
 #: 模块级 logger。
@@ -68,51 +66,6 @@ def get_ai_service() -> AIService:
 
 #: AIService 依赖类型别名。
 AIServiceDep = Annotated[AIService, Depends(get_ai_service)]
-
-
-async def _resolve_dept_id(current_user: CurrentUser) -> UUID:
-    """从数据库查询用户的 department_id。
-
-    优先使用 token 中的 department_id；缺失时查 DB；
-    DB 也查不到时抛错，不生成随机 UUID（避免孤儿数据 + RLS 绕过）。
-    """
-    user_id = current_user.user_id
-    org_id = getattr(current_user, "department_id", None)
-    if org_id is not None:
-        return UUID(str(org_id))
-
-    # 1. 优先查 app_user 表获取用户的 department_id
-    try:
-        from packages.auth.entities import AppUser
-
-        async with _ai_session_scope(_get_ai_factory()) as session:
-            user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-            if user is not None and user.department_id is not None:
-                return user.department_id
-    except Exception as exc:
-        logger.warning("Failed to load AppUser.department_id for %s: %s", user_id, exc)
-
-    # 2. 兜底：查询 root 哨兵部门（code='root', parent_id IS NULL）。
-    #    organization 表已在迁移 0066 中 DROP，原 IRIP-DEMO 兜底改用 department 哨兵。
-    try:
-        async with _ai_session_scope(_get_ai_factory()) as session:
-            result = await session.execute(
-                sa.text(
-                    "SELECT id FROM department WHERE code = 'root' AND parent_id IS NULL LIMIT 1"
-                )
-            )
-            row = result.scalar()
-            if row is not None:
-                return UUID(str(row))
-    except Exception as exc:
-        logger.warning("Failed to resolve sentinel root department: %s", exc)
-
-    raise AppError(
-        code="forbidden",
-        message="无法确定用户所属部门，请先绑定部门后再使用 AI 助手",
-        retryable=False,
-        fields={"user_id": str(user_id)},
-    )
 
 
 # ---- 请求模型 ----
@@ -262,7 +215,9 @@ async def create_conversation(
     Returns:
         ConversationResponse: 新对话（201 Created）。
     """
-    org_id = await _resolve_dept_id(current_user)
+    org_id = await service.resolve_dept_id(
+        current_user.user_id, getattr(current_user, "department_id", None)
+    )
 
     ref = await service.create_conversation(
         user_id=current_user.user_id,
@@ -311,7 +266,9 @@ async def list_conversations(
     Returns:
         ConversationListResponse: 对话列表。
     """
-    org_id = await _resolve_dept_id(current_user)
+    org_id = await service.resolve_dept_id(
+        current_user.user_id, getattr(current_user, "department_id", None)
+    )
 
     # tab 参数走协作筛选逻辑
     if tab is not None and tab in ("private", "collaborative", "same_dept", "cross_dept"):

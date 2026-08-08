@@ -21,12 +21,15 @@ logout(refresh_token):
   撤销当前会话（幂等，不存在则静默返回）。
 """
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.auth.backends import AuthBackend
+from packages.auth.entities import AppUser
+from packages.auth.passwords import hash_password, verify_password
 from packages.auth.repository import AuthRepository
 from packages.auth.tokens import (
     ACCESS_TOKEN_TTL_SECONDS,
@@ -299,3 +302,104 @@ class AuthService:
             await session.flush()
             # H-06: 撤销该用户的所有 refresh session
             await self._repository.revoke_family_by_user(session, user_id, now)
+
+    # ---- 账户自助服务（account router 下沉） ----
+
+    async def get_user_by_id(self, user_id: UUID) -> AppUser | None:
+        """按 ID 查询用户实体（供 /me、/account/profile 等端点使用）。
+
+        Args:
+            user_id: 用户 UUID。
+
+        Returns:
+            AppUser | None: 用户实体，不存在时返回 None。
+        """
+        async with session_scope(self._session_factory) as session:
+            return await self._repository.find_user_by_id(session, user_id)
+
+    async def update_profile(
+        self,
+        user_id: UUID,
+        display_name: str | None = None,
+        avatar_url: str | None = None,
+    ) -> AppUser:
+        """修改用户显示名 / 头像 URL。
+
+        Args:
+            user_id: 用户 UUID。
+            display_name: 新显示名（None 表示不修改）。
+            avatar_url: 新头像 URL（None 表示不修改）。
+
+        Returns:
+            AppUser: 更新后的用户实体。
+
+        Raises:
+            AppError: code="not_found"，当用户不存在时。
+        """
+        async with session_scope(self._session_factory) as session:
+            user = await self._repository.find_user_by_id(session, user_id)
+            if user is None:
+                raise AppError(
+                    code="not_found",
+                    message="用户不存在",
+                    retryable=False,
+                    fields={},
+                )
+            if display_name is not None:
+                user.display_name = display_name
+            if avatar_url is not None:
+                user.avatar_url = avatar_url
+            user.updated_at = datetime.now(UTC)
+            await session.flush()
+            return user
+
+    async def change_password(
+        self,
+        user_id: UUID,
+        old_password: str,
+        new_password: str,
+    ) -> None:
+        """修改用户密码（验证旧密码 + token_version + 1）。
+
+        Args:
+            user_id: 用户 UUID。
+            old_password: 旧密码明文。
+            new_password: 新密码明文。
+
+        Raises:
+            AppError: code="not_found"，当用户不存在时。
+            AppError: code="invalid_credentials"，当旧密码不正确时。
+        """
+        async with session_scope(self._session_factory) as session:
+            user = await self._repository.find_user_by_id(session, user_id)
+            if user is None:
+                raise AppError(
+                    code="not_found",
+                    message="用户不存在",
+                    retryable=False,
+                    fields={},
+                )
+            if not verify_password(user.password_hash, old_password):
+                raise AppError(
+                    code="invalid_credentials",
+                    message="旧密码不正确",
+                    retryable=False,
+                    fields={},
+                )
+            user.password_hash = hash_password(new_password)
+            user.token_version = user.token_version + 1
+            user.updated_at = datetime.now(UTC)
+
+    async def set_avatar_url(self, user_id: UUID, avatar_url: str) -> None:
+        """更新用户头像 URL（头像文件上传到 MinIO 后调用）。
+
+        Args:
+            user_id: 用户 UUID。
+            avatar_url: 头像访问 URL。
+        """
+        async with session_scope(self._session_factory) as session:
+            await session.execute(
+                sa.update(AppUser)
+                .values(avatar_url=avatar_url, updated_at=datetime.utcnow())
+                .where(AppUser.id == user_id)
+            )

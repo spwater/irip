@@ -28,12 +28,12 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
-    from packages.research.artifact_service import RunArtifactService
-    from packages.research.candidates import CandidateService
-    from packages.research.catalog import ResearchCatalogImpl
-    from packages.research.insight_extractor import InsightExtractor
-    from packages.research.model_gateway import ModelGateway
+    from packages.research.planning.model_gateway import ModelGateway
     from packages.research.products import ProductService
+    from packages.research.products.artifact_service import RunArtifactService
+    from packages.research.products.candidates import CandidateService
+    from packages.research.products.catalog import ResearchCatalogImpl
+    from packages.research.products.insight_extractor import InsightExtractor
 
     # 复用 research_run 中已注册的 artifact_service
     # 此处重新构建（与 research_run 中相同的 s3_repo）

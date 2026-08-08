@@ -123,7 +123,7 @@ class CoreFactProviderImpl:
         dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id
         user_id = self._query_service._actor_id
 
-        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:  # type: ignore[attr-defined, arg-type]
+        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:  # type: ignore[arg-type]
             effective_size = min(max(page_size, 1), 100)
             fetch_limit = effective_size + 1
 
@@ -271,7 +271,8 @@ class CoreFactProviderImpl:
         from packages.common.errors import AppError
 
         try:
-            return await self._query_service.get_fact_data(fact_id)
+            result = await self._query_service.get_fact_data(fact_id)
+            return result  # type: ignore[no-any-return]
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(

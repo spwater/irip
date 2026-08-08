@@ -186,7 +186,7 @@ class ExperimentProjectRepository:
         Returns:
             int: 任务数量。
         """
-        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow.flow_runtime import (
             FlowDefinition,
         )
 
@@ -212,7 +212,7 @@ class ExperimentProjectRepository:
         Returns:
             int: 数据数量。
         """
-        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow.flow_runtime import (
             FlowDefinition,
             FlowDefinitionVersionORM,
             FlowRun,
@@ -254,7 +254,7 @@ class ExperimentProjectRepository:
         if not project_ids:
             return {}
 
-        from packages.components.flow.flow_runtime import (  # type: ignore[attr-defined]
+        from packages.components.flow.flow_runtime import (
             FlowDefinition,
             FlowDefinitionVersionORM,
             FlowRun,

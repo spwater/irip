@@ -29,6 +29,7 @@ from apps.api.dependencies.authorization import require_permission
 from apps.api.dependencies.departments import get_department_service
 from apps.api.dependencies.dept_scope import can_reparent_department
 from packages.common.errors import AppError
+from packages.departments.entities import Department
 from packages.departments.service import DepartmentService
 
 #: 路由实例。
@@ -128,7 +129,7 @@ class DepartmentNameMapItem(BaseModel):
 # ---- 辅助函数 ----
 
 
-def _to_response(dept: object) -> DepartmentResponse:
+def _to_response(dept: Department) -> DepartmentResponse:
     """将 Department ORM 实体转换为响应模型。"""
     parent_id_val = getattr(dept, "parent_id", None)
     return DepartmentResponse(
@@ -246,24 +247,13 @@ async def get_department_name_map(
 
     Args:
         current_user: 当前认证用户（需 department:read 权限）。
-        service: 实验室服务（复用其 session factory）。
+        service: 实验室服务（ORM 查询已下沉）。
 
     Returns:
         list[DepartmentNameMapItem]: 部门 id→display_name 映射列表。
     """
-    import sqlalchemy as sa
-
-    from packages.departments.entities import Department
-
-    async with service._scoped_session() as session:  # noqa: SLF001
-        # 阶段2: department 表是结构数据，RLS 按 current_visible_dept_ids() 过滤
-        # 可见性由数据库层 RLS 处理，路由层不再做冗余过滤。
-        stmt = sa.select(Department.id, Department.display_name).order_by(
-            Department.sort_order, Department.display_name
-        )
-
-        result = await session.execute(stmt)
-        rows = result.all()
+    # ORM 查询已下沉到 DepartmentService.get_name_map
+    rows = await service.get_name_map()
 
     return [DepartmentNameMapItem(id=str(row[0]), display_name=row[1]) for row in rows]
 
@@ -319,7 +309,7 @@ async def update_department(
     # 阶段2: re-parent 二次确认 — 检查是否可以调整父子关系
     new_parent_id = UUID(body.parent_id) if body.parent_id else None
     if new_parent_id is not None:
-        can_reparent = await can_reparent_department(department_id, service._factory)  # noqa: SLF001
+        can_reparent = await can_reparent_department(department_id, service.session_factory)
         if not can_reparent:
             raise AppError(
                 code="forbidden",

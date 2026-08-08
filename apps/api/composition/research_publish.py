@@ -29,12 +29,12 @@ def register(ctx: CompositionContext) -> None:
     """
     # 复用 research_products 中已注册的 artifact_service
     # 此处重新构建 ProductService（需要 ArtifactService，从 ctx 获取 s3_repo 构建）
-    from packages.research.artifact_service import RunArtifactService
-    from packages.research.catalog import ResearchCatalogImpl
     from packages.research.lineage import LineageEdgeService
     from packages.research.products import ProductService
+    from packages.research.products.artifact_service import RunArtifactService
+    from packages.research.products.catalog import ResearchCatalogImpl
     from packages.research.publication import PublicationService
-    from packages.research.search import ResultSearchService
+    from packages.research.publication.search import ResultSearchService
 
     artifact_service = RunArtifactService(
         session_factory=ctx.session_factory,

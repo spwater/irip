@@ -480,6 +480,113 @@ jobs:
             sbom-node.json
           retention-days: 30
 
+  # F-16: E2E 测试 -- Playwright 端到端测试，需要完整环境（DB + API + Web）
+  test-e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: irip
+          POSTGRES_PASSWORD: irip_dev_password
+          POSTGRES_DB: irip_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U irip -d irip_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      minio:
+        image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        env:
+          MINIO_ROOT_USER: irip
+          MINIO_ROOT_PASSWORD: irip_dev_password
+        ports:
+          - 59000:9000
+        command: server /data
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      IRIP_TEST_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+      IRIP_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+      IRIP_REDIS_URL: redis://localhost:56379/0
+      IRIP_MINIO_ENDPOINT: localhost:59000
+      IRIP_MINIO_ACCESS_KEY: irip
+      IRIP_MINIO_SECRET_KEY: irip_dev_password
+      IRIP_MINIO_BUCKET: irip-test
+      IRIP_JWT_SECRET: ci-test-secret-2026
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD: Admin-IRIP-2026
+      E2E_BASE_URL: http://localhost:8080
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+      - run: pip install -e ".[dev]"
+      - run: python -m alembic upgrade head
+      # 种子数据：创建哨兵部门 + 管理员用户（幂等，重复运行不报错）
+      - run: python -m deployments.compose.bootstrap || true
+      - run: corepack enable pnpm
+      - run: pnpm --dir apps/web install --frozen-lockfile
+      - run: pnpm --dir apps/web exec playwright install --with-deps chromium
+      - name: Start API + Web servers and run E2E tests
+        run: |
+          # 启动 API 服务（后台）
+          uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 &
+          API_PID=$!
+          # 启动 Web 开发服务器（后台，端口 8080 对齐 E2E_BASE_URL）
+          pnpm --dir apps/web exec vite --port 8080 --host 0.0.0.0 &
+          WEB_PID=$!
+          # 等待 API 服务就绪
+          echo "Waiting for API server..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/v1/health/live > /dev/null 2>&1; then
+              echo "API server is ready"
+              break
+            fi
+            sleep 2
+          done
+          # 等待 Web 服务就绪
+          echo "Waiting for Web server..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8080 > /dev/null 2>&1; then
+              echo "Web server is ready"
+              break
+            fi
+            sleep 2
+          done
+          # 运行 E2E 测试
+          pnpm --dir apps/web exec playwright test
+          TEST_EXIT=$?
+          # 清理后台进程
+          kill $API_PID $WEB_PID 2>/dev/null || true
+          exit $TEST_EXIT
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        if: always()
+        with:
+          name: playwright-results
+          path: apps/web/playwright-report/
+          retention-days: 7
+
   # F-22/H-10: 源码统计与验收报告生成 -- 依赖质量 jobs，工件驱动
   generate-stats:
     name: Generate Stats & Acceptance Report
@@ -496,6 +603,7 @@ jobs:
       - test-acceptance
       - web-test
       - web-build
+      - test-e2e
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5

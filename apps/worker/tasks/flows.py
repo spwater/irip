@@ -42,9 +42,9 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRuntimeService  # type: ignore[attr-defined]
-    from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
-    from packages.components.runner import PythonComponentRunner  # type: ignore[attr-defined]
+    from packages.components.flow_runtime import FlowRuntimeService
+    from packages.components.registry import ComponentRegistryService
+    from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
 
     db_url = os.getenv(
@@ -129,7 +129,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
 
     # 获取最终状态
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
-    from packages.components.flow_runtime import FlowRun  # type: ignore[attr-defined]
+    from packages.components.flow_runtime import FlowRun
 
     async with session_scope(factory) as session:
         # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC
@@ -261,12 +261,12 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+    from packages.components.flow_runtime import (
         FlowRun,
         FlowRuntimeService,
     )
-    from packages.components.registry import ComponentRegistryService  # type: ignore[attr-defined]
-    from packages.components.runner import PythonComponentRunner  # type: ignore[attr-defined]
+    from packages.components.registry import ComponentRegistryService
+    from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
 
     db_url = os.getenv(

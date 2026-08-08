@@ -27,7 +27,6 @@ from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
-from packages.components.registry.registry import Component
 
 #: JSON Schema 路径（相对项目根目录）。
 _SCHEMA_PATH: Path = (
@@ -260,24 +259,15 @@ async def publish_component(
     # 优先用请求体的 experimental_object_code，fallback 到 YAML 解析
     exp_code = body.experimental_object_code or _parse_experimental_object_code(body.manifest_yaml)
     if exp_code:
-        import sqlalchemy as sa
-
-        from packages.common.database import session_scope
-        from packages.standards.objects import IndustrialObject
-
-        async with session_scope(service.session_factory) as sess:
-            obj = await sess.scalar(
-                sa.select(IndustrialObject).where(
-                    IndustrialObject.code == exp_code,
-                )
+        # ORM 查询已下沉到 ComponentRegistryService.get_industrial_object_by_code
+        obj = await service.get_industrial_object_by_code(exp_code)
+        if obj is None:
+            raise AppError(
+                code="validation_failed",
+                message=f"实验对象编码不存在: {exp_code}",
+                retryable=False,
+                fields={"experimental_object_code": exp_code},
             )
-            if obj is None:
-                raise AppError(
-                    code="validation_failed",
-                    message=f"实验对象编码不存在: {exp_code}",
-                    retryable=False,
-                    fields={"experimental_object_code": exp_code},
-                )
 
     version = await service.publish(
         manifest,
@@ -433,7 +423,7 @@ async def list_component_versions(
             manifest_sha256=v.manifest_sha256,
             created_at=v.created_at,
         )
-        for v in versions
+        for v in versions  # type: ignore[attr-defined]
     ]
 
 
@@ -517,10 +507,6 @@ async def update_component(
         current_user: 当前认证用户（需 component:manage 权限）。
         service: 组件注册表服务。
     """
-    import sqlalchemy as sa
-
-    from packages.common.database import session_scope
-
     comp, _ = await service.get_by_component_id(component_id)
 
     # 归属检查：所有者+上级模型
@@ -533,16 +519,12 @@ async def update_component(
         session_factory=service.session_factory,
     )
 
-    async with session_scope(service.session_factory) as session:
-        if body.department_id is not None:
-            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))  # type: ignore[assignment]
-            if comp is not None:
-                comp.department_id = UUID(body.department_id)
-        if body.visible_departments is not None:
-            comp = await session.scalar(sa.select(Component).where(Component.id == comp.id))  # type: ignore[assignment]
-            if comp is not None:
-                comp.visible_departments = body.visible_departments
-        await session.flush()
+    # ORM 操作已下沉到 ComponentRegistryService.update_component_fields
+    await service.update_component_fields(
+        component_id=comp.id,
+        department_id=UUID(body.department_id) if body.department_id is not None else None,
+        visible_departments=body.visible_departments,
+    )
 
     return {"status": "updated"}
 

@@ -18,8 +18,16 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from apps.api.dependencies.auth import CurrentUser, get_current_user
-from apps.api.routers.account import account_router, get_account_session_factory
+from apps.api.routers.account import (
+    account_router,
+    get_account_service,
+    get_account_session_factory,
+)
+from packages.auth.backends import LocalAuthBackend
 from packages.auth.passwords import hash_password, verify_password
+from packages.auth.repository import AuthRepository
+from packages.auth.service import AuthService
+from packages.common.clock import SystemClock
 from packages.common.error_codes import ErrorCode
 from packages.common.errors import AppError
 
@@ -108,6 +116,19 @@ def _build_app(async_session_factory, current_user):
 
     app.dependency_overrides[get_account_session_factory] = _override_session_factory
     app.dependency_overrides[get_current_user] = _override_current_user
+
+    # 构造 AuthService 并覆盖 get_account_service（账户端点 ORM 操作已下沉到 AuthService）
+    auth_repository = AuthRepository()
+    auth_backend = LocalAuthBackend(auth_repository)
+    account_service = AuthService(
+        backend=auth_backend,
+        repository=auth_repository,
+        session_factory=async_session_factory,
+        token_secret="test-secret-for-account",
+        clock=SystemClock(),
+    )
+    app.dependency_overrides[get_account_service] = lambda: account_service
+
     return app
 
 

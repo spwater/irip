@@ -27,7 +27,7 @@ import logging
 import os
 from typing import Any, Protocol, runtime_checkable
 
-from packages.research.models_trusted import ExecutionResult, OutputFile, ResourceLimits
+from packages.research.execution.models_trusted import ExecutionResult, OutputFile, ResourceLimits
 
 logger = logging.getLogger("research.sandbox")
 
@@ -246,7 +246,7 @@ class DockerSandboxRuntime:
         self._warm_pool = warm_pool
         self._client: Any | None = None
 
-    async def _get_client(self) -> object:
+    async def _get_client(self) -> Any:
         """获取 aiodocker 客户端（延迟初始化）。
 
         Returns:

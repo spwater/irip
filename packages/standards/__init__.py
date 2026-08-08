@@ -11,7 +11,7 @@
 """
 
 # ruff: noqa: F401
-from packages.standards.objects import (  # type: ignore[attr-defined]
+from packages.standards.objects import (
     HIERARCHICAL_RELATIONS,
     IndustrialObject,
     ObjectGraphService,

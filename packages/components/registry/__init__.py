@@ -5,3 +5,5 @@ from packages.components.registry.registry import (  # noqa: F401
     ComponentRegistryService,
     ComponentVersion,
 )
+
+__all__ = ["Component", "ComponentRegistryService", "ComponentVersion"]

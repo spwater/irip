@@ -223,7 +223,7 @@ class ResearchCatalogImpl:
 
             return results
 
-    def _check_visible(self, result_entity: object) -> bool:
+    def _check_visible(self, result_entity: Any) -> bool:
         """校验当前用户是否有权查看成果包（基于 ACL）。
 
         Args:
@@ -233,7 +233,7 @@ class ResearchCatalogImpl:
             bool: 是否有权查看。
         """
         if result_entity.current_acl_type == "private":
-            return result_entity.owner_user_id == self._actor_id
+            return bool(result_entity.owner_user_id == self._actor_id)
         if result_entity.current_acl_type == "tree":
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
         if result_entity.current_acl_type == "explicit":

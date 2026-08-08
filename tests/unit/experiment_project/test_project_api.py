@@ -91,6 +91,9 @@ def _make_mock_service() -> MagicMock:
     mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
     mock_ctx.__aexit__ = AsyncMock(return_value=None)
     service._scoped_session = MagicMock(return_value=mock_ctx)
+    # get_owner_display_name 已下沉为 service 方法（router→service 边界重构）
+    # 详情接口 get_project 会调用，默认返回 None（无负责人显示名）
+    service.get_owner_display_name = AsyncMock(return_value=None)
     return service
 
 

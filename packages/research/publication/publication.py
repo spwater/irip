@@ -27,7 +27,8 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.envelope import PermissionEnvelopeCalculator
+from packages.research.entities import ResearchResult, ResearchResultVersion
+from packages.research.execution.envelope import PermissionEnvelopeCalculator
 from packages.research.lineage import LineageEdgeService
 from packages.research.models import (
     AclRevisionRef,
@@ -1582,7 +1583,7 @@ class PublicationService(ScopedSessionMixin):
             str | None: Run 状态，不存在时返回 None。
         """
         try:
-            from packages.research.entities_trusted import ResearchAnalysisRun
+            from packages.research.execution.entities_trusted import ResearchAnalysisRun
 
             res = await session.execute(
                 sa.select(ResearchAnalysisRun.status).where(ResearchAnalysisRun.id == run_id)
@@ -1667,7 +1668,7 @@ class PublicationService(ScopedSessionMixin):
 
     def _check_result_visible(
         self,
-        result: object,
+        result: ResearchResult,
         principal_id: UUID,
     ) -> bool:
         """校验当前用户是否有权查看成果包（基于 ACL）。
@@ -1681,7 +1682,7 @@ class PublicationService(ScopedSessionMixin):
         """
         # private: 仅 owner 可见
         if result.current_acl_type == "private":
-            return result.owner_user_id == principal_id
+            return bool(result.owner_user_id == principal_id)
 
         # tree: 同部门可见（首期简化为部门内可见，实际需查询部门树）
         if result.current_acl_type == "tree":
@@ -1704,8 +1705,8 @@ class PublicationService(ScopedSessionMixin):
 
     async def _version_to_detail(
         self,
-        session: object,
-        version: object,
+        session: AsyncSession,
+        version: ResearchResultVersion,
     ) -> ResultVersionDetail:
         """将 ORM 版本实体转换为版本详情 dataclass。
 

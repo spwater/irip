@@ -20,12 +20,12 @@ from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.experiment_project.entities import ExperimentProject
 from packages.experiment_project.service import ExperimentProjectService
 
 #: 路由实例。
@@ -159,7 +159,7 @@ class ExperimentProjectDetailResponse(BaseModel):
 # ---- 辅助函数 ----
 
 
-def _to_response(project: object) -> ExperimentProjectResponse:
+def _to_response(project: ExperimentProject) -> ExperimentProjectResponse:
     """将 ExperimentProject ORM 实体转换为响应模型。"""
     return ExperimentProjectResponse(
         id=str(project.id),
@@ -313,15 +313,8 @@ async def get_project(
         AppError: code="not_found"，当项目不存在时。
     """
     project, task_count, fact_count = await service.get_with_stats(project_id)
-    # 查负责人 display_name
-    owner_display_name: str | None = None
-    async with service._scoped_session() as session:  # noqa: SLF001
-        from packages.auth.entities import AppUser
-
-        owner = await session.scalar(
-            sa.select(AppUser.display_name).where(AppUser.id == project.owner_user_id)
-        )
-        owner_display_name = owner
+    # 查负责人 display_name（ORM 查询已下沉到 service.get_owner_display_name）
+    owner_display_name: str | None = await service.get_owner_display_name(project.owner_user_id)
     return ExperimentProjectDetailResponse(
         id=str(project.id),
         department_id=str(project.department_id),

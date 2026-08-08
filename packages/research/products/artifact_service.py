@@ -19,8 +19,8 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
-from packages.research.models_trusted import ArtifactContent, ArtifactRef
-from packages.research.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.models_trusted import ArtifactContent, ArtifactRef
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.artifacts")
 
@@ -347,6 +347,7 @@ class RunArtifactService(ScopedSessionMixin):
             return result if isinstance(result, bytes) else result
         sync_get = getattr(self._s3_repo, "get_object_sync", None)
         if sync_get is not None:
-            return sync_get(storage_path)
+            data = sync_get(storage_path)
+            return data  # type: ignore[no-any-return]
         logger.warning("S3Repository has no get_object method, returning empty")
         return b""

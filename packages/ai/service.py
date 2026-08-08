@@ -139,6 +139,71 @@ class AIService:
 
     # ---- 对话管理（委托 ConversationService）----
 
+    async def resolve_dept_id(
+        self,
+        user_id: UUID,
+        known_dept_id: UUID | None = None,
+    ) -> UUID:
+        """解析用户所属部门 ID（供路由层调用，替代 router 内直接 ORM 查询）。
+
+        优先使用已知 department_id；缺失时查 app_user 表；
+        app_user 也查不到时查 root 哨兵部门；均失败时抛 AppError(forbidden)。
+
+        Args:
+            user_id: 用户 UUID。
+            known_dept_id: 已知的部门 ID（如 token 中的 department_id），可为 None。
+
+        Returns:
+            UUID: 用户所属部门 ID。
+
+        Raises:
+            AppError: code="forbidden"，当无法确定用户所属部门时。
+        """
+        import logging
+
+        from packages.common.database import session_scope
+        from packages.common.errors import AppError
+
+        logger = logging.getLogger("api.assistant")
+
+        if known_dept_id is not None:
+            return known_dept_id
+
+        # 1. 查 app_user 表获取 department_id
+        import sqlalchemy as sa
+
+        from packages.auth.entities import AppUser
+
+        try:
+            async with session_scope(self._factory) as session:
+                user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
+                if user is not None and user.department_id is not None:
+                    return user.department_id
+        except Exception as exc:
+            logger.warning("Failed to load AppUser.department_id for %s: %s", user_id, exc)
+
+        # 2. 兜底：查 root 哨兵部门
+        try:
+            async with session_scope(self._factory) as session:
+                result = await session.execute(
+                    sa.text(
+                        "SELECT id FROM department "
+                        "WHERE code = 'root' AND parent_id IS NULL LIMIT 1"
+                    )
+                )
+                row = result.scalar()
+                if row is not None:
+                    return UUID(str(row))
+        except Exception as exc:
+            logger.warning("Failed to resolve sentinel root department: %s", exc)
+
+        raise AppError(
+            code="forbidden",
+            message="无法确定用户所属部门，请先绑定部门后再使用 AI 助手",
+            retryable=False,
+            fields={"user_id": str(user_id)},
+        )
+
     async def create_conversation(
         self,
         user_id: UUID,

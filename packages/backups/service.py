@@ -386,6 +386,75 @@ class BackupRecordService(ScopedSessionMixin):
             await session.execute(sa.delete(BackupRecord).where(BackupRecord.id == record_id))
             await session.flush()
 
+    async def get_stats(self) -> dict[str, int]:
+        """获取备份汇总统计。
+
+        统计全部备份记录的总数、总大小、各类型数量及状态分布。
+
+        Returns:
+            dict: {
+                "total_count": int,
+                "total_size_bytes": int,
+                "daily_count": int,
+                "milestone_count": int,
+                "succeeded_count": int,
+                "failed_count": int,
+            }
+        """
+        async with self._scoped_session() as session:
+            total_count: int = (
+                await session.scalar(sa.select(sa.func.count()).select_from(BackupRecord)) or 0
+            )
+            total_size: int = (
+                await session.scalar(
+                    sa.select(sa.func.coalesce(sa.func.sum(BackupRecord.file_size), 0)).select_from(
+                        BackupRecord
+                    )
+                )
+                or 0
+            )
+            daily_count: int = (
+                await session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(BackupRecord)
+                    .where(BackupRecord.backup_type == BackupType.DAILY.value)
+                )
+                or 0
+            )
+            milestone_count: int = (
+                await session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(BackupRecord)
+                    .where(BackupRecord.backup_type == BackupType.MILESTONE.value)
+                )
+                or 0
+            )
+            succeeded_count: int = (
+                await session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(BackupRecord)
+                    .where(BackupRecord.status == BackupStatus.SUCCEEDED.value)
+                )
+                or 0
+            )
+            failed_count: int = (
+                await session.scalar(
+                    sa.select(sa.func.count())
+                    .select_from(BackupRecord)
+                    .where(BackupRecord.status == BackupStatus.FAILED.value)
+                )
+                or 0
+            )
+
+        return {
+            "total_count": total_count,
+            "total_size_bytes": total_size,
+            "daily_count": daily_count,
+            "milestone_count": milestone_count,
+            "succeeded_count": succeeded_count,
+            "failed_count": failed_count,
+        }
+
     async def delete_expired(
         self,
         *,

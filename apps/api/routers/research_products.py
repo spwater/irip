@@ -55,9 +55,9 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.research.candidates import CandidateService
-from packages.research.catalog import ResearchCatalogImpl
 from packages.research.products import ProductService
+from packages.research.products.candidates import CandidateService
+from packages.research.products.catalog import ResearchCatalogImpl
 
 #: 需 research:use 权限的当前用户依赖。
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]

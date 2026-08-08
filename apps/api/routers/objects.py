@@ -21,6 +21,7 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
 from packages.standards.object_graph import ObjectGraphService
+from packages.standards.objects.objects import IndustrialObject
 
 #: 路由实例。
 objects_router = APIRouter(prefix="/api/v1/objects", tags=["objects"])
@@ -67,7 +68,7 @@ async def _check_object_ownership(
         current_user=current_user,
         entity_department_id=obj_department_id,
         entity_owner_user_id=obj_owner_user_id,
-        session_factory=service._factory,
+        session_factory=service.session_factory,
     )
 
 
@@ -358,26 +359,18 @@ async def delete_object(
         current_user, existing.department_id, existing.owner_user_id, service
     )
 
-    # 检查是否有关联的 fact 数据（外键约束保护）
-    async with service._scoped_session() as session:  # noqa: SLF001
-        import sqlalchemy as sa
-
-        from packages.facts.entities import Fact
-
-        count_result = await session.execute(
-            sa.select(sa.func.count(Fact.id)).where(Fact.object_id == object_id)
+    # 检查是否有关联的 fact 数据（外键约束保护，ORM 查询已下沉到 service）
+    fact_count = await service.count_facts_by_object(object_id)
+    if fact_count > 0:
+        raise AppError(
+            code="conflict",
+            message=(
+                f"无法删除该实验对象，仍有 {fact_count} 条原始数据关联。"
+                "请先删除或转移关联数据后再操作。"
+            ),
+            retryable=False,
+            fields={"object_id": str(object_id), "fact_count": fact_count},
         )
-        fact_count = int(count_result.scalar() or 0)
-        if fact_count > 0:
-            raise AppError(
-                code="conflict",
-                message=(
-                    f"无法删除该实验对象，仍有 {fact_count} 条原始数据关联。"
-                    "请先删除或转移关联数据后再操作。"
-                ),
-                retryable=False,
-                fields={"object_id": str(object_id), "fact_count": fact_count},
-            )
 
     await service.delete_object(object_id)
 
@@ -385,7 +378,7 @@ async def delete_object(
 # ---- 辅助函数 ----
 
 
-def _object_to_response(obj: object) -> ObjectResponse:
+def _object_to_response(obj: IndustrialObject) -> ObjectResponse:
     """将 IndustrialObject ORM 实体转为响应模型。"""
     return ObjectResponse(
         id=str(obj.id),
@@ -404,7 +397,7 @@ def _object_to_response(obj: object) -> ObjectResponse:
     )
 
 
-def _object_to_list_item(obj: object) -> ObjectListItem:
+def _object_to_list_item(obj: IndustrialObject) -> ObjectListItem:
     """将 IndustrialObject ORM 实体转为列表项。"""
     return ObjectListItem(
         id=str(obj.id),

@@ -21,14 +21,15 @@ from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.research.entities import ResearchInsightCandidate
+from packages.research.execution.entities_trusted import ResearchAnalysisStep, ResearchRunArtifact
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.validation import ThreeSegmentValidator
 from packages.research.models import (
     CandidateDetail,
     CandidateProductSummary,
     InsightCandidateRef,
 )
 from packages.research.repository import ResearchRepository
-from packages.research.repository_trusted import ResearchRepositoryTrusted
-from packages.research.validation import ThreeSegmentValidator
 
 logger = logging.getLogger("research.candidates")
 
@@ -114,7 +115,7 @@ class CandidateService(ScopedSessionMixin):
                 artifacts.extend(r_artifacts)
                 r_steps = await ResearchRepositoryTrusted.list_steps_by_run(session, r.id)
                 steps.extend(r_steps)
-            step_map: dict[UUID, object] = {s.id: s for s in steps}
+            step_map: dict[UUID, ResearchAnalysisStep] = {s.id: s for s in steps}
 
             # 2. 识别 data 候选
             for artifact in artifacts:
@@ -166,8 +167,8 @@ class CandidateService(ScopedSessionMixin):
 
     async def _identify_data_candidate(
         self,
-        artifact: object,
-        step_map: dict[UUID, object],
+        artifact: ResearchRunArtifact,
+        step_map: dict[UUID, ResearchAnalysisStep],
     ) -> CandidateProductSummary:
         """识别 data 工件为候选 DerivedDataset。
 
@@ -279,8 +280,8 @@ class CandidateService(ScopedSessionMixin):
 
     def _identify_chart_candidate(
         self,
-        artifact: object,
-        step_map: dict[UUID, object],
+        artifact: ResearchRunArtifact,
+        step_map: dict[UUID, ResearchAnalysisStep],
     ) -> CandidateProductSummary:
         """识别 chart 工件为候选 ResearchView。
 
@@ -492,7 +493,7 @@ class CandidateService(ScopedSessionMixin):
 
             # 2. 清除 plan dag_structure 中的 insight_candidate 信息
             #    防止刷新页面后从 dag_structure 恢复已拒绝的候选
-            from packages.research.entities_trusted import ResearchAnalysisPlanVersion
+            from packages.research.execution.entities_trusted import ResearchAnalysisPlanVersion
 
             plan_result = await session.execute(
                 sa.select(ResearchAnalysisPlanVersion)

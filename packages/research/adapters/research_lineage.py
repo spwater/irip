@@ -28,7 +28,7 @@ from packages.research.entities import (
     ResearchViewVersion,
     ResearchWorkspace,
 )
-from packages.research.entities_trusted import (
+from packages.research.execution.entities_trusted import (
     ResearchAnalysisRun,
     ResearchAnalysisStep,
 )

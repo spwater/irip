@@ -42,15 +42,15 @@ def _build_orchestrator() -> Any:
     import redis as redis_lib
 
     from packages.common.database import build_session_factory
-    from packages.research.artifact_service import RunArtifactService
-    from packages.research.context_router import ContextRouter
+    from packages.research.execution.models_trusted import ModelConfig, TaskType
+    from packages.research.execution.orchestrator import ResearchOrchestrator
+    from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+    from packages.research.execution.sandbox import DockerSandboxRuntime, WarmPoolManager
+    from packages.research.execution.scheduler import ResearchScheduler
     from packages.research.memory_service import ResearchMemoryService
-    from packages.research.model_gateway import ModelGateway
-    from packages.research.models_trusted import ModelConfig, TaskType
-    from packages.research.orchestrator import ResearchOrchestrator
-    from packages.research.repository_trusted import ResearchRepositoryTrusted
-    from packages.research.sandbox import DockerSandboxRuntime, WarmPoolManager
-    from packages.research.scheduler import ResearchScheduler
+    from packages.research.planning.context_router import ContextRouter
+    from packages.research.planning.model_gateway import ModelGateway
+    from packages.research.products.artifact_service import RunArtifactService
 
     db_url = os.getenv("IRIP_DATABASE_URL", "")
     if db_url.startswith("postgresql+psycopg://"):
@@ -147,7 +147,7 @@ def _build_orchestrator() -> Any:
     memory_service = ResearchMemoryService(session_factory=factory)
 
     # 构建 Insight 提取器（复用 AI provider）
-    from packages.research.insight_extractor import InsightExtractor
+    from packages.research.products.insight_extractor import InsightExtractor
 
     insight_extractor = InsightExtractor(model_gateway=model_gateway) if ai_provider else None
 
@@ -209,8 +209,8 @@ def check_run_heartbeat() -> int:
     import sqlalchemy as sa
 
     from packages.common.database import build_session_factory
-    from packages.research.repository_trusted import ResearchRepositoryTrusted
-    from packages.research.scheduler import ResearchScheduler
+    from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+    from packages.research.execution.scheduler import ResearchScheduler
 
     db_url = os.getenv("IRIP_DATABASE_URL", "")
     if db_url.startswith("postgresql+psycopg://"):
@@ -254,14 +254,15 @@ def cleanup_warm_containers() -> int:
     """
     import redis as redis_lib
 
-    from packages.research.sandbox import WarmPoolManager
+    from packages.research.execution.sandbox import WarmPoolManager
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
     r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
     warm_pool = WarmPoolManager(redis_client=r)
 
     async def _cleanup() -> int:
-        return await warm_pool.cleanup_expired()
+        result = await warm_pool.cleanup_expired()
+        return int(result)
 
     return asyncio.run(_cleanup())
 
@@ -277,7 +278,7 @@ def promote_queued_runs() -> int:
     """
     import redis as redis_lib
 
-    from packages.research.scheduler import ResearchScheduler
+    from packages.research.execution.scheduler import ResearchScheduler
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
     r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
@@ -287,7 +288,7 @@ def promote_queued_runs() -> int:
         promoted = await scheduler.check_and_promote()
         # 对每个提升的 Run 发送执行任务（检查 DB 状态，跳过已取消/失败的）
         from packages.common.database import build_session_factory
-        from packages.research.repository_trusted import ResearchRepositoryTrusted
+        from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
         db_url = os.getenv("IRIP_DATABASE_URL", "")
         if db_url.startswith("postgresql+psycopg://"):

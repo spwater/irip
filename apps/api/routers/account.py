@@ -14,19 +14,16 @@
 """
 
 import asyncio
-from datetime import UTC, datetime
+import time
 from typing import Annotated, Any
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.auth.entities import AppUser
-from packages.auth.passwords import hash_password, verify_password
-from packages.common.database import session_scope
+from packages.auth.service import AuthService
 from packages.common.errors import AppError
 
 #: 路由实例。
@@ -38,7 +35,10 @@ PasswordUserDep = Annotated[CurrentUser, Depends(require_permission("account:pas
 
 
 def get_account_session_factory() -> async_sessionmaker[AsyncSession]:
-    """获取数据库会话工厂（由 DI 容器或测试覆盖提供）。"""
+    """获取数据库会话工厂（由 DI 容器或测试覆盖提供）。
+
+    保留用于向后兼容；账户端点的 ORM 操作已下沉到 AuthService。
+    """
     raise NotImplementedError(
         "get_account_session_factory must be overridden via dependency_overrides"
     )
@@ -47,6 +47,17 @@ def get_account_session_factory() -> async_sessionmaker[AsyncSession]:
 AccountSessionFactoryDep = Annotated[
     async_sessionmaker[AsyncSession], Depends(get_account_session_factory)
 ]
+
+
+def get_account_service() -> AuthService:
+    """获取 AuthService 实例（由 DI 容器或测试覆盖提供）。
+
+    账户自助操作（改密码、改头像、改显示名）的 ORM 查询已下沉到 AuthService。
+    """
+    raise NotImplementedError("get_account_service must be overridden via dependency_overrides")
+
+
+AccountServiceDep = Annotated[AuthService, Depends(get_account_service)]
 
 
 def get_s3_repo() -> Any:
@@ -97,7 +108,7 @@ class AvatarUploadResponse(BaseModel):
 @account_router.get("/profile", response_model=ProfileResponse)
 async def get_profile(
     current_user: ProfileUserDep,
-    session_factory: AccountSessionFactoryDep,
+    service: AccountServiceDep,
 ) -> ProfileResponse:
     """查询当前用户的个人信息。
 
@@ -105,37 +116,34 @@ async def get_profile(
 
     Args:
         current_user: 当前用户。
-        session_factory: 数据库会话工厂。
+        service: 认证服务（ORM 查询已下沉）。
 
     Returns:
         ProfileResponse: 个人信息（含头像 URL、角色、组织 ID）。
     """
-    async with session_factory() as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == current_user.user_id)
+    user = await service.get_user_by_id(current_user.user_id)
+    if user is None:
+        raise AppError(
+            code="not_found",
+            message="用户不存在",
+            retryable=False,
+            fields={},
         )
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message="用户不存在",
-                retryable=False,
-                fields={},
-            )
-        return ProfileResponse(
-            id=str(user.id),
-            email=user.email,
-            display_name=user.display_name,
-            avatar_url=user.avatar_url,
-            roles=list(user.roles) if user.roles else [],
-            department_id=str(user.department_id) if user.department_id else None,
-        )
+    return ProfileResponse(
+        id=str(user.id),
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        roles=list(user.roles) if user.roles else [],
+        department_id=str(user.department_id) if user.department_id else None,
+    )
 
 
 @account_router.patch("/profile", response_model=ProfileResponse)
 async def update_profile(
     body: UpdateProfileRequest,
     current_user: ProfileUserDep,
-    session_factory: AccountSessionFactoryDep,
+    service: AccountServiceDep,
 ) -> ProfileResponse:
     """修改个人信息（显示名 / 头像 URL）。
 
@@ -144,7 +152,7 @@ async def update_profile(
     Args:
         body: 修改请求（display_name 和/或 avatar_url）。
         current_user: 当前用户。
-        session_factory: 数据库会话工厂。
+        service: 认证服务（ORM 操作已下沉）。
 
     Returns:
         ProfileResponse: 更新后的个人信息。
@@ -152,38 +160,26 @@ async def update_profile(
     Raises:
         AppError: code="not_found"，用户不存在。
     """
-    async with session_scope(session_factory) as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == current_user.user_id)
-        )
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message="用户不存在",
-                retryable=False,
-                fields={},
-            )
-        if body.display_name is not None:
-            user.display_name = body.display_name
-        if body.avatar_url is not None:
-            user.avatar_url = body.avatar_url
-        user.updated_at = datetime.now(UTC)
-        await session.flush()
-        return ProfileResponse(
-            id=str(user.id),
-            email=user.email,
-            display_name=user.display_name,
-            avatar_url=user.avatar_url,
-            roles=list(user.roles) if user.roles else [],
-            department_id=str(user.department_id) if user.department_id else None,
-        )
+    user = await service.update_profile(
+        user_id=current_user.user_id,
+        display_name=body.display_name,
+        avatar_url=body.avatar_url,
+    )
+    return ProfileResponse(
+        id=str(user.id),
+        email=user.email,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        roles=list(user.roles) if user.roles else [],
+        department_id=str(user.department_id) if user.department_id else None,
+    )
 
 
 @account_router.post("/password", status_code=204)
 async def change_password(
     body: ChangePasswordRequest,
     current_user: PasswordUserDep,
-    session_factory: AccountSessionFactoryDep,
+    service: AccountServiceDep,
 ) -> None:
     """修改密码。
 
@@ -193,44 +189,24 @@ async def change_password(
     Args:
         body: 修改密码请求（旧密码 + 新密码）。
         current_user: 当前用户。
-        session_factory: 数据库会话工厂。
+        service: 认证服务（ORM 操作已下沉）。
 
     Raises:
         AppError: code="invalid_credentials"，旧密码不正确。
         AppError: code="not_found"，用户不存在。
     """
-    async with session_scope(session_factory) as session:
-        user: AppUser | None = await session.scalar(
-            sa.select(AppUser).where(AppUser.id == current_user.user_id)
-        )
-        if user is None:
-            raise AppError(
-                code="not_found",
-                message="用户不存在",
-                retryable=False,
-                fields={},
-            )
-
-        # 验证旧密码
-        if not verify_password(user.password_hash, body.old_password):
-            raise AppError(
-                code="invalid_credentials",
-                message="旧密码不正确",
-                retryable=False,
-                fields={},
-            )
-
-        # 新密码哈希 + token_version + 1
-        user.password_hash = hash_password(body.new_password)
-        user.token_version = user.token_version + 1
-        user.updated_at = datetime.now(UTC)
+    await service.change_password(
+        user_id=current_user.user_id,
+        old_password=body.old_password,
+        new_password=body.new_password,
+    )
 
 
 @account_router.post("/avatar", response_model=AvatarUploadResponse)
 async def upload_avatar(
     file: UploadFile,
     current_user: ProfileUserDep,
-    session_factory: AccountSessionFactoryDep,
+    service: AccountServiceDep,
     s3_repo: S3RepoDep,
 ) -> AvatarUploadResponse:
     """上传头像到 MinIO 并更新用户 avatar_url。
@@ -242,7 +218,7 @@ async def upload_avatar(
     Args:
         file: 上传的图片文件。
         current_user: 当前用户。
-        session_factory: 数据库会话工厂。
+        service: 认证服务（DB 写入已下沉）。
         s3_repo: S3 / MinIO 客户端。
 
     Returns:
@@ -281,8 +257,6 @@ async def upload_avatar(
         "image/gif": "gif",
     }
     ext = ext_map.get(content_type, "jpg")
-    import time
-
     timestamp = int(time.time())
     object_key = f"avatars/{current_user.user_id}/{timestamp}.{ext}"
 
@@ -301,12 +275,7 @@ async def upload_avatar(
         7 * 24 * 3600,
     )
 
-    # 更新数据库
-    async with session_scope(session_factory) as session:
-        await session.execute(
-            sa.update(AppUser)
-            .values(avatar_url=avatar_url, updated_at=datetime.utcnow())
-            .where(AppUser.id == current_user.user_id)
-        )
+    # 更新数据库（ORM 操作已下沉到 AuthService）
+    await service.set_avatar_url(current_user.user_id, avatar_url)
 
     return AvatarUploadResponse(avatar_url=avatar_url)

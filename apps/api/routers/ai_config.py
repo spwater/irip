@@ -16,12 +16,19 @@ import os
 from typing import Annotated, Any
 
 import httpx
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.ai.config_store import (
+    get_active_ai_config as _get_active_ai_config_from_store,
+)
+from packages.ai.config_store import (
+    get_config_row,
+    upsert_config,
+    upsert_meta_prompt,
+)
 from packages.common.clock import SystemClock
 from packages.common.crypto import EnvelopeCrypto
 from packages.common.database import session_scope
@@ -35,37 +42,6 @@ ai_config_router = APIRouter(prefix="/api/v1/ai-config", tags=["ai-config"])
 ManageUserDep = Annotated[CurrentUser, Depends(require_permission("system:manage"))]
 #: 需 assistant:use 权限的当前用户依赖。
 UseUserDep = Annotated[CurrentUser, Depends(require_permission("assistant:use"))]
-
-
-# ---- 表定义（内联，避免迁移依赖） ----
-
-import packages.common.database as db_mod  # noqa: E402
-from packages.common.db_types import GUID, UTCDateTime  # noqa: E402
-
-_ai_config_table = sa.Table(
-    "ai_config",
-    db_mod.Base.metadata,
-    sa.Column("id", sa.Integer, primary_key=True, server_default=sa.text("1")),
-    sa.Column("base_url", sa.Text, nullable=False),
-    sa.Column("api_key", sa.Text, nullable=False),
-    sa.Column("model_name", sa.Text, nullable=False),
-    sa.Column("assistant_model_name", sa.Text, nullable=True),
-    sa.Column("research_model_name", sa.Text, nullable=True),
-    sa.Column("enabled", sa.Boolean, nullable=False, server_default=sa.text("false")),
-    sa.Column("meta_prompt", sa.Text, nullable=True),
-    sa.Column(
-        "model_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
-    ),
-    sa.Column(
-        "assistant_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
-    ),
-    sa.Column(
-        "research_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
-    ),
-    sa.Column("updated_at", UTCDateTime, server_default=sa.func.now(), nullable=False),
-    sa.Column("updated_by", GUID, nullable=True),
-    extend_existing=True,
-)
 
 
 # ---- 请求/响应模型 ----
@@ -212,15 +188,6 @@ def _mask_key(key: str) -> str:
     return key[:4] + "***" + key[-4:]
 
 
-async def _get_config_row(session: Any) -> dict[str, Any] | None:
-    """读取配置行。"""
-    result = await session.execute(sa.select(_ai_config_table).where(_ai_config_table.c.id == 1))
-    row = result.fetchone()
-    if row is None:
-        return None
-    return dict(row._mapping)
-
-
 # ---- 端点 ----
 
 
@@ -228,7 +195,7 @@ async def _get_config_row(session: Any) -> dict[str, Any] | None:
 async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
     """获取当前 AI 大模型配置（密钥脱敏）。"""
     async with session_scope(_get_session_factory()) as session:
-        row = await _get_config_row(session)
+        row = await get_config_row(session)
         if row is None:
             return AIConfigResponse(
                 base_url="",
@@ -292,7 +259,7 @@ async def update_ai_config(
 
     # 如果前端传 __use_saved__，保留已保存的密钥不变
     async with session_scope(_get_session_factory()) as session:
-        existing = await _get_config_row(session)
+        existing = await get_config_row(session)
         if body.api_key == "__use_saved__":
             if existing is None:
                 raise AppError(
@@ -305,43 +272,21 @@ async def update_ai_config(
             # H-06: 使用单例 crypto（from_env 返回单例实例）
             crypto = EnvelopeCrypto.from_env()
             encrypted_api_key = crypto.encrypt(body.api_key)
-        if existing is None:
-            await session.execute(
-                _ai_config_table.insert().values(
-                    id=1,
-                    base_url=body.base_url,
-                    api_key=encrypted_api_key,
-                    model_name=body.model_name,
-                    assistant_model_name=body.assistant_model_name,
-                    research_model_name=body.research_model_name,
-                    enabled=body.enabled,
-                    meta_prompt=body.meta_prompt,
-                    model_thinking_enabled=body.model_thinking_enabled,
-                    assistant_thinking_enabled=body.assistant_thinking_enabled,
-                    research_thinking_enabled=body.research_thinking_enabled,
-                    updated_at=now,
-                    updated_by=current_user.user_id,
-                )
-            )
-        else:
-            await session.execute(
-                _ai_config_table.update()
-                .where(_ai_config_table.c.id == 1)
-                .values(
-                    base_url=body.base_url,
-                    api_key=encrypted_api_key,
-                    model_name=body.model_name,
-                    assistant_model_name=body.assistant_model_name,
-                    research_model_name=body.research_model_name,
-                    enabled=body.enabled,
-                    meta_prompt=body.meta_prompt,
-                    model_thinking_enabled=body.model_thinking_enabled,
-                    assistant_thinking_enabled=body.assistant_thinking_enabled,
-                    research_thinking_enabled=body.research_thinking_enabled,
-                    updated_at=now,
-                    updated_by=current_user.user_id,
-                )
-            )
+    existing = await upsert_config(
+        _get_session_factory(),
+        base_url=body.base_url,
+        api_key=encrypted_api_key,
+        model_name=body.model_name,
+        assistant_model_name=body.assistant_model_name,
+        research_model_name=body.research_model_name,
+        enabled=body.enabled,
+        meta_prompt=body.meta_prompt,
+        model_thinking_enabled=body.model_thinking_enabled,
+        assistant_thinking_enabled=body.assistant_thinking_enabled,
+        research_thinking_enabled=body.research_thinking_enabled,
+        updated_at=now,
+        updated_by=current_user.user_id,
+    )
 
     # 返回时用已保存密钥的掩码值（如果是 __use_saved__ 的话）
     masked_key = (
@@ -383,31 +328,12 @@ async def update_meta_prompt(
     """单独更新提示词推荐的系统提示词。"""
     clock = SystemClock()
     now = clock.now()
-    async with session_scope(_get_session_factory()) as session:
-        existing = await _get_config_row(session)
-        if existing is None:
-            await session.execute(
-                _ai_config_table.insert().values(
-                    id=1,
-                    base_url="",
-                    api_key="",
-                    model_name="",
-                    enabled=False,
-                    meta_prompt=body.meta_prompt,
-                    updated_at=now,
-                    updated_by=current_user.user_id,
-                )
-            )
-        else:
-            await session.execute(
-                _ai_config_table.update()
-                .where(_ai_config_table.c.id == 1)
-                .values(
-                    meta_prompt=body.meta_prompt,
-                    updated_at=now,
-                    updated_by=current_user.user_id,
-                )
-            )
+    await upsert_meta_prompt(
+        _get_session_factory(),
+        meta_prompt=body.meta_prompt,
+        updated_at=now,
+        updated_by=current_user.user_id,
+    )
     return MetaPromptResponse(meta_prompt=body.meta_prompt)
 
 
@@ -417,7 +343,7 @@ async def get_meta_prompt(
 ) -> MetaPromptResponse:
     """获取提示词推荐的系统提示词。"""
     async with session_scope(_get_session_factory()) as session:
-        row = await _get_config_row(session)
+        row = await get_config_row(session)
         if row is None:
             return MetaPromptResponse(meta_prompt=_DEFAULT_META_PROMPT)
         return MetaPromptResponse(meta_prompt=row.get("meta_prompt") or _DEFAULT_META_PROMPT)
@@ -458,7 +384,7 @@ async def test_ai_connection(
         if saved is None:
             # 未启用，直接从表读
             async with session_scope(_get_session_factory()) as session:
-                row = await _get_config_row(session)
+                row = await get_config_row(session)
                 if row is None:
                     return AITestResponse(success=False, message="未找到已保存的配置")
                 # H-06: 使用单例 crypto，解密失败直接 raise
@@ -519,24 +445,7 @@ async def get_active_ai_config() -> dict[str, str] | None:
     Returns:
         dict | None: 包含 base_url/api_key/model_name 的字典，未配置或未启用时返回 None。
     """
-    async with session_scope(_get_session_factory()) as session:
-        row = await _get_config_row(session)
-        if row is None or not row["enabled"]:
-            return None
-        # H-06: 使用单例 crypto，解密失败直接 raise（不回退明文）
-        crypto = EnvelopeCrypto.from_env()
-        decrypted_key = crypto.decrypt(row["api_key"])
-        return {
-            "base_url": row["base_url"],
-            "api_key": decrypted_key,
-            "model_name": row["model_name"],
-            "assistant_model_name": row.get("assistant_model_name") or row["model_name"],
-            "research_model_name": row.get("research_model_name") or row["model_name"],
-            "meta_prompt": row.get("meta_prompt") or "",
-            "model_thinking_enabled": row.get("model_thinking_enabled") or False,
-            "assistant_thinking_enabled": row.get("assistant_thinking_enabled") or False,
-            "research_thinking_enabled": row.get("research_thinking_enabled") or False,
-        }
+    return await _get_active_ai_config_from_store(_get_session_factory())
 
 
 # ---- DI 占位 ----

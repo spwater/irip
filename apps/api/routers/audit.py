@@ -18,7 +18,6 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.audit.events import AuditEvent
+from packages.audit.repository import AuditQueryRepository
 from packages.common.database import session_scope
 from packages.common.errors import AppError
 from packages.common.ids import new_id
@@ -125,69 +125,17 @@ def _to_event_response(event: AuditEvent) -> AuditEventResponse:
     )
 
 
-def _build_filter_conditions(
-    object_id: str | None,
-    object_type: str | None,
-    user_id: str | None,
-    action: str | None,
-    start_date: datetime | None,
-    end_date: datetime | None,
-) -> list[sa.ColumnExpressionArgument[bool]]:
-    """构建审计事件查询过滤条件。
-
-    Args:
-        object_id: 资源 ID 过滤。
-        object_type: 资源类型过滤。
-        user_id: 操作者 ID 过滤。
-        action: 动作过滤。
-        start_date: 起始日期。
-        end_date: 截止日期。
-
-    Returns:
-        list: SQLAlchemy 过滤条件列表。
-
-    Raises:
-        AppError: code="validation_failed"，当 UUID 格式无效时。
-    """
-    conditions: list[sa.ColumnExpressionArgument[bool]] = []
-
-    if object_id is not None:
-        try:
-            object_uuid = UUID(object_id)
-        except ValueError as exc:
-            raise AppError(
-                code="validation_failed",
-                message="无效的对象 ID",
-                retryable=False,
-                fields={"object_id": object_id},
-            ) from exc
-        conditions.append(AuditEvent.resource_id == object_uuid)
-
-    if object_type is not None:
-        conditions.append(AuditEvent.resource_type == object_type)
-
-    if user_id is not None:
-        try:
-            user_uuid = UUID(user_id)
-        except ValueError as exc:
-            raise AppError(
-                code="validation_failed",
-                message="无效的用户 ID",
-                retryable=False,
-                fields={"user_id": user_id},
-            ) from exc
-        conditions.append(AuditEvent.actor_user_id == user_uuid)
-
-    if action is not None:
-        conditions.append(AuditEvent.action == action)
-
-    if start_date is not None:
-        conditions.append(AuditEvent.occurred_at >= start_date)
-
-    if end_date is not None:
-        conditions.append(AuditEvent.occurred_at <= end_date)
-
-    return conditions
+def _parse_uuid(value: str, field_name: str) -> UUID:
+    """将字符串参数解析为 UUID，无效时抛 AppError(validation_failed)。"""
+    try:
+        return UUID(value)
+    except ValueError as exc:
+        raise AppError(
+            code="validation_failed",
+            message=f"无效的{field_name}",
+            retryable=False,
+            fields={field_name: value},
+        ) from exc
 
 
 # ---- 端点 ----
@@ -226,10 +174,12 @@ async def list_audit_events(
     Returns:
         AuditEventListResponse: 分页审计事件列表。
     """
-    conditions = _build_filter_conditions(
-        object_id, object_type, user_id, action, start_date, end_date
-    )
+    # 参数校验：UUID 格式
+    object_uuid: UUID | None = _parse_uuid(object_id, "对象 ID") if object_id is not None else None
+    user_uuid: UUID | None = _parse_uuid(user_id, "用户 ID") if user_id is not None else None
 
+    # 解析游标
+    cursor_dt: datetime | None = None
     if cursor is not None:
         try:
             cursor_dt = datetime.fromisoformat(cursor)
@@ -240,17 +190,20 @@ async def list_audit_events(
                 retryable=False,
                 fields={"cursor": cursor},
             ) from exc
-        conditions.append(AuditEvent.occurred_at < cursor_dt)
 
+    # ORM 查询已下沉到 AuditQueryRepository
     async with session_factory() as session:
-        stmt = (
-            sa.select(AuditEvent)
-            .where(*conditions)
-            .order_by(AuditEvent.occurred_at.desc())
-            .limit(limit + 1)
+        rows: list[AuditEvent] = await AuditQueryRepository.list_events(
+            session,
+            object_id=object_uuid,
+            object_type=object_type,
+            user_id=user_uuid,
+            action=action,
+            start_date=start_date,
+            end_date=end_date,
+            cursor_dt=cursor_dt,
+            limit=limit,
         )
-        result = await session.execute(stmt)
-        rows: list[AuditEvent] = list(result.scalars().all())
 
     has_more: bool = len(rows) > limit
     page_items: list[AuditEvent] = rows[:limit]

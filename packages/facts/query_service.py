@@ -547,7 +547,7 @@ class FactQueryService(ScopedSessionMixin):
                             create_async_engine as _cae,
                         )
 
-                        from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+                        from packages.components.flow_runtime import (
                             FlowDefinition,
                             FlowDefinitionVersionORM,
                             FlowRun,
@@ -637,7 +637,7 @@ class FactQueryService(ScopedSessionMixin):
                                             # 查组件 display_name 和 experimental_object_code
                                             import yaml as yaml_lib
 
-                                            from packages.components.registry import (  # type: ignore[attr-defined]
+                                            from packages.components.registry import (
                                                 Component,
                                                 ComponentVersion,
                                             )
@@ -665,7 +665,7 @@ class FactQueryService(ScopedSessionMixin):
                                                 ds["experimental_object_code"] = (
                                                     cv.experimental_object_code
                                                 )
-                                                from packages.standards.objects import (  # type: ignore[attr-defined]
+                                                from packages.standards.objects import (
                                                     IndustrialObject,
                                                 )
 
@@ -716,7 +716,7 @@ class FactQueryService(ScopedSessionMixin):
         # ---- Fallback：快照没命中，通过 flow_run_id 外键反查（兼容旧数据）----
         if not task_info:
             try:
-                from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+                from packages.components.flow_runtime import (
                     FlowDefinition,
                     FlowDefinitionVersionORM,
                     FlowRun,

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.entities import ResearchResult, ResearchResultVersion
 from packages.research.models import SearchResultItem, SearchResultPage
 from packages.research.repository import ResearchRepository
 
@@ -125,7 +126,7 @@ class ResultSearchService(ScopedSessionMixin):
                 )
 
             # 查询版本信息
-            versions_map: dict[UUID, object] = {}
+            versions_map: dict[UUID, ResearchResultVersion] = {}
             for result in results:
                 latest = await ResearchRepository.get_latest_result_version(session, result.id)
                 if latest is not None and latest.status == "active":
@@ -152,24 +153,24 @@ class ResultSearchService(ScopedSessionMixin):
             # 6. 构建搜索结果
             items: list[SearchResultItem] = []
             for result in results:
-                version = versions_map.get(result.id)
-                if version is None:
+                ver: ResearchResultVersion | None = versions_map.get(result.id)
+                if ver is None:
                     continue
 
                 # 统计产物数量
-                dataset_count = len(version.dataset_version_refs or [])
-                view_count = len(version.view_version_refs or [])
-                insight_count = len(version.insight_version_refs or [])
+                dataset_count = len(ver.dataset_version_refs or [])
+                view_count = len(ver.view_version_refs or [])
+                insight_count = len(ver.insight_version_refs or [])
 
                 items.append(
                     SearchResultItem(
                         result_id=result.id,
                         name=result.name,
-                        title=version.title,
-                        summary=version.summary or "",
-                        tags=list(version.tags or []),
-                        publisher=version.publisher,
-                        published_at=version.published_at,
+                        title=ver.title,
+                        summary=ver.summary or "",
+                        tags=list(ver.tags or []),
+                        publisher=ver.publisher,
+                        published_at=ver.published_at,
                         current_version=result.current_version,
                         current_acl_type=result.current_acl_type,
                         dataset_count=dataset_count,
@@ -218,7 +219,7 @@ class ResultSearchService(ScopedSessionMixin):
 
     def _check_result_visible(
         self,
-        result: object,
+        result: ResearchResult,
         principal_id: UUID,
     ) -> bool:
         """校验当前用户是否有权查看成果包（基于 ACL）。
@@ -231,7 +232,7 @@ class ResultSearchService(ScopedSessionMixin):
             bool: 是否有权查看。
         """
         if result.current_acl_type == "private":
-            return result.owner_user_id == principal_id
+            return bool(result.owner_user_id == principal_id)
         if result.current_acl_type == "tree":
             return True  # 首期简化：同部门用户可见（RLS 已过滤）
         if result.current_acl_type == "explicit":
@@ -244,7 +245,7 @@ class ResultSearchService(ScopedSessionMixin):
             return True
         return False
 
-    def _match_query(self, version: object, query: str) -> bool:
+    def _match_query(self, version: ResearchResultVersion, query: str) -> bool:
         """检查版本是否匹配关键词查询。
 
         匹配 title / summary / tags。

@@ -27,6 +27,8 @@ set_status(department_id, status, lock_version):
 - updated_at 显式写（服务层 UPDATE 语句 SET updated_at=now()，不加 DB 触发器）。
 """
 
+from __future__ import annotations
+
 import base64
 import binascii
 import json
@@ -94,6 +96,11 @@ class DepartmentService(ScopedSessionMixin):
         self._factory = session_factory
         self._dept_id = department_id
         self._clock = clock or SystemClock()
+
+    @property
+    def session_factory(self) -> async_sessionmaker[AsyncSession]:
+        """异步会话工厂（公开只读访问，替代 ``service._factory``）。"""
+        return self._factory
 
     async def create(
         self,
@@ -423,6 +430,23 @@ class DepartmentService(ScopedSessionMixin):
             "subtree_count": len(subtree_ids),
             "equipment_count": equipment_count,
         }
+
+    async def get_name_map(self) -> list[tuple[UUID, str]]:
+        """获取部门 ID→名称映射（受组织隔离限制）。
+
+        专用于前端名称展示场景，只返回 (id, display_name)，
+        不含成员数、描述等敏感信息。可见性由 RLS 处理。
+
+        Returns:
+            list[tuple[UUID, str]]: (department_id, display_name) 列表，
+            按 sort_order + display_name 排序。
+        """
+        async with self._scoped_session() as session:
+            stmt = sa.select(Department.id, Department.display_name).order_by(
+                Department.sort_order, Department.display_name
+            )
+            result = await session.execute(stmt)
+            return [(row[0], row[1]) for row in result.all()]
 
     async def delete(self, department_id: UUID) -> None:
         """删除实验室（物理删除）。

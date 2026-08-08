@@ -269,7 +269,7 @@ def _member_to_response(m: EvidenceMember) -> EvidenceMemberResponse:
     )
 
 
-def _output_to_response(out) -> ParameterCandidateOutputResponse:
+def _output_to_response(out: Any) -> ParameterCandidateOutputResponse:
     """将 ParameterCandidateOutput 转为响应模型。"""
     return ParameterCandidateOutputResponse(
         variable_code=out.variable_code,

@@ -28,6 +28,8 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.validation import ThreeSegmentValidator
 from packages.research.models import (
     DatasetDetail,
     DatasetVersionDetail,
@@ -43,8 +45,6 @@ from packages.research.models import (
     ViewVersionRef,
 )
 from packages.research.repository import ResearchRepository
-from packages.research.repository_trusted import ResearchRepositoryTrusted
-from packages.research.validation import ThreeSegmentValidator
 
 logger = logging.getLogger("research.products")
 

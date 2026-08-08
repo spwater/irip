@@ -26,7 +26,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.common.ids import new_id
-from packages.research.entities_trusted import (
+from packages.research.execution.entities_trusted import (
     ResearchAiConversation,
     ResearchAnalysisPlanVersion,
     ResearchAnalysisRun,

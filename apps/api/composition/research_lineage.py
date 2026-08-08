@@ -34,13 +34,13 @@ def register(ctx: CompositionContext) -> None:
     from packages.research.adapters.research_lineage import (
         ResearchLineageAdapterImpl,
     )
-    from packages.research.knowledge_provider import (
+    from packages.research.lineage.lineage_writer import LineageWriterService
+    from packages.research.lineage.provenance import UnifiedProvenanceQueryService
+    from packages.research.publication.knowledge_provider import (
         KnowledgeProviderService,
         MockKnowledgeProvider,
     )
-    from packages.research.knowledge_reference import KnowledgeReferenceService
-    from packages.research.lineage_writer import LineageWriterService
-    from packages.research.provenance import UnifiedProvenanceQueryService
+    from packages.research.publication.knowledge_reference import KnowledgeReferenceService
 
     # 构建 Adapter（无状态，共享 session_factory）
     core_adapter = CoreProvenanceAdapterImpl(session_factory=ctx.session_factory)

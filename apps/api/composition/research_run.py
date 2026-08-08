@@ -36,14 +36,14 @@ def register(ctx: CompositionContext) -> None:
     """
     import redis as redis_lib
 
-    from packages.research.artifact_service import RunArtifactService
-    from packages.research.context_router import ContextRouter
     from packages.research.conversation_service import AIConversationService
+    from packages.research.execution.run_service import AnalysisRunService
+    from packages.research.execution.scheduler import ResearchScheduler
     from packages.research.memory_service import ResearchMemoryService
-    from packages.research.model_gateway import ModelGateway
-    from packages.research.plan_service import PlanService
-    from packages.research.run_service import AnalysisRunService
-    from packages.research.scheduler import ResearchScheduler
+    from packages.research.planning.context_router import ContextRouter
+    from packages.research.planning.model_gateway import ModelGateway
+    from packages.research.planning.plan_service import PlanService
+    from packages.research.products.artifact_service import RunArtifactService
 
     # 构建共享单例
     redis_client = redis_lib.from_url(ctx.redis_url)  # type: ignore[no-untyped-call]
@@ -103,7 +103,7 @@ def register(ctx: CompositionContext) -> None:
         _logger.warning("Failed to load AI config for API PlanService: %s", exc)
 
     # 构建模型注册表：所有任务类型使用研发助手模型
-    from packages.research.model_gateway import ModelConfig, TaskType  # type: ignore[attr-defined]
+    from packages.research.planning.model_gateway import ModelConfig, TaskType
 
     if research_model_name:
         model_registry = {
@@ -174,7 +174,7 @@ def register(ctx: CompositionContext) -> None:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
         from apps.api.dependencies.dept_scope import get_rls_dept_id
         from packages.facts.query_service import FactQueryService
-        from packages.research.core_adapter import CoreFactProviderImpl
+        from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         fact_query_service = FactQueryService(

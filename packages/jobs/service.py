@@ -202,7 +202,7 @@ class JobService(ScopedSessionMixin):
                     Job.lock_version == job.lock_version,
                 )
             )
-            if result.rowcount == 0:
+            if result.rowcount == 0:  # type: ignore[attr-defined]
                 raise AppError(
                     code="conflict",
                     message="作业状态已被其他请求修改，请重试",
@@ -314,13 +314,13 @@ class JobService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
-            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow_runtime import (
                 FlowDefinition as FlowDefORM,
             )
-            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow_runtime import (
                 FlowDefinitionVersionORM,
             )
-            from packages.components.flow_runtime import (  # type: ignore[attr-defined]
+            from packages.components.flow_runtime import (
                 FlowRun as FlowRunORM,
             )
             from packages.departments.entities import Department
@@ -395,3 +395,20 @@ class JobService(ScopedSessionMixin):
                 )
 
             return job
+
+    async def get_created_by_name(self, created_by: UUID) -> str | None:
+        """查询作业创建者的 display_name。
+
+        Args:
+            created_by: 创建者用户 UUID。
+
+        Returns:
+            str | None: 创建者显示名，不存在时返回 None。
+        """
+        from packages.auth.entities import AppUser
+
+        async with self._scoped_session() as session:
+            result = await session.scalar(
+                sa.select(AppUser.display_name).where(AppUser.id == created_by)
+            )
+            return result

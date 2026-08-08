@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
-from packages.research.labels import NodeDisplayLabelGenerator
+from packages.research.lineage.labels import NodeDisplayLabelGenerator
 from packages.research.models import (
     ProvenanceEdge,
     ProvenanceGraph,
@@ -182,7 +182,7 @@ class UnifiedProvenanceQueryService(ScopedSessionMixin):
             is_restricted=False,
         )
 
-    def _route_adapter(self, namespace: str) -> object:
+    def _route_adapter(self, namespace: str) -> Any:
         """根据命名空间路由到对应 Adapter。
 
         Args:

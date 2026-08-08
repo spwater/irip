@@ -17,9 +17,12 @@
 import os
 from typing import Annotated
 
-import sqlalchemy as sa
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+
+# health 路由使用 text() 执行原生 SQL 探针查询（检查迁移版本 + outbox 心跳），
+# 这属于基础设施健康检查，不是业务 ORM 查询，保留在路由层。
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.s3_repository import S3Repository
@@ -122,7 +125,7 @@ async def readiness(
     try:
         expected_heads = _get_expected_heads()
         async with session_factory() as session:
-            result = await session.execute(sa.text("SELECT version_num FROM alembic_version"))
+            result = await session.execute(text("SELECT version_num FROM alembic_version"))
             version: str | None = result.scalar()
             if version not in expected_heads:
                 checks["database"] = {
@@ -141,7 +144,7 @@ async def readiness(
     try:
         import redis.asyncio as aioredis
 
-        client = aioredis.from_url(redis_url)
+        client = aioredis.from_url(redis_url)  # type: ignore[no-untyped-call]
         await client.ping()
         await client.aclose()
         checks["redis"] = {"status": "ok"}
@@ -161,7 +164,7 @@ async def readiness(
     try:
         async with session_factory() as session:
             result = await session.execute(
-                sa.text(
+                text(
                     "SELECT count(*) FROM outbox_event "
                     "WHERE delivered_at IS NULL "
                     f"AND occurred_at < now() - "
@@ -188,7 +191,7 @@ async def readiness(
 
         import redis
 
-        r = redis.from_url(redis_url)
+        r = redis.from_url(redis_url)  # type: ignore[no-untyped-call]
         raw = r.get("irip:worker:heartbeat")
 
         if raw is not None:

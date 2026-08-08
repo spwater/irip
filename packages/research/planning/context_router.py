@@ -16,7 +16,7 @@ ContextRouter 是无状态服务，负责：
 
 import logging
 
-from packages.research.models_trusted import (
+from packages.research.execution.models_trusted import (
     AnalysisMode,
     Chunk,
     ChunkStrategy,

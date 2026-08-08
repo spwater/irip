@@ -458,7 +458,7 @@ class ExpressionInterpreter:
                 code="numeric_expression_rejected",
                 message="boolean literals are not allowed",
             )
-        float_val = float(val)
+        float_val = float(val)  # type: ignore[arg-type]
         if not math.isfinite(float_val):
             raise NumericError(
                 code="numeric_non_finite_result",
@@ -531,11 +531,11 @@ class ExpressionInterpreter:
             return _EvalValue.scalar_val(result, val.unit)
 
         # vector
-        result = val.vval.copy()
+        vec_result = val.vval.copy()
         null_mask = val.mval.copy()
         non_null = ~null_mask
-        result[non_null] = -result[non_null]
-        return _EvalValue.vector_val(result, null_mask, val.unit)
+        vec_result[non_null] = -vec_result[non_null]
+        return _EvalValue.vector_val(vec_result, null_mask, val.unit)
 
     # ---- 二元运算 ----
 
@@ -616,7 +616,7 @@ class ExpressionInterpreter:
     def _get_values(self, val: _EvalValue, shape: tuple[int, ...]) -> np.ndarray:
         """获取与目标形状匹配的值数组。"""
         if len(shape) == 0:
-            return np.float64(val.scalar if not val.is_null_scalar else 0.0)
+            return np.float64(val.scalar if not val.is_null_scalar else 0.0)  # type: ignore[return-value]
         if val.kind == "scalar":
             return np.full(
                 shape[0], val.scalar if not val.is_null_scalar else 0.0, dtype=np.float64
@@ -781,7 +781,7 @@ class ExpressionInterpreter:
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
 
-        non_null = ~null_mask
+        non_null = ~null_mask  # type: ignore[operator]
 
         if check_div_zero:
             self._check_div_zero_vector(b, non_null, op_name)
@@ -794,7 +794,7 @@ class ExpressionInterpreter:
             result[non_null] = op(a[non_null], b[non_null])
             self._check_finite_vector(result, non_null, op_name)
 
-        return _EvalValue.vector_val(result, null_mask, unit)
+        return _EvalValue.vector_val(result, null_mask, unit)  # type: ignore[arg-type]
 
     # ---- 比较运算 ----
 
@@ -826,7 +826,7 @@ class ExpressionInterpreter:
         if len(shape) == 0:
             if left.is_null_scalar or right.is_null_scalar:
                 return _EvalValue.condition_val("scalar", scalar=0.0)
-            result = self._compare_scalar(a, b, op_str)
+            result = self._compare_scalar(float(a), float(b), op_str)
             return _EvalValue.condition_val("scalar", scalar=float(result))
 
         if self._null_policy == "propagate":
@@ -834,13 +834,13 @@ class ExpressionInterpreter:
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
 
-        result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask
+        vec_result = np.zeros(shape[0], dtype=np.float64)
+        non_null = ~null_mask  # type: ignore[operator]
         if np.any(non_null):
             cmp_result = self._compare_vector(a, b, op_str, non_null)
-            result[non_null] = cmp_result
+            vec_result[non_null] = cmp_result
 
-        return _EvalValue.condition_val("vector", vector=result, null_mask=null_mask)
+        return _EvalValue.condition_val("vector", vector=vec_result, null_mask=null_mask)
 
     def _compare_scalar(self, a: float, b: float, op: str) -> float:
         if op == "<":
@@ -863,24 +863,24 @@ class ExpressionInterpreter:
         av = a[mask]
         bv = b[mask]
         if op == "<":
-            return (av < bv).astype(np.float64)
+            return (av < bv).astype(np.float64)  # type: ignore[no-any-return]
         if op == "<=":
-            return (av <= bv).astype(np.float64)
+            return (av <= bv).astype(np.float64)  # type: ignore[no-any-return]
         if op == ">":
-            return (av > bv).astype(np.float64)
+            return (av > bv).astype(np.float64)  # type: ignore[no-any-return]
         if op == ">=":
-            return (av >= bv).astype(np.float64)
+            return (av >= bv).astype(np.float64)  # type: ignore[no-any-return]
         if op == "==":
-            return (av == bv).astype(np.float64)
+            return (av == bv).astype(np.float64)  # type: ignore[no-any-return]
         if op == "!=":
-            return (av != bv).astype(np.float64)
+            return (av != bv).astype(np.float64)  # type: ignore[no-any-return]
         raise NumericError(code="numeric_expression_rejected", message=f"unknown comparison: {op}")
 
     # ---- 函数调用 ----
 
     def _visit_call(self, node: ast.Call) -> _EvalValue:
         """白名单函数调用。"""
-        func_name = node.func.id
+        func_name = node.func.id  # type: ignore[attr-defined]
         args = [self.interpret(a) for a in node.args]
 
         if func_name in _ELEMENTWISE_FUNCS:
@@ -1048,15 +1048,15 @@ class ExpressionInterpreter:
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
 
-        result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask
+        vec_result = np.zeros(shape[0], dtype=np.float64)
+        non_null = ~null_mask  # type: ignore[operator]
         if np.any(non_null):
-            result[non_null] = np.arctan2(yv[non_null], xv[non_null])
+            vec_result[non_null] = np.arctan2(yv[non_null], xv[non_null])
             if self._options.angle_unit == "degree":
-                result[non_null] = np.degrees(result[non_null])
-            self._check_finite_vector(result, non_null, "atan2")
+                vec_result[non_null] = np.degrees(vec_result[non_null])
+            self._check_finite_vector(vec_result, non_null, "atan2")
 
-        return _EvalValue.vector_val(result, null_mask, unit)
+        return _EvalValue.vector_val(vec_result, null_mask, unit)  # type: ignore[arg-type]
 
     def _call_round(self, args: list[_EvalValue]) -> _EvalValue:
         x = args[0]
@@ -1098,11 +1098,11 @@ class ExpressionInterpreter:
             if self._null_policy == "propagate"
             else np.zeros(len(x.vval), dtype=np.bool_)
         )
-        result = np.zeros_like(x.vval)
+        vec_result = np.zeros_like(x.vval)
         non_null = ~null_mask
         if np.any(non_null):
-            result[non_null] = np.round(x.vval[non_null], digits)
-        return _EvalValue.vector_val(result, null_mask, unit)
+            vec_result[non_null] = np.round(x.vval[non_null], digits)
+        return _EvalValue.vector_val(vec_result, null_mask, unit)
 
     def _elementwise_unary(
         self,
@@ -1130,17 +1130,17 @@ class ExpressionInterpreter:
             else np.zeros(len(x.vval), dtype=np.bool_)
         )
         non_null = ~null_mask
-        result = np.zeros(len(x.vval), dtype=np.float64)
+        vec_result = np.zeros(len(x.vval), dtype=np.float64)
 
         if domain_check is not None and np.any(non_null):
             vals = x.vval[non_null]
             domain_check(vals)
 
         if np.any(non_null):
-            result[non_null] = func(x.vval[non_null])
-            self._check_finite_vector(result, non_null, name)
+            vec_result[non_null] = func(x.vval[non_null])
+            self._check_finite_vector(vec_result, non_null, name)
 
-        return _EvalValue.vector_val(result, null_mask, unit)
+        return _EvalValue.vector_val(vec_result, null_mask, unit)
 
     # ---- 选择/裁剪函数 ----
 
@@ -1181,16 +1181,16 @@ class ExpressionInterpreter:
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
 
-        result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask
+        vec_result = np.zeros(shape[0], dtype=np.float64)
+        non_null = ~null_mask  # type: ignore[operator]
         if np.any(non_null):
             if is_min:
-                result[non_null] = np.minimum(av[non_null], bv[non_null])
+                vec_result[non_null] = np.minimum(av[non_null], bv[non_null])
             else:
-                result[non_null] = np.maximum(av[non_null], bv[non_null])
-            self._check_finite_vector(result, non_null, name)
+                vec_result[non_null] = np.maximum(av[non_null], bv[non_null])
+            self._check_finite_vector(vec_result, non_null, name)
 
-        return _EvalValue.vector_val(result, null_mask, unit)
+        return _EvalValue.vector_val(vec_result, null_mask, unit)  # type: ignore[arg-type]
 
     def _call_clip(self, args: list[_EvalValue]) -> _EvalValue:
         x = args[0]
@@ -1234,13 +1234,13 @@ class ExpressionInterpreter:
             if self._null_policy == "propagate"
             else np.zeros(len(x.vval), dtype=np.bool_)
         )
-        result = np.zeros(len(x.vval), dtype=np.float64)
+        vec_result = np.zeros(len(x.vval), dtype=np.float64)
         non_null = ~null_mask
         if np.any(non_null):
-            result[non_null] = np.clip(x.vval[non_null], low_val, high_val)
-            self._check_finite_vector(result, non_null, "clip")
+            vec_result[non_null] = np.clip(x.vval[non_null], low_val, high_val)
+            self._check_finite_vector(vec_result, non_null, "clip")
 
-        return _EvalValue.vector_val(result, null_mask, unit)
+        return _EvalValue.vector_val(vec_result, null_mask, unit)
 
     def _call_where(self, args: list[_EvalValue]) -> _EvalValue:
         cond = args[0]
@@ -1261,7 +1261,7 @@ class ExpressionInterpreter:
         if cond.kind == "scalar" and a.kind == "scalar" and b.kind == "scalar":
             if cond.is_null_scalar or a.is_null_scalar or b.is_null_scalar:
                 return _EvalValue.null_scalar(unit)
-            return _EvalValue.scalar_val(a.scalar if cond.scalar else b.scalar, unit)
+            return _EvalValue.scalar_val(a.scalar if cond.scalar else b.scalar, unit)  # type: ignore[arg-type]
 
         # 至少一个是向量
         shape = self._broadcast(a, b)
@@ -1529,15 +1529,15 @@ class ExpressionInterpreter:
             )
 
     def _safe_div(self, a: np.ndarray, b: np.ndarray, op_name: str) -> np.ndarray:
-        return a / b
+        return a / b  # type: ignore[no-any-return]
 
     def _safe_mod(self, a: np.ndarray, b: np.ndarray, op_name: str) -> np.ndarray:
-        return np.mod(a, b)
+        return np.mod(a, b)  # type: ignore[no-any-return]
 
     def _safe_pow(
         self, a: np.ndarray, b: np.ndarray, op_name: str, exponent_is_int: bool
     ) -> np.ndarray:
-        return np.power(a, b)
+        return np.power(a, b)  # type: ignore[no-any-return]
 
     def _check_sqrt_domain(self, val: Any, name: str) -> None:
         """检查 sqrt 定义域 x >= 0。"""
@@ -1632,7 +1632,7 @@ class ExpressionInterpreter:
     def _trig(self, v: np.ndarray, func: Any, name: str) -> np.ndarray:
         if self._options.angle_unit == "degree":
             v = np.radians(v)
-        return func(v)
+        return func(v)  # type: ignore[no-any-return]
 
     def _inverse_trig(
         self, v: np.ndarray, func: Any, name: str, check_domain: str | None
@@ -1640,7 +1640,7 @@ class ExpressionInterpreter:
         result = func(v)
         if self._options.angle_unit == "degree":
             result = np.degrees(result)
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _normalize_zero(self, val: float) -> float:
         """规范化 -0.0 为 0.0。"""
@@ -1746,7 +1746,7 @@ class SafeExpressionEngine:
                 scalar_val = 0.0  # normalize -0.0
             return NumericValue(
                 kind="scalar",
-                scalar=float(scalar_val),
+                scalar=float(scalar_val),  # type: ignore[arg-type]
                 unit=unit_str,
                 warnings=list(warnings),
             )
