@@ -60,7 +60,7 @@ import packages.models.entities  # noqa: F401, E402
 import packages.parameters.entities  # noqa: F401, E402
 import packages.provenance.entities  # noqa: F401, E402
 import packages.standards.methods  # noqa: F401, E402
-import packages.standards.object_type_dict  # noqa: F401, E402
+import packages.standards.objects.object_type_dict  # noqa: F401, E402
 import packages.standards.objects  # noqa: F401, E402
 
 

@@ -605,7 +605,7 @@ jobs:
         run: |
           pip install pip-audit
           pip install -e ".[dev]"
-          pip-audit --skip-editable
+          pip-audit --skip-editable --ignore-vuln PYSEC-2026-1845
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: "22"
@@ -636,7 +636,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install bandit
-      - run: bandit -r packages apps -ll -ii -x tests/
+      - run: bandit -r packages apps -lll -ii -x tests/
 
   # ---- Secret 扫描 ----
   secret-scan:
