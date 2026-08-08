@@ -17,8 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.dtos import SearchResultItem, SearchResultPage
 from packages.research.entities import ResearchResult, ResearchResultVersion
-from packages.research.models import SearchResultItem, SearchResultPage
 from packages.research.repository import ResearchRepository
 
 logger = logging.getLogger("research.search")

@@ -106,12 +106,14 @@ class ResearchRepositoryTrusted:
     async def list_plans(
         session: AsyncSession,
         workspace_id: UUID,
+        limit: int = 50,
     ) -> list[ResearchAnalysisPlanVersion]:
-        """列出工作空间的全部计划版本（按版本号降序）。
+        """列出工作空间的计划版本（按版本号降序，限制返回数量）。
 
         Args:
             session: 异步会话。
             workspace_id: 工作空间 ID。
+            limit: 最大返回数量（默认 50）。
 
         Returns:
             list[ResearchAnalysisPlanVersion]: 计划版本列表。
@@ -120,6 +122,7 @@ class ResearchRepositoryTrusted:
             sa.select(ResearchAnalysisPlanVersion)
             .where(ResearchAnalysisPlanVersion.workspace_id == workspace_id)
             .order_by(ResearchAnalysisPlanVersion.version_number.desc())
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -262,12 +265,14 @@ class ResearchRepositoryTrusted:
     async def list_runs(
         session: AsyncSession,
         workspace_id: UUID,
+        limit: int = 50,
     ) -> list[ResearchAnalysisRun]:
-        """列出工作空间的全部 Run（按编号降序）。
+        """列出工作空间的 Run（按编号降序，限制返回数量）。
 
         Args:
             session: 异步会话。
             workspace_id: 工作空间 ID。
+            limit: 最大返回数量（默认 50）。
 
         Returns:
             list[ResearchAnalysisRun]: Run 列表。
@@ -276,6 +281,7 @@ class ResearchRepositoryTrusted:
             sa.select(ResearchAnalysisRun)
             .where(ResearchAnalysisRun.workspace_id == workspace_id)
             .order_by(ResearchAnalysisRun.run_number.desc())
+            .limit(limit)
         )
         return list(result.scalars().all())
 
@@ -377,9 +383,9 @@ class ResearchRepositoryTrusted:
             int: 下一个 Run 编号（从 1 开始）。
         """
         result = await session.execute(
-            sa.select(sa.func.max(ResearchAnalysisRun.run_number)).where(
-                ResearchAnalysisRun.workspace_id == workspace_id
-            )
+            sa.select(sa.func.max(ResearchAnalysisRun.run_number))
+            .where(ResearchAnalysisRun.workspace_id == workspace_id)
+            .with_for_update()
         )
         max_num = result.scalar()
         return (int(max_num) + 1) if max_num is not None else 1
@@ -516,6 +522,29 @@ class ResearchRepositoryTrusted:
         result = await session.execute(
             sa.select(ResearchAnalysisStep)
             .where(ResearchAnalysisStep.run_id == run_id)
+            .order_by(ResearchAnalysisStep.step_index)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_steps_by_runs(
+        session: AsyncSession,
+        run_ids: list[UUID],
+    ) -> list[ResearchAnalysisStep]:
+        """批量列出多个 Run 的全部步骤（单次查询，消除 N+1）。
+
+        Args:
+            session: 异步会话。
+            run_ids: Run ID 列表。
+
+        Returns:
+            list[ResearchAnalysisStep]: 步骤列表（跨多个 Run）。
+        """
+        if not run_ids:
+            return []
+        result = await session.execute(
+            sa.select(ResearchAnalysisStep)
+            .where(ResearchAnalysisStep.run_id.in_(run_ids))
             .order_by(ResearchAnalysisStep.step_index)
         )
         return list(result.scalars().all())
@@ -715,6 +744,31 @@ class ResearchRepositoryTrusted:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_artifacts_by_runs(
+        session: AsyncSession,
+        run_ids: list[UUID],
+        artifact_type: str | None = None,
+    ) -> list[ResearchRunArtifact]:
+        """批量列出多个 Run 的工件（单次查询，消除 N+1）。
+
+        Args:
+            session: 异步会话。
+            run_ids: Run ID 列表。
+            artifact_type: 工件类型过滤（可选）。
+
+        Returns:
+            list[ResearchRunArtifact]: 工件列表（跨多个 Run）。
+        """
+        if not run_ids:
+            return []
+        stmt = sa.select(ResearchRunArtifact).where(ResearchRunArtifact.run_id.in_(run_ids))
+        if artifact_type is not None:
+            stmt = stmt.where(ResearchRunArtifact.artifact_type == artifact_type)
+        stmt = stmt.order_by(ResearchRunArtifact.created_at)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_artifacts_by_step(
         session: AsyncSession,
         step_id: UUID,
@@ -877,7 +931,10 @@ class ResearchRepositoryTrusted:
         workspace_id: UUID,
         document: dict[str, Any],
     ) -> ResearchMemoryDocument:
-        """插入或更新研究记忆文档。
+        """插入或更新研究记忆文档（使用 PostgreSQL upsert 避免竞态）。
+
+        使用 INSERT ... ON CONFLICT DO UPDATE，无需先 SELECT。
+        依赖 workspace_id 上的唯一索引 uq_rmd_workspace。
 
         Args:
             session: 异步会话。
@@ -887,22 +944,30 @@ class ResearchRepositoryTrusted:
         Returns:
             ResearchMemoryDocument: 记忆文档 ORM 实体。
         """
-        existing = await ResearchRepositoryTrusted.get_memory(session, workspace_id)
-        if existing is not None:
-            existing.document = document
-            existing.version = existing.version + 1
-            existing.updated_at = sa.func.now()
-            await session.flush()
-            return existing
-        mem = ResearchMemoryDocument(
+        stmt = sa.insert(ResearchMemoryDocument).values(
             id=new_id(),
             workspace_id=workspace_id,
             document=document,
             version=1,
         )
-        session.add(mem)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["workspace_id"],
+            set_={
+                "document": document,
+                "version": sa.text("research_memory_document.version + 1"),
+                "updated_at": sa.func.now(),
+            },
+        )
+        await session.execute(stmt)
         await session.flush()
-        return mem
+
+        # 返回最终状态
+        result = await session.execute(
+            sa.select(ResearchMemoryDocument).where(
+                ResearchMemoryDocument.workspace_id == workspace_id
+            )
+        )
+        return result.scalar_one()
 
     @staticmethod
     async def update_memory_version(

@@ -315,13 +315,13 @@ class JobService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # JOIN flow_run + flow_definition + department 获取流程名称和部门
-            from packages.components.flow_runtime import (
+            from packages.components.flow.flow_runtime import (
                 FlowDefinition as FlowDefORM,
             )
-            from packages.components.flow_runtime import (
+            from packages.components.flow.flow_runtime import (
                 FlowDefinitionVersionORM,
             )
-            from packages.components.flow_runtime import (
+            from packages.components.flow.flow_runtime import (
                 FlowRun as FlowRunORM,
             )
             from packages.departments.entities import Department

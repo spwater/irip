@@ -41,9 +41,9 @@ def register(ctx: CompositionContext) -> None:
             s3_repo=ctx.s3_repo,
             rls_dept_id=rls_dept_id,
         )
-        # 平台管理员需要 _rls_dept_id 绕过 RLS 隔离
+        # 平台管理员需要 set_rls_override 绕过 RLS 隔离
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service.set_rls_override(rls_dept_id)
         return service
 
     def _build_fact_provider(current_user: CurrentUser) -> CoreFactProviderImpl:
@@ -73,7 +73,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service.set_rls_override(rls_dept_id)
         return service
 
     ctx.app.dependency_overrides[get_workspace_service] = _get_workspace_service_dep
@@ -92,7 +92,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service.set_rls_override(rls_dept_id)
         return service
 
     ctx.app.dependency_overrides[get_snapshot_service] = _get_snapshot_service_dep

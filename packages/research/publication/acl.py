@@ -10,8 +10,8 @@ from uuid import UUID
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
+from packages.research.dtos import AclRevisionRef
 from packages.research.execution.envelope import PermissionEnvelopeCalculator
-from packages.research.models import AclRevisionRef
 from packages.research.publication._base import _PublicationBase
 from packages.research.repository import ResearchRepository
 

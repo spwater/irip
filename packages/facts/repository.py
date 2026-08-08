@@ -212,7 +212,9 @@ class FactRepository:
         Raises:
             AppError: code="not_found"，当事实不存在或不属于该组织时。
         """
-        result = await session.execute(sa.select(Fact).where(Fact.id == fact_id))
+        result = await session.execute(
+            sa.select(Fact).where(Fact.id == fact_id, Fact.department_id == org_id)
+        )
         fact = result.scalar_one_or_none()
         if fact is None:
             raise AppError(
@@ -266,6 +268,7 @@ class FactRepository:
             )
             .where(
                 Fact.search_vector.op("@@")(tsquery),
+                Fact.department_id == org_id,
             )
             .order_by(
                 Fact.created_at.desc(),
@@ -349,6 +352,7 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
                 Fact.id.label("fact_uuid"),
             )
+            .where(Fact.department_id == org_id)
             .order_by(Fact.created_at.asc(), Fact.id.asc())
             .limit(fetch_limit)
         )
@@ -444,13 +448,13 @@ class FactRepository:
         Returns:
             dict[UUID, FactSnapshotRow]: fact_id → 快照行映射。
         """
-        from packages.components.flow_runtime import (
+        from packages.components.flow.flow_runtime import (
             FlowDefinition as _FD,
         )
-        from packages.components.flow_runtime import (
+        from packages.components.flow.flow_runtime import (
             FlowDefinitionVersionORM as _FV,
         )
-        from packages.components.flow_runtime import (
+        from packages.components.flow.flow_runtime import (
             FlowRun as _FR,
         )
 
@@ -804,6 +808,6 @@ class FactRepository:
             session: 异步会话。
             flow_run_ids: 流程运行 ID 列表。
         """
-        from packages.components.flow_runtime import FlowRun
+        from packages.components.flow.flow_runtime import FlowRun
 
         await session.execute(sa.delete(FlowRun).where(FlowRun.id.in_(flow_run_ids)))

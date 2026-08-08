@@ -149,39 +149,42 @@ class ContextBuilderMixin(ResearchOrchestratorBase):
             if snapshot is None:
                 return ""
 
-            # 读取每个证据引用的 Fact 完整数据
-            evidence_data = []
-            for ref in snapshot.source_refs or []:
+            # 读取每个证据引用的 Fact 完整数据（P2-C24: 并行加载）
+            from apps.api.main import _build_s3_repo
+            from packages.research.lineage.core_adapter import CoreFactProviderImpl
+
+            s3_repo = _build_s3_repo()
+            provider = CoreFactProviderImpl(  # type: ignore[call-arg]
+                session_factory=self._factory,
+                s3_repo=s3_repo,
+            )
+
+            async def _load_fact(ref: dict) -> dict:
                 fact_id = ref.get("id")
                 namespace = ref.get("namespace", "")
                 if namespace == "core:fact" and fact_id:
                     try:
-                        # 通过 factory 创建 CoreFactProvider 并读取数据
-                        from apps.api.main import _build_s3_repo
-                        from packages.research.lineage.core_adapter import CoreFactProviderImpl
-
-                        s3_repo = _build_s3_repo()
-                        provider = CoreFactProviderImpl(  # type: ignore[call-arg]
-                            session_factory=self._factory,
-                            s3_repo=s3_repo,
-                        )
                         fact_data = await provider.get_fact_data(UUID(fact_id))
-                        evidence_data.append(
-                            {
-                                "fact_id": fact_id,
-                                "namespace": namespace,
-                                "data": fact_data,
-                            }
-                        )
+                        return {
+                            "fact_id": fact_id,
+                            "namespace": namespace,
+                            "data": fact_data,
+                        }
                     except Exception as exc:
                         logger.warning("Failed to load fact data %s: %s", fact_id, exc)
-                        evidence_data.append(
-                            {
-                                "fact_id": fact_id,
-                                "namespace": namespace,
-                                "error": str(exc)[:200],
-                            }
-                        )
+                        return {
+                            "fact_id": fact_id,
+                            "namespace": namespace,
+                            "error": str(exc)[:200],
+                        }
+                return {
+                    "fact_id": fact_id,
+                    "namespace": namespace,
+                }
+
+            evidence_data = await asyncio.gather(
+                *(_load_fact(ref) for ref in snapshot.source_refs or [])
+            )
 
             return json.dumps(
                 {

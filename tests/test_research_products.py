@@ -365,7 +365,7 @@ class TestInsightExtractor:
 
     def test_parse_insight_json_valid(self, extractor):
         """合法 JSON 返回 InsightCandidateData，extraction_failed=False。"""
-        from packages.research.models import InsightCandidateData
+        from packages.research.dtos import InsightCandidateData
 
         raw = json.dumps(
             {
@@ -1516,7 +1516,7 @@ class TestProductDataModels:
 
     def test_three_segment_data_is_frozen(self):
         """ThreeSegmentData 为 frozen dataclass。"""
-        from packages.research.models import ThreeSegmentData
+        from packages.research.dtos import ThreeSegmentData
 
         data = ThreeSegmentData(metadata={"k": "v"}, points=[], series=[])
         with pytest.raises(AttributeError):
@@ -1524,7 +1524,7 @@ class TestProductDataModels:
 
     def test_field_manifest_entry_defaults(self):
         """FieldManifestEntry 默认值正确。"""
-        from packages.research.models import FieldManifestEntry
+        from packages.research.dtos import FieldManifestEntry
 
         entry = FieldManifestEntry(field_name="test")
         assert entry.inferred_type == "null"
@@ -1536,7 +1536,7 @@ class TestProductDataModels:
 
     def test_validation_result_defaults(self):
         """ValidationResult 默认值正确。"""
-        from packages.research.models import ValidationResult
+        from packages.research.dtos import ValidationResult
 
         result = ValidationResult(valid=True)
         assert result.errors == []
@@ -1545,7 +1545,7 @@ class TestProductDataModels:
 
     def test_insight_candidate_data_has_extraction_failed(self):
         """InsightCandidateData 有 extraction_failed 字段，默认 False。"""
-        from packages.research.models import InsightCandidateData
+        from packages.research.dtos import InsightCandidateData
 
         data = InsightCandidateData(
             conclusion="c",
@@ -1561,7 +1561,7 @@ class TestProductDataModels:
 
     def test_product_summary_is_frozen(self):
         """ProductSummary 为 frozen dataclass。"""
-        from packages.research.models import ProductSummary
+        from packages.research.dtos import ProductSummary
 
         summary = ProductSummary(
             product_type="derived_dataset",
@@ -1575,7 +1575,7 @@ class TestProductDataModels:
 
     def test_candidate_product_summary_has_error_reason(self):
         """CandidateProductSummary 有 error_reason 字段，默认空字符串。"""
-        from packages.research.models import CandidateProductSummary
+        from packages.research.dtos import CandidateProductSummary
 
         summary = CandidateProductSummary(
             candidate_type="derived_dataset",
@@ -1592,7 +1592,7 @@ class TestProductDataModels:
 
     def test_evidence_source_label_enum(self):
         """EvidenceSourceLabel 枚举值正确。"""
-        from packages.research.models import EvidenceSourceLabel
+        from packages.research.dtos import EvidenceSourceLabel
 
         assert EvidenceSourceLabel.EXPERIMENTAL_DATA.value == "experimental_data"
         assert EvidenceSourceLabel.KNOWLEDGE_BASE.value == "knowledge_base"
@@ -1600,7 +1600,7 @@ class TestProductDataModels:
 
     def test_candidate_status_enum(self):
         """CandidateStatus 枚举值正确。"""
-        from packages.research.models import CandidateStatus
+        from packages.research.dtos import CandidateStatus
 
         assert CandidateStatus.PENDING.value == "pending"
         assert CandidateStatus.ACCEPTED.value == "accepted"
@@ -1609,7 +1609,7 @@ class TestProductDataModels:
 
     def test_product_type_enum(self):
         """ProductType 枚举值正确。"""
-        from packages.research.models import ProductType
+        from packages.research.dtos import ProductType
 
         assert ProductType.DERIVED_DATASET.value == "derived_dataset"
         assert ProductType.VIEW.value == "view"

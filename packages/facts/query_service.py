@@ -21,7 +21,6 @@ session 语义：
 
 import json
 import logging
-import os
 from typing import Any
 from uuid import UUID
 
@@ -35,6 +34,48 @@ from packages.facts.observations import FactDetailRow
 from packages.facts.repository import FactRepository
 
 _logger = logging.getLogger(__name__)
+
+_superuser_engine: Any | None = None
+_superuser_factory: Any | None = None
+
+
+def _get_superuser_factory() -> Any:
+    """获取模块级超管引擎 session factory 单例（避免每次调用重建引擎）。"""
+    global _superuser_engine, _superuser_factory
+    if _superuser_engine is None:
+        import os as _os
+
+        _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", _os.getenv("IRIP_DATABASE_URL", ""))
+        if not _alembic_url:
+            return None
+        _url = _alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        _superuser_engine = create_async_engine(_url, pool_size=5, max_overflow=5)
+        _superuser_factory = async_sessionmaker(_superuser_engine, expire_on_commit=False)
+    return _superuser_factory
+
+
+_redis_client: Any | None = None
+
+FACT_DATA_CACHE_TTL: int = 300  # 5 minutes
+
+
+def _get_redis() -> Any:
+    """获取模块级 Redis 客户端单例（用于 get_fact_data 缓存）。
+
+    通过环境变量 ``IRIP_REDIS_URL`` 配置，未配置时返回 None（降级为无缓存）。
+    """
+    global _redis_client
+    if _redis_client is None:
+        import os as _os
+
+        _redis_url = _os.getenv("IRIP_REDIS_URL", "")
+        if _redis_url:
+            import redis as _redis_lib
+
+            _redis_client = _redis_lib.from_url(_redis_url)
+    return _redis_client
 
 
 class FactQueryService(ScopedSessionMixin):
@@ -392,6 +433,9 @@ class FactQueryService(ScopedSessionMixin):
            补查 data_source_list → fallback 用 fact 自身 GUC 反查）；
         3. find_source_file_artifact → 返回 result_data dict。
 
+        Redis 缓存：结果以 ``fact_data:{fact_id}`` 为 key 缓存 300 秒，
+        ``IRIP_REDIS_URL`` 未配置时降级为无缓存。
+
         Args:
             fact_id: 事实 UUID。
 
@@ -402,6 +446,14 @@ class FactQueryService(ScopedSessionMixin):
         Raises:
             AppError: code="not_found"，当事实不存在时。
         """
+        # Redis 缓存检查
+        cache_key = f"fact_data:{fact_id}"
+        redis_client = _get_redis()
+        if redis_client is not None:
+            cached = redis_client.get(cache_key)
+            if cached is not None:
+                return json.loads(cached)
+
         async with self._scoped_session() as session:
             # repo.get_fact 抛 not_found（保持实际 404 行为）
             fact_record = await FactRepository.get_fact(session, fact_id, self._dept_id)
@@ -409,7 +461,12 @@ class FactQueryService(ScopedSessionMixin):
             # 查找 JSON artifact
             art_record = await FactRepository.find_json_artifact(session, fact_id)
             if art_record is None:
-                return {"metadata": {}, "points": [], "series": []}
+                result_data = {"metadata": {}, "points": [], "series": []}
+                if redis_client is not None:
+                    redis_client.setex(
+                        cache_key, FACT_DATA_CACHE_TTL, json.dumps(result_data, default=str)
+                    )
+                return result_data
 
             # 下载 artifact 内容（MinIO 文件不存在时返回空数据而非 500）
             artifact_svc = self._artifact_service()
@@ -451,7 +508,22 @@ class FactQueryService(ScopedSessionMixin):
             except Exception:
                 _logger.warning("查找原始文件失败", exc_info=True)
 
+            if redis_client is not None:
+                redis_client.setex(
+                    cache_key, FACT_DATA_CACHE_TTL, json.dumps(result_data, default=str)
+                )
             return result_data
+
+    @staticmethod
+    def invalidate_fact_data_cache(fact_id: UUID) -> None:
+        """当 artifact 变更时使 get_fact_data 缓存失效。
+
+        Args:
+            fact_id: 事实 UUID。
+        """
+        redis_client = _get_redis()
+        if redis_client is not None:
+            redis_client.delete(f"fact_data:{fact_id}")
 
     # ---- 私有方法 ----
 
@@ -538,29 +610,13 @@ class FactQueryService(ScopedSessionMixin):
 
                 if fact_record.flow_run_id:
                     # 用 alembic URL (superuser) 开 session 绕过 RLS，仅用于补查元数据
-                    _alembic_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL", "")
-                    if _alembic_url:
-                        from sqlalchemy.ext.asyncio import (
-                            async_sessionmaker as _asm,
-                        )
-                        from sqlalchemy.ext.asyncio import (
-                            create_async_engine as _cae,
-                        )
-
-                        from packages.components.flow_runtime import (
+                    _factory = _get_superuser_factory()
+                    if _factory is not None:
+                        from packages.components.flow.flow_runtime import (
                             FlowDefinition,
                             FlowDefinitionVersionORM,
                             FlowRun,
                         )
-
-                        _engine = _cae(
-                            _alembic_url.replace(
-                                "postgresql+psycopg://",
-                                "postgresql+psycopg_async://",
-                                1,
-                            )
-                        )
-                        _factory = _asm(_engine, expire_on_commit=False)
 
                         # 所有查询均在 async with 块内（确保 session 有效）
                         async with _factory() as sess:
@@ -716,7 +772,7 @@ class FactQueryService(ScopedSessionMixin):
         # ---- Fallback：快照没命中，通过 flow_run_id 外键反查（兼容旧数据）----
         if not task_info:
             try:
-                from packages.components.flow_runtime import (
+                from packages.components.flow.flow_runtime import (
                     FlowDefinition,
                     FlowDefinitionVersionORM,
                     FlowRun,

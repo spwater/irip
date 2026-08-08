@@ -31,7 +31,7 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.models import FactSummary, SnapshotRef
+from packages.research.dtos import FactSummary, SnapshotRef
 from packages.research.repository import ResearchRepository
 from packages.research.service import CoreFactProviderProtocol
 

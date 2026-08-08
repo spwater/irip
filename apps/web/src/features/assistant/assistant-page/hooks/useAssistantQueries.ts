@@ -36,21 +36,32 @@ export function useAssistantQueries(params: UseAssistantQueriesParams): UseAssis
 
   const conversationList: ConversationSummary[] = conversations ?? [];
 
-  // ---- 消息列表查询（依赖选中对话） ----
-  const { data: messagesData } = useQuery({
-    queryKey: ['assistant-messages', selectedConvId],
-    queryFn: () => apiListMessages(selectedConvId!),
-    enabled: !!selectedConvId,
-    retry: false,
-    refetchInterval: selectedConvId && !isSending ? 3_000 : false, // 发送/流式期间暂停轮询，避免重复 AI 消息
-  });
-
   // irip-ai-collab: 查询参与者（判断当前用户是否为 owner）
   const { data: participantsData } = useQuery({
     queryKey: ['participants', selectedConvId],
     queryFn: () => apiListParticipants(selectedConvId!),
     enabled: !!selectedConvId,
     retry: false,
+  });
+
+  // ---- 消息列表查询（依赖选中对话） ----
+  // P2-C15: 降低轮询频率 3s→10s，仅协作对话轮询，减少不必要请求
+  // 后端已有 /api/v1/assistant/stream SSE 端点（用于 AI 流式回答），
+  // 但消息列表更新仍需轮询（SSE 仅覆盖 AI 回答，不覆盖其他参与者发消息）
+  const isCollaborativeConv = useMemo(() => {
+    if (!selectedConvId) return false;
+    const participants = participantsData ?? [];
+    return participants.length > 1;
+  }, [selectedConvId, participantsData]);
+
+  const { data: messagesData } = useQuery({
+    queryKey: ['assistant-messages', selectedConvId],
+    queryFn: () => apiListMessages(selectedConvId!),
+    enabled: !!selectedConvId,
+    retry: false,
+    staleTime: 5_000, // 5 秒内不重复请求
+    refetchInterval: selectedConvId && !isSending && isCollaborativeConv ? 10_000 : false,
+    refetchOnWindowFocus: true, // 切回窗口时刷新（替代持续轮询）
   });
 
   // irip-ai-collab: 可邀请用户（同 org active 用户）

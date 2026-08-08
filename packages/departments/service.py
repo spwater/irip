@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import ScopedSessionMixin
-from packages.common.errors import AppError
+from packages.common.errors import AppError, require_found
 from packages.common.ids import new_id
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from packages.departments.entities import Department, DepartmentStatus
@@ -232,14 +232,7 @@ class DepartmentService(ScopedSessionMixin):
         """
         async with self._scoped_session() as session:
             dept = await DepartmentRepository.select_by_id(session, department_id)
-        if dept is None:
-            raise AppError(
-                code="not_found",
-                message="实验室不存在",
-                retryable=False,
-                fields={"department_id": str(department_id)},
-            )
-        return dept
+        return require_found(dept, "实验室", department_id, {"department_id": str(department_id)})
 
     async def update(
         self,
@@ -304,13 +297,7 @@ class DepartmentService(ScopedSessionMixin):
 
             # 影响 0 行：判断是不存在还是 lock_version 不匹配
             existing = await DepartmentRepository.select_by_id(session, department_id)
-            if existing is None:
-                raise AppError(
-                    code="not_found",
-                    message="实验室不存在",
-                    retryable=False,
-                    fields={"department_id": str(department_id)},
-                )
+            require_found(existing, "实验室", department_id, {"department_id": str(department_id)})
             raise AppError(
                 code="conflict",
                 message="数据已被修改，请刷新后重试",
@@ -349,13 +336,7 @@ class DepartmentService(ScopedSessionMixin):
                 return updated
 
             existing = await DepartmentRepository.select_by_id(session, department_id)
-            if existing is None:
-                raise AppError(
-                    code="not_found",
-                    message="实验室不存在",
-                    retryable=False,
-                    fields={"department_id": str(department_id)},
-                )
+            require_found(existing, "实验室", department_id, {"department_id": str(department_id)})
             raise AppError(
                 code="conflict",
                 message="数据已被修改，请刷新后重试",
@@ -468,13 +449,7 @@ class DepartmentService(ScopedSessionMixin):
         async with self._scoped_session() as session:
             # 检查是否存在
             existing = await DepartmentRepository.select_by_id(session, department_id)
-            if existing is None:
-                raise AppError(
-                    code="not_found",
-                    message="实验室不存在",
-                    retryable=False,
-                    fields={"department_id": str(department_id)},
-                )
+            require_found(existing, "实验室", department_id, {"department_id": str(department_id)})
 
             # 阶段2: 哨兵保护
             if existing.code in ("root", "system"):

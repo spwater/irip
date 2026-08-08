@@ -263,6 +263,36 @@ class FlowRunService(ScopedSessionMixin):
             node_result = await session.execute(node_stmt)
             return node_result.scalar_one_or_none()
 
+    async def get_latest_node_executions(
+        self,
+        run_ids: list[UUID],
+    ) -> dict[UUID, FlowNodeExecution]:
+        """批量查询多个 run 的最新节点执行记录（单次查询，消除 N+1）。
+
+        按 flow_run_id + completed_at 降序排列后，每个 run 只保留第一条。
+
+        Args:
+            run_ids: 运行记录 ID 列表。
+
+        Returns:
+            dict[UUID, FlowNodeExecution]: {run_id: FlowNodeExecution} 映射
+            （仅包含有记录的 run）。
+        """
+        if not run_ids:
+            return {}
+        async with self._scoped_session() as session:
+            result = await session.execute(
+                sa.select(FlowNodeExecution)
+                .where(FlowNodeExecution.flow_run_id.in_(run_ids))
+                .order_by(FlowNodeExecution.flow_run_id, FlowNodeExecution.completed_at.desc())
+            )
+            rows = result.scalars().all()
+            latest: dict[UUID, FlowNodeExecution] = {}
+            for row in rows:
+                if row.flow_run_id not in latest:
+                    latest[row.flow_run_id] = row
+            return latest
+
     async def list_facts_by_flow(
         self,
         flow_id: UUID,

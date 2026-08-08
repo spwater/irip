@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.standards.object_type_dict import ObjectTypeDict
 from packages.standards.object_type_service import ObjectTypeService
+from packages.standards.objects.object_type_dict import ObjectTypeDict
 
 object_types_router = APIRouter(prefix="/api/v1/object-types", tags=["object-types"])
 

@@ -11,6 +11,7 @@ Dispatcher 由 Celery Beat 定时触发，使用 ``FOR UPDATE SKIP LOCKED`` 拉�
 """
 
 import logging
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -110,8 +111,11 @@ class OutboxDispatcherService:
         """发送事件到 Celery broker。
 
         通过依赖注入的 ``self._task_sender.send_task`` 将作业 ID 发送到
-        ``irip-jobs`` 队列；未配置 ``TaskSender`` 时跳过并返回 False，
+        按 job kind 路由的 Celery 队列；未配置 ``TaskSender`` 时跳过并返回 False，
         等待下一调度周期重试。
+
+        队列路由：从 outbox event payload 中读取 job kind（如有），
+        通过 JobKindPolicy 查询对应分层队列。无法确定 kind 时使用默认队列。
 
         Args:
             event: 待发送的 outbox 事件。
@@ -126,16 +130,26 @@ class OutboxDispatcherService:
             )
             return False
         try:
+            queue: str = "irip-normal"
+            payload: dict[str, Any] | None = event.payload
+            if payload and "kind" in payload:
+                kind: str = str(payload["kind"])
+                from packages.common.job_policy import JobKindPolicy
+
+                policy = JobKindPolicy.get_policy(kind)
+                if policy is not None:
+                    queue = policy.queue
             self._task_sender.send_task(
                 "jobs.execute",
                 args=[str(event.aggregate_id)],
-                queue="irip-jobs",
+                queue=queue,
             )
             logger.info(
-                "Dispatched event %s (type=%s, aggregate_id=%s)",
+                "Dispatched event %s (type=%s, aggregate_id=%s, queue=%s)",
                 event.id,
                 event.event_type,
                 event.aggregate_id,
+                queue,
             )
             return True
         except Exception:

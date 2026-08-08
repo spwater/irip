@@ -68,6 +68,16 @@ class OpenAICompatibleProvider:
         self._timeout = timeout
         self._thinking_enabled = thinking_enabled
 
+    @property
+    def thinking_enabled(self) -> bool:
+        """是否启用思考模式（公开属性，替代直接访问 _thinking_enabled）。"""
+        return self._thinking_enabled
+
+    @thinking_enabled.setter
+    def thinking_enabled(self, value: bool) -> None:
+        """设置思考模式开关。"""
+        self._thinking_enabled = value
+
     async def complete(
         self,
         request: AIRequest,

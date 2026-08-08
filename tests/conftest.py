@@ -41,7 +41,7 @@ import packages.ai.tool_repository  # noqa: F401, E402
 import packages.audit.events  # noqa: F401, E402
 import packages.auth.entities  # noqa: F401, E402
 import packages.common.artifacts  # noqa: F401, E402
-import packages.components.flow_runtime  # noqa: F401, E402
+import packages.components.flow.flow_runtime  # noqa: F401, E402
 import packages.components.registry  # noqa: F401, E402
 import packages.connectors.entities  # noqa: F401, E402
 import packages.departments.entities  # noqa: F401, E402
@@ -52,8 +52,8 @@ import packages.jobs.outbox  # noqa: F401, E402
 import packages.models.entities  # noqa: F401, E402
 import packages.parameters.entities  # noqa: F401, E402
 import packages.provenance.entities  # noqa: F401, E402
-import packages.standards.object_type_dict  # noqa: F401, E402
 import packages.standards.objects  # noqa: F401, E402
+import packages.standards.objects.object_type_dict  # noqa: F401, E402
 
 
 class RecordingTaskSender:

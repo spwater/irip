@@ -15,7 +15,7 @@
 
 关键设计：
 - ``_AskContext`` 定义在本模块内部（仅为 AskService 使用）。
-- ``_provider._thinking_enabled`` 直接访问保持不变（纯重构约束）。
+- ``_provider.thinking_enabled`` 通过公开属性访问（P2-C9 修复）。
 - ``AppUser`` 延迟 import 不涉及此模块。
 """
 
@@ -45,6 +45,8 @@ from packages.ai.tools import ToolRegistry
 from packages.common.clock import Clock
 from packages.common.database import scoped_session
 from packages.common.errors import AppError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -243,10 +245,11 @@ class AskService:
         )
 
         # 思考模式：前端开关 AND 配置层面开关，两者都为 True 时才启用
+        # P2-C9: 使用公开属性 thinking_enabled 替代直接访问 _thinking_enabled
         config_thinking = False
-        if hasattr(self._provider, "_thinking_enabled"):
-            config_thinking = getattr(self._provider, "_thinking_enabled", False)
-            self._provider._thinking_enabled = thinking_enabled and config_thinking
+        if hasattr(self._provider, "thinking_enabled"):
+            config_thinking = getattr(self._provider, "thinking_enabled", False)
+            self._provider.thinking_enabled = thinking_enabled and config_thinking
 
         # 创建取消事件并注册（仅对非 mention-only 消息注册）
         if not mention_only:
@@ -360,10 +363,10 @@ class AskService:
                     tool_name, tool_args, user, ctx.org_id
                 )
                 _t_tool_end = time.monotonic()
-                print(
-                    f"[TIMING] tool_exec: {tool_name}"
-                    f"  duration={(_t_tool_end - _t_tool_start) * 1000:.1f}ms",
-                    flush=True,
+                logger.debug(
+                    "[TIMING] tool_exec: %s  duration=%.1fms",
+                    tool_name,
+                    (_t_tool_end - _t_tool_start) * 1000,
                 )
                 result_summary = str(tool_result.get("summary", ""))
 
@@ -474,8 +477,8 @@ class AskService:
                 provider_mode=ctx.provider_name,
             )
 
-            if hasattr(self._provider, "_thinking_enabled"):
-                self._provider._thinking_enabled = (
+            if hasattr(self._provider, "thinking_enabled"):
+                self._provider.thinking_enabled = (
                     ctx.thinking_enabled and ctx.config_thinking_enabled
                 )
 
@@ -485,7 +488,7 @@ class AskService:
                     second_request, cancel_event=ctx.cancel_event
                 )
                 _t_r2_end = time.monotonic()
-                print(f"[TIMING] llm_round2={(_t_r2_end - _t_r2_start) * 1000:.0f}ms", flush=True)
+                logger.debug("[TIMING] llm_round2=%.0fms", (_t_r2_end - _t_r2_start) * 1000)
                 final_answer = self._persistence.redact_credentials(second_response.answer)
                 final_uncertainty = second_response.uncertainty
             except Exception:
@@ -616,12 +619,12 @@ class AskService:
                 ctx.ai_request, cancel_event=ctx.cancel_event
             )
             _t2 = time.monotonic()
-            print(
-                f"[TIMING] prepare={(_t1 - _t0) * 1000:.0f}ms"
-                f"  llm_round1={(_t2 - _t1) * 1000:.0f}ms"
-                f"  tools={len(response.tool_calls)}"
-                f"  thinking={thinking_enabled and ctx.config_thinking_enabled}",
-                flush=True,
+            logger.debug(
+                "[TIMING] prepare=%.0fms  llm_round1=%.0fms  tools=%d  thinking=%s",
+                (_t1 - _t0) * 1000,
+                (_t2 - _t1) * 1000,
+                len(response.tool_calls),
+                thinking_enabled and ctx.config_thinking_enabled,
             )
         except AppError as exc:
             if exc.code == "ai_cancelled":
@@ -689,18 +692,9 @@ class AskService:
             mentions=mentions,
         )
         _t0 = time.monotonic()
-        print(f"[TIMING] stream_ask entered, question={question[:50]}", flush=True)
-        ctx = await self._prepare_ask(
-            user=user,
-            question=question,
-            conversation_id=conversation_id,
-            provider_name=provider_name,
-            thinking_enabled=thinking_enabled,
-            system_context=system_context,
-            mentions=mentions,
-        )
+        logger.debug("[TIMING] stream_ask entered, question=%s", question[:50])
         _t1 = time.monotonic()
-        print(f"[TIMING] prepare={(_t1 - _t0) * 1000:.0f}ms", flush=True)
+        logger.debug("[TIMING] prepare=%.0fms", (_t1 - _t0) * 1000)
 
         # 协作对话中仅 @人（不 @AI）：仅持久化用户消息，不调 AI
         if ctx.mention_only:
@@ -741,12 +735,12 @@ class AskService:
                     ctx.ai_request, cancel_event=ctx.cancel_event
                 )
                 _t2 = time.monotonic()
-                print(
-                    f"[TIMING] stream_prepare={(_t1 - _t0) * 1000:.0f}ms"
-                    f"  llm_round1={(_t2 - _t1) * 1000:.0f}ms"
-                    f"  tools={len(response.tool_calls)}"
-                    f"  thinking={thinking_enabled and ctx.config_thinking_enabled}",
-                    flush=True,
+                logger.debug(
+                    "[TIMING] stream_prepare=%.0fms  llm_round1=%.0fms  tools=%d  thinking=%s",
+                    (_t1 - _t0) * 1000,
+                    (_t2 - _t1) * 1000,
+                    len(response.tool_calls),
+                    thinking_enabled and ctx.config_thinking_enabled,
                 )
                 answer_text = self._persistence.redact_credentials(response.answer)
                 if answer_text:
@@ -772,12 +766,13 @@ class AskService:
                     elif event_type == "done":
                         streamed_tool_calls = event.get("tool_calls", [])
                         _t2 = time.monotonic()
-                        print(
-                            f"[TIMING] stream_prepare={(_t1 - _t0) * 1000:.0f}ms"
-                            f"  llm_round1={(_t2 - _t1) * 1000:.0f}ms"
-                            f"  tools={len(streamed_tool_calls)}"
-                            f"  thinking={thinking_enabled and ctx.config_thinking_enabled}",
-                            flush=True,
+                        logger.debug(
+                            "[TIMING] stream_prepare=%.0fms"
+                            "  llm_round1=%.0fms  tools=%d  thinking=%s",
+                            (_t1 - _t0) * 1000,
+                            (_t2 - _t1) * 1000,
+                            len(streamed_tool_calls),
+                            thinking_enabled and ctx.config_thinking_enabled,
                         )
                     elif event_type == "error":
                         stream_error = True

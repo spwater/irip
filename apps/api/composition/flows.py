@@ -28,7 +28,7 @@ def register(ctx: CompositionContext) -> None:
     from apps.api.routers.ai_config import get_active_ai_config
     from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRuntimeService
+    from packages.components.flow.flow_runtime import FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
@@ -44,7 +44,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service.set_rls_override(rls_dept_id)
         return service
 
     ctx.app.dependency_overrides[get_component_registry_service] = (
@@ -63,7 +63,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            registry._rls_dept_id = rls_dept_id
+            registry.set_rls_override(rls_dept_id)
         if _flow_runner is None:
             _flow_runner = PythonComponentRunner()
             register_builtin_components(_flow_runner)
@@ -73,7 +73,7 @@ def register(ctx: CompositionContext) -> None:
             created_by=current_user.user_id,
         )
         if rls_dept_id is not None:
-            job_svc._rls_dept_id = rls_dept_id
+            job_svc.set_rls_override(rls_dept_id)
         art_svc = ArtifactService(
             s3_repo=ctx.s3_repo,  # type: ignore[arg-type]
             session_factory=ctx.session_factory,
@@ -81,7 +81,7 @@ def register(ctx: CompositionContext) -> None:
             uploaded_by=current_user.user_id,
         )
         if rls_dept_id is not None:
-            art_svc._rls_dept_id = rls_dept_id
+            art_svc.set_rls_override(rls_dept_id)
         flow_svc = FlowRuntimeService(
             session_factory=ctx.session_factory,
             department_id=dept_id,
@@ -93,7 +93,7 @@ def register(ctx: CompositionContext) -> None:
             ai_config_provider=get_active_ai_config,
         )
         if rls_dept_id is not None:
-            flow_svc._rls_dept_id = rls_dept_id
+            flow_svc.set_rls_override(rls_dept_id)
         return flow_svc
 
     ctx.app.dependency_overrides[get_flow_service] = _get_flow_service_dep

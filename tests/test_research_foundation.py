@@ -35,19 +35,19 @@ import pytest
 from sqlalchemy.dialects.postgresql import JSONB
 
 from packages.common.database import Base
-from packages.research.entities import (
-    ResearchEvidenceSnapshot,
-    ResearchQuestionVersion,
-    ResearchWorkspace,
-    WorkspaceEvidenceRef,
-)
-from packages.research.models import (
+from packages.research.dtos import (
     CreateWorkspaceCommand,
     EvidenceRefDTO,
     FactSummary,
     QuestionVersionRef,
     SnapshotRef,
     WorkspaceRef,
+)
+from packages.research.entities import (
+    ResearchEvidenceSnapshot,
+    ResearchQuestionVersion,
+    ResearchWorkspace,
+    WorkspaceEvidenceRef,
 )
 
 # ---------------------------------------------------------------------------
@@ -1636,7 +1636,7 @@ class TestDataModels:
 
     def test_workspace_detail_defaults(self):
         """WorkspaceDetail 默认 snapshots 为空列表。"""
-        from packages.research.models import WorkspaceDetail
+        from packages.research.dtos import WorkspaceDetail
 
         detail = WorkspaceDetail(
             workspace_id=uuid4(),

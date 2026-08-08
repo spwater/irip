@@ -447,7 +447,7 @@ class TestFlowDefinitionProjectIdColumn:
 
     def test_flow_definition_has_project_id(self):
         """FlowDefinition ORM 含 project_id 列"""
-        import packages.components.flow_runtime  # noqa: F401
+        import packages.components.flow.flow_runtime  # noqa: F401
         from packages.common.database import Base
 
         table = Base.metadata.tables["flow_definition"]
@@ -455,7 +455,7 @@ class TestFlowDefinitionProjectIdColumn:
 
     def test_project_id_nullable_with_fk(self):
         """project_id 为 nullable 且有 FK→experiment_project.id"""
-        import packages.components.flow_runtime  # noqa: F401
+        import packages.components.flow.flow_runtime  # noqa: F401
         from packages.common.database import Base
 
         table = Base.metadata.tables["flow_definition"]

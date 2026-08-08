@@ -20,15 +20,15 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.entities import ResearchInsightCandidate
-from packages.research.execution.entities_trusted import ResearchAnalysisStep, ResearchRunArtifact
-from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
-from packages.research.execution.validation import ThreeSegmentValidator
-from packages.research.models import (
+from packages.research.dtos import (
     CandidateDetail,
     CandidateProductSummary,
     InsightCandidateRef,
 )
+from packages.research.entities import ResearchInsightCandidate
+from packages.research.execution.entities_trusted import ResearchAnalysisStep, ResearchRunArtifact
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.validation import ThreeSegmentValidator
 from packages.research.repository import ResearchRepository
 
 logger = logging.getLogger("research.candidates")
@@ -108,13 +108,9 @@ class CandidateService(ScopedSessionMixin):
             # 1. 查询 workspace 下所有 run 的 publishable 工件
             #    （不只查指定 run，因为 analyze_data 可能创建了新 run 但工件在旧 run）
             all_runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
-            artifacts = []
-            steps = []
-            for r in all_runs:
-                r_artifacts = await ResearchRepositoryTrusted.list_artifacts_by_run(session, r.id)
-                artifacts.extend(r_artifacts)
-                r_steps = await ResearchRepositoryTrusted.list_steps_by_run(session, r.id)
-                steps.extend(r_steps)
+            run_ids = [r.id for r in all_runs]
+            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_runs(session, run_ids)
+            steps = await ResearchRepositoryTrusted.list_steps_by_runs(session, run_ids)
             step_map: dict[UUID, ResearchAnalysisStep] = {s.id: s for s in steps}
 
             # 2. 识别 data 候选

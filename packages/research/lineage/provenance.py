@@ -24,8 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
-from packages.research.lineage.labels import NodeDisplayLabelGenerator
-from packages.research.models import (
+from packages.research.dtos import (
     ProvenanceEdge,
     ProvenanceGraph,
     ProvenanceGraphStats,
@@ -33,6 +32,7 @@ from packages.research.models import (
     ProvenanceQueryOptions,
     RestrictedNode,
 )
+from packages.research.lineage.labels import NodeDisplayLabelGenerator
 
 logger = logging.getLogger("research.provenance")
 

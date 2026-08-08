@@ -318,6 +318,13 @@ class FlowRuntimeService(ScopedSessionMixin):
         """查询 run 的最新节点执行记录（委托到 FlowRunService）。"""
         return await self._run_svc.get_latest_node_execution(run_id)
 
+    async def get_latest_node_executions(
+        self,
+        run_ids: list[UUID],
+    ) -> dict[UUID, FlowNodeExecution]:
+        """批量查询多个 run 的最新节点执行记录（委托到 FlowRunService）。"""
+        return await self._run_svc.get_latest_node_executions(run_ids)
+
     async def list_facts_by_flow(
         self,
         flow_id: UUID,

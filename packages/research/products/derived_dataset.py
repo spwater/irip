@@ -20,14 +20,14 @@ import sqlalchemy as sa
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
-from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
-from packages.research.execution.validation import ThreeSegmentValidator
-from packages.research.models import (
+from packages.research.dtos import (
     DatasetDetail,
     DatasetVersionDetail,
     DatasetVersionRef,
     DerivedDatasetRef,
 )
+from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
+from packages.research.execution.validation import ThreeSegmentValidator
 from packages.research.products.product_base import ProductServiceBase
 from packages.research.repository import ResearchRepository
 

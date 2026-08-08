@@ -23,7 +23,7 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
-from packages.research.models import (
+from packages.research.dtos import (
     CreateWorkspaceCommand,
     EvidenceRefDTO,
     FactSummary,
@@ -315,7 +315,7 @@ class WorkspaceService(ScopedSessionMixin):
 
             # 获取快照列表
             snapshots_orm = await ResearchRepository.list_snapshots(session, workspace_id)
-            from packages.research.models import SnapshotRef
+            from packages.research.dtos import SnapshotRef
 
             snapshots = [
                 SnapshotRef(

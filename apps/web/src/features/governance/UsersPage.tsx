@@ -29,17 +29,10 @@ import { apiListDepartments, apiGetUserDepartments, apiSetUserDepartments, type 
 import { extractApiError } from '@/api/types';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { DataTableShell } from '@/shared/ui';
+// P2-C22: ROLE_OPTIONS 提取到 userUtils.ts
+import { ROLE_OPTIONS } from '@/features/governance/userUtils';
 
 const { Text } = Typography;
-
-/** 内置角色选项 */
-const ROLE_OPTIONS = [
-  { value: 'platform_administrator', label: '平台管理员' },
-  { value: 'platform_auditor', label: '平台监督员（只读）' },
-  { value: 'lab_director', label: '实验室负责人' },
-  { value: 'lab_member', label: '实验室成员' },
-  { value: 'lab_viewer', label: '实验室成员（只读）' },
-];
 
 /**
  * 用户管理页面 — 仅管理员可见

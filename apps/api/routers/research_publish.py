@@ -264,7 +264,7 @@ async def publish_result(
     user: PublishUserDep,
 ) -> dict[str, Any]:
     """组装并发布研究成果包。"""
-    from packages.research.models import PublishRequest as PublishRequestDC
+    from packages.research.dtos import PublishRequest as PublishRequestDC
 
     req = PublishRequestDC(
         title=request.title,
@@ -350,7 +350,7 @@ async def publish_new_version(
     user: PublishUserDep,
 ) -> dict[str, Any]:
     """发布新版本。"""
-    from packages.research.models import PublishRequest as PublishRequestDC
+    from packages.research.dtos import PublishRequest as PublishRequestDC
 
     req = PublishRequestDC(
         title=request.title,

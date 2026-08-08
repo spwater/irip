@@ -229,10 +229,10 @@ class TestPolicyAttributes:
         assert policy.timeout_seconds == 14400
 
     def test_flow_execute_policy_attributes(self) -> None:
-        """flow_execute 策略属性：irip-jobs 队列、3 重试。"""
+        """flow_execute 策略属性：irip-normal 队列、3 重试。"""
         policy = JobKindPolicy.get_policy("flow_execute")
         assert policy is not None
-        assert policy.queue == "irip-jobs"
+        assert policy.queue == "irip-normal"
         assert policy.max_retries == 3
         assert policy.timeout_seconds == 3600
 

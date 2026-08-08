@@ -185,7 +185,7 @@ class FlowExecutionEngine(ScopedSessionMixin):
             version_digest=version_digest,
             cancel_event=cancel_event,
             succeeded_nodes=set(),
-            existing_summaries=[],
+            existing_summaries={},
         )
 
     async def resume(self, run_id: UUID) -> None:
@@ -272,15 +272,13 @@ class FlowExecutionEngine(ScopedSessionMixin):
         self._cancel_events[run_id] = cancel_event
 
         # 逐节点执行（跳过已成功的）
-        node_exec_summaries: list[dict[str, Any]] = []
+        node_exec_summaries: dict[str, dict[str, Any]] = {}
         for exec_record in existing_execs:
-            node_exec_summaries.append(
-                {
-                    "node_id": exec_record.node_id,
-                    "status": exec_record.status,
-                    "output_summary": exec_record.output_summary or {},
-                }
-            )
+            node_exec_summaries[exec_record.node_id] = {
+                "node_id": exec_record.node_id,
+                "status": exec_record.status,
+                "output_summary": exec_record.output_summary or {},
+            }
 
         await self._run_node_loop(
             run_id=run_id,
@@ -305,7 +303,7 @@ class FlowExecutionEngine(ScopedSessionMixin):
         version_digest: str,
         cancel_event: asyncio.Event,
         succeeded_nodes: set[str],
-        existing_summaries: list[dict[str, Any]],
+        existing_summaries: dict[str, dict[str, Any]],
         node_outputs: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         """execute / resume 共享的节点执行循环逻辑。
@@ -323,17 +321,19 @@ class FlowExecutionEngine(ScopedSessionMixin):
             version_digest: 版本摘要。
             cancel_event: 取消事件。
             succeeded_nodes: 已成功节点 ID 集合（resume 时跳过）。
-            existing_summaries: 已存在的节点执行摘要列表（resume 时复用）。
+            existing_summaries: 已存在的节点执行摘要映射（node_id → 摘要 dict），resume 时复用。
             node_outputs: 已执行节点的输出映射（resume 时预填充）。
         """
         if node_outputs is None:
             node_outputs = {}
-        node_exec_summaries: list[dict[str, Any]] = list(existing_summaries)
+        node_exec_summaries: dict[str, dict[str, Any]] = dict(existing_summaries)
 
         for node_id in order:
             # 检查取消信号
             if cancel_event.is_set():
-                await self._finalize_run(run_id, "cancelled", version_digest, node_exec_summaries)
+                await self._finalize_run(
+                    run_id, "cancelled", version_digest, list(node_exec_summaries.values())
+                )
                 await self._update_job_status(job_id, "cancelled")
                 return
 
@@ -367,38 +367,27 @@ class FlowExecutionEngine(ScopedSessionMixin):
 
             node_outputs[node_id] = exec_result.get("outputs", {})
 
-            # 更新摘要
-            found: bool = False
-            for i, s in enumerate(node_exec_summaries):
-                if s["node_id"] == node_id:
-                    node_exec_summaries[i] = {
-                        "node_id": node_id,
-                        "status": exec_result["status"],
-                        "output_summary": exec_result.get("output_summary", {}),
-                    }
-                    found = True
-                    break
-            if not found:
-                node_exec_summaries.append(
-                    {
-                        "node_id": node_id,
-                        "status": exec_result["status"],
-                        "output_summary": exec_result.get("output_summary", {}),
-                    }
-                )
+            # 更新摘要（O(1) dict 查找）
+            node_exec_summaries[node_id] = {
+                "node_id": node_id,
+                "status": exec_result["status"],
+                "output_summary": exec_result.get("output_summary", {}),
+            }
 
             if exec_result["status"] != "succeeded":
                 await self._finalize_run(
                     run_id,
                     "failed",
                     version_digest,
-                    node_exec_summaries,
+                    list(node_exec_summaries.values()),
                 )
                 await self._update_job_status(job_id, "failed")
                 return
 
         # 全部成功
-        await self._finalize_run(run_id, "succeeded", version_digest, node_exec_summaries)
+        await self._finalize_run(
+            run_id, "succeeded", version_digest, list(node_exec_summaries.values())
+        )
         await self._update_job_status(job_id, "succeeded")
 
     async def cancel(self, run_id: UUID) -> FlowRun:
@@ -560,22 +549,23 @@ class FlowExecutionEngine(ScopedSessionMixin):
         # 更新 run 状态
         version_digest: str = version.digest
         if exec_result["status"] == "succeeded":
-            # 重新检查是否所有节点都成功
-            all_succeeded: bool = True
+            # 检查是否所有节点都已成功执行（包括从未执行的下游节点）
             async with self._scoped_session() as session:
-                pending_or_failed: list[FlowNodeExecution] = list(
+                succeeded_node_ids: set[str] = set(
                     (
                         await session.execute(
-                            sa.select(FlowNodeExecution).where(
+                            sa.select(FlowNodeExecution.node_id)
+                            .where(
                                 FlowNodeExecution.flow_run_id == run_id,
-                                FlowNodeExecution.status.in_(["pending", "failed"]),
+                                FlowNodeExecution.status == "succeeded",
                             )
+                            .distinct()
                         )
                     )
                     .scalars()
                     .all()
                 )
-                all_succeeded = len(pending_or_failed) == 0
+            all_succeeded = succeeded_node_ids >= set(node_map.keys())
 
             if all_succeeded:
                 # 重新计算摘要
@@ -602,7 +592,8 @@ class FlowExecutionEngine(ScopedSessionMixin):
                 await self._finalize_run(run_id, "succeeded", version_digest, summaries)
                 await self._update_job_status(job_id, "succeeded")
             else:
-                await self._finalize_run(run_id, "running", version_digest, [])
+                # 重试节点成功，但仍有下游节点未执行 → 恢复执行下游节点
+                await self.resume(run_id)
         else:
             await self._finalize_run(run_id, "failed", version_digest, [])
             await self._update_job_status(job_id, "failed")

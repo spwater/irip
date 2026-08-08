@@ -279,3 +279,107 @@ async def upload_avatar(
     await service.set_avatar_url(current_user.user_id, avatar_url)
 
     return AvatarUploadResponse(avatar_url=avatar_url)
+
+
+# ============================================================
+# P2-I12: GDPR 数据导出 / 删除
+# ============================================================
+
+
+@account_router.get("/export")
+async def export_user_data(
+    current_user: ProfileUserDep,
+    service: AccountServiceDep,
+) -> dict[str, Any]:
+    """导出当前用户的全部数据（GDPR 数据可携带权）。
+
+    account:profile 权限硬编码放行。
+    返回用户个人数据 + 关联数据摘要（审计日志、对话、事实等）。
+
+    Args:
+        current_user: 当前用户。
+        service: 认证服务。
+
+    Returns:
+        dict: 用户数据导出包。
+    """
+    user = await service.get_user_by_id(current_user.user_id)
+    if user is None:
+        raise AppError(code="not_found", message="用户不存在", retryable=False)
+
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "roles": list(user.roles) if user.roles else [],
+            "department_id": str(user.department_id) if user.department_id else None,
+            "status": user.status,
+            "created_at": str(user.created_at) if hasattr(user, "created_at") else None,
+            "updated_at": str(user.updated_at) if hasattr(user, "updated_at") else None,
+        },
+        "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "note": "此导出包含您的个人数据。关联的实验数据（facts/artifacts）"
+        "因归属部门而非个人，不包含在此导出中。",
+    }
+
+
+class DeleteAccountRequest(BaseModel):
+    """删除账户请求。"""
+
+    confirm_email: str = Field(..., description="需输入邮箱确认删除操作")
+    password: str = Field(..., description="需输入密码确认删除操作")
+
+
+@account_router.delete("", status_code=204)
+async def delete_account(
+    body: DeleteAccountRequest,
+    current_user: PasswordUserDep,
+    service: AccountServiceDep,
+) -> None:
+    """删除用户账户（GDPR 被遗忘权）。
+
+    account:password 权限硬编码放行。
+    需邮箱 + 密码双重确认。
+
+    删除策略：
+    - 用户账户：标记为 deleted（软删除，保留 ID 用于审计追溯）
+    - 个人数据：display_name → "已删除用户"，email → 匿名化
+    - 关联数据（facts/artifacts/flows）：因归属部门，不删除
+    - 审计日志：保留（合规要求），actor_user_id 保留
+    - AI 对话：删除用户创建的对话
+    - token_version + 1：使所有 JWT 立即失效
+
+    Args:
+        body: 删除请求（邮箱 + 密码确认）。
+        current_user: 当前用户。
+        service: 认证服务。
+
+    Raises:
+        AppError: code="validation_failed"，邮箱或密码不匹配。
+    """
+    user = await service.get_user_by_id(current_user.user_id)
+    if user is None:
+        raise AppError(code="not_found", message="用户不存在", retryable=False)
+
+    # 双重确认：邮箱 + 密码
+    if body.confirm_email != user.email:
+        raise AppError(
+            code="validation_failed",
+            message="邮箱不匹配，请输入正确的邮箱以确认删除",
+            retryable=False,
+            fields={"confirm_email": "邮箱不匹配"},
+        )
+
+    # 验证密码
+    if not service.verify_password(user, body.password):
+        raise AppError(
+            code="invalid_credentials",
+            message="密码不正确",
+            retryable=False,
+            fields={"password": "密码不正确"},
+        )
+
+    # 执行删除（软删除 + 匿名化）
+    await service.delete_account(current_user.user_id)

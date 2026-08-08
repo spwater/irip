@@ -16,7 +16,7 @@ import hashlib
 import json
 from typing import Any
 
-from packages.research.models import FieldManifestEntry, ThreeSegmentData, ValidationResult
+from packages.research.dtos import FieldManifestEntry, ThreeSegmentData, ValidationResult
 
 
 class ThreeSegmentValidator:

@@ -9,7 +9,7 @@ NodeDisplayLabelGenerator 为静态工具类，按命名空间映射到类型标
 from typing import Any
 from uuid import UUID
 
-from packages.research.models import NodeDisplayLabel
+from packages.research.dtos import NodeDisplayLabel
 
 # 命名空间 → (类型标签, 图标) 映射表。
 _NAMESPACE_LABELS: dict[str, tuple[str, str]] = {

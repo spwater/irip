@@ -18,6 +18,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.research.dtos import ProvenanceEdge, ProvenanceNode
 from packages.research.entities import (
     ResearchDerivedDataset,
     ResearchEvidenceSnapshot,
@@ -32,7 +33,6 @@ from packages.research.execution.entities_trusted import (
     ResearchAnalysisRun,
     ResearchAnalysisStep,
 )
-from packages.research.models import ProvenanceEdge, ProvenanceNode
 from packages.research.repository import ResearchRepository
 
 logger = logging.getLogger("research.adapters.research_lineage")

@@ -6,7 +6,7 @@
 
 安全约定：
 - SET LOCAL 不支持参数绑定，必须用字符串拼接；
-- 使用 PostgreSQL 的 quote_literal 确保值安全引用，防止 SQL 注入；
+- 使用 PostgreSQL 的 quote_literal 函数确保值安全引用，防止 SQL 注入；
 - None 时设为空串（非 NULL），确保 RLS fail-closed 语义。
 """
 
@@ -22,21 +22,21 @@ DEPT_GUC: str = "app.current_dept_id"
 USER_GUC: str = "app.current_user_id"
 
 
-def _safe_literal(value: str) -> str:
-    """安全引用字符串值，防止 SQL 注入。
+async def _safe_literal(session: AsyncSession, value: str) -> str:
+    """安全引用字符串值，使用 PostgreSQL quote_literal 函数。
 
-    使用 PostgreSQL 的 quote_literal 函数确保值被安全引用。
-    退回方案：单引号转义（双单引号）。
+    通过数据库函数获取安全引用值，确保与 PostgreSQL 内部转义逻辑完全一致。
+    退回方案：单引号转义（双单引号），用于数据库不可用时的降级。
 
     Args:
+        session: 数据库异步会话（需在事务内）。
         value: 原始字符串值。
 
     Returns:
         str: 安全引用后的字符串（含外层单引号）。
     """
-    # 简单转义：将单引号替换为双单引号
-    escaped = value.replace("'", "''")
-    return f"'{escaped}'"
+    result = await session.execute(sa.select(sa.func.quote_literal(value)))
+    return result.scalar_one()
 
 
 async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
@@ -49,7 +49,10 @@ async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
         session: 数据库异步会话（需在事务内）。
         dept_id: 部门 UUID，None 时设空串（fail-closed）。
     """
-    value = _safe_literal(str(dept_id)) if dept_id is not None else "''"
+    if dept_id is not None:
+        value = await _safe_literal(session, str(dept_id))
+    else:
+        value = "''"
     await session.execute(sa.text(f"SET LOCAL {DEPT_GUC} = {value}"))
 
 
@@ -63,5 +66,8 @@ async def set_user_guc(session: AsyncSession, user_id: UUID | None) -> None:
         session: 数据库异步会话（需在事务内）。
         user_id: 用户 UUID，None 时设空串（fail-closed）。
     """
-    value = _safe_literal(str(user_id)) if user_id is not None else "''"
+    if user_id is not None:
+        value = await _safe_literal(session, str(user_id))
+    else:
+        value = "''"
     await session.execute(sa.text(f"SET LOCAL {USER_GUC} = {value}"))

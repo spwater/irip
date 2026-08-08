@@ -18,7 +18,7 @@ from uuid import UUID
 import sqlalchemy as sa
 
 from packages.common.database import scoped_session
-from packages.research.models import FactSummary
+from packages.research.dtos import FactSummary
 
 
 class CoreFactProvider(Protocol):

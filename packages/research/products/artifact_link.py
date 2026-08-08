@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
-from packages.research.models import (
+from packages.research.dtos import (
     InsightDetail,
     InsightRef,
     InsightVersionRef,

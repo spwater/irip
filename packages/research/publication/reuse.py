@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
-from packages.research.models import EvidenceRefDTO, WorkspaceRef
+from packages.research.dtos import EvidenceRefDTO, WorkspaceRef
 from packages.research.publication._base import _PublicationBase
 from packages.research.repository import ResearchRepository
 

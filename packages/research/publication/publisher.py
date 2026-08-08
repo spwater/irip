@@ -25,13 +25,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
-from packages.research.execution.envelope import PermissionEnvelopeCalculator
-from packages.research.models import (
+from packages.research.dtos import (
     ProductRefCollection,
     PublishPreviewResult,
     PublishRequest,
     ResultVersionRef,
 )
+from packages.research.execution.envelope import PermissionEnvelopeCalculator
 from packages.research.publication._base import _PublicationBase
 from packages.research.publication.acl import _AclMixin
 from packages.research.publication.reuse import _ReuseMixin
@@ -571,6 +571,22 @@ class _PublishMixin(_PublicationBase):
                     "insight_id": str(insight_id),
                     "version_number": insight_version.version_number,
                     "name": insight.name,
+                    "content_hash": hashlib.sha256(
+                        json.dumps(
+                            {
+                                "conclusion": insight_version.conclusion,
+                                "scope": insight_version.scope,
+                                "evidence_refs": insight_version.evidence_refs,
+                                "method_refs": insight_version.method_refs,
+                                "confidence_level": insight_version.confidence_level,
+                                "limitations": insight_version.limitations,
+                                "evidence_source_label": insight_version.evidence_source_label,
+                            },
+                            sort_keys=True,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest(),
                 }
             )
 
@@ -710,6 +726,7 @@ class _PublishMixin(_PublicationBase):
                     "type": "insight_version",
                     "insight_id": ref.get("insight_id", ""),
                     "version_number": ref.get("version_number", 0),
+                    "content_hash": ref.get("content_hash", ""),
                 }
             )
 

@@ -115,10 +115,14 @@ class NumericToolFacade:
             expression_sha256 = hashlib.sha256(expression.encode("utf-8")).hexdigest()
 
             try:
-                # 2. 解析数据来源（异步，可能访问数据库）
+                # 2. 解析数据来源（异步，并行解析所有变量）
                 resolved: dict[str, ResolvedNumericInput] = {}
-                for source in variable_sources:
-                    resolved[source.name] = await self._resolver.resolve(source, principal)
+                if variable_sources:
+                    resolved_values = await asyncio.gather(
+                        *(self._resolver.resolve(s, principal) for s in variable_sources)
+                    )
+                    for source, value in zip(variable_sources, resolved_values, strict=True):
+                        resolved[source.name] = value
 
                 # 3. 执行表达式（同步 CPU 计算，在线程中执行 + 超时保护）
                 try:

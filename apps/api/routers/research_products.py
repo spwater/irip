@@ -51,10 +51,21 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.schemas.research_products import (
+    CreateDatasetRequest,
+    CreateViewRequest,
+    DatasetResponse,
+    InsightResponse,
+    ModifyCandidateRequest,
+    RejectCandidateRequest,
+    UpdateDatasetMetadataRequest,
+    UpdateInsightMetadataRequest,
+    UpdateViewMetadataRequest,
+    ViewResponse,
+)
 from packages.research.products import ProductService
 from packages.research.products.candidates import CandidateService
 from packages.research.products.catalog import ResearchCatalogImpl
@@ -96,91 +107,8 @@ research_products_router = APIRouter(prefix="/api/v1/research", tags=["research-
 
 
 # ============================================================
-# Pydantic 请求/响应模型
+# Pydantic 请求/响应模型已提取到 apps/api/schemas/research_products.py
 # ============================================================
-
-
-class CreateDatasetRequest(BaseModel):
-    """创建 DerivedDataset 请求。"""
-
-    artifact_id: UUID
-    name: str
-    summary: str | None = None
-    tags: list[str] = Field(default_factory=list)
-
-
-class UpdateDatasetMetadataRequest(BaseModel):
-    """编辑 DerivedDataset 元数据请求。"""
-
-    name: str | None = None
-    summary: str | None = None
-    tags: list[str] | None = None
-
-
-class CreateViewRequest(BaseModel):
-    """创建 ResearchView 请求。"""
-
-    artifact_id: UUID
-    name: str
-    caption: str | None = None
-    display_order: int = 0
-
-
-class UpdateViewMetadataRequest(BaseModel):
-    """编辑 ResearchView 元数据请求。"""
-
-    name: str | None = None
-    caption: str | None = None
-    display_order: int | None = None
-
-
-class UpdateInsightMetadataRequest(BaseModel):
-    """编辑 Insight 元数据请求。"""
-
-    name: str
-
-
-class ModifyCandidateRequest(BaseModel):
-    """修改 Insight 候选请求。"""
-
-    conclusion: str | None = None
-    scope: str | None = None
-    evidence_refs: list[dict[str, Any]] | None = None
-    method_refs: list[dict[str, Any]] | None = None
-    confidence_level: str | None = None
-    limitations: str | None = None
-    evidence_source_label: str | None = None
-    modification_note: str
-
-
-class RejectCandidateRequest(BaseModel):
-    """拒绝 Insight 候选请求。"""
-
-    reason: str | None = None
-
-
-class DatasetResponse(BaseModel):
-    dataset_id: UUID
-    name: str
-    status: str
-    current_version: int
-    workspace_id: UUID
-
-
-class ViewResponse(BaseModel):
-    view_id: UUID
-    name: str
-    status: str
-    current_version: int
-    caption: str | None = None
-    display_order: int = 0
-
-
-class InsightResponse(BaseModel):
-    insight_id: UUID
-    name: str
-    status: str
-    current_version: int
 
 
 # ============================================================

@@ -18,7 +18,7 @@ import pytest
 from packages.research.envelope import PermissionEnvelopeCalculator
 from packages.research.search import ResultSearchService
 
-from packages.research.models import (
+from packages.research.dtos import (
     PermissionEnvelope,
     ProductRefCollection,
     PublishRequest,

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
-from packages.research.models import (
+from packages.research.dtos import (
     KnowledgeDocument,
     KnowledgeSearchOptions,
     KnowledgeSearchResult,

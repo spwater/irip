@@ -20,8 +20,8 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.research.dtos import EnvelopeValidationResult, PermissionEnvelope
 from packages.research.entities import ResearchEvidenceSnapshot
-from packages.research.models import EnvelopeValidationResult, PermissionEnvelope
 
 
 class PermissionEnvelopeCalculator:

@@ -177,6 +177,9 @@ class OutboxDispatcher:
         不再使用 Redis LPUSH，也不再直接 import ``apps.worker.celery_app``。
         所有异步任务只通过 Outbox→Dispatcher→Celery 一条通道。
 
+        队列路由：从 outbox event payload 中读取 job kind（如有），
+        通过 JobKindPolicy 查询对应分层队列。无法确定 kind 时使用默认队列。
+
         通过依赖注入的 ``self._task_sender`` 投递；未配置时跳过并返回 False，
         等待下一调度周期重试。
 
@@ -193,16 +196,26 @@ class OutboxDispatcher:
             )
             return False
         try:
+            queue: str = "irip-normal"
+            payload: dict[str, Any] | None = event.payload
+            if payload and "kind" in payload:
+                from packages.common.job_policy import JobKindPolicy
+
+                kind: str = str(payload["kind"])
+                policy = JobKindPolicy.get_policy(kind)
+                if policy is not None:
+                    queue = policy.queue
             self._task_sender.send_task(
                 "jobs.execute",
                 args=[str(event.aggregate_id)],
-                queue="irip-jobs",
+                queue=queue,
             )
             logger.info(
-                "Dispatched event %s (type=%s, aggregate_id=%s)",
+                "Dispatched event %s (type=%s, aggregate_id=%s, queue=%s)",
                 event.id,
                 event.event_type,
                 event.aggregate_id,
+                queue,
             )
             return True
         except Exception:

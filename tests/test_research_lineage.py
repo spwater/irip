@@ -28,7 +28,7 @@ from packages.research.provenance import (
     UnifiedProvenanceQueryService,
 )
 
-from packages.research.models import (
+from packages.research.dtos import (
     ProvenanceEdge,
     ProvenanceNode,
     ProvenanceQueryOptions,

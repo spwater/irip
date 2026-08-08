@@ -22,6 +22,12 @@ import { apiListFacts } from '@/api/facts-provenance';
 import { apiSearchCatalog, type CatalogSearchResult } from '@/api/researchProducts';
 import { apiSearchPublishedCatalog, type CatalogPublishedSearchResult } from '@/api/researchPublish';
 import type { FactSummary } from '@/api/types';
+// P2-C22: 辅助函数提取到 evidenceUtils.ts
+import {
+  buildFactGroups,
+  flattenFactIds,
+  type FactGroups,
+} from '@/features/research/evidenceUtils';
 
 const { Text } = Typography;
 
@@ -29,41 +35,6 @@ interface EvidencePanelProps {
   workspaceId: string;
   evidenceCount: number;
   onEvidenceChanged: () => void;
-}
-
-// ---- 树形分组类型（复用 AI 助手模式） ----
-type FactItem = { fact_id: string; subject_id: string };
-type TaskGroup = { taskName: string; facts: FactItem[] };
-type ProjectGroup = { projectName: string; tasks: Record<string, TaskGroup> };
-type FactGroups = Record<string, ProjectGroup>;
-
-function buildFactGroups(allFacts: FactSummary[], searchText: string): FactGroups {
-  const filtered = searchText.trim()
-    ? allFacts.filter(
-        (f) =>
-          f.subject_id.toLowerCase().includes(searchText.toLowerCase()) ||
-          (f.task_name ?? '').toLowerCase().includes(searchText.toLowerCase()) ||
-          (f.project_name ?? '').toLowerCase().includes(searchText.toLowerCase()),
-      )
-    : allFacts;
-
-  const groups: FactGroups = {};
-  for (const f of filtered) {
-    const projKey = f.project_name ?? '未分类项目';
-    const taskKey = f.task_code ?? '未分组';
-    if (!groups[projKey]) groups[projKey] = { projectName: projKey, tasks: {} };
-    if (!groups[projKey].tasks[taskKey]) {
-      groups[projKey].tasks[taskKey] = { taskName: f.task_name ?? taskKey, facts: [] };
-    }
-    groups[projKey].tasks[taskKey].facts.push({ fact_id: f.fact_id, subject_id: f.subject_id });
-  }
-  return groups;
-}
-
-function flattenFactIds(groups: FactGroups): string[] {
-  return Object.values(groups).flatMap((p) =>
-    Object.values(p.tasks).flatMap((t) => t.facts.map((f) => f.fact_id)),
-  );
 }
 
 export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }: EvidencePanelProps): JSX.Element {

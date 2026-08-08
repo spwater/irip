@@ -21,15 +21,18 @@ class KindPolicy:
 
     Attributes:
         required_permission: 提交此 kind 所需的权限字符串。
-        queue: Celery 队列名。
-        timeout_seconds: 作业超时时间（秒）。
+        queue: Celery 队列名（分层队列：irip-fast / irip-normal / irip-research / irip-ops）。
+        timeout_seconds: 作业硬超时时间（秒），超时后 Celery 强制 kill Worker。
+        soft_timeout_seconds: 作业软超时时间（秒），超时后抛 SoftTimeLimitExceeded，
+            允许 Worker 优雅终止（保存状态、记录日志）。
         max_retries: 最大重试次数。
         allow_general_submit: 是否允许通过通用 POST /jobs 接口提交。
     """
 
     required_permission: str
-    queue: str = "irip-jobs"
+    queue: str = "irip-normal"
     timeout_seconds: int = 3600
+    soft_timeout_seconds: int = 3000
     max_retries: int = 3
     allow_general_submit: bool = False
 
@@ -44,43 +47,49 @@ class JobKindPolicy:
     POLICIES: dict[str, KindPolicy] = {
         "flow_execute": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
+            queue="irip-normal",
             timeout_seconds=3600,
+            soft_timeout_seconds=3000,
             max_retries=3,
             allow_general_submit=True,
         ),
         "flow_resume": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
-            timeout_seconds=1800,
+            queue="irip-fast",
+            timeout_seconds=600,
+            soft_timeout_seconds=540,
             max_retries=2,
             allow_general_submit=True,
         ),
         "ingestion": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
-            timeout_seconds=1800,
+            queue="irip-fast",
+            timeout_seconds=600,
+            soft_timeout_seconds=540,
             max_retries=3,
             allow_general_submit=True,
         ),
         "model_train": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
+            queue="irip-normal",
             timeout_seconds=7200,
+            soft_timeout_seconds=6600,
             max_retries=3,
             allow_general_submit=True,
         ),
         "model_predict": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
-            timeout_seconds=1800,
+            queue="irip-fast",
+            timeout_seconds=600,
+            soft_timeout_seconds=540,
             max_retries=3,
             allow_general_submit=True,
         ),
         "model_publish": KindPolicy(
             required_permission="job:submit",
-            queue="irip-jobs",
+            queue="irip-normal",
             timeout_seconds=1800,
+            soft_timeout_seconds=1500,
             max_retries=2,
             allow_general_submit=True,
         ),
@@ -88,6 +97,7 @@ class JobKindPolicy:
             required_permission="system:manage",
             queue="irip-ops",
             timeout_seconds=7200,
+            soft_timeout_seconds=6600,
             max_retries=0,
             allow_general_submit=False,
         ),
@@ -95,6 +105,7 @@ class JobKindPolicy:
             required_permission="system:manage",
             queue="irip-ops",
             timeout_seconds=14400,
+            soft_timeout_seconds=13800,
             max_retries=0,
             allow_general_submit=False,
         ),
@@ -102,6 +113,7 @@ class JobKindPolicy:
             required_permission="system:manage",
             queue="irip-ops",
             timeout_seconds=3600,
+            soft_timeout_seconds=3000,
             max_retries=0,
             allow_general_submit=False,
         ),

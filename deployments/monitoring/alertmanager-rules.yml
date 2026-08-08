@@ -1,0 +1,73 @@
+# IRIP Alertmanager / Prometheus 告警规则
+# 用法：将此文件内容加载到 Prometheus rule_files 中（或 Alertmanager 中配置路由）。
+# Prometheus rule_files 示例:
+#   rule_files:
+#     - /etc/prometheus/rules/irip-alerts.yml
+
+groups:
+  - name: irip-service-health
+    interval: 30s
+    rules:
+      # API 服务宕机 -- P0/Critical
+      - alert: APIDown
+        expr: up{job="irip-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: irip
+          service: api
+        annotations:
+          summary: "IRIP API 服务宕机"
+          description: "API 实例 {{ $labels.instance }} 已宕机超过 1 分钟。"
+          runbook: "docs/operations/on-call-runbook.md#api-宕机"
+
+      # Worker 服务宕机 -- P0/Critical
+      - alert: WorkerDown
+        expr: up{job="irip-worker"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: irip
+          service: worker
+        annotations:
+          summary: "IRIP Worker 服务宕机"
+          description: "Worker 实例 {{ $labels.instance }} 已宕机超过 1 分钟。"
+          runbook: "docs/operations/on-call-runbook.md#worker-卡死"
+
+      # Outbox 积压超限 -- P1/Warning
+      - alert: OutboxBacklog
+        expr: irip_outbox_undelivered_count > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: irip
+          service: outbox
+        annotations:
+          summary: "Outbox 积压超限"
+          description: "未投递的 Outbox 消息数 {{ $value }} 超过 100，持续 5 分钟。"
+          runbook: "docs/operations/on-call-runbook.md#outbox-积压"
+
+      # Worker 心跳超时 -- P0/Critical
+      - alert: WorkerHeartbeatStale
+        expr: time() - irip_worker_heartbeat_timestamp > 120
+        labels:
+          severity: critical
+          team: irip
+          service: worker
+        annotations:
+          summary: "Worker 心跳超时"
+          description: "Worker {{ $labels.worker }} 心跳已超过 120 秒未更新，可能已卡死。"
+          runbook: "docs/operations/on-call-runbook.md#worker-卡死"
+
+      # API 错误率过高 -- P1/Warning
+      - alert: HighErrorRate
+        expr: rate(irip_api_requests_total{status=~"5.."}[5m]) / rate(irip_api_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: irip
+          service: api
+        annotations:
+          summary: "API 5xx 错误率过高"
+          description: "API 5xx 错误率 {{ $value | humanizePercentage }} 超过 5%，持续 5 分钟。"
+          runbook: "docs/operations/on-call-runbook.md#api-错误率过高"

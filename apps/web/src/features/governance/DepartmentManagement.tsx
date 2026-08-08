@@ -33,15 +33,17 @@ import {
   type DepartmentListItem,
   type ReparentImpactResponse,
 } from '@/api/departments';
+// P2-C22: 辅助函数提取到 departmentUtils.ts
+import {
+  buildTree,
+  getDescendantIds,
+  extractErrorMessage,
+  type DepartmentTreeNode,
+} from '@/features/governance/departmentUtils';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { MemberDrawer } from '@/features/governance/MemberDrawer';
 import { EquipmentPage } from '@/features/equipment/EquipmentPage';
 import { QueryStateDisplay } from '@/features/components/StateDisplay';
-
-/**
- * 树形节点类型：DepartmentListItem + children 数组。
- */
-type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]; level?: number };
 
 /**
  * 实验室管理组件（P0）
@@ -56,61 +58,9 @@ type DepartmentTreeNode = DepartmentListItem & { children?: DepartmentTreeNode[]
  * - Popconfirm 启用/禁用确认
  * - 禁用行灰色标签
  * - 成员管理抽屉（P1，MemberDrawer）
- */
-
-/**
- * 将扁平列表构建为树形结构。
  *
- * @param items 扁平的部门列表项。
- * @returns 根节点列表（每个节点附带 children 数组）。
+ * P2-C22: buildTree/getDescendantIds/extractErrorMessage 已提取到 departmentUtils.ts
  */
-function buildTree(items: DepartmentListItem[]): DepartmentTreeNode[] {
-  const map = new Map<string, DepartmentTreeNode>();
-  items.forEach((item) => map.set(item.id, { ...item, children: [], level: 0 }));
-  const roots: DepartmentTreeNode[] = [];
-  map.forEach((item) => {
-    if (item.parent_id && map.has(item.parent_id)) {
-      const parent = map.get(item.parent_id)!;
-      item.level = (parent.level ?? 0) + 1;
-      parent.children!.push(item);
-    } else {
-      roots.push(item);
-    }
-  });
-  map.forEach((item) => {
-    if (item.children && item.children.length === 0) {
-      delete item.children;
-    }
-  });
-  return roots;
-}
-
-/**
- * 获取指定部门的所有后代 ID（含自身）。
- *
- * 用于编辑时排除自己及子孙作为上级选项，防止循环引用。
- *
- * @param items 扁平的部门列表项。
- * @param id 要查找后代的部门 ID。
- * @returns 包含该部门及其所有后代 ID 的 Set。
- */
-function getDescendantIds(
-  items: DepartmentListItem[],
-  id: string,
-): Set<string> {
-  const result = new Set<string>([id]);
-  const queue = [id];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    items.forEach((item) => {
-      if (item.parent_id === current && !result.has(item.id)) {
-        result.add(item.id);
-        queue.push(item.id);
-      }
-    });
-  }
-  return result;
-}
 
 export function DepartmentManagement(): JSX.Element {
   const queryClient = useQueryClient();
@@ -164,7 +114,7 @@ export function DepartmentManagement(): JSX.Element {
       message.success('实验室创建成功');
     },
     onError: (err: unknown) => {
-      const msg = _extractErrorMessage(err);
+      const msg = extractErrorMessage(err);
       message.error(msg);
     },
   });
@@ -190,7 +140,7 @@ export function DepartmentManagement(): JSX.Element {
       message.success('实验室更新成功');
     },
     onError: (err: unknown) => {
-      const msg = _extractErrorMessage(err);
+      const msg = extractErrorMessage(err);
       message.error(msg);
     },
   });
@@ -207,7 +157,7 @@ export function DepartmentManagement(): JSX.Element {
       message.success('状态更新成功');
     },
     onError: (err: unknown) => {
-      const msg = _extractErrorMessage(err);
+      const msg = extractErrorMessage(err);
       message.error(msg);
     },
   });
@@ -224,7 +174,7 @@ export function DepartmentManagement(): JSX.Element {
       message.success('部门已删除');
     },
     onError: (err: unknown) => {
-      const msg = _extractErrorMessage(err);
+      const msg = extractErrorMessage(err);
       message.error(msg);
     },
   });
@@ -323,7 +273,7 @@ export function DepartmentManagement(): JSX.Element {
       const impact = await apiGetReparentImpact(reparentTarget.id, reparentNewParent);
       setReparentImpact(impact);
     } catch (err: unknown) {
-      message.error(_extractErrorMessage(err));
+      message.error(extractErrorMessage(err));
     } finally {
       setReparentLoading(false);
     }
@@ -349,7 +299,7 @@ export function DepartmentManagement(): JSX.Element {
       setReparentNewParent(null);
       setReparentImpact(null);
     } catch (err: unknown) {
-      message.error(_extractErrorMessage(err));
+      message.error(extractErrorMessage(err));
     }
   };
 
@@ -727,18 +677,3 @@ export function DepartmentManagement(): JSX.Element {
   );
 }
 
-/**
- * 从 Axios 错误中提取后端错误消息。
- */
-function _extractErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: { message?: string } } } }).response;
-    if (response?.data?.error?.message) {
-      return response.data.error.message;
-    }
-  }
-  if (err instanceof Error) {
-    return err.message;
-  }
-  return '操作失败';
-}

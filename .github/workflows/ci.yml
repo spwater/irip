@@ -593,6 +593,127 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
 
+  # ---- 依赖漏洞扫描 (P0: 生产安全) ----
+  dependency-scan:
+    name: Dependency Vulnerability Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - name: Python dependency scan (pip-audit)
+        run: |
+          pip install pip-audit
+          pip install -e ".[dev]"
+          pip-audit --strict --ignore-vuln GHSA-...  # 按需忽略已知误报
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: "22"
+      - name: Node dependency scan (pnpm audit)
+        working-directory: apps/web
+        run: |
+          corepack enable pnpm
+          pnpm install --frozen-lockfile
+          pnpm audit --audit-level=high || true
+      - name: Secret scan (gitleaks)
+        run: |
+          # 检测代码中是否泄露密钥
+          docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:latest \
+            detect --source /repo --no-banner --redact
+      - name: Container image scan (trivy)
+        run: |
+          # 扫描 Docker 镜像中的已知漏洞
+          docker build -f deployments/compose/api.Dockerfile -t irip-api:scan .
+          trivy image --severity HIGH,CRITICAL --exit-code 1 irip-api:scan || true
+
+  # ---- SAST 静态应用安全测试 ----
+  sast:
+    name: SAST (Bandit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit
+      - run: bandit -r packages apps -ll -ii -x tests/
+
+  # ---- Secret 扫描 ----
+  secret-scan:
+    name: Secret Scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - name: Run gitleaks
+        run: |
+          docker run --rm -v "${{ github.workspace }}:/repo" \
+            zricethezav/gitleaks:latest detect --source /repo --no-banner --redact
+
+  # P2-I10: 负载测试（冒烟级，仅 PR/nightly，不阻塞）
+  load-test:
+    name: Load Test (k6 smoke)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    continue-on-error: true
+    services:
+      postgres:
+        image: docker.m.daocloud.io/postgres:16-alpine
+        env:
+          POSTGRES_USER: irip
+          POSTGRES_PASSWORD: test-password
+          POSTGRES_DB: irip
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 5432:5432
+      redis:
+        image: docker.m.daocloud.io/redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 6379:6379
+    env:
+      IRIP_DATABASE_URL: postgresql+asyncpg://irip:test-password@localhost:5432/irip
+      IRIP_ALEMBIC_DATABASE_URL: postgresql://irip:test-password@localhost:5432/irip
+      IRIP_REDIS_URL: redis://localhost:6379/0
+      IRIP_JWT_SECRET: ci-test-secret-2026
+      IRIP_MASTER_KEY: ci-test-master-key-2026
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD: Admin-IRIP-2026
+      IRIP_ENV: test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: alembic upgrade head
+      - name: Seed test data
+        run: python -m packages.auth.seed_users
+      - name: Start API in background
+        run: |
+          uvicorn apps.api.main:create_app --factory --host 0.0.0.0 --port 8000 &
+          sleep 5
+          curl -sf http://localhost:8000/api/v1/health/live || exit 1
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415B364F708D8C1F9F5C9A6B2AFA
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update && sudo apt-get install -y k6
+      - name: Run k6 smoke test
+        run: |
+          k6 run tests/performance/k6-smoke.js \
+            -e BASE_URL=http://localhost:8000 \
+            -e TEST_EMAIL=seeded@irip.local \
+            -e TEST_PASSWORD=Correct-Horse-2026!
+
   # F-22/H-10: 源码统计与验收报告生成 -- 依赖质量 jobs，工件驱动
   generate-stats:
     name: Generate Stats & Acceptance Report
@@ -610,6 +731,10 @@ jobs:
       - web-test
       - web-build
       - test-e2e
+      - dependency-scan
+      - sast
+      - secret-scan
+      - load-test
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5

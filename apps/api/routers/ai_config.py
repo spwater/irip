@@ -208,9 +208,15 @@ async def get_ai_config(current_user: ManageUserDep) -> AIConfigResponse:
                 assistant_thinking_enabled=False,
                 research_thinking_enabled=False,
             )
+        # P2-C25: 先解密再掩码，确保掩码作用于明文而非密文
+        crypto = EnvelopeCrypto.from_env()
+        try:
+            decrypted_key = crypto.decrypt(row["api_key"])
+        except Exception:
+            decrypted_key = ""
         return AIConfigResponse(
             base_url=row["base_url"],
-            api_key_masked=_mask_key(row["api_key"]),
+            api_key_masked=_mask_key(decrypted_key),
             model_name=row["model_name"],
             assistant_model_name=row.get("assistant_model_name") or "",
             research_model_name=row.get("research_model_name") or "",
@@ -289,13 +295,18 @@ async def update_ai_config(
     )
 
     # 返回时用已保存密钥的掩码值（如果是 __use_saved__ 的话）
-    masked_key = (
-        _mask_key(body.api_key)
-        if body.api_key != "__use_saved__"
-        else _mask_key(existing["api_key"])
-        if existing
-        else "***"
-    )
+    # P2-C25: __use_saved__ 时先解密再掩码
+    if body.api_key != "__use_saved__":
+        masked_key = _mask_key(body.api_key)
+    elif existing:
+        crypto = EnvelopeCrypto.from_env()
+        try:
+            decrypted_existing = crypto.decrypt(existing["api_key"])
+        except Exception:
+            decrypted_existing = ""
+        masked_key = _mask_key(decrypted_existing)
+    else:
+        masked_key = "***"
 
     return AIConfigResponse(
         base_url=body.base_url,

@@ -7,6 +7,8 @@ import zhCN from 'antd/locale/zh_CN';
 import { router } from '@/app/router';
 import { dataOceanTheme } from '@/theme/themeConfig';
 import { registerQueryClient } from '@/features/auth/sessionState';
+// P2-I11: Web Vitals 性能监控（仅生产环境采集）
+import { initWebVitals } from '@/shared/webVitals';
 // KaTeX CSS 通过 index.html <link> 引入
 // Data Ocean 全局样式：基础 / 极地雾蓝空间 / 动效降级
 import '@/styles/global.css';
@@ -32,6 +34,9 @@ const queryClient = new QueryClient({
 
 // H-15: 注册 QueryClient 到 sessionState，供 clearSessionState 使用
 registerQueryClient(queryClient);
+
+// P2-I11: 初始化 Web Vitals 采集
+initWebVitals();
 
 /**
  * IRIP Web 控制台入口

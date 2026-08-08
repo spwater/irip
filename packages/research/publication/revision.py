@@ -14,14 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.errors import AppError
-from packages.research.entities import ResearchResultVersion
-from packages.research.models import (
+from packages.research.dtos import (
     AclRevisionRef,
     ResultDetail,
     ResultRef,
     ResultVersionDetail,
     ResultVersionRef,
 )
+from packages.research.entities import ResearchResultVersion
 from packages.research.publication._base import _PublicationBase
 from packages.research.repository import ResearchRepository
 

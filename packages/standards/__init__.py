@@ -5,9 +5,7 @@
 
 - objects: 工业对象（IndustrialObject）/ 对象类型字典（ObjectTypeDict）/
   对象图服务（ObjectGraphService），有 6 条数据在用；
-- methods: 空子包（migration 0056 已废弃，保留空 __init__.py）；
-- 顶层 shim 文件 object_graph.py / object_type_dict.py，供其他模块通过
-  顶层路径导入。
+- methods: 空子包（migration 0056 已废弃，保留空 __init__.py）。
 """
 
 # ruff: noqa: F401

@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 from apps.api.dependencies.auth import CurrentUser  # noqa: E402
 from apps.api.dependencies.authorization import require_permission  # noqa: E402
+from apps.api.schemas.facts import FactListResponse, FactResponse  # noqa: E402, F401
 from packages.common.errors import AppError  # noqa: E402
 from packages.facts.observations import FactDetailRow, FactRef  # noqa: E402
 from packages.facts.query_service import FactQueryService  # noqa: E402
@@ -75,38 +76,6 @@ class CreateFactRequest(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     idempotency_key: str | None = Field(None, max_length=256)
-
-
-# ---- 响应模型 ----
-
-
-class FactResponse(BaseModel):
-    """事实响应。"""
-
-    fact_id: str
-    fact_type: str
-    subject_id: str
-    status: str
-    task_code: str | None = None
-    task_name: str | None = None
-    project_name: str | None = None
-    department_name: str | None = None
-    operator: str | None = None
-    run_operator: str | None = None
-    equipment_name: str | None = None
-    data_summary: str | None = None
-    created_at: str | None = None
-
-
-class FactListResponse(BaseModel):
-    """事实分页列表响应。"""
-
-    items: list[FactResponse]
-    next_cursor: str | None
-    group_counts: dict[str, int] = Field(
-        default_factory=dict,
-        description="每个 task_code 对应的事实总数（不受分页限制）",
-    )
 
 
 # ---- 辅助函数 ----

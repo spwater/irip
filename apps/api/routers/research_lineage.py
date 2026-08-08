@@ -311,7 +311,7 @@ async def query_provenance_graph(
 
     BFS 从 target 向上游追溯，跨核心域和研究域拼接完整溯源 DAG。
     """
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth, truncate_branch=truncate_branch)
     graph = await service.query_provenance_graph(
@@ -335,7 +335,7 @@ async def query_result_provenance(
     max_depth: int = Query(default=20, ge=1, le=100),
 ) -> ProvenanceGraphResponse:
     """查询成果版本的溯源图（便捷端点）。"""
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
     graph = await service.query_provenance_graph(
@@ -359,7 +359,7 @@ async def query_dataset_provenance(
     max_depth: int = Query(default=20, ge=1, le=100),
 ) -> ProvenanceGraphResponse:
     """查询数据集版本的溯源图。"""
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
     graph = await service.query_provenance_graph(
@@ -383,7 +383,7 @@ async def query_view_provenance(
     max_depth: int = Query(default=20, ge=1, le=100),
 ) -> ProvenanceGraphResponse:
     """查询图表版本的溯源图。"""
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
     graph = await service.query_provenance_graph(
@@ -407,7 +407,7 @@ async def query_insight_provenance(
     max_depth: int = Query(default=20, ge=1, le=100),
 ) -> ProvenanceGraphResponse:
     """查询 Insight 版本的溯源图。"""
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=max_depth)
     graph = await service.query_provenance_graph(
@@ -456,7 +456,7 @@ async def search_knowledge(
     max_results: int = Query(default=10, ge=1, le=50),
 ) -> list[KnowledgeSearchResultResponse]:
     """检索知识库（支持指定 Provider 或全部 Provider 并行检索）。"""
-    from packages.research.models import KnowledgeSearchOptions
+    from packages.research.dtos import KnowledgeSearchOptions
 
     options = KnowledgeSearchOptions(max_results=max_results)
     provider_names = [provider_name] if provider_name else None
@@ -557,7 +557,7 @@ async def export_provenance_graph(
     request: ExportRequest,
 ) -> ExportResponse:
     """导出溯源图（JSON 格式）。"""
-    from packages.research.models import ProvenanceQueryOptions
+    from packages.research.dtos import ProvenanceQueryOptions
 
     options = ProvenanceQueryOptions(max_depth=request.max_depth)
     graph = await service.query_provenance_graph(

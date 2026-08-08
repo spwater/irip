@@ -403,3 +403,41 @@ class AuthService:
                 .values(avatar_url=avatar_url, updated_at=datetime.utcnow())
                 .where(AppUser.id == user_id)
             )
+
+    @staticmethod
+    def verify_password(user: AppUser, password: str) -> bool:
+        """验证用户密码（P2-I12 GDPR 删除确认）。
+
+        Args:
+            user: 用户 ORM 实体。
+            password: 待验证的明文密码。
+
+        Returns:
+            bool: 密码是否匹配。
+        """
+        return verify_password(user.password_hash, password)
+
+    async def delete_account(self, user_id: UUID) -> None:
+        """软删除用户账户 + 匿名化个人数据（P2-I12 GDPR 被遗忘权）。
+
+        策略：
+        - status → "deleted"
+        - display_name → "已删除用户"
+        - email → 匿名化（{user_id}@deleted.local）
+        - avatar_url → None
+        - token_version + 1（使所有 JWT 失效）
+        - 关联数据不删除（归属部门）
+
+        Args:
+            user_id: 用户 UUID。
+        """
+        async with session_scope(self._session_factory) as session:
+            user = await self._repository.find_user_by_id(session, user_id)
+            if user is None:
+                return
+            user.status = "deleted"
+            user.display_name = "已删除用户"
+            user.email = f"{user_id}@deleted.local"
+            user.avatar_url = None
+            user.token_version = user.token_version + 1
+            user.updated_at = datetime.now(UTC)

@@ -72,13 +72,15 @@ export interface UseFlowQueriesResult {
 export function useFlowQueries(params: UseFlowQueriesParams): UseFlowQueriesResult {
   const { projectId, selectedFlowId, showArchived, deptFilter, equipFilter, createForm } = params;
 
-  // ---- 组件列表查询（用于新建流程选择工具）----
-  const { data: componentsDataForCreate } = useQuery({
-    queryKey: ['components-for-flow-create'],
+  // ---- 组件列表查询（P2-C16: 合并为单次查询，消除重复 API 调用）----
+  const { data: componentsData } = useQuery({
+    queryKey: ['components-for-flow'],
     queryFn: () => apiListComponents(),
   });
-  const componentOptions = (() => {
-    const items = componentsDataForCreate?.items ?? [];
+
+  // P2-C20: useMemo 包裹派生计算，避免每次渲染重建
+  const componentOptions = useMemo(() => {
+    const items = componentsData?.items ?? [];
     const latestByName = new Map<string, ComponentSummary>();
     for (const item of items) {
       const existing = latestByName.get(item.name);
@@ -94,20 +96,46 @@ export function useFlowQueries(params: UseFlowQueriesParams): UseFlowQueriesResu
         version: c.version,
         summary: c,
       }));
-  })();
+  }, [componentsData]);
+
+  const compMap = useMemo(
+    () => new Map<string, ComponentSummary>((componentsData?.items ?? []).map((c) => [c.name, c])),
+    [componentsData],
+  );
+
+  const compIdToName = useMemo(
+    () => new Map<string, string>((componentsData?.items ?? []).map((c) => [c.id, c.name])),
+    [componentsData],
+  );
+
+  const compOptionsForObj = useMemo(
+    () =>
+      (componentsData?.items ?? [])
+        .filter((c) => c.status !== 'deprecated')
+        .map((c) => ({
+          value: c.id,
+          label: c.display_name || c.name,
+        })),
+    [componentsData],
+  );
 
   // ---- ingestion tools 查询：构建 tool_type → display_name 映射 ----
   const { data: ingestionToolsData } = useQuery({
     queryKey: ['ingestion-tools-for-flow'],
     queryFn: apiListIngestionTools,
   });
-  const toolTypeDisplayName = new Map<string, string>(
-    (ingestionToolsData ?? []).map((t) => [t.name, t.display_name]),
+  const toolTypeDisplayName = useMemo(
+    () => new Map<string, string>((ingestionToolsData ?? []).map((t) => [t.name, t.display_name])),
+    [ingestionToolsData],
   );
-  const ingestionToolOptions = (ingestionToolsData ?? []).map((t) => ({
-    value: t.name,
-    label: t.display_name,
-  }));
+  const ingestionToolOptions = useMemo(
+    () =>
+      (ingestionToolsData ?? []).map((t) => ({
+        value: t.name,
+        label: t.display_name,
+      })),
+    [ingestionToolsData],
+  );
 
   // ---- 流程列表查询 ----
   const { data: listData, isLoading: listLoading } = useQuery({
@@ -120,23 +148,14 @@ export function useFlowQueries(params: UseFlowQueriesParams): UseFlowQueriesResu
     ? allFlows.filter((f) => f.status === 'deprecated')
     : allFlows.filter((f) => f.status !== 'deprecated');
 
-  // ---- 查询组件列表、实验对象、设备，用于在流程列表展示关联信息 ----
-  const { data: compListData } = useQuery({
-    queryKey: ['components-for-flow-list'],
-    queryFn: () => apiListComponents(),
-  });
-  // component_name → ComponentSummary（后端已返回当前活跃版本）
-  const compMap = new Map<string, ComponentSummary>();
-  for (const c of compListData?.items ?? []) {
-    compMap.set(c.name, c);
-  }
-
+  // ---- 实验对象查询 ----
   const { data: objListData } = useQuery({
     queryKey: ['objects-for-flow-list'],
     queryFn: () => apiListObjects({ page_size: 100 }),
   });
-  const objMap = new Map<string, IndustrialObject>(
-    (objListData?.items ?? []).map((o) => [o.code, o]),
+  const objMap = useMemo(
+    () => new Map<string, IndustrialObject>((objListData?.items ?? []).map((o) => [o.code, o])),
+    [objListData],
   );
 
   // 监听新建任务表单中实验对象的选择值，用于自动填充任务名称
@@ -157,59 +176,64 @@ export function useFlowQueries(params: UseFlowQueriesParams): UseFlowQueriesResu
     queryKey: ['object-types-for-flow-create'],
     queryFn: apiListObjectTypes,
   });
-  const objectTypeOptions = (objectTypeData ?? []).map((t) => ({
-    value: t.code,
-    label: t.display_name,
-  }));
+  const objectTypeOptions = useMemo(
+    () =>
+      (objectTypeData ?? []).map((t) => ({
+        value: t.code,
+        label: t.display_name,
+      })),
+    [objectTypeData],
+  );
   // 实验对象下拉选项（带 object_type 字段以便按类型过滤）
-  const objectOptions = (objListData?.items ?? []).map((o) => ({
-    value: o.code,
-    label: `${o.display_name} (${o.code})`,
-    object_type: o.object_type,
-  }));
+  const objectOptions = useMemo(
+    () =>
+      (objListData?.items ?? []).map((o) => ({
+        value: o.code,
+        label: `${o.display_name} (${o.code})`,
+        object_type: o.object_type,
+      })),
+    [objListData],
+  );
 
+  // ---- 设备列表查询 ----
   const { data: equipListData } = useQuery({
     queryKey: ['equipment-for-flow-list'],
     queryFn: () => apiListEquipment({ limit: 100 }),
   });
-  const equipMap = new Map<string, string>(
-    (equipListData?.items ?? []).map((e) => [e.id, e.display_name]),
+  const equipMap = useMemo(
+    () => new Map<string, string>((equipListData?.items ?? []).map((e) => [e.id, e.display_name])),
+    [equipListData],
+  );
+  const equipOptions = useMemo(
+    () =>
+      (equipListData?.items ?? []).map((e) => ({
+        value: e.id,
+        label: e.display_name,
+      })),
+    [equipListData],
   );
 
+  // ---- 部门列表查询 ----
   const { data: deptListData } = useQuery({
     queryKey: ['departments-for-flow-list'],
     queryFn: () => apiListDepartments({ limit: 100 }),
   });
-  const deptMap = new Map<string, string>(
-    (deptListData?.items ?? []).map((d) => [d.id, d.display_name]),
+  const deptMap = useMemo(
+    () => new Map<string, string>((deptListData?.items ?? []).map((d) => [d.id, d.display_name])),
+    [deptListData],
   );
-  // 部门下拉选项（用于新建任务）
-  const deptOptions = (deptListData?.items ?? []).map((d) => ({
-    value: d.id,
-    label: d.display_name,
-  }));
-  // 部门树（用于新建实验对象的可见单位）
+  const deptOptions = useMemo(
+    () =>
+      (deptListData?.items ?? []).map((d) => ({
+        value: d.id,
+        label: d.display_name,
+      })),
+    [deptListData],
+  );
   const deptTreeData = useMemo(
     () => buildDeptTree(deptListData?.items ?? []),
     [deptListData],
   );
-
-  // ---- 数据接口列表（用于新建实验对象的数据接口选择，按 id 选择）----
-  const compOptionsForObj = (componentsDataForCreate?.items ?? [])
-    .filter((c) => c.status !== 'deprecated')
-    .map((c) => ({
-      value: c.id,
-      label: c.display_name || c.name,
-    }));
-
-  // 从 component_id 到 component_name 的映射（用于执行时从实验对象绑定推导接口）
-  const compIdToName = new Map<string, string>(
-    (componentsDataForCreate?.items ?? []).map((c) => [c.id, c.name]),
-  );
-  const equipOptions = (equipListData?.items ?? []).map((e) => ({
-    value: e.id,
-    label: e.display_name,
-  }));
 
   // ---- 选中流程详情查询 ----
   const { data: flow } = useQuery({

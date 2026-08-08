@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.research.models import (
+from packages.research.dtos import (
     EvidenceRefDTO,
     FactSummary,
     QuestionVersionRef,
@@ -275,7 +275,7 @@ async def create_workspace(
     service: WorkspaceServiceDep,
 ) -> WorkspaceResponse:
     """创建研究工作空间（含研究问题 v1）。"""
-    from packages.research.models import CreateWorkspaceCommand
+    from packages.research.dtos import CreateWorkspaceCommand
 
     command = CreateWorkspaceCommand(
         name=body.name,

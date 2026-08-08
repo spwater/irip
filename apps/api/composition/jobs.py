@@ -36,7 +36,7 @@ def register(ctx: CompositionContext) -> None:
         )
         rls_dept_id = get_rls_dept_id(current_user, ctx.root_dept_id)
         if rls_dept_id is not None:
-            service._rls_dept_id = rls_dept_id
+            service.set_rls_override(rls_dept_id)
         return service
 
     ctx.app.dependency_overrides[get_job_service] = _get_job_service

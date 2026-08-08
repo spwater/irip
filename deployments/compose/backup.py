@@ -763,6 +763,41 @@ def main() -> None:
     manifest: BackupManifest = asyncio.run(run_backup(args.output_dir))
     print(f"\n备份完成: {manifest.to_json()}")
 
+    # ---- 异地存储同步 ----
+    remote_target: str = os.getenv("IRIP_BACKUP_REMOTE_TARGET", "")
+    if remote_target:
+        import subprocess as _sp
+
+        backup_output_dir: str = os.getenv("IRIP_BACKUP_OUTPUT_DIR", "/backups")
+        logger.info("Syncing backup to remote: %s", remote_target)
+        try:
+            # 支持 rclone（推荐）或 aws s3 sync
+            if shutil.which("rclone"):
+                _sp.run(
+                    ["rclone", "copy", backup_output_dir, remote_target],
+                    check=True,
+                    timeout=3600,
+                )
+            elif shutil.which("aws"):
+                _sp.run(
+                    ["aws", "s3", "sync", backup_output_dir, remote_target],
+                    check=True,
+                    timeout=3600,
+                )
+            else:
+                logger.warning(
+                    "Neither rclone nor aws CLI found; skipping remote sync. "
+                    "Install rclone or aws-cli to enable offsite backup."
+                )
+            logger.info("Remote sync completed: %s", remote_target)
+        except Exception as exc:
+            logger.error("Remote sync failed: %s", exc)
+    else:
+        logger.info(
+            "IRIP_BACKUP_REMOTE_TARGET not set; skipping offsite backup sync. "
+            "Set it to e.g. 's3:irip-backups/' or 'remote:backups/' to enable."
+        )
+
 
 if __name__ == "__main__":
     main()

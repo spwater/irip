@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.common.errors import AppError
-from packages.standards.object_graph import ObjectGraphService
+from packages.standards.objects.object_graph import ObjectGraphService
 from packages.standards.objects.objects import IndustrialObject
 
 #: 路由实例。

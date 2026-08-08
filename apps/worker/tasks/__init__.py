@@ -50,11 +50,22 @@ def _async_db_url() -> str:
     return db_url
 
 
+_factory_cache: Any | None = None
+
+
+def _get_session_factory() -> Any:
+    """获取模块级 session factory 单例（避免每次任务执行重建连接池）。"""
+    global _factory_cache
+    if _factory_cache is None:
+        _factory_cache = build_session_factory(_async_db_url())
+    return _factory_cache
+
+
 async def _execute_job_async(job_id: str) -> str:
     """异步执行作业。
 
     构建 session_factory、租约管理器和执行器，注册全部 handler，
-    然后执行作业。
+    然后执行作业。执行前检查部门并发上限，超限时抛异常触发重试。
 
     Args:
         job_id: 作业 UUID 字符串。
@@ -62,9 +73,7 @@ async def _execute_job_async(job_id: str) -> str:
     Returns:
         str: 作业 UUID。
     """
-    async_url = _async_db_url()
-
-    factory = build_session_factory(async_url)
+    factory = _get_session_factory()
     # RLS 通电：注入 system 哨兵 GUC，使 worker 能跨部门读写 job 表
     default_dept_id, default_user_id = get_system_guc()
     lease_manager = WorkerLeaseManager(
@@ -84,8 +93,42 @@ async def _execute_job_async(job_id: str) -> str:
 
     # H-03: owner 从环境变量获取而非硬编码
     owner = os.getenv("IRIP_WORKER_ID", f"celery-worker-{os.getpid()}")
-    result = await executor.execute(UUID(job_id), owner=owner)
-    return str(result.job_id) if result else job_id
+
+    # 部门并发上限检查：查询 job 的 department_id，通过 Redis 计数器限流
+    import sqlalchemy as sa
+
+    from packages.jobs.dept_concurrency import DeptConcurrencyLimiter
+    from packages.jobs.entities import Job
+
+    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    import redis as redis_lib
+
+    redis_client = redis_lib.from_url(redis_url)
+    limiter = DeptConcurrencyLimiter(redis_client)
+
+    dept_id_str: str = ""
+    acquired: bool = False
+    async with factory() as session:
+        row = await session.scalar(sa.select(Job).where(Job.id == UUID(job_id)))
+        if row and row.department_id:
+            dept_id_str = str(row.department_id)
+
+    if dept_id_str:
+        acquired = limiter.acquire(dept_id_str)
+        if not acquired:
+            raise AppError(
+                code="rate_limited",
+                message="部门并发上限已达，作业将在下次调度时重试",
+                retryable=True,
+                fields={"department_id": dept_id_str},
+            )
+
+    try:
+        result = await executor.execute(UUID(job_id), owner=owner)
+        return str(result.job_id) if result else job_id
+    finally:
+        if acquired and dept_id_str:
+            limiter.release(dept_id_str)
 
 
 def _register_handlers(executor: JobExecutor) -> None:
@@ -225,7 +268,7 @@ async def _backup_handler(job: object) -> dict[str, Any]:
     backup_record_id_str: str = payload.get("backup_record_id", "")
     backup_type: str = payload.get("type", "daily")
 
-    factory = build_session_factory(_async_db_url())
+    factory = _get_session_factory()
     service: BackupRecordService = BackupRecordService(factory)
 
     try:
@@ -326,7 +369,7 @@ async def _restore_handler(job: object) -> dict[str, Any]:
             fields={"field": "backup_id"},
         )
 
-    factory = build_session_factory(_async_db_url())
+    factory = _get_session_factory()
     service: BackupRecordService = BackupRecordService(factory)
 
     # ---- Step 1: 创建 pre_restore 备份（仅执行一次）----
@@ -514,28 +557,14 @@ async def _audit_export_handler(job: object) -> dict[str, Any]:
         dict: 导出结果（含记录数、导出路径）。
     """
     _validate_job_kind(job)
-    import os
-    from uuid import UUID
-
     import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory, session_scope
 
     payload: dict[str, Any] = getattr(job, "payload", None) or {}
     org_id_str: str = payload.get("department_id", "")
     start_date_str: str = payload.get("start_date", "")
     end_date_str: str = payload.get("end_date", "")
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
-    )
-    if db_url.startswith("postgresql+psycopg://"):
-        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
-    else:
-        async_url = db_url
-
-    factory = build_session_factory(async_url)
+    factory = _get_session_factory()
 
     # 查询审计事件并导出
 
@@ -694,7 +723,7 @@ async def _execute_beat_task_async(
 
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
 
-    factory = build_session_factory(_async_db_url())
+    factory = _get_session_factory()
     dept_uuid: _UUID | None = _UUID(department_id) if department_id else None
     # RLS 通电：Beat 无用户 → 使用 system_service 用户 GUC（挂 root 部门 → 全部门可见）
     user_uuid: _UUID | None = _parse_uuid_or_none(get_system_service_user_id())

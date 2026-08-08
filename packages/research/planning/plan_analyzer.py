@@ -5,11 +5,13 @@
 两条独立调用链。
 """
 
+import json
 import logging
 from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
+from sqlalchemy.exc import SQLAlchemyError
 
 from packages.common.errors import AppError
 from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
@@ -87,8 +89,12 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     _row = _result.fetchone()
                     if _row:
                         fact_name = _row[0] or ""
-                except Exception:
-                    logger.warning("unexpected error", exc_info=True)
+                except SQLAlchemyError:
+                    logger.warning(
+                        "Failed to fetch fact name for source %s",
+                        source_id,
+                        exc_info=True,
+                    )
                 get_data = getattr(self._fact_provider, "get_fact_data", None)
                 if get_data is not None:
                     fact_data = await get_data(source_id)
@@ -333,7 +339,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 stored_steps = plan.dag_structure.get("steps", []) if plan.dag_structure else []
                 if stored_steps:
                     stored_steps[0]["analysis_result"] = analysis_result
-                    stored_steps[0]["data_context"] = full_data_text
+                    # P2-C14: 截断到 256K 防止 JSONB 膨胀，完整数据通过 artifact 存储
+                    stored_steps[0]["data_context"] = full_data_text[:256000]
                     new_dag = dict(plan.dag_structure)
                     new_dag["steps"] = stored_steps
                     await session.execute(
@@ -343,7 +350,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                         ),
                         {"dag": _json.dumps(new_dag, ensure_ascii=False), "pid": str(plan.id)},
                     )
-            except Exception as exc:
+            except (SQLAlchemyError, TypeError, KeyError) as exc:
                 logger.warning("Failed to persist analysis result: %s", exc)
 
             # 8. 解析 ```data 块 → 存为 RunArtifact (type=data, is_publishable=true)
@@ -428,8 +435,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                 title = t.get("text", title)
                             elif isinstance(t, str):
                                 title = t
-                        except Exception:
-                            logger.warning("unexpected error", exc_info=True)
+                        except (json.JSONDecodeError, KeyError, AttributeError):
+                            logger.warning("Failed to parse echarts block title", exc_info=True)
 
                         content_bytes = block.encode("utf-8")
                         content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -551,7 +558,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     clean = clean.rsplit("```", 1)[0]
                 clean = clean.strip()
                 insight_candidate = _json.loads(clean)
-            except Exception as exc:
+            except (json.JSONDecodeError, AttributeError, IndexError) as exc:
                 logger.warning("Insight extraction failed: %s", exc)
 
             # 4. 写入候选记录
@@ -604,7 +611,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             "ai_raw": analysis_result[:8000],
                         },
                     )
-                except Exception as exc:
+                except (SQLAlchemyError, TypeError, KeyError) as exc:
                     logger.warning("Failed to save insight candidate: %s", exc)
                     insight_candidate_id = None
                     insight_run_id = None
@@ -706,8 +713,11 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                             title = t.get("text", title)
                                         elif isinstance(t, str):
                                             title = t
-                                    except Exception:
-                                        logger.warning("unexpected error", exc_info=True)
+                                    except (json.JSONDecodeError, KeyError, AttributeError):
+                                        logger.warning(
+                                            "Failed to parse echarts title in extract_insight",
+                                            exc_info=True,
+                                        )
 
                                     content_bytes = block.encode("utf-8")
                                     content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -770,7 +780,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                         ),
                         {"dag": _json.dumps(new_dag, ensure_ascii=False), "pid": str(plan.id)},
                     )
-            except Exception as exc:
+            except (SQLAlchemyError, TypeError, KeyError) as exc:
                 logger.warning("Failed to persist insight: %s", exc)
 
             return {

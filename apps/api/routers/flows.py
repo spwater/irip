@@ -34,8 +34,9 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.schemas.facts import FactListResponse, FactResponse
 from packages.common.errors import AppError
-from packages.components.flow_runtime import (
+from packages.components.flow.flow_runtime import (
     PROTECTED_PARAMS,
     FlowDefinition,
     FlowDefinitionVersionORM,
@@ -43,7 +44,7 @@ from packages.components.flow_runtime import (
     FlowRun,
     FlowRuntimeService,
 )
-from packages.components.flows import (
+from packages.components.flow.flows import (
     FlowEdge,
     FlowNode,
     edge_from_dict,
@@ -61,9 +62,6 @@ ReadUserDep = Annotated[CurrentUser, Depends(require_permission("flow:read"))]
 
 #: 需 flow:execute 权限的当前用户依赖。
 ExecuteUserDep = Annotated[CurrentUser, Depends(require_permission("flow:execute"))]
-
-# 从 facts 路由复用响应模型
-from apps.api.routers.facts import FactListResponse, FactResponse  # noqa: E402
 
 
 def get_flow_service() -> FlowRuntimeService:
@@ -623,12 +621,15 @@ async def list_runs(
     fact_id_map: dict[UUID, str] = await service.get_run_fact_ids(run_ids) if run_ids else {}
     persisted_ids: set[UUID] = set(fact_id_map.keys())
 
+    # 批量查最新节点执行记录，消除 N+1
+    latest_nodes = await service.get_latest_node_executions(run_ids) if run_ids else {}
+
     for r in runs:
         resp = _run_to_response(r)
         resp.persisted_as_fact = r.id in persisted_ids
         resp.fact_id = fact_id_map.get(r.id)
         # 查询成功节点的 output_summary，或失败节点的 error_message
-        node = await service.get_latest_node_execution(r.id)
+        node = latest_nodes.get(r.id)
         if node:
             if node.status == "succeeded" and node.output_summary:
                 resp.output_summary = node.output_summary

@@ -427,6 +427,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
         step_id: UUID | None,
         step_def: dict[str, Any],
         plan: object,
+        python_output: str | None = None,
     ) -> dict[str, Any] | None:
         """执行 LLM 步骤：ContextRouter 计算预算 → 超预算分块 → 模型调用 → 归并。
 
@@ -435,6 +436,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             step_id: 步骤 ID。
             step_def: 步骤定义。
             plan: 计划版本 ORM。
+            python_output: Python 步骤输出文本（混合步骤中使用，替代快照数据）。
 
         Returns:
             dict | None: 成功时返回覆盖声明，失败时返回 None。
@@ -449,8 +451,11 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 return None
             snapshot_id = run.snapshot_id
 
-        # 准备输入数据（从快照获取）
-        data_text = await self._load_snapshot_data(snapshot_id)
+        # 准备输入数据：混合步骤使用 Python 输出，独立步骤从快照加载
+        if python_output is not None:
+            data_text = python_output
+        else:
+            data_text = await self._load_snapshot_data(snapshot_id)
 
         # 构建步骤定义
         from packages.research.execution.models_trusted import PlanStep as PlanStepDC
@@ -612,8 +617,13 @@ class StepExecutorMixin(ResearchOrchestratorBase):
         if python_coverage is None:
             return None
 
-        # 再执行 LLM 部分
-        llm_coverage = await self._execute_llm_step(run_id, step_id, step_def, plan)
+        # 收集 Python 步骤输出文本（从数据工件中读取）
+        python_output_text = await self._collect_step_output_text(step_id)
+
+        # 再执行 LLM 部分，使用 Python 输出作为数据上下文
+        llm_coverage = await self._execute_llm_step(
+            run_id, step_id, step_def, plan, python_output=python_output_text
+        )
         if llm_coverage is None:
             # LLM 失败不影响 Python 结果（P1-7 风格）
             return python_coverage
@@ -626,6 +636,43 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             is_sampled=False,
             mode_reason="Python 全量计算 + LLM 语义分析混合",
         ).to_dict()
+
+    async def _collect_step_output_text(self, step_id: UUID | None) -> str:
+        """从步骤的数据工件中收集输出文本（混合步骤 LLM 使用）。
+
+        Python 步骤执行后，输出文件（JSON/CSV）会作为 data 类型工件持久化。
+        本方法读取这些工件并拼接为文本，供 LLM 步骤作为数据上下文使用。
+
+        Args:
+            step_id: 步骤 ID。
+
+        Returns:
+            str: 拼接的输出文本，无数据工件时返回空字符串。
+        """
+        if step_id is None or self._artifact_service is None:
+            return ""
+
+        from packages.research.execution.repository_trusted import (
+            ResearchRepositoryTrusted,
+        )
+
+        parts: list[str] = []
+        async with self._factory() as session:
+            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
+                session, step_id
+            )
+            for a in artifacts:
+                if a.artifact_type == "data":
+                    try:
+                        content = await self._artifact_service.get_artifact(a.id)
+                        if content is not None:
+                            parts.append(content.content.decode("utf-8", errors="replace"))
+                    except Exception:
+                        logging.getLogger(__name__).debug(
+                            "Failed to read artifact %s", a.id, exc_info=True
+                        )
+
+        return "\n\n".join(parts)
 
     async def _extract_insight_candidate(
         self,

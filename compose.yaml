@@ -8,6 +8,14 @@
 # - Redis 加密码
 # - 内部服务不暴露宿主端口（postgres/redis/minio 仅 internal）
 # - 统一 cap_drop/no-new-privileges/只读 FS 安全基线
+# - Docker 日志轮转（max-size: 100m, max-file: 5）防止磁盘耗尽
+
+# 日志轮转基线（所有服务共享）
+x-logging: &logging-base
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
 
 # H-13: 应用服务安全基线（不适用于基础设施 postgres/redis/minio，它们需要写权限）
 x-security-base: &security-base
@@ -23,6 +31,7 @@ x-infra-security: &infra-security {}
 services:
   postgres:
     image: docker.m.daocloud.io/pgvector/pgvector:pg16
+    logging: *logging-base
     # PITR: 通过 command 参数注入 WAL 归档配置（无需修改 postgresql.conf）
     command: >
       postgres
@@ -54,6 +63,7 @@ services:
   redis:
     image: docker.m.daocloud.io/redis:7-alpine
     <<: *infra-security
+    logging: *logging-base
     # H-13: Redis 加密码
     command: ["redis-server", "--requirepass", "${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}"]
     # 开发环境临时暴露端口
@@ -71,6 +81,7 @@ services:
   minio:
     image: docker.m.daocloud.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
     <<: *infra-security
+    logging: *logging-base
     command: server /data --console-address ":9001"
     # 开发环境临时暴露端口
     ports:
@@ -93,6 +104,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
+    logging: *logging-base
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
@@ -132,7 +144,8 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
-    command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+    logging: *logging-base
+    command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2", "-Q", "irip-fast,irip-normal,irip-research,irip-ops"]
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
@@ -180,6 +193,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
+    logging: *logging-base
     command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser
@@ -225,6 +239,7 @@ services:
       context: .
       dockerfile: deployments/compose/web.Dockerfile
     <<: *security-base
+    logging: *logging-base
     cap_add: ["CHOWN", "SETGID", "SETUID"]
     tmpfs:
       - /tmp
@@ -242,6 +257,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
+    logging: *logging-base
     # 先跑 alembic 迁移建表，再跑 bootstrap 创建组织+角色+管理员+bucket
     command: ["sh", "-c", "alembic upgrade head && python -m deployments.compose.bootstrap"]
     environment:
@@ -268,6 +284,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
+    logging: *logging-base
     command: ["python", "-m", "deployments.compose.backup"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
@@ -302,6 +319,7 @@ services:
       context: .
       dockerfile: deployments/compose/api.Dockerfile
     <<: *security-base
+    logging: *logging-base
     command: ["python", "-m", "deployments.compose.restore", "--backup-dir", "${IRIP_RESTORE_BACKUP_DIR:-/backups}"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
@@ -321,6 +339,9 @@ services:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
       # PITR: WAL 归档目录（PITR 恢复时 PG 从此处读取 WAL）
       - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
+      # 安全提示：Docker socket 挂载为容器逃逸风险点。
+      # 生产环境应使用专用恢复服务（非 Docker socket）或通过 API 代理限制可执行命令。
+      # 仅在 dangerous-ops profile 下启动，且需 system:manage 权限。
       # PITR: Docker socket（需控制 PG 容器 stop/start）
       - /var/run/docker.sock:/var/run/docker.sock
       # PITR: pgdata 卷（PITR 恢复需写入 PG data 目录）
@@ -338,3 +359,77 @@ volumes:
   miniodata:
   redisdata:
   backups:
+  # P2-I8: Loki 日志存储
+  loki-data:
+
+# ============================================================
+# P2-I8: 日志聚合系统（Loki + Promtail）
+# 通过 profiles: monitoring 控制，仅在生产/监控环境启动
+# structlog JSON 输出已就绪，Promtail 从 Docker 容器日志采集
+# ============================================================
+services:
+  loki:
+    profiles: ["monitoring"]
+    image: docker.m.daocloud.io/grafana/loki:3.2.1
+    <<: *infra-security
+    logging: *logging-base
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+    restart: unless-stopped
+
+  promtail:
+    profiles: ["monitoring"]
+    image: docker.m.daocloud.io/grafana/promtail:3.2.1
+    <<: *infra-security
+    logging: *logging-base
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro
+      - ./deployments/monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  # P2-I2: PgBouncer 连接池代理
+  # transaction-level pooling，减少 PostgreSQL 连接数
+  # 注意：RLS GUC SET LOCAL 在 transaction-level 模式下兼容
+  # （SET LOCAL 在事务结束时自动重置，PgBouncer transaction 模式正好匹配此行为）
+  pgbouncer:
+    profiles: ["pooling"]
+    image: docker.m.daocloud.io/edoburu/pgbouncer:1.23.1
+    <<: *infra-security
+    logging: *logging-base
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${IRIP_DATABASE_APP_USER:-irip_app}
+      DB_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
+      DB_NAME: ${IRIP_DATABASE_NAME:-irip}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+      MIN_POOL_SIZE: 5
+      RESERVE_POOL_SIZE: 5
+      SERVER_RESET_QUERY: DISCARD ALL
+      AUTH_TYPE: scram-sha-256
+      LISTEN_ADDR: "*"
+      LISTEN_PORT: 6432
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # P2-I9: 分布式追踪（Jaeger）
+  # 接收 OTLP gRPC (4317) / HTTP (4318)，UI 在 16686
+  jaeger:
+    profiles: ["monitoring"]
+    image: docker.m.daocloud.io/jaegertracing/all-in-one:1.62.0
+    <<: *infra-security
+    logging: *logging-base
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"  # Jaeger UI
+    restart: unless-stopped

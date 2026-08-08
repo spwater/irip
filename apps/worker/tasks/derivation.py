@@ -143,8 +143,8 @@ async def _process_derivation_async(
         raise
 
 
-@celery_app.task(name="irip.derivation.process")
-def process_derivation_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.derivation.process", bind=True, soft_time_limit=3000, time_limit=3600)
+def process_derivation_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：处理推导作业。
 
     1. 从 payload 提取参数；
@@ -163,4 +163,7 @@ def process_derivation_job(job_id: str, payload: dict[str, Any]) -> dict[str, An
     try:
         return asyncio.run(_process_derivation_async(job_id, payload))
     except Exception as exc:
-        return {"error": str(exc), "job_id": job_id}
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise

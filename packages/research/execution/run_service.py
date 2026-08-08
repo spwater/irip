@@ -212,6 +212,7 @@ class AnalysisRunService(ScopedSessionMixin):
                     celery_app.send_task(
                         "research.run.execute",
                         kwargs={"run_id": str(run.id)},
+                        queue="irip-research",
                     )
                 except Exception as exc:
                     logger.error("Failed to send Celery task: %s", exc)

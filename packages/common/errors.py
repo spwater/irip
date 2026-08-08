@@ -9,6 +9,7 @@ HTTP 状态与 code 对照由 ``packages/common/error_codes.py`` 中的
 
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID
 
 from packages.common.error_codes import ErrorCode
 
@@ -68,3 +69,39 @@ class AppError(Exception):
             "retryable": self.retryable,
             "fields": self.fields,
         }
+
+
+def require_found[T](
+    obj: T | None,
+    entity_name: str,
+    entity_id: str | UUID | None = None,
+    fields: dict[str, Any] | None = None,
+) -> T:
+    """如果 obj 为 None 则抛出 not_found 错误，否则返回 obj。
+
+    消除 30+ 处重复的 ``if obj is None: raise AppError(code="not_found", ...)``
+    模式（P2-C7）。
+
+    Args:
+        obj: 查询结果（可能为 None）。
+        entity_name: 实体中文名称（如"用户"、"部门"）。
+        entity_id: 实体 ID（可选，用于错误消息定位）。
+        fields: 字段级错误明细（可选，用于前端表单回显）。
+
+    Returns:
+        非 None 的 obj。
+
+    Raises:
+        AppError: code="not_found"，当 obj 为 None 时。
+    """
+    if obj is None:
+        message = f"{entity_name}不存在"
+        if entity_id is not None:
+            message += f"（id={entity_id}）"
+        raise AppError(
+            code="not_found",
+            message=message,
+            retryable=False,
+            fields=fields or {},
+        )
+    return obj

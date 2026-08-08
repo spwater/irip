@@ -43,7 +43,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import FlowRuntimeService
+    from packages.components.flow.flow_runtime import FlowRuntimeService
     from packages.components.registry import ComponentRegistryService
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
@@ -130,7 +130,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
 
     # 获取最终状态
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
-    from packages.components.flow_runtime import FlowRun
+    from packages.components.flow.flow_runtime import FlowRun
 
     async with session_scope(factory) as session:
         # RLS 通电：FlowRun 有 B 类 RLS，需设 GUC
@@ -147,8 +147,8 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
         }
 
 
-@celery_app.task(name="irip.flow.execute")
-def execute_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.flow.execute", bind=True, soft_time_limit=3000, time_limit=3600)
+def execute_flow_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行流程。
 
     1. 从 payload 提取 run_id 和组织 ID；
@@ -175,7 +175,10 @@ def execute_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             asyncio.run(_mark_job_failed(job_id, str(exc)))
         except Exception:
             logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
-        return {"error": str(exc), "job_id": job_id, "run_id": run_id}
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise
 
 
 async def _mark_job_failed(job_id: str, error: str) -> None:
@@ -220,8 +223,8 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         )
 
 
-@celery_app.task(name="irip.flow.resume")
-def resume_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.flow.resume", bind=True, soft_time_limit=540, time_limit=600)
+def resume_flow_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：恢复流程执行。
 
     Args:
@@ -242,7 +245,10 @@ def resume_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             asyncio.run(_mark_job_failed(job_id, str(exc)))
         except Exception:
             logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
-        return {"error": str(exc), "job_id": job_id, "run_id": run_id}
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise
 
 
 async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -262,7 +268,7 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
     from packages.common.database import build_session_factory, session_scope
     from packages.common.s3_repository import S3Repository
     from packages.components.builtin import register_builtin_components
-    from packages.components.flow_runtime import (
+    from packages.components.flow.flow_runtime import (
         FlowRun,
         FlowRuntimeService,
     )

@@ -15,7 +15,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -90,12 +90,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """应用生命周期：启动时初始化资源，退出时清理。
 
     初始化内容：
+      0. 生产环境密钥安全校验；
       1. 数据库会话工厂（从 IRIP_DATABASE_URL）；
       2. S3 / MinIO 客户端（ensure_bucket 幂等创建）；
       3. Redis URL；
       4. JWT 密钥；
       5. 通过 composition provider 模块设置全部依赖覆盖。
     """
+    # ---- 0. 生产环境密钥安全校验 ----
+    from packages.common.security_check import assert_production_keys
+
+    assert_production_keys()
+
     from apps.api.composition import CompositionContext, lookup_root_dept_id, register_all
 
     # ---- 1. 数据库会话工厂 ----
@@ -171,18 +177,54 @@ def create_app() -> FastAPI:
     Returns:
         FastAPI: 已配置全部路由、中间件、异常处理器的应用实例。
     """
+    env: str = os.getenv("IRIP_ENV", "development")
+    is_production: bool = env == "production"
+
+    # ---- Sentry 错误追踪 ----
+    sentry_dsn = os.getenv("IRIP_SENTRY_DSN", "")
+    if sentry_dsn:
+        import sentry_sdk
+        from sentry_sdk.integrations.asyncio import AsyncioIntegration
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            environment=env,
+            traces_sample_rate=0.1 if is_production else 1.0,
+            integrations=[
+                FastApiIntegration(),
+                AsyncioIntegration(),
+            ],
+        )
+
     app = FastAPI(
         title="IRIP",
         description="Industrial Research Intelligence Platform — API",
         version="0.8.0",
         lifespan=lifespan,
+        # 生产环境禁用 API 文档端点
+        docs_url=None if is_production else "/docs",
+        redoc_url=None if is_production else "/redoc",
+        openapi_url=None if is_production else "/openapi.json",
     )
+
+    # P2-I9: 分布式追踪（OpenTelemetry）
+    from packages.common.tracing import init_tracing, instrument_fastapi
+
+    init_tracing(service_name="irip-api")
+    instrument_fastapi(app)
 
     # ---- CORS ----
     cors_origins = os.getenv("IRIP_API_CORS_ORIGINS", "http://localhost:5173")
+    parsed_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+    if "*" in parsed_origins:
+        raise RuntimeError(
+            "IRIP_API_CORS_ORIGINS 不能包含 '*' 通配符（allow_credentials=True 时浏览器"
+            "会拒绝凭据请求）。请列出明确的 origin 列表，逗号分隔。"
+        )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[o.strip() for o in cors_origins.split(",")],
+        allow_origins=parsed_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
@@ -204,12 +246,29 @@ def create_app() -> FastAPI:
     from starlette.middleware.base import BaseHTTPMiddleware
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=metrics_middleware)
-    set_app_info(version="0.8.0", environment=os.getenv("IRIP_ENV", "development"))
+
+    # ---- 安全响应头中间件（API 直连场景，nginx 反代时由 nginx 设置）----
+    async def security_headers_dispatch(request: Request, call_next: Any) -> JSONResponse | Any:
+        """为所有 API 响应添加安全 HTTP 头。"""
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+        return response
+
+    app.add_middleware(BaseHTTPMiddleware, dispatch=security_headers_dispatch)
+
+    set_app_info(version="0.8.0", environment=env)
 
     # ---- 路由 ----
     @app.get("/", include_in_schema=False)
     async def root() -> RedirectResponse:
-        """根路径重定向到 API 文档。"""
+        """根路径重定向（开发环境→API 文档，生产环境→健康检查）。"""
+        if is_production:
+            return RedirectResponse(url="/api/v1/health/live")
         return RedirectResponse(url="/docs")
 
     # ---- F-19: Prometheus 指标端点 ----

@@ -19,10 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import FixedClock
 from packages.common.errors import AppError
-from packages.components.flow_runtime import (
+from packages.components.flow.flow_runtime import (
     FlowRuntimeService,
 )
-from packages.components.flows import (
+from packages.components.flow.flows import (
     FlowEdge,
     FlowNode,
 )

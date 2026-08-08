@@ -1,0 +1,45 @@
+# Promtail 配置 — 从 Docker 容器日志采集到 Loki
+# P2-I8: 日志聚合系统
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # 从 Docker 容器日志采集
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+        filters:
+          - name: label
+            values: ["com.docker.compose.service"]
+    relabel_configs:
+      # 提取服务名作为 label
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: service
+      # 提取容器名
+      - source_labels: ["__meta_docker_container_name"]
+        target_label: container
+        regex: '/(.*)'
+      # 提取镜像名
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: stream
+      # 添加环境标签
+      - target_label: environment
+        replacement: production
+
+  # 从系统日志文件采集（可选）
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: system
+          __path__: /var/log/*log

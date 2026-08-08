@@ -115,15 +115,54 @@ class S3Repository:
             pass
 
     def ensure_bucket(self) -> None:
-        """幂等创建默认 bucket。
+        """幂等创建默认 bucket，并配置生命周期规则。
 
         若 bucket 已存在则静默返回，否则创建之。
+        创建后自动配置生命周期规则：
+        - research/artifacts/ 前缀：365 天后自动转移到归档存储
+        - temp/ 前缀：7 天后自动删除
         """
         try:
             self._client.head_bucket(Bucket=self._bucket)
         except ClientError:
             self._client.create_bucket(Bucket=self._bucket)
             logger.info("Created S3 bucket: %s", self._bucket)
+
+        # P2-I5: 配置 MinIO 生命周期策略
+        self._configure_lifecycle()
+
+    def _configure_lifecycle(self) -> None:
+        """配置 bucket 生命周期规则（幂等）。
+
+        - research/artifacts/ 前缀：365 天后归档
+        - temp/ 前缀：7 天后删除
+        """
+        lifecycle_config: dict[str, Any] = {
+            "Rules": [
+                {
+                    "ID": "archive-old-research-artifacts",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "research/artifacts/"},
+                    "Transitions": [
+                        {"Days": 365, "StorageClass": "STANDARD_IA"},
+                    ],
+                },
+                {
+                    "ID": "expire-temp-objects",
+                    "Status": "Enabled",
+                    "Filter": {"Prefix": "temp/"},
+                    "Expiration": {"Days": 7},
+                },
+            ]
+        }
+        try:
+            self._client.put_bucket_lifecycle_configuration(
+                Bucket=self._bucket,
+                LifecycleConfiguration=lifecycle_config,
+            )
+            logger.debug("Configured lifecycle rules for bucket: %s", self._bucket)
+        except Exception:
+            logger.warning("Failed to configure lifecycle rules (non-fatal)", exc_info=True)
 
     def put_object(
         self,

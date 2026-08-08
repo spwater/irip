@@ -48,13 +48,37 @@ celery_app.conf.update(
     # 可靠性
     task_acks_late=True,
     task_reject_on_worker_lost=True,
-    task_default_queue="irip-jobs",
+    task_default_queue="irip-normal",
     # 预取：一次只取一个任务（确保长任务不阻塞短任务）
     worker_prefetch_multiplier=1,
+    # 全局兜底超时（每个任务在装饰器上有更精确的值）
+    task_time_limit=3600,
+    task_soft_time_limit=3000,
     # 重试配置
     task_default_max_retries=3,
     # 结果过期时间（7 天）
     result_expires=7 * 24 * 3600,
+    # 分层队列路由：按任务名自动路由到对应优先级队列
+    # irip-fast: 短任务（≤10min），快速返回
+    # irip-normal: 中等任务（10min~2h），流程执行、模型训练
+    # irip-research: 研究域长任务（沙箱执行），独立隔离
+    # irip-ops: 系统运维任务（备份/恢复/审计），特权操作
+    task_routes={
+        # jobs.execute 由 dispatcher 按 kind 动态选队列，此处设默认
+        "jobs.execute": {"queue": "irip-normal"},
+        # 研究域任务走独立队列，不与普通作业抢资源
+        "research.run.execute": {"queue": "irip-research"},
+        # Beat 调度任务走 ops 队列
+        "outbox.dispatch": {"queue": "irip-ops"},
+        "worker.heartbeat": {"queue": "irip-ops"},
+        "worker.reap_expired_leases": {"queue": "irip-ops"},
+        "worker.retry_wait_jobs": {"queue": "irip-ops"},
+        "backup.daily": {"queue": "irip-ops"},
+        "backup.retention_cleanup": {"queue": "irip-ops"},
+        "research.heartbeat": {"queue": "irip-ops"},
+        "research.cleanup_warm": {"queue": "irip-ops"},
+        "research.promote_queued": {"queue": "irip-ops"},
+    },
     # Celery Beat 调度配置（F-04：Outbox 闭环）
     beat_schedule={
         # Outbox 事件投递调度：每 1 秒拉取未投递事件发送到 Celery
@@ -98,16 +122,21 @@ celery_app.conf.update(
             "task": "research.cleanup_warm",
             "schedule": 60.0,
         },
-        # 研究域队列提升：每 5 秒检查队列并提升等待 Run
+        # 研究域队列提升：每 30 秒检查队列并提升等待 Run
         "research-promote-queued": {
             "task": "research.promote_queued",
-            "schedule": 5.0,
+            "schedule": 30.0,
+        },
+        # P2-I6: 审计日志保留清理：每日 04:00 UTC 删除超过 N 天的审计日志
+        "audit-retention-cleanup": {
+            "task": "ops.audit_retention_cleanup",
+            "schedule": crontab(hour=4, minute=0),
         },
     },
 )
 
 
-@celery_app.task(name="jobs.execute", bind=True)
+@celery_app.task(name="jobs.execute", bind=True, soft_time_limit=3000, time_limit=3600)
 def execute_job(self: object, job_id: str) -> str:
     """Celery 任务入口：执行作业。
 
@@ -127,7 +156,7 @@ def execute_job(self: object, job_id: str) -> str:
     return _do_execute_job(job_id)
 
 
-@celery_app.task(name="outbox.dispatch")
+@celery_app.task(name="outbox.dispatch", soft_time_limit=30, time_limit=60)
 def dispatch_outbox() -> int:
     """Celery Beat 调度任务：拉取 Outbox 未投递事件并发送到 Celery。
 
@@ -146,7 +175,7 @@ def dispatch_outbox() -> int:
     return run_dispatch(task_sender=celery_app)
 
 
-@celery_app.task(name="worker.heartbeat")
+@celery_app.task(name="worker.heartbeat", soft_time_limit=10, time_limit=30)
 def worker_heartbeat() -> str:
     """Celery Beat 调度任务：Worker 心跳。
 
@@ -170,7 +199,7 @@ def worker_heartbeat() -> str:
     return "heartbeat-ok"
 
 
-@celery_app.task(name="worker.reap_expired_leases")
+@celery_app.task(name="worker.reap_expired_leases", soft_time_limit=30, time_limit=60)
 def reap_expired_leases() -> int:
     """Celery Beat 调度任务：回收过期租约。
 
@@ -212,7 +241,7 @@ def reap_expired_leases() -> int:
     return len(result)
 
 
-@celery_app.task(name="worker.retry_wait_jobs")
+@celery_app.task(name="worker.retry_wait_jobs", soft_time_limit=30, time_limit=60)
 def retry_wait_jobs() -> int:
     """Celery Beat 调度任务：重新入队 retry_wait 状态且已到 run_after 的作业。
 
@@ -288,7 +317,7 @@ def retry_wait_jobs() -> int:
 # ---- 数据库备份调度任务 ----
 
 
-@celery_app.task(name="backup.daily")
+@celery_app.task(name="backup.daily", soft_time_limit=6600, time_limit=7200)
 def daily_backup() -> str:
     """Celery Beat 调度任务：每日数据库自动备份。
 
@@ -409,7 +438,7 @@ def daily_backup() -> str:
     return asyncio.run(_create_daily_backup())
 
 
-@celery_app.task(name="backup.retention_cleanup")
+@celery_app.task(name="backup.retention_cleanup", soft_time_limit=300, time_limit=600)
 def retention_cleanup() -> int:
     """Celery Beat 调度任务：清理过期备份。
 

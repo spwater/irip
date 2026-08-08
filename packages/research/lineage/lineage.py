@@ -11,7 +11,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.research.models import LineageEdgeRef, ProductRefCollection
+from packages.research.dtos import LineageEdgeRef, ProductRefCollection
 from packages.research.repository import ResearchRepository
 
 logger = logging.getLogger("research.lineage")

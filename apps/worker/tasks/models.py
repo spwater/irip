@@ -214,8 +214,8 @@ async def _publish_model_async(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@celery_app.task(name="irip.model.train")
-def train_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.model.train", bind=True, soft_time_limit=6600, time_limit=7200)
+def train_model_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：训练模型（创建 + 提交验证）。
 
     Args:
@@ -228,15 +228,14 @@ def train_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return asyncio.run(_train_model_async(payload))
     except Exception as exc:
-        return {
-            "error": str(exc),
-            "job_id": job_id,
-            "payload": payload,
-        }
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise
 
 
-@celery_app.task(name="irip.model.predict")
-def predict_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.model.predict", bind=True, soft_time_limit=540, time_limit=600)
+def predict_model_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行模型预测。
 
     Args:
@@ -249,15 +248,14 @@ def predict_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return asyncio.run(_predict_model_async(payload))
     except Exception as exc:
-        return {
-            "error": str(exc),
-            "job_id": job_id,
-            "payload": payload,
-        }
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise
 
 
-@celery_app.task(name="irip.model.publish")
-def publish_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+@celery_app.task(name="irip.model.publish", bind=True, soft_time_limit=1500, time_limit=1800)
+def publish_model_job(self: Any, job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：发布模型版本。
 
     Args:
@@ -270,8 +268,7 @@ def publish_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         return asyncio.run(_publish_model_async(payload))
     except Exception as exc:
-        return {
-            "error": str(exc),
-            "job_id": job_id,
-            "payload": payload,
-        }
+        # P2-C17: 可重试异常用 self.retry，否则 raise 让 Celery 记录失败
+        if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+            raise self.retry(exc=exc) from None
+        raise

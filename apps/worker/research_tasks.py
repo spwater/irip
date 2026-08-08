@@ -166,12 +166,14 @@ def _build_orchestrator() -> Any:
     return orchestrator
 
 
-@celery_app.task(name="research.run.execute", bind=True)
+@celery_app.task(name="research.run.execute", bind=True, soft_time_limit=1500, time_limit=1800)
 def execute_analysis_run(self: object, run_id: str) -> str:
     """Celery 任务：执行分析 Run。
 
     由 AnalysisRunService.submit_run 通过 send_task 触发。
     在 Worker 进程中调用 ResearchOrchestrator.execute_run 执行 DAG 步骤。
+
+    执行前检查部门并发上限，超限时抛异常触发重试。
 
     Args:
         self: Celery 任务实例（bind=True）。
@@ -181,17 +183,70 @@ def execute_analysis_run(self: object, run_id: str) -> str:
         str: Run UUID（用于结果追踪）。
     """
     logger.info("Starting analysis run execution: run_id=%s", run_id)
-    orchestrator = _build_orchestrator()
 
-    async def _execute() -> None:
-        await orchestrator.execute_run(UUID(run_id))
+    # 部门并发上限检查
+    import sqlalchemy as sa
 
-    asyncio.run(_execute())
-    logger.info("Analysis run execution completed: run_id=%s", run_id)
-    return run_id
+    from packages.common.database import build_session_factory
+    from packages.research.entities import ResearchWorkspace
+    from packages.research.execution.entities_trusted import ResearchAnalysisRun
+
+    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    if db_url.startswith("postgresql+psycopg://"):
+        async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+    else:
+        async_url = db_url
+    factory = build_session_factory(async_url)
+
+    import redis as redis_lib
+
+    from packages.jobs.dept_concurrency import DeptConcurrencyLimiter
+
+    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_client = redis_lib.from_url(redis_url)
+    limiter = DeptConcurrencyLimiter(redis_client)
+
+    dept_id_str: str = ""
+    acquired: bool = False
+
+    async def _get_dept() -> None:
+        nonlocal dept_id_str
+        async with factory() as session:
+            row = await session.scalar(
+                sa.select(ResearchWorkspace.department_id)
+                .join(
+                    ResearchAnalysisRun,
+                    ResearchAnalysisRun.workspace_id == ResearchWorkspace.id,
+                )
+                .where(ResearchAnalysisRun.id == UUID(run_id))
+            )
+            if row:
+                dept_id_str = str(row)
+
+    asyncio.run(_get_dept())
+
+    if dept_id_str:
+        acquired = limiter.acquire(dept_id_str)
+        if not acquired:
+            raise RuntimeError(
+                f"部门并发上限已达，Run {run_id} 将在下次调度时重试"
+            )
+
+    try:
+        orchestrator = _build_orchestrator()
+
+        async def _execute() -> None:
+            await orchestrator.execute_run(UUID(run_id))
+
+        asyncio.run(_execute())
+        logger.info("Analysis run execution completed: run_id=%s", run_id)
+        return run_id
+    finally:
+        if acquired and dept_id_str:
+            limiter.release(dept_id_str)
 
 
-@celery_app.task(name="research.heartbeat")
+@celery_app.task(name="research.heartbeat", soft_time_limit=30, time_limit=60)
 def check_run_heartbeat() -> int:
     """Celery Beat 调度任务：检查活跃 Run 心跳。
 
@@ -243,7 +298,7 @@ def check_run_heartbeat() -> int:
     return asyncio.run(_check())
 
 
-@celery_app.task(name="research.cleanup_warm")
+@celery_app.task(name="research.cleanup_warm", soft_time_limit=30, time_limit=60)
 def cleanup_warm_containers() -> int:
     """Celery Beat 调度任务：清理过期保温容器。
 
@@ -267,7 +322,7 @@ def cleanup_warm_containers() -> int:
     return asyncio.run(_cleanup())
 
 
-@celery_app.task(name="research.promote_queued")
+@celery_app.task(name="research.promote_queued", soft_time_limit=30, time_limit=60)
 def promote_queued_runs() -> int:
     """Celery Beat 调度任务：检查队列并提升等待 Run。
 
@@ -314,7 +369,11 @@ def promote_queued_runs() -> int:
                         run.status if run else "not_found",
                     )
                     continue
-            celery_app.send_task("research.run.execute", kwargs={"run_id": run_id_str})
+            celery_app.send_task(
+                "research.run.execute",
+                kwargs={"run_id": run_id_str},
+                queue="irip-research",
+            )
             valid_promoted += 1
         return valid_promoted
 

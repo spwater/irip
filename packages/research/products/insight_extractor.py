@@ -15,8 +15,8 @@ import json
 import logging
 from typing import Any
 
+from packages.research.dtos import InsightCandidateData
 from packages.research.execution.models_trusted import TaskType
-from packages.research.models import InsightCandidateData
 
 logger = logging.getLogger("research.insight_extractor")
 

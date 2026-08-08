@@ -16,7 +16,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.research.models import ProvenanceEdge, ProvenanceNode
+from packages.research.dtos import ProvenanceEdge, ProvenanceNode
 
 logger = logging.getLogger("research.adapters.core_provenance")
 

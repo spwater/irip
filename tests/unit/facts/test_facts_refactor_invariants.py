@@ -314,10 +314,14 @@ class TestAlembicUrlEngine:
         assert hasattr(FactQueryService, "_resolve_task_info")
 
     def test_resolve_task_info_contains_alembic_url(self) -> None:
-        """_resolve_task_info 源码包含 IRIP_ALEMBIC_DATABASE_URL。"""
+        """_resolve_task_info 通过 _get_superuser_factory 单例使用 IRIP_ALEMBIC_DATABASE_URL。"""
         source = inspect.getsource(FactQueryService._resolve_task_info)
-        assert "IRIP_ALEMBIC_DATABASE_URL" in source
-        assert "create_async_engine" in source or "_cae" in source
+        assert "_get_superuser_factory" in source
+        # 引擎创建逻辑已抽取到模块级 _get_superuser_factory 单例函数
+        import packages.facts.query_service as qs_module
+
+        module_source = inspect.getsource(qs_module)
+        assert "IRIP_ALEMBIC_DATABASE_URL" in module_source
 
     def test_resolve_task_info_has_fallback_guc(self) -> None:
         """_resolve_task_info 有 fallback GUC 反查路径。"""

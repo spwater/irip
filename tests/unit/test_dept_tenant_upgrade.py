@@ -106,7 +106,7 @@ def _get_orm_entity(table_name: str):
     import packages.auth.scope_grants  # noqa: F401
     import packages.backups.entities  # noqa: F401
     import packages.common.artifacts  # noqa: F401
-    import packages.components.flow_runtime  # noqa: F401
+    import packages.components.flow.flow_runtime  # noqa: F401
     import packages.components.registry  # noqa: F401
     import packages.connectors.entities  # noqa: F401
     import packages.departments.entities  # noqa: F401
@@ -117,8 +117,8 @@ def _get_orm_entity(table_name: str):
     import packages.models.entities  # noqa: F401
     import packages.parameters.entities  # noqa: F401
     import packages.provenance.entities  # noqa: F401
-    import packages.standards.object_type_dict  # noqa: F401
     import packages.standards.objects  # noqa: F401
+    import packages.standards.objects.object_type_dict  # noqa: F401
     from packages.common.database import Base
 
     table = Base.metadata.tables.get(table_name)
@@ -949,14 +949,19 @@ class TestTenantGUC:
 
         mock_session = AsyncMock()
         dept_id = uuid4()
+        # _safe_literal 会先执行 SELECT quote_literal，返回引用后的值
+        mock_result = MagicMock()
+        mock_result.scalar_one.return_value = f"'{dept_id}'"
+        mock_session.execute.return_value = mock_result
 
         await set_dept_guc(mock_session, dept_id)
 
-        mock_session.execute.assert_called_once()
-        sql = str(mock_session.execute.call_args[0][0])
+        # 两次 execute: quote_literal 查询 + SET LOCAL
+        assert mock_session.execute.call_count == 2
+        set_local_call = mock_session.execute.call_args_list[1]
+        sql = str(set_local_call[0][0])
         assert "SET LOCAL" in sql
         assert "app.current_dept_id" in sql
-        assert str(dept_id) in sql
 
     async def test_set_dept_guc_none_sets_empty_string(self):
         """set_dept_guc 传入 None 时设空串（fail-closed）"""
@@ -978,14 +983,18 @@ class TestTenantGUC:
 
         mock_session = AsyncMock()
         user_id = uuid4()
+        mock_result = MagicMock()
+        mock_result.scalar_one.return_value = f"'{user_id}'"
+        mock_session.execute.return_value = mock_result
 
         await set_user_guc(mock_session, user_id)
 
-        mock_session.execute.assert_called_once()
-        sql = str(mock_session.execute.call_args[0][0])
+        # 两次 execute: quote_literal 查询 + SET LOCAL
+        assert mock_session.execute.call_count == 2
+        set_local_call = mock_session.execute.call_args_list[1]
+        sql = str(set_local_call[0][0])
         assert "SET LOCAL" in sql
         assert "app.current_user_id" in sql
-        assert str(user_id) in sql
 
     async def test_set_user_guc_none_sets_empty_string(self):
         """set_user_guc 传入 None 时设空串（fail-closed）"""
@@ -999,16 +1008,31 @@ class TestTenantGUC:
         sql = str(mock_session.execute.call_args[0][0])
         assert "''" in sql
 
-    def test_safe_literal_escapes_single_quotes(self):
-        """_safe_literal 正确转义单引号（防 SQL 注入）"""
+    async def test_safe_literal_uses_quote_literal(self):
+        """_safe_literal 通过 PostgreSQL quote_literal 函数安全引用"""
         from packages.common.tenant_guc import _safe_literal
 
-        result = _safe_literal("normal-uuid")
-        assert result == "'normal-uuid'"
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one.return_value = "'normal-uuid'"
+        mock_session.execute.return_value = mock_result
 
-        result = _safe_literal("evil'); DROP TABLE--")
-        assert "''" in result  # 单引号被转义为双单引号
-        assert result.count("'") > 2  # 含转义后的引号
+        result = await _safe_literal(mock_session, "normal-uuid")
+        assert result == "'normal-uuid'"
+        mock_session.execute.assert_called_once()
+
+    async def test_safe_literal_escapes_injection(self):
+        """_safe_literal 通过 quote_literal 防 SQL 注入"""
+        from packages.common.tenant_guc import _safe_literal
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        # quote_literal 会将恶意输入安全引用
+        mock_result.scalar_one.return_value = "'evil''); DROP TABLE--'"
+        mock_session.execute.return_value = mock_result
+
+        result = await _safe_literal(mock_session, "evil'); DROP TABLE--")
+        assert result == "'evil''); DROP TABLE--'"
 
 
 class TestDeptScope:

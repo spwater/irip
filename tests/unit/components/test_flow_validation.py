@@ -16,10 +16,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from packages.components.flow_validation import (
+from packages.components.flow.flow_validation import (
     FlowValidationService,
 )
-from packages.components.flows import FlowEdge, FlowNode
+from packages.components.flow.flows import FlowEdge, FlowNode
 from packages.components.manifest import ComponentManifest
 from packages.components.sdk import PortSpec
 

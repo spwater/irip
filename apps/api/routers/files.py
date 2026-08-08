@@ -133,6 +133,12 @@ async def browse_files(
             if entry.startswith("."):
                 continue
             full_path = os.path.join(target, entry)
+            # 跳过符号链接（防止链接逃逸）
+            if os.path.islink(full_path):  # noqa: ASYNC240
+                continue
+            # 安全检查：确保解析后路径仍在根目录内
+            if not Path(os.path.realpath(full_path)).is_relative_to(root):  # noqa: ASYNC240
+                continue
             if os.path.isdir(full_path):  # noqa: ASYNC240
                 items.append(FileItem(name=entry, type="dir"))
             elif os.path.isfile(full_path):  # noqa: ASYNC240

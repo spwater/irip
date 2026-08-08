@@ -270,7 +270,7 @@ class ResearchOrchestrator(
                     await AuditRecorder.record(
                         session,
                         AuditEventData(
-                            department_id=workspace_id or UUID(int=0),
+                            department_id=self._dept_id or workspace_id or UUID(int=0),
                             actor_user_id=created_by,
                             action="research.run.complete",
                             resource_type="research_analysis_run",

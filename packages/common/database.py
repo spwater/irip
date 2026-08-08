@@ -191,3 +191,14 @@ class ScopedSessionMixin:
         user_id: UUID | None = getattr(self, "_actor_id", None)
         async with scoped_session(self._factory, dept_id, user_id) as session:  # type: ignore[attr-defined]
             yield session
+
+    def set_rls_override(self, dept_id: UUID | None) -> None:
+        """设置 RLS 部门覆盖（公开方法，替代直接赋值 _rls_dept_id）。
+
+        平台管理员需要绕过 RLS 隔离时，通过此方法设置目标部门 ID。
+        传入 None 清除覆盖，回退到 _dept_id 的正常隔离行为。
+
+        Args:
+            dept_id: 覆盖的部门 ID，None 时清除覆盖。
+        """
+        self._rls_dept_id = dept_id
