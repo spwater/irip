@@ -172,6 +172,10 @@ class IngestionService:
         self._rls_dept_id: UUID | None = None
         self._artifact_service = artifact_service
 
+    def set_rls_override(self, dept_id: UUID) -> None:
+        """设置 RLS 覆盖部门 ID（与其他 service 的 ScopedSessionMixin 对齐）。"""
+        self._rls_dept_id = dept_id
+
     async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:
         """预览数据源。
 

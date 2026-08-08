@@ -64,6 +64,7 @@ class ResearchOrchestratorBase:
     _factory: Any
     _insight_extractor: Any | None
     _lineage_writer: Any | None
+    _dept_id: UUID | None
 
     def __init__(
         self,
@@ -77,6 +78,7 @@ class ResearchOrchestratorBase:
         session_factory: async_sessionmaker[AsyncSession] | None = None,
         insight_extractor: Any | None = None,
         lineage_writer: Any | None = None,
+        department_id: UUID | None = None,
     ) -> None:
         """初始化编排器。
 
@@ -91,6 +93,7 @@ class ResearchOrchestratorBase:
             session_factory: 异步会话工厂（可选，Worker 中使用）。
             insight_extractor: Insight 提取器（可选，阶段 3 新增）。
             lineage_writer: LineageWriterService 实例（可选，阶段 5 新增）。
+            department_id: 当前部门 ID（可选，用于审计记录）。
         """
         self._repo = repo
         self._model_gateway = model_gateway
@@ -102,6 +105,7 @@ class ResearchOrchestratorBase:
         self._factory: Any = session_factory
         self._insight_extractor = insight_extractor
         self._lineage_writer = lineage_writer
+        self._dept_id = department_id
 
         # 包装 session_factory：退出时自动 commit（与 session_scope 行为一致）
         _original_factory = session_factory

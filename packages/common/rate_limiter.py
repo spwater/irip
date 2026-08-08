@@ -200,7 +200,7 @@ def get_rate_limiter() -> RateLimiter | RedisRateLimiter:
         try:
             import redis as redis_lib
 
-            client = redis_lib.from_url(redis_url)
+            client = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
             client.ping()
             _global_limiter = RedisRateLimiter(client)
             return _global_limiter

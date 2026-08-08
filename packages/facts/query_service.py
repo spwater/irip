@@ -74,7 +74,7 @@ def _get_redis() -> Any:
         if _redis_url:
             import redis as _redis_lib
 
-            _redis_client = _redis_lib.from_url(_redis_url)
+            _redis_client = _redis_lib.from_url(_redis_url)  # type: ignore[no-untyped-call]
     return _redis_client
 
 
@@ -461,7 +461,7 @@ class FactQueryService(ScopedSessionMixin):
             # 查找 JSON artifact
             art_record = await FactRepository.find_json_artifact(session, fact_id)
             if art_record is None:
-                result_data = {"metadata": {}, "points": [], "series": []}
+                result_data: dict[str, Any] = {"metadata": {}, "points": [], "series": []}
                 if redis_client is not None:
                     redis_client.setex(
                         cache_key, FACT_DATA_CACHE_TTL, json.dumps(result_data, default=str)

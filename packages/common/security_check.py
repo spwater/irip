@@ -114,8 +114,8 @@ def assert_production_keys() -> None:
         "IRIP_MINIO_SECRET_KEY",
     )
     for var_name in weak_password_vars:
-        value: str = os.getenv(var_name, "")
-        if value and value in WEAK_SECRETS:
+        pw_value = os.getenv(var_name, "")
+        if pw_value and pw_value in WEAK_SECRETS:
             msg = f"[{var_name}] 使用了开发默认值，生产环境必须替换"
             if is_production:
                 errors.append(msg)

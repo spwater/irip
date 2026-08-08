@@ -950,7 +950,7 @@ class ResearchRepositoryTrusted:
             document=document,
             version=1,
         )
-        stmt = stmt.on_conflict_do_update(
+        stmt = stmt.on_conflict_do_update(  # type: ignore[attr-defined]
             index_elements=["workspace_id"],
             set_={
                 "document": document,

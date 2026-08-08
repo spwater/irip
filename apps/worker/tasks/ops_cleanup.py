@@ -10,6 +10,7 @@ P2-I6: 定期清理超过 N 天的审计日志，防止表无限增长。
 import logging
 import os
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import sqlalchemy as sa
 from celery import shared_task
@@ -22,9 +23,33 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_RETENTION_DAYS = 90
 
+_superuser_factory: Any | None = None
+
+
+def _get_superuser_factory() -> Any:
+    """获取超级用户 session factory 单例。
+
+    使用 IRIP_ALEMBIC_DATABASE_URL（superuser 连接）绕过 RLS，
+    因为 audit_event 表对 irip_app 角色仅追加（REVOKE UPDATE, DELETE）。
+    """
+    global _superuser_factory
+    if _superuser_factory is not None:
+        return _superuser_factory
+
+    alembic_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL", os.getenv("IRIP_DATABASE_URL", ""))
+    if not alembic_url:
+        raise RuntimeError("无法获取超级用户连接：IRIP_ALEMBIC_DATABASE_URL 未配置")
+
+    async_url = alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(async_url, pool_size=2, max_overflow=2)
+    _superuser_factory = async_sessionmaker(engine, expire_on_commit=False)
+    return _superuser_factory
+
 
 @shared_task(name="ops.audit_retention_cleanup", soft_time_limit=300, time_limit=600)
-def audit_retention_cleanup() -> dict[str, any]:
+def audit_retention_cleanup() -> dict[str, Any]:
     """清理超过保留期的审计日志。
 
     删除 occurred_at 早于 (now - IRIP_AUDIT_RETENTION_DAYS) 的审计事件。
@@ -33,8 +58,6 @@ def audit_retention_cleanup() -> dict[str, any]:
     Returns:
         dict: 清理结果摘要。
     """
-    from apps.worker.celery_app import _get_superuser_factory
-
     retention_days = int(os.getenv("IRIP_AUDIT_RETENTION_DAYS", str(_DEFAULT_RETENTION_DAYS)))
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
 
@@ -60,12 +83,10 @@ def audit_retention_cleanup() -> dict[str, any]:
                 await set_user_guc(session, sys_user)
 
                 result = await session.execute(
-                    sa.delete(sa.text("audit_event")).where(
-                        sa.text("audit_event.occurred_at < :cutoff")
-                    ),
+                    sa.text("DELETE FROM audit_event WHERE occurred_at < :cutoff"),
                     {"cutoff": cutoff},
                 )
-                return result.rowcount or 0
+                return result.rowcount or 0  # type: ignore[attr-defined]
 
         deleted_count = asyncio.run(_cleanup())
 

@@ -450,6 +450,7 @@ class DepartmentService(ScopedSessionMixin):
             # 检查是否存在
             existing = await DepartmentRepository.select_by_id(session, department_id)
             require_found(existing, "实验室", department_id, {"department_id": str(department_id)})
+            assert existing is not None  # require_found guarantees non-None
 
             # 阶段2: 哨兵保护
             if existing.code in ("root", "system"):

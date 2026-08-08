@@ -159,7 +159,7 @@ class ContextBuilderMixin(ResearchOrchestratorBase):
                 s3_repo=s3_repo,
             )
 
-            async def _load_fact(ref: dict) -> dict:
+            async def _load_fact(ref: dict[str, Any]) -> dict[str, Any]:
                 fact_id = ref.get("id")
                 namespace = ref.get("namespace", "")
                 if namespace == "core:fact" and fact_id:

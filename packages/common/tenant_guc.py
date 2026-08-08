@@ -36,7 +36,7 @@ async def _safe_literal(session: AsyncSession, value: str) -> str:
         str: 安全引用后的字符串（含外层单引号）。
     """
     result = await session.execute(sa.select(sa.func.quote_literal(value)))
-    return result.scalar_one()
+    return result.scalar_one()  # type: ignore[no-any-return]
 
 
 async def set_dept_guc(session: AsyncSession, dept_id: UUID | None) -> None:
