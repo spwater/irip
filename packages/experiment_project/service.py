@@ -331,7 +331,7 @@ class ExperimentProjectService(ScopedSessionMixin):
             result = await session.scalar(
                 sa.select(AppUser.display_name).where(AppUser.id == owner_user_id)
             )
-            return result  # type: ignore[no-any-return]
+            return result
 
     async def update(
         self,

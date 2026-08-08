@@ -79,7 +79,7 @@ async def test_list_departments_with_member_count(
     await service.create("lab_list_a", "实验室A", None, 0)
     await service.create("lab_list_b", "实验室B", None, 1)
 
-    result = await service.list()
+    result = await service.list_all()
     assert len(result.items) >= 2
     # 按 sort_order 排序
     codes = [dept.code for dept, _, _, _ in result.items]
@@ -273,12 +273,12 @@ async def test_disabled_not_in_active_list(
 
     await service.set_status(to_disable.id, "disabled", 0)
 
-    active_result = await service.list(status="active")
+    active_result = await service.list_all(status="active")
     active_codes = [dept.code for dept, _, _, _ in active_result.items]
     assert "lab_active_filter" in active_codes
     assert "lab_disabled_filter" not in active_codes
 
-    disabled_result = await service.list(status="disabled")
+    disabled_result = await service.list_all(status="disabled")
     disabled_codes = [dept.code for dept, _, _, _ in disabled_result.items]
     assert "lab_disabled_filter" in disabled_codes
 
@@ -297,19 +297,19 @@ async def test_list_pagination(
         await service.create(f"lab_page_{i:02d}", f"分页实验室{i}", None, i)
 
     # 第一页 limit=2
-    page1 = await service.list(limit=2)
+    page1 = await service.list_all(limit=2)
     assert len(page1.items) == 2
     assert page1.has_more is True
     assert page1.next_cursor is not None
 
     # 第二页
-    page2 = await service.list(cursor=page1.next_cursor, limit=2)
+    page2 = await service.list_all(cursor=page1.next_cursor, limit=2)
     assert len(page2.items) == 2
     assert page2.has_more is True
     assert page2.next_cursor is not None
 
     # 第三页（可能包含非 lab_page 的 parent department，has_more 不确定）
-    page3 = await service.list(cursor=page2.next_cursor, limit=2)
+    page3 = await service.list_all(cursor=page2.next_cursor, limit=2)
     assert len(page3.items) >= 1
 
 
@@ -324,4 +324,4 @@ async def test_list_invalid_cursor(
         department_id=test_user.department_id,
     )
     with pytest.raises(AppError, match="分页游标无效"):
-        await service.list(cursor="invalid-base64!!")
+        await service.list_all(cursor="invalid-base64!!")

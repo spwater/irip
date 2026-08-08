@@ -36,7 +36,7 @@ def register(ctx: CompositionContext) -> None:
             uploaded_by=current_user.user_id,
         )
         if rls_dept_id is not None:
-            art_svc._rls_dept_id = rls_dept_id  # type: ignore[attr-defined]
+            art_svc._rls_dept_id = rls_dept_id
         # 注入 FactService，使模型预测结果写入溯源事实链
         fact_svc = FactService(
             session_factory=ctx.session_factory,

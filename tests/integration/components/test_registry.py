@@ -276,7 +276,7 @@ class TestListComponents:
         await registry_service.publish(validator.validate(VALID_YAML_INGESTION))
         await registry_service.publish(validator.validate(VALID_YAML_TRANSFORM))
 
-        items = await registry_service.list()
+        items = await registry_service.list_all()
         assert len(items) == 2
 
     async def test_list_filter_by_kind(
@@ -289,15 +289,15 @@ class TestListComponents:
         await registry_service.publish(validator.validate(VALID_YAML_TRANSFORM))
         await registry_service.publish(validator.validate(VALID_YAML_QUALITY))
 
-        items = await registry_service.list(kind="ingestion")
+        items = await registry_service.list_all(kind="ingestion")
         assert len(items) == 1
         comp, _ver = items[0]
         assert comp.kind == "ingestion"
 
-        items = await registry_service.list(kind="quality")
+        items = await registry_service.list_all(kind="quality")
         assert len(items) == 1
 
-        items = await registry_service.list(kind="transform")
+        items = await registry_service.list_all(kind="transform")
         assert len(items) == 1
 
     async def test_list_filter_by_status(
@@ -310,12 +310,12 @@ class TestListComponents:
         comp, _ = await registry_service.get_version_by_id(version.id)
         await registry_service.deprecate(comp.name)
 
-        items = await registry_service.list(status="deprecated")
+        items = await registry_service.list_all(status="deprecated")
         assert len(items) == 1
         comp_item, _ver = items[0]
         assert comp_item.status == "deprecated"
 
-        items = await registry_service.list(status="published")
+        items = await registry_service.list_all(status="published")
         assert len(items) == 0
 
     async def test_list_empty(
@@ -323,7 +323,7 @@ class TestListComponents:
         registry_service: ComponentRegistryService,
     ) -> None:
         """无组件时返回空列表。"""
-        items = await registry_service.list()
+        items = await registry_service.list_all()
         assert len(items) == 0
 
     async def test_list_multiple_versions(
@@ -339,7 +339,7 @@ class TestListComponents:
         v2_yaml = VALID_YAML_INGESTION_V2.replace("name: csv_ingestion", f"name: {component_name}")
         await registry_service.publish(validator.validate(v2_yaml))
 
-        items = await registry_service.list()
+        items = await registry_service.list_all()
         assert len(items) == 1  # 同一组件只出现一次
         _comp, ver = items[0]
         assert ver.version == "1.0.1"  # 当前活跃版本为最新
@@ -380,7 +380,7 @@ class TestDeprecateComponent:
         comp, _ = await registry_service.get_version_by_id(version.id)
         await registry_service.deprecate(comp.name)
 
-        items = await registry_service.list(status="deprecated")
+        items = await registry_service.list_all(status="deprecated")
         assert len(items) == 1
         comp_item, _ver = items[0]
         assert comp_item.name == comp.name

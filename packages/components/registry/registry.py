@@ -237,6 +237,7 @@ class ComponentRegistryService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._actor_id = actor_id
         self._clock: Clock = clock if clock is not None else SystemClock()
 
@@ -576,7 +577,7 @@ class ComponentRegistryService(ScopedSessionMixin):
             version: ComponentVersion = row[1]
             return component, version
 
-    async def list(
+    async def list_all(
         self,
         kind: str | None = None,
         status: str | None = None,
@@ -634,7 +635,7 @@ class ComponentRegistryService(ScopedSessionMixin):
             filtered.sort(key=lambda x: x[0].name)
             return filtered
 
-    async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:  # type: ignore[valid-type]
+    async def list_versions(self, component_id: UUID) -> list[ComponentVersion]:
         """列出指定组件的所有版本（按版本创建时间降序）。
 
         Args:
@@ -824,9 +825,10 @@ class ComponentRegistryService(ScopedSessionMixin):
         from packages.standards.objects import IndustrialObject
 
         async with self._scoped_session() as session:
-            return await session.scalar(
+            result = await session.scalar(
                 sa.select(IndustrialObject).where(IndustrialObject.code == code)
             )
+            return result if result is not None else None
 
     async def update_component_fields(
         self,

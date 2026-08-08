@@ -312,7 +312,7 @@ async def list_components(
     Returns:
         ComponentListResponse: 组件列表。
     """
-    items = await service.list(kind=kind, status=status)
+    items = await service.list_all(kind=kind, status=status)
 
     # 可见性由 service 层通过 compute_visible_dept_ids() 处理（含后代向下遍历），
     # 路由层不再做硬编码 department_id 过滤。
@@ -423,7 +423,7 @@ async def list_component_versions(
             manifest_sha256=v.manifest_sha256,
             created_at=v.created_at,
         )
-        for v in versions  # type: ignore[attr-defined]
+        for v in versions
     ]
 
 

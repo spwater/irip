@@ -202,7 +202,7 @@ async def list_departments(
     Returns:
         DepartmentListResponse: 分页列表。
     """
-    result = await service.list(status=status, cursor=cursor, limit=limit)
+    result = await service.list_all(status=status, cursor=cursor, limit=limit)
 
     # 可见性由 RLS / current_visible_dept_ids() 在数据库层处理，
     # 路由层不再做冗余的 should_filter_by_department 过滤。

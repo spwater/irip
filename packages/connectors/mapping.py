@@ -169,6 +169,7 @@ class IngestionService:
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._artifact_service = artifact_service
 
     async def preview(self, source: ConnectorSource, limit: int = 100) -> PreviewTable:

@@ -64,6 +64,7 @@ class JobService(ScopedSessionMixin):
         """
         self._factory = session_factory
         self._dept_id = department_id
+        self._rls_dept_id: UUID | None = None
         self._created_by = created_by
         self._actor_id = created_by
         self._clock = clock or SystemClock()

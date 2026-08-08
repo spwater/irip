@@ -175,25 +175,27 @@ class AIService:
         from packages.auth.entities import AppUser
 
         try:
-            async with session_scope(self._factory) as session:
-                user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
-                if user is not None and user.department_id is not None:
-                    return user.department_id
+            if self._factory is not None:
+                async with session_scope(self._factory) as session:
+                    user = await session.scalar(sa.select(AppUser).where(AppUser.id == user_id))
+                    if user is not None and user.department_id is not None:
+                        return user.department_id
         except Exception as exc:
             logger.warning("Failed to load AppUser.department_id for %s: %s", user_id, exc)
 
         # 2. 兜底：查 root 哨兵部门
         try:
-            async with session_scope(self._factory) as session:
-                result = await session.execute(
-                    sa.text(
-                        "SELECT id FROM department "
-                        "WHERE code = 'root' AND parent_id IS NULL LIMIT 1"
+            if self._factory is not None:
+                async with session_scope(self._factory) as session:
+                    result = await session.execute(
+                        sa.text(
+                            "SELECT id FROM department "
+                            "WHERE code = 'root' AND parent_id IS NULL LIMIT 1"
+                        )
                     )
-                )
-                row = result.scalar()
-                if row is not None:
-                    return UUID(str(row))
+                    row = result.scalar()
+                    if row is not None:
+                        return UUID(str(row))
         except Exception as exc:
             logger.warning("Failed to resolve sentinel root department: %s", exc)
 

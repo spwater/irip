@@ -261,9 +261,9 @@ async def list_mentionable_users(
     Returns:
         MentionableUserListResponse: 可 @ 用户列表。
     """
-    from apps.api.routers.assistant import _resolve_dept_id
-
-    org_id = await _resolve_dept_id(current_user)
+    org_id = await service.resolve_dept_id(
+        current_user.user_id, getattr(current_user, "department_id", None)
+    )
     refs = await service.list_mentionable_users(
         user_id=current_user.user_id,
         department_id=org_id,

@@ -317,7 +317,7 @@ async def test_member_count_aggregation(
             primary_department_id=None,
         )
 
-        result = await dept_service.list()
+        result = await dept_service.list_all()
         dept_item = next(
             (d for d, c, _, _ in result.items if d.code == "ud_count_lab"),
             None,

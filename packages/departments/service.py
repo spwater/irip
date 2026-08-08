@@ -159,7 +159,7 @@ class DepartmentService(ScopedSessionMixin):
             )
             return await DepartmentRepository.insert(session, dept)
 
-    async def list(
+    async def list_all(
         self,
         status: str | None = None,
         cursor: str | None = None,
