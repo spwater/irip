@@ -111,6 +111,10 @@ class TestAssertProductionKeysProd:
         monkeypatch.setenv("IRIP_MASTER_KEY", "a_very_secure_master_key_0123456789")
         monkeypatch.setenv("IRIP_REDIS_PASSWORD", "a_very_secure_redis_pw_0123456789")
         monkeypatch.setenv("IRIP_ALLOW_PRIVATE_NETWORK", "0")
+        # 清除可选弱密码变量，避免 CI 注入的默认值干扰
+        monkeypatch.delenv("IRIP_BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+        monkeypatch.delenv("IRIP_DATABASE_PASSWORD", raising=False)
+        monkeypatch.delenv("IRIP_MINIO_SECRET_KEY", raising=False)
         sc.assert_production_keys()  # 不抛异常
 
     def test_weak_admin_password_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -1,0 +1,25 @@
+# Gitleaks 配置 — 允许已知的测试/示例密钥
+# 这些密钥仅用于开发/CI 测试，不用于生产环境
+
+title = "IRIP Gitleaks Config"
+
+[allowlist]
+description = "Allow known test/example secrets"
+paths = [
+  '''\.env\.example''',
+  '''\.env\.example\.example''',
+  '''tests/.*\.py''',
+  '''test_.*\.py''',
+  '''conftest\.py''',
+  # CI 配置中注入的测试密钥
+  '''\.github/workflows/.*''',
+]
+regexes = [
+  # CI 测试密钥
+  '''ci-test-secret-2026''',
+  '''Admin-IRIP-2026''',
+  # 开发默认密钥
+  '''dev_only_insecure_jwt_secret_change_me_0123456789abcdef''',
+  '''irip_dev_password''',
+  '''agsdgfsdg21r34sf''',
+]

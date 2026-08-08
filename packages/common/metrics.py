@@ -186,7 +186,7 @@ def generate_metrics() -> bytes:
     Returns:
         bytes: Prometheus exposition 格式文本。
     """
-    return generate_latest(REGISTRY)  # type: ignore[no-any-return]
+    return bytes(generate_latest(REGISTRY))
 
 
 async def metrics_middleware(request: Any, call_next: Any) -> Any:

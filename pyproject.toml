@@ -135,6 +135,9 @@ module = [
   "joblib.*",
   "aiodocker.*",
   "sse_starlette.*",
+  "opentelemetry.*",
+  "sentry_sdk.*",
+  "prometheus_client.*",
 ]
 ignore_missing_imports = true
 

@@ -48,7 +48,7 @@ import packages.audit.events  # noqa: F401, E402
 import packages.auth.entities  # noqa: F401, E402
 import packages.auth.scope_grants  # noqa: F401, E402
 import packages.common.artifacts  # noqa: F401, E402
-import packages.components.flow_runtime  # noqa: F401, E402
+import packages.components.flow.flow_runtime  # noqa: F401, E402
 import packages.components.registry  # noqa: F401, E402
 import packages.connectors.entities  # noqa: F401, E402
 import packages.departments.entities  # noqa: F401, E402

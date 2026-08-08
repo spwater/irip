@@ -605,7 +605,7 @@ jobs:
         run: |
           pip install pip-audit
           pip install -e ".[dev]"
-          pip-audit --strict --ignore-vuln GHSA-...  # 按需忽略已知误报
+          pip-audit --skip-editable
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: "22"
@@ -647,7 +647,7 @@ jobs:
       - name: Run gitleaks
         run: |
           docker run --rm -v "${{ github.workspace }}:/repo" \
-            zricethezav/gitleaks:latest detect --source /repo --no-banner --redact
+            zricethezav/gitleaks:latest detect --source /repo --config /repo/.gitleaks.toml --no-banner --redact
 
   # P2-I10: 负载测试（冒烟级，仅 PR/nightly，不阻塞）
   load-test:

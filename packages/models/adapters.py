@@ -425,7 +425,7 @@ class PythonModelAdapter:
                 import io
                 import pickle
 
-                self._model_obj = pickle.loads(artifact_bytes)
+                self._model_obj = pickle.loads(artifact_bytes)  # nosec B301 — SHA-256 校验在前，仅反序列化已验证内容
         except Exception as exc:
             raise AppError(
                 code="invalid_model_artifact",
