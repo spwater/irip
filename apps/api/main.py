@@ -257,6 +257,15 @@ def create_app() -> FastAPI:
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         if is_production:
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
+            # KaTeX 渲染依赖内联样式，style-src 必须保留 'unsafe-inline'。
+            # 开发环境不加 CSP（Vite 需要 unsafe-inline 和 unsafe-eval）。
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob:; font-src 'self'; "
+                "connect-src 'self'; object-src 'none'; "
+                "base-uri 'self'; frame-ancestors 'none'"
+            )
         return response
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=security_headers_dispatch)

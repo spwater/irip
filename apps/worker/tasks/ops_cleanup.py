@@ -60,9 +60,7 @@ def audit_retention_cleanup() -> dict[str, any]:
                 await set_user_guc(session, sys_user)
 
                 result = await session.execute(
-                    sa.delete(
-                        sa.text("audit_event")
-                    ).where(
+                    sa.delete(sa.text("audit_event")).where(
                         sa.text("audit_event.occurred_at < :cutoff")
                     ),
                     {"cutoff": cutoff},

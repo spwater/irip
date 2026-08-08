@@ -228,9 +228,7 @@ def execute_analysis_run(self: object, run_id: str) -> str:
     if dept_id_str:
         acquired = limiter.acquire(dept_id_str)
         if not acquired:
-            raise RuntimeError(
-                f"部门并发上限已达，Run {run_id} 将在下次调度时重试"
-            )
+            raise RuntimeError(f"部门并发上限已达，Run {run_id} 将在下次调度时重试")
 
     try:
         orchestrator = _build_orchestrator()

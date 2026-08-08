@@ -19,9 +19,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 #: 默认每部门最大并发任务数。
-DEFAULT_MAX_CONCURRENT_PER_DEPT: int = int(
-    os.getenv("IRIP_MAX_CONCURRENT_TASKS_PER_DEPT", "3")
-)
+DEFAULT_MAX_CONCURRENT_PER_DEPT: int = int(os.getenv("IRIP_MAX_CONCURRENT_TASKS_PER_DEPT", "3"))
 
 #: Redis key 前缀。
 DEPT_CONCURRENCY_PREFIX: str = "irip:dept:concurrency:"

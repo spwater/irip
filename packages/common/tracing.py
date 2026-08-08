@@ -46,11 +46,13 @@ def init_tracing(service_name: str = "irip-api") -> None:
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-        resource = Resource.create({
-            "service.name": service_name,
-            "service.version": os.getenv("IRIP_VERSION", "dev"),
-            "deployment.environment": os.getenv("IRIP_ENV", "development"),
-        })
+        resource = Resource.create(
+            {
+                "service.name": service_name,
+                "service.version": os.getenv("IRIP_VERSION", "dev"),
+                "deployment.environment": os.getenv("IRIP_ENV", "development"),
+            }
+        )
 
         provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)

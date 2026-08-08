@@ -658,9 +658,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
 
         parts: list[str] = []
         async with self._factory() as session:
-            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
-                session, step_id
-            )
+            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(session, step_id)
             for a in artifacts:
                 if a.artifact_type == "data":
                     try:

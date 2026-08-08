@@ -26,7 +26,6 @@ import type { FactSummary } from '@/api/types';
 import {
   buildFactGroups,
   flattenFactIds,
-  type FactGroups,
 } from '@/features/research/evidenceUtils';
 
 const { Text } = Typography;

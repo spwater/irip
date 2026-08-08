@@ -30,6 +30,8 @@ export default defineConfig({
             '@tanstack/react-query',
             '@tanstack/react-router',
           ],
+          // AntV G6 图可视化库（~500KB+，仅溯源图页面使用，通过 lazy import 按需加载）
+          'g6-vendor': ['@antv/g6'],
         },
       },
     },

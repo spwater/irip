@@ -14,8 +14,8 @@
  *
  * 参照 PRD 4.1 节 UI 设计与 arch-research-lineage.md 2.3 节文件 26/27。
  */
-import { useState, useEffect, useCallback } from 'react';
-import { Space, Typography, Button, Slider, Input, Tag, message } from 'antd';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { Space, Typography, Button, Slider, Input, Tag, Spin, message } from 'antd';
 import {
   DownloadOutlined,
   FileTextOutlined,
@@ -23,11 +23,16 @@ import {
   NodeIndexOutlined,
   LockOutlined,
 } from '@ant-design/icons';
-import { ProvenanceGraphView } from './ProvenanceGraphView';
 import type {
   ProvenanceGraph,
   ProvenanceNode,
 } from '@/api/researchLineage';
+
+// Lazy-load ProvenanceGraphView to split @antv/g6 into a separate chunk,
+// reducing the LabOpsPage bundle size by ~500KB+ (G6 library weight).
+const ProvenanceGraphView = lazy(() =>
+  import('./ProvenanceGraphView').then((m) => ({ default: m.ProvenanceGraphView })),
+);
 
 const { Text } = Typography;
 
@@ -282,13 +287,21 @@ export function ProvenanceTab({
       </div>
 
       {/* 溯源图 */}
-      <ProvenanceGraphView
-        graph={graph}
-        loading={loading}
-        searchKeyword={searchKeyword}
-        onNodeClick={handleNodeClick}
-        height={height}
-      />
+      <Suspense
+        fallback={
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+            <Spin tip="加载溯源图组件..." />
+          </div>
+        }
+      >
+        <ProvenanceGraphView
+          graph={graph}
+          loading={loading}
+          searchKeyword={searchKeyword}
+          onNodeClick={handleNodeClick}
+          height={height}
+        />
+      </Suspense>
     </div>
   );
 }
