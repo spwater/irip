@@ -442,6 +442,8 @@ export function ResearchShowcasePanel({
               {items.map((item) => (
                 <div
                   key={item.product_id}
+                  role="button"
+                  tabIndex={0}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -450,6 +452,12 @@ export function ResearchShowcasePanel({
                     cursor: 'pointer',
                   }}
                   onClick={() => setSelectedProduct({ type: item.product_type, id: item.product_id })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedProduct({ type: item.product_type, id: item.product_id });
+                    }
+                  }}
                 >
                   <Space style={{ flex: 1, minWidth: 0 }}>
                     <Text
@@ -548,7 +556,6 @@ export function ResearchShowcasePanel({
           onChange={(e) => setDatasetName(e.target.value)}
           placeholder="输入数据集名称"
           maxLength={200}
-          autoFocus
         />
       </Modal>
     </div>

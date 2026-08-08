@@ -196,7 +196,7 @@ class PlanGeneratorMixin(PlanServiceBase):
                     if _row:
                         fact_name = _row[0] or ""
             except Exception:
-                pass
+                logger.warning("unexpected error", exc_info=True)
 
             # 获取数据摘要
             get_data = getattr(self._fact_provider, "get_fact_data", None)

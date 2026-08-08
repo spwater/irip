@@ -31,9 +31,7 @@ if config.config_file_name is not None:
 _db_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL") or os.getenv("IRIP_DATABASE_URL")
 if _db_url is not None:
     if _db_url.startswith("postgresql+psycopg://"):
-        _async_url = _db_url.replace(
-            "postgresql+psycopg://", "postgresql+psycopg_async://", 1
-        )
+        _async_url = _db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
         _async_url = _db_url
     config.set_main_option("sqlalchemy.url", _async_url)
@@ -43,11 +41,14 @@ target_metadata = Base.metadata
 # ---- 导入所有 ORM 模型模块，确保 autogenerate 能发现所有表 ----
 # H-02 修复：完整导入所有 packages 下的 entities / ORM 模块，
 # 确保 Base.metadata 包含所有表定义，避免 autogenerate 遗漏。
+import packages.ai.service  # noqa: F401, E402
+import packages.ai.tool_repository  # noqa: F401, E402
+import packages.audit.events  # noqa: F401, E402
 import packages.auth.entities  # noqa: F401, E402
 import packages.auth.scope_grants  # noqa: F401, E402
 import packages.common.artifacts  # noqa: F401, E402
-import packages.components.registry  # noqa: F401, E402
 import packages.components.flow_runtime  # noqa: F401, E402
+import packages.components.registry  # noqa: F401, E402
 import packages.connectors.entities  # noqa: F401, E402
 import packages.departments.entities  # noqa: F401, E402
 import packages.equipment.entities  # noqa: F401, E402
@@ -60,9 +61,6 @@ import packages.provenance.entities  # noqa: F401, E402
 import packages.standards.methods  # noqa: F401, E402
 import packages.standards.object_type_dict  # noqa: F401, E402
 import packages.standards.objects  # noqa: F401, E402
-import packages.audit.events  # noqa: F401, E402
-import packages.ai.service  # noqa: F401, E402
-import packages.ai.tool_repository  # noqa: F401, E402
 
 
 def run_migrations_offline() -> None:

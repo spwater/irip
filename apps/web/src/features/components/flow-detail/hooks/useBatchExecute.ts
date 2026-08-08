@@ -90,7 +90,7 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
         setBatchRunning(false);
         return;
       }
-      let params: Record<string, unknown> = {};
+      const params: Record<string, unknown> = {};
       try {
         const detail = await apiGetComponent(comp.summary.id);
         const parsed = parseManifest(detail.manifest_yaml);

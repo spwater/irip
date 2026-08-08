@@ -115,6 +115,12 @@ export function ParticipantPanel({
         role="button"
         tabIndex={0}
         aria-label="查看对话参与者"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setDrawerOpen(true);
+          }
+        }}
       >
         <Avatar.Group size="small" maxCount={maxAvatars}>
           {shownAvatars.map((p) => (

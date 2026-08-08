@@ -19,13 +19,9 @@ def upgrade() -> None:
     audit_event is an immutable table (has trigger preventing UPDATE/DELETE).
     irip_app should only have SELECT and INSERT, not UPDATE/DELETE.
     """
-    op.execute(
-        "REVOKE UPDATE, DELETE ON TABLE audit_event FROM irip_app"
-    )
+    op.execute("REVOKE UPDATE, DELETE ON TABLE audit_event FROM irip_app")
 
 
 def downgrade() -> None:
     """Restore UPDATE, DELETE on audit_event to irip_app."""
-    op.execute(
-        "GRANT UPDATE, DELETE ON TABLE audit_event TO irip_app"
-    )
+    op.execute("GRANT UPDATE, DELETE ON TABLE audit_event TO irip_app")

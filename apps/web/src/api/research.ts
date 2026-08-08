@@ -553,7 +553,7 @@ export async function apiGetQueueStatus(
 // --- SSE 端点 URL ---
 
 export function getRunSSEUrl(workspaceId: string, runId: string): string {
-  const baseURL = (import.meta as any).env?.VITE_API_BASE_URL ?? '/api/v1';
+  const baseURL = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL ?? '/api/v1';
   return `${baseURL}/research/workspaces/${workspaceId}/runs/${runId}/events`;
 }
 

@@ -35,6 +35,12 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
+      // TypeScript: 忽略 _ 前缀的未使用变量
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+
       // jsx-a11y 可访问性规则
       'jsx-a11y/alt-text': 'error',
       'jsx-a11y/aria-props': 'error',

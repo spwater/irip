@@ -408,7 +408,7 @@ export function getViewImageUrl(
   viewId: string,
   versionNumber: number,
 ): string {
-  const baseURL = (import.meta as any).env?.VITE_API_BASE_URL ?? '/api/v1';
+  const baseURL = (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL ?? '/api/v1';
   return `${baseURL}/research/workspaces/${workspaceId}/views/${viewId}/versions/${versionNumber}/image`;
 }
 

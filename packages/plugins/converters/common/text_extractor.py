@@ -135,7 +135,7 @@ def _extract_pdf_with_ocr(file_path: Path, image_dpi: int = 200) -> str:
             try:
                 os.unlink(tmp)
             except Exception:
-                pass
+                logger.debug("cleanup failed", exc_info=True)
 
     return "\n\n".join(all_text)
 

@@ -229,7 +229,7 @@ class KnowledgeProviderService:
         try:
             asyncio.ensure_future(self._audit_provider_degraded(provider_name, str(error)))
         except Exception:
-            pass
+            logger.warning("unexpected error", exc_info=True)
 
     async def _audit_provider_degraded(self, provider_name: str, error_msg: str) -> None:
         """审计知识库 Provider 降级事件。

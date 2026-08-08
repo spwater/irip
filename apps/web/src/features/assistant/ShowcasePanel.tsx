@@ -217,6 +217,14 @@ export function ShowcasePanel({
           cursor: 'pointer',
         }}
         onClick={onToggleCollapse}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggleCollapse();
+          }
+        }}
+        role="button"
+        tabIndex={0}
         title="展开橱窗"
       >
         <MenuUnfoldOutlined style={{ fontSize: 18, color: 'var(--ocean-text-muted)' }} />

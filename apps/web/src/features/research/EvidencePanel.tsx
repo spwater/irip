@@ -507,6 +507,8 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                           padding: '8px 0', cursor: 'pointer',
                           borderBottom: '1px solid var(--ocean-border-subtle)', userSelect: 'none',
                         }}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => {
                           setExpandedKeys((prev) => {
                             const next = new Set(prev);
@@ -514,6 +516,17 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                             else next.add(projKey);
                             return next;
                           });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            setExpandedKeys((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(projKey)) next.delete(projKey);
+                              else next.add(projKey);
+                              return next;
+                            });
+                          }
                         }}
                       >
                         <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
@@ -543,6 +556,8 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                                     display: 'flex', alignItems: 'center', gap: 8,
                                     padding: '6px 0', cursor: 'pointer', userSelect: 'none',
                                   }}
+                                  role="button"
+                                  tabIndex={0}
                                   onClick={() => {
                                     setExpandedKeys((prev) => {
                                       const next = new Set(prev);
@@ -550,6 +565,17 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                                       else next.add(taskExpandedKey);
                                       return next;
                                     });
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      setExpandedKeys((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(taskExpandedKey)) next.delete(taskExpandedKey);
+                                        else next.add(taskExpandedKey);
+                                        return next;
+                                      });
+                                    }
                                   }}
                                 >
                                   <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
@@ -569,12 +595,20 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                                     {group.facts.map((f) => (
                                       <div
                                         key={f.fact_id}
+                                        role="button"
+                                        tabIndex={0}
                                         style={{
                                           display: 'flex', alignItems: 'center', gap: 8,
                                           padding: '4px 0', cursor: 'pointer', borderRadius: 4,
                                           background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
                                         }}
                                         onClick={() => toggleFact(f.fact_id)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            toggleFact(f.fact_id);
+                                          }
+                                        }}
                                       >
                                         <Checkbox
                                           checked={selectedFactIds.includes(f.fact_id)}

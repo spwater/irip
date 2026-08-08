@@ -33,7 +33,7 @@ export function CreateFlowModal(props: CreateFlowModalProps): JSX.Element {
     setSelectedType,
     objectTypeOptions,
     objectOptions,
-    objMap,
+    objMap: _objMap,
     onNewObject,
   } = props;
 
@@ -57,14 +57,6 @@ export function CreateFlowModal(props: CreateFlowModalProps): JSX.Element {
                 value={selectedType}
                 onChange={(val: string | undefined) => {
                   setSelectedType(val);
-                  const currentObj = createForm.getFieldValue('experimental_object_code');
-                  if (currentObj) {
-                    const obj = objMap.get(currentObj);
-                    if (obj && val && obj.display_name && false) {
-                      // type mismatch check — simplified, handled in parent
-                      createForm.setFieldsValue({ experimental_object_code: undefined });
-                    }
-                  }
                 }}
                 options={objectTypeOptions}
               />

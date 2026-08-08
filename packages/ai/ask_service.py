@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -532,7 +533,7 @@ class AskService:
                     answer=final_response.answer,
                 )
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("unexpected error", exc_info=True)
 
         return final_response
 
@@ -604,7 +605,7 @@ class AskService:
                         answer=question[:60],
                     )
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning("unexpected error", exc_info=True)
             return mention_only_response
 
         try:
@@ -719,7 +720,7 @@ class AskService:
                         answer=question[:60],
                     )
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).warning("unexpected error", exc_info=True)
             yield {
                 "type": "done",
                 "answer": "",

@@ -115,6 +115,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """删除两个数值工具种子数据。"""
-    op.execute(
-        "DELETE FROM ai_tool WHERE name IN ('evaluate_expression', 'describe_series')"
-    )
+    op.execute("DELETE FROM ai_tool WHERE name IN ('evaluate_expression', 'describe_series')")

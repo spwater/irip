@@ -198,7 +198,15 @@ export function BatchExecuteModal(props: BatchExecuteModalProps): JSX.Element {
               }}
             />
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => document.getElementById('batch-file-input')?.click()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  document.getElementById('batch-file-input')?.click();
+                }
+              }}
               style={{
                 border: '2px dashed var(--ocean-border-strong)',
                 borderRadius: 8,

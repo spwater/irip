@@ -206,7 +206,9 @@ def downgrade() -> None:
     op.execute("ALTER TABLE experiment_project DISABLE ROW LEVEL SECURITY")
 
     # 3. 删 flow_definition.project_id FK + 列
-    op.execute("ALTER TABLE flow_definition DROP CONSTRAINT IF EXISTS fk_flow_definition_project_id")
+    op.execute(
+        "ALTER TABLE flow_definition DROP CONSTRAINT IF EXISTS fk_flow_definition_project_id"
+    )
     op.execute("ALTER TABLE flow_definition DROP COLUMN IF EXISTS project_id")
 
     # 4. 删 project_name COMMENT

@@ -104,7 +104,7 @@ export function PlotlyBlock({
 
     const Plotly = plotlyRef.current;
     const el = containerRef.current;
-    let cancelled = false;
+    const cancelled = false;
 
     const data = (parsed.data ?? []) as unknown[];
     const rawLayout = (parsed.layout ?? {}) as Record<string, unknown>;

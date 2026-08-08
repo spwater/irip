@@ -25,7 +25,6 @@ from collections.abc import Sequence
 
 from alembic import op
 
-
 revision: str = "0001"
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
@@ -35,13 +34,98 @@ depends_on: str | Sequence[str] | None = None
 # ---- Table name constants for role/grant management ----
 
 #: All business tables that exist at revision 0061.
-_ALL_TABLES: list[str] = ['ai_config', 'ai_conversation', 'ai_message', 'ai_showcase_item', 'ai_tool', 'app_user', 'app_user_department', 'artifact', 'artifact_blob', 'audit_event', 'backup_record', 'component', 'component_version', 'conversation_participant', 'department', 'derivation_run', 'equipment', 'evidence_set', 'evidence_set_version', 'fact', 'fact_data_index', 'flow_definition', 'flow_definition_version', 'flow_node_execution', 'flow_run', 'industrial_object', 'job', 'model', 'model_version', 'object_type_dict', 'outbox_event', 'parameter', 'parameter_candidate', 'parameter_version', 'provenance_edge', 'refresh_session', 'role', 'secret', 'transformation_recipe', 'transformation_recipe_version']
+_ALL_TABLES: list[str] = [
+    "ai_config",
+    "ai_conversation",
+    "ai_message",
+    "ai_showcase_item",
+    "ai_tool",
+    "app_user",
+    "app_user_department",
+    "artifact",
+    "artifact_blob",
+    "audit_event",
+    "backup_record",
+    "component",
+    "component_version",
+    "conversation_participant",
+    "department",
+    "derivation_run",
+    "equipment",
+    "evidence_set",
+    "evidence_set_version",
+    "fact",
+    "fact_data_index",
+    "flow_definition",
+    "flow_definition_version",
+    "flow_node_execution",
+    "flow_run",
+    "industrial_object",
+    "job",
+    "model",
+    "model_version",
+    "object_type_dict",
+    "outbox_event",
+    "parameter",
+    "parameter_candidate",
+    "parameter_version",
+    "provenance_edge",
+    "refresh_session",
+    "role",
+    "secret",
+    "transformation_recipe",
+    "transformation_recipe_version",
+]
 
 #: Tables where irip_app has CRUD grants (from migration 0005, minus later-dropped tables).
-_IRIP_APP_TABLES: list[str] = ['ai_config', 'ai_conversation', 'ai_message', 'ai_showcase_item', 'ai_tool', 'app_user', 'app_user_department', 'artifact', 'artifact_blob', 'audit_event', 'component', 'component_version', 'conversation_participant', 'department', 'derivation_run', 'equipment', 'evidence_set', 'evidence_set_version', 'fact', 'flow_definition', 'flow_definition_version', 'flow_node_execution', 'flow_run', 'industrial_object', 'job', 'model', 'model_version', 'object_type_dict', 'outbox_event', 'parameter', 'parameter_candidate', 'parameter_version', 'provenance_edge', 'refresh_session', 'role', 'secret', 'transformation_recipe', 'transformation_recipe_version']
+_IRIP_APP_TABLES: list[str] = [
+    "ai_config",
+    "ai_conversation",
+    "ai_message",
+    "ai_showcase_item",
+    "ai_tool",
+    "app_user",
+    "app_user_department",
+    "artifact",
+    "artifact_blob",
+    "audit_event",
+    "component",
+    "component_version",
+    "conversation_participant",
+    "department",
+    "derivation_run",
+    "equipment",
+    "evidence_set",
+    "evidence_set_version",
+    "fact",
+    "flow_definition",
+    "flow_definition_version",
+    "flow_node_execution",
+    "flow_run",
+    "industrial_object",
+    "job",
+    "model",
+    "model_version",
+    "object_type_dict",
+    "outbox_event",
+    "parameter",
+    "parameter_candidate",
+    "parameter_version",
+    "provenance_edge",
+    "refresh_session",
+    "role",
+    "secret",
+    "transformation_recipe",
+    "transformation_recipe_version",
+]
 
 #: Immutable tables -- runtime role gets only SELECT + INSERT.
-_IMMUTABLE_TABLES: list[str] = ['component_version', 'flow_definition_version', 'audit_event', 'evidence_set_version']
+_IMMUTABLE_TABLES: list[str] = [
+    "component_version",
+    "flow_definition_version",
+    "audit_event",
+    "evidence_set_version",
+]
 
 #: Audit event table -- special grant handling.
 _AUDIT_TABLE: str = "audit_event"
@@ -1519,10 +1603,26 @@ def downgrade() -> None:
     """
     # Drop all policies (safe to drop even if not exists)
     _rls_tables = [
-        "ai_conversation", "app_user", "artifact", "audit_event", "backup_record",
-        "component", "department", "derivation_run", "equipment", "evidence_set",
-        "fact", "flow_definition", "flow_run", "industrial_object", "job",
-        "model", "parameter", "provenance_edge", "secret", "transformation_recipe",
+        "ai_conversation",
+        "app_user",
+        "artifact",
+        "audit_event",
+        "backup_record",
+        "component",
+        "department",
+        "derivation_run",
+        "equipment",
+        "evidence_set",
+        "fact",
+        "flow_definition",
+        "flow_run",
+        "industrial_object",
+        "job",
+        "model",
+        "parameter",
+        "provenance_edge",
+        "secret",
+        "transformation_recipe",
     ]
     for _table in _rls_tables:
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {_table}")

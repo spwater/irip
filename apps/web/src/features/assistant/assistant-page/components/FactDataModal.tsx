@@ -98,6 +98,8 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                       borderBottom: '1px solid var(--ocean-border-subtle)',
                       userSelect: 'none',
                     }}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       setExpandedGroups((prev) => {
                         const next = new Set(prev);
@@ -105,6 +107,17 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                         else next.add(projKey);
                         return next;
                       });
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setExpandedGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(projKey)) next.delete(projKey);
+                          else next.add(projKey);
+                          return next;
+                        });
+                      }
                     }}
                   >
                     <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
@@ -139,6 +152,8 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                                 cursor: 'pointer',
                                 userSelect: 'none',
                               }}
+                              role="button"
+                              tabIndex={0}
                               onClick={() => {
                                 setExpandedGroups((prev) => {
                                   const next = new Set(prev);
@@ -146,6 +161,17 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                                   else next.add(taskExpandedKey);
                                   return next;
                                 });
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault();
+                                  setExpandedGroups((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(taskExpandedKey)) next.delete(taskExpandedKey);
+                                    else next.add(taskExpandedKey);
+                                    return next;
+                                  });
+                                }
                               }}
                             >
                               <span style={{ fontSize: 10, color: 'var(--ocean-text-muted)', width: 12, display: 'inline-block' }}>
@@ -166,6 +192,8 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                                 {group.facts.map((f) => (
                                   <div
                                     key={f.fact_id}
+                                    role="button"
+                                    tabIndex={0}
                                     style={{
                                       display: 'flex',
                                       alignItems: 'center',
@@ -176,6 +204,12 @@ export function FactDataModal(props: FactDataModalProps): JSX.Element {
                                       background: selectedFactIds.includes(f.fact_id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent',
                                     }}
                                     onClick={() => onToggleFact(f.fact_id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        onToggleFact(f.fact_id);
+                                      }
+                                    }}
                                   >
                                     <Checkbox
                                       checked={selectedFactIds.includes(f.fact_id)}

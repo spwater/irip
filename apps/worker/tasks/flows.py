@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from typing import Any
 from uuid import UUID
@@ -173,7 +174,7 @@ def execute_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             asyncio.run(_mark_job_failed(job_id, str(exc)))
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
         return {"error": str(exc), "job_id": job_id, "run_id": run_id}
 
 
@@ -240,7 +241,7 @@ def resume_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             asyncio.run(_mark_job_failed(job_id, str(exc)))
         except Exception:
-            pass
+            logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
         return {"error": str(exc), "job_id": job_id, "run_id": run_id}
 
 

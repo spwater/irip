@@ -22,13 +22,9 @@ def upgrade() -> None:
 
     DROP COLUMN IF EXISTS 会连带自动删除该列上的 COMMENT。
     """
-    op.execute(
-        "ALTER TABLE flow_definition DROP COLUMN IF EXISTS project_name"
-    )
+    op.execute("ALTER TABLE flow_definition DROP COLUMN IF EXISTS project_name")
 
 
 def downgrade() -> None:
     """回滚：恢复 flow_definition.project_name 列（nullable TEXT）。"""
-    op.execute(
-        "ALTER TABLE flow_definition ADD COLUMN project_name TEXT"
-    )
+    op.execute("ALTER TABLE flow_definition ADD COLUMN project_name TEXT")

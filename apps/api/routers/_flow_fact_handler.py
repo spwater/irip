@@ -110,7 +110,7 @@ async def persist_run_as_fact_handler(
             _art_id = UUID(source_path[len("artifact:") :])
             source_filename = await flow_fact_svc.resolve_artifact_filename(_art_id) or ""
         except Exception:
-            pass
+            _logger.warning("unexpected error", exc_info=True)
     elif source_path:
         source_filename = Path(source_path).name
 
@@ -177,7 +177,7 @@ async def persist_run_as_fact_handler(
         )
         data_artifact_id = data_ref.artifact_id
     except Exception:
-        pass
+        _logger.warning("unexpected error", exc_info=True)
 
     # 6. 查询任务信息快照
     snapshot = await flow_fact_svc.get_task_snapshot(

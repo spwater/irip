@@ -80,13 +80,9 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rar_workspace_id "
-        "ON research_analysis_run (workspace_id)"
+        "CREATE INDEX IF NOT EXISTS ix_rar_workspace_id ON research_analysis_run (workspace_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rar_status "
-        "ON research_analysis_run (status)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rar_status ON research_analysis_run (status)")
     # 部分唯一索引：每 Workspace 最多 1 个活跃 Run
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_rar_workspace_active "
@@ -125,13 +121,9 @@ def upgrade() -> None:
         )
         """
     )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ras_run_id ON research_analysis_step (run_id)")
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ras_run_id "
-        "ON research_analysis_step (run_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ras_run_status "
-        "ON research_analysis_step (run_id, status)"
+        "CREATE INDEX IF NOT EXISTS ix_ras_run_status ON research_analysis_step (run_id, status)"
     )
 
     # ---- 4. research_run_artifact ----
@@ -151,14 +143,8 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rra_run_id "
-        "ON research_run_artifact (run_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rra_step_id "
-        "ON research_run_artifact (step_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rra_run_id ON research_run_artifact (run_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rra_step_id ON research_run_artifact (step_id)")
 
     # ---- 5. research_ai_conversation ----
     op.execute(
@@ -175,13 +161,9 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rac_workspace_id "
-        "ON research_ai_conversation (workspace_id)"
+        "CREATE INDEX IF NOT EXISTS ix_rac_workspace_id ON research_ai_conversation (workspace_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rac_run_id "
-        "ON research_ai_conversation (run_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rac_run_id ON research_ai_conversation (run_id)")
 
     # ---- 6. research_memory_document ----
     op.execute(

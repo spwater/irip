@@ -215,6 +215,8 @@ export function FactDetail(): JSX.Element {
                 {sourceFile ? (
                   <a
                     style={{ cursor: 'pointer' }}
+                    role="button"
+                    tabIndex={0}
                     onClick={async (e) => {
                       e.preventDefault();
                       try {
@@ -222,6 +224,12 @@ export function FactDetail(): JSX.Element {
                         window.open(url, '_blank');
                       } catch {
                         message.error('下载失败');
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        (e.target as HTMLElement).click();
                       }
                     }}
                   >

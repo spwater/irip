@@ -14,6 +14,7 @@ _execute_step（按 python/llm/mixed/knowledge 分发）、_execute_python_step
 - 每步发布 SSE 事件到 Redis pub/sub。
 """
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -418,7 +419,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 try:
                     await self._sandbox.destroy_container(container_id)
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
 
     async def _execute_llm_step(
         self,
@@ -671,7 +672,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                                     step_output = content.content.decode("utf-8", errors="replace")
                                     break
                             except Exception:
-                                pass
+                                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
         elif method == "mixed":
             # 混合步骤：LLM 部分的输出
             step_output = step_def.get("question", "")

@@ -11,8 +11,8 @@ EnvelopeCrypto (AES-256-GCM). Values already encrypted (starting with
 Prerequisite: IRIP_MASTER_KEY environment variable must be set.
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0082"
 down_revision = "0081"
@@ -22,8 +22,8 @@ depends_on = None
 
 def upgrade() -> None:
     """Encrypt existing plaintext secret values."""
-    import os
     import base64
+    import os
 
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -74,7 +74,9 @@ def upgrade() -> None:
         )
         updated += 1
 
-    print(f"0082: Encrypted {updated} secret values (skipped {len(rows) - updated} already encrypted)")
+    print(
+        f"0082: Encrypted {updated} secret values (skipped {len(rows) - updated} already encrypted)"
+    )
 
 
 def downgrade() -> None:

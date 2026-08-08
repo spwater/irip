@@ -465,7 +465,15 @@ export function ResultDetailView({
         </Tag>
         <Tag color="blue">v{resultRef.current_version}</Tag>
         <span
+          role="button"
+          tabIndex={0}
           onClick={onFavoriteToggle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onFavoriteToggle();
+            }
+          }}
           style={{ cursor: 'pointer', fontSize: 16, color: isFavorited ? '#faad14' : '#bfbfbf' }}
         >
           {isFavorited ? <StarFilled /> : <StarOutlined />}

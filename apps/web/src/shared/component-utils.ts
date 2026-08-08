@@ -154,7 +154,7 @@ export function parseYamlToFormValues(yaml: string): Partial<ComponentFormValues
   // prompt 的 default 值（支持双引号格式和块标量 | 格式）
   const promptBlockMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*\|\s*\n((?:\s{8,}.*\n?)*)/m);
   if (promptBlockMatch) {
-    result.prompt = promptBlockMatch[1].replace(/^        /gm, '').replace(/\n$/, '');
+    result.prompt = promptBlockMatch[1].replace(/^[ ]{8}/gm, '').replace(/\n$/, '');
   } else {
     const promptMatch = yaml.match(/prompt:\s*\n\s*type:\s*string\s*\n\s*description:.*?\n\s*default:\s*["']?(.*?)["']?\s*$/m);
     if (promptMatch) result.prompt = promptMatch[1];

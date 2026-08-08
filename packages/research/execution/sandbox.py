@@ -503,7 +503,7 @@ class DockerSandboxRuntime:
         try:
             await container.kill()
         except Exception:
-            pass
+            logger.debug("cleanup failed", exc_info=True)
         try:
             await container.delete(force=True)
         except Exception as exc:

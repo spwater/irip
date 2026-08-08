@@ -82,7 +82,15 @@ export function ResultCard({
           </Tag>
           {onFavoriteToggle && (
             <span
+              role="button"
+              tabIndex={0}
               onClick={onFavoriteToggle}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onFavoriteToggle();
+                }
+              }}
               style={{ cursor: 'pointer', fontSize: 14, color: isFavorited ? '#faad14' : '#bfbfbf' }}
             >
               {isFavorited ? <StarFilled /> : <StarOutlined />}

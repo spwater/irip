@@ -56,10 +56,7 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_rkr_workspace_id "
         "ON research_knowledge_reference (workspace_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rkr_run_id "
-        "ON research_knowledge_reference (run_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rkr_run_id ON research_knowledge_reference (run_id)")
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_rkr_insight_id "
         "ON research_knowledge_reference (insight_id) "

@@ -88,7 +88,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     if _row:
                         fact_name = _row[0] or ""
                 except Exception:
-                    pass
+                    logger.warning("unexpected error", exc_info=True)
                 get_data = getattr(self._fact_provider, "get_fact_data", None)
                 if get_data is not None:
                     fact_data = await get_data(source_id)
@@ -429,7 +429,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             elif isinstance(t, str):
                                 title = t
                         except Exception:
-                            pass
+                            logger.warning("unexpected error", exc_info=True)
 
                         content_bytes = block.encode("utf-8")
                         content_hash = hashlib.sha256(content_bytes).hexdigest()
@@ -707,7 +707,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                         elif isinstance(t, str):
                                             title = t
                                     except Exception:
-                                        pass
+                                        logger.warning("unexpected error", exc_info=True)
 
                                     content_bytes = block.encode("utf-8")
                                     content_hash = hashlib.sha256(content_bytes).hexdigest()

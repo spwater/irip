@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -112,7 +113,7 @@ class MessagePersistence:
                     actual_display_name = sender.display_name
                     actual_avatar_url = sender.avatar_url
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("unexpected error", exc_info=True)
 
             user_msg = AIMessage(
                 id=new_id(),
@@ -173,7 +174,7 @@ class MessagePersistence:
                     actual_display_name = sender.display_name
                     actual_avatar_url = sender.avatar_url
             except Exception:
-                pass
+                logging.getLogger(__name__).warning("unexpected error", exc_info=True)
 
             # 用户消息（irip-ai-collab: 填充 mentions + sender 字段）
             user_msg = AIMessage(

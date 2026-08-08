@@ -13,6 +13,7 @@
   - ``/api/v1/metrics`` 端点通过 ``generate_metrics()`` 暴露 Prometheus 格式文本。
 """
 
+import logging
 import time
 from typing import Any
 
@@ -214,7 +215,7 @@ async def metrics_middleware(request: Any, call_next: Any) -> Any:
         if route is not None and hasattr(route, "path"):
             path = route.path
     except Exception:
-        pass
+        logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
 
     record_api_request(
         method=request.method,

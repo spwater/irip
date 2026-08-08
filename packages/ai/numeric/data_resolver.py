@@ -12,6 +12,7 @@ NumericDataResolver：校验并解析 scalar、inline、fact_series、artifact_s
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 from collections.abc import Callable
 from typing import Any
@@ -508,5 +509,5 @@ class NumericDataResolver:
                 if art_record is not None:
                     return art_record.id, art_record.sha256  # type: ignore[attr-defined]
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("unexpected error", exc_info=True)
         return None, None

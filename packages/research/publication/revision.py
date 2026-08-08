@@ -6,6 +6,7 @@
 - 成果包详情 / 版本详情 / 版本历史 / ACL 变更记录查询
 """
 
+import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -427,7 +428,7 @@ class _RevisionMixin(_PublicationBase):
             if row and row[0]:
                 publisher_display = row[0]
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("unexpected error", exc_info=True)
 
         return ResultVersionDetail(
             result_id=version.result_id,

@@ -49,18 +49,9 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rr_workspace_id "
-        "ON research_result (workspace_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rr_owner_user_id "
-        "ON research_result (owner_user_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rr_status "
-        "ON research_result (status)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rr_workspace_id ON research_result (workspace_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rr_owner_user_id ON research_result (owner_user_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rr_status ON research_result (status)")
 
     # ---- 2. research_result_version ----
     op.execute(
@@ -88,18 +79,12 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rrv_result_id "
-        "ON research_result_version (result_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rrv_result_id ON research_result_version (result_id)")
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrv_result_version "
         "ON research_result_version (result_id, version_number)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rrv_status "
-        "ON research_result_version (status)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rrv_status ON research_result_version (status)")
     # 全文搜索 tsvector + GIN 索引（仅 title + summary；tags 在应用层用 ILIKE 搜索）
     op.execute(
         """
@@ -133,8 +118,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rrar_result_id "
-        "ON research_result_acl_revision (result_id)"
+        "CREATE INDEX IF NOT EXISTS ix_rrar_result_id ON research_result_acl_revision (result_id)"
     )
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrar_result_revision "
@@ -165,10 +149,7 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_rle_target "
         "ON research_lineage_edge (target_namespace, target_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rle_edge_type "
-        "ON research_lineage_edge (edge_type)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rle_edge_type ON research_lineage_edge (edge_type)")
 
     # ---- 5. research_result_favorite ----
     op.execute(
@@ -185,10 +166,7 @@ def upgrade() -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_rrf_result_user "
         "ON research_result_favorite (result_id, user_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rrf_user_id "
-        "ON research_result_favorite (user_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rrf_user_id ON research_result_favorite (user_id)")
 
 
 def downgrade() -> None:

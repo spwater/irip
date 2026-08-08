@@ -394,7 +394,7 @@ class CandidateService(ScopedSessionMixin):
                                 preview_data["series"] = result.data.series
                                 preview_data["field_manifest"] = result.field_manifest
                     except Exception:
-                        pass
+                        logger.warning("unexpected error", exc_info=True)
 
                 return CandidateDetail(
                     candidate_type=candidate_type,

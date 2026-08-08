@@ -45,8 +45,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     """恢复单一 thinking_enabled 列。"""
     op.execute(
-        "ALTER TABLE ai_config "
-        "ADD COLUMN IF NOT EXISTS thinking_enabled boolean DEFAULT false"
+        "ALTER TABLE ai_config ADD COLUMN IF NOT EXISTS thinking_enabled boolean DEFAULT false"
     )
     op.execute(
         "UPDATE ai_config SET thinking_enabled = true "
@@ -54,15 +53,6 @@ def downgrade() -> None:
         "assistant_thinking_enabled = true OR "
         "research_thinking_enabled = true"
     )
-    op.execute(
-        "ALTER TABLE ai_config "
-        "DROP COLUMN IF EXISTS model_thinking_enabled"
-    )
-    op.execute(
-        "ALTER TABLE ai_config "
-        "DROP COLUMN IF EXISTS assistant_thinking_enabled"
-    )
-    op.execute(
-        "ALTER TABLE ai_config "
-        "DROP COLUMN IF EXISTS research_thinking_enabled"
-    )
+    op.execute("ALTER TABLE ai_config DROP COLUMN IF EXISTS model_thinking_enabled")
+    op.execute("ALTER TABLE ai_config DROP COLUMN IF EXISTS assistant_thinking_enabled")
+    op.execute("ALTER TABLE ai_config DROP COLUMN IF EXISTS research_thinking_enabled")

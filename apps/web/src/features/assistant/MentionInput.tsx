@@ -193,7 +193,15 @@ export function MentionInput({
         filteredUsers.map((user) => (
           <div
             key={user.id}
+            role="button"
+            tabIndex={0}
             onClick={() => handleSelectUser(user)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleSelectUser(user);
+              }
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',

@@ -21,6 +21,7 @@ H-09 改动：
 """
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 from typing import Any
@@ -125,7 +126,7 @@ def _register_handlers(executor: JobExecutor) -> None:
             try:
                 await _mark_job_failed(job_id, str(exc))
             except Exception:
-                pass
+                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
             raise
 
     async def _flow_resume_adapter(job: Any) -> None:
@@ -143,7 +144,7 @@ def _register_handlers(executor: JobExecutor) -> None:
             try:
                 await _mark_job_failed(job_id, str(exc))
             except Exception:
-                pass
+                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
             raise
 
     def _adapt(handler: Any) -> Any:
@@ -235,7 +236,7 @@ async def _backup_handler(job: object) -> dict[str, Any]:
             try:
                 await service.mark_failed(UUID(backup_record_id_str), str(exc))
             except Exception:
-                pass
+                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
         raise
 
     # 备份成功：更新 backup_record 状态与元数据
@@ -268,8 +269,6 @@ async def _backup_handler(job: object) -> dict[str, Any]:
             )
         except Exception as exc:
             # 记录更新失败不影响作业成功状态，但记录日志
-            import logging
-
             logging.getLogger(__name__).warning(
                 "Failed to update backup_record %s: %s", backup_record_id_str, exc
             )
@@ -402,10 +401,8 @@ async def _restore_handler(job: object) -> dict[str, Any]:
             try:
                 await service.mark_failed(pre_restore_id, str(exc))
             except Exception:
-                pass
+                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
             # 不中断恢复流程——pre_restore 是安全网，失败不应阻止用户恢复
-            import logging
-
             logging.getLogger(__name__).warning(
                 "pre_restore backup failed (continuing with restore): %s", exc
             )
@@ -442,8 +439,6 @@ async def _restore_handler(job: object) -> dict[str, Any]:
 
         await service.mark_restored(UUID(backup_id), restored_target_time)
     except Exception as exc:
-        import logging
-
         logging.getLogger(__name__).warning(
             "Failed to mark restored for backup_record %s: %s", backup_id, exc
         )

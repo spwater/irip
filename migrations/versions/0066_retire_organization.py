@@ -56,9 +56,7 @@ def upgrade() -> None:
     # === 1. 清理 department 表上可能残留的 organization_id 索引/约束 ===
     # 旧唯一约束 uq_department_org_code（已在 0062 中被替换为 uq_department_parent_code，
     # 但安全起见再次尝试删除）
-    op.execute(
-        "ALTER TABLE department DROP CONSTRAINT IF EXISTS uq_department_org_code"
-    )
+    op.execute("ALTER TABLE department DROP CONSTRAINT IF EXISTS uq_department_org_code")
     # department 表上可能的 organization_id 索引
     op.execute("DROP INDEX IF EXISTS ix_department_organization_id")
 
@@ -66,9 +64,7 @@ def upgrade() -> None:
     # 先删除可能依赖 organization_id 的外键约束，再删除列
     for table in _ALL_TABLES:
         # 安全删除：IF EXISTS 确保不存在的列不会报错
-        op.execute(
-            f"ALTER TABLE {table} DROP COLUMN IF EXISTS organization_id CASCADE"
-        )
+        op.execute(f"ALTER TABLE {table} DROP COLUMN IF EXISTS organization_id CASCADE")
 
     # === 3. 删除 organization 表（如果存在） ===
     op.execute("DROP TABLE IF EXISTS organization")

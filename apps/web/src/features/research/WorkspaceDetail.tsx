@@ -90,8 +90,9 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       await apiArchiveWorkspace(workspaceId);
       message.success('已归档');
       onBack();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || '归档失败';
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = axiosErr?.response?.data?.error?.message || '归档失败';
       message.error(msg);
     }
   };
@@ -101,8 +102,9 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       await apiDeleteWorkspace(workspaceId);
       message.success('已删除');
       onBack();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || '删除失败（可能存在发布成果引用，请先归档）';
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = axiosErr?.response?.data?.error?.message || '删除失败（可能存在发布成果引用，请先归档）';
       message.error(msg);
     }
   };

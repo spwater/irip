@@ -67,12 +67,8 @@ def upgrade() -> None:
     # 密码与 irip 相同（开发环境），生产环境应使用独立密码。
     op.execute("ALTER ROLE irip_app LOGIN PASSWORD 'irip_dev_password'")
     op.execute("GRANT USAGE ON SCHEMA public TO irip_app")
-    op.execute(
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO irip_app"
-    )
-    op.execute(
-        "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO irip_app"
-    )
+    op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO irip_app")
+    op.execute("GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO irip_app")
     # 未来由 irip 创建的表自动授予 irip_app DML 权限
     op.execute(
         "ALTER DEFAULT PRIVILEGES FOR ROLE irip IN SCHEMA public "

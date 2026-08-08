@@ -5,6 +5,7 @@
 解析逻辑委托给插件。
 """
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -156,6 +157,6 @@ def _guess_suffix(data: bytes) -> str:
                 if any(n.startswith("xl/") for n in names):
                     return ".xlsx"
         except Exception:
-            pass
+            logging.getLogger(__name__).warning("unexpected error", exc_info=True)
         return ".xlsx"
     return ""

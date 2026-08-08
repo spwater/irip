@@ -53,17 +53,13 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rdd_workspace_id "
-        "ON research_derived_dataset (workspace_id)"
+        "CREATE INDEX IF NOT EXISTS ix_rdd_workspace_id ON research_derived_dataset (workspace_id)"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_rdd_owner_user_id "
         "ON research_derived_dataset (owner_user_id)"
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rdd_status "
-        "ON research_derived_dataset (status)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rdd_status ON research_derived_dataset (status)")
 
     # ---- 2. research_derived_dataset_version ----
     op.execute(
@@ -113,14 +109,8 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rv_workspace_id "
-        "ON research_view (workspace_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rv_owner_user_id "
-        "ON research_view (owner_user_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rv_workspace_id ON research_view (workspace_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rv_owner_user_id ON research_view (owner_user_id)")
 
     # ---- 4. research_view_version ----
     op.execute(
@@ -146,10 +136,7 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_rvv_view_id "
-        "ON research_view_version (view_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_rvv_view_id ON research_view_version (view_id)")
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_rvv_view_version "
         "ON research_view_version (view_id, version_number)"
@@ -172,14 +159,8 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ri_workspace_id "
-        "ON research_insight (workspace_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ri_owner_user_id "
-        "ON research_insight (owner_user_id)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ri_workspace_id ON research_insight (workspace_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ri_owner_user_id ON research_insight (owner_user_id)")
 
     # ---- 6. research_insight_version ----
     op.execute(
@@ -206,8 +187,7 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_riv_insight_id "
-        "ON research_insight_version (insight_id)"
+        "CREATE INDEX IF NOT EXISTS ix_riv_insight_id ON research_insight_version (insight_id)"
     )
     op.execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_riv_insight_version "
@@ -239,14 +219,8 @@ def upgrade() -> None:
         )
         """
     )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ric_run_id "
-        "ON research_insight_candidate (run_id)"
-    )
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_ric_status "
-        "ON research_insight_candidate (status)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ric_run_id ON research_insight_candidate (run_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_ric_status ON research_insight_candidate (status)")
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_ric_workspace_id "
         "ON research_insight_candidate (workspace_id)"

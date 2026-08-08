@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -479,7 +480,7 @@ class ToolExecutor:
                                 }
                             )
                     except Exception:
-                        pass
+                        logging.getLogger(__name__).warning("unexpected error", exc_info=True)
 
         return {
             "summary": f"报告草稿已生成，引用 {len(fact_summaries)} 个事实",

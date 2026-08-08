@@ -109,6 +109,7 @@ export function ViewPreview({ workspaceId, viewId }: ViewPreviewProps): JSX.Elem
       {/* 图片 */}
       <Card size="small" title="图表" style={{ marginBottom: 12 }}>
         <div style={{ textAlign: 'center' }}>
+          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions */}
           <img
             src={imageUrl}
             alt={detail.name}

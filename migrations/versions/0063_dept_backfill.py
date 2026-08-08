@@ -25,7 +25,6 @@ Revises: 0062
 Create Date: 2026-08-21
 """
 
-import sqlalchemy as sa
 from alembic import op
 
 revision = "0063"
@@ -330,19 +329,34 @@ def downgrade() -> None:
     """回滚回填：将 department_id 及 A 类列置回 NULL。"""
     # A 类表
     for table in [
-        "fact", "parameter", "evidence_set", "artifact", "model",
-        "transformation_recipe", "component", "flow_definition",
-        "industrial_object", "equipment",
+        "fact",
+        "parameter",
+        "evidence_set",
+        "artifact",
+        "model",
+        "transformation_recipe",
+        "component",
+        "flow_definition",
+        "industrial_object",
+        "equipment",
     ]:
         op.execute(f"UPDATE {table} SET department_id = NULL")
         if table not in ("industrial_object", "equipment"):
-            op.execute(f"UPDATE {table} SET visible_departments = NULL, visibility_scope = NULL, owner_user_id = NULL")
+            op.execute(
+                f"UPDATE {table} SET visible_departments = NULL, visibility_scope = NULL, owner_user_id = NULL"
+            )
         else:
             op.execute(f"UPDATE {table} SET visibility_scope = NULL, owner_user_id = NULL")
 
     # B 类表
     for table in [
-        "job", "flow_run", "derivation_run", "audit_event",
-        "secret", "backup_record", "app_user", "scope_grant",
+        "job",
+        "flow_run",
+        "derivation_run",
+        "audit_event",
+        "secret",
+        "backup_record",
+        "app_user",
+        "scope_grant",
     ]:
         op.execute(f"UPDATE {table} SET department_id = NULL")

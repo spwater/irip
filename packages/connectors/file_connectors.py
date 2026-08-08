@@ -19,6 +19,7 @@ import asyncio
 import csv
 import io
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 from typing import IO, Any
@@ -398,4 +399,4 @@ def close_stream(stream: IO[bytes]) -> None:
     try:
         stream.close()
     except Exception:
-        pass
+        logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
