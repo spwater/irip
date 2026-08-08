@@ -43,6 +43,8 @@ describe('LoginPage', () => {
     const loginButton = await screen.findByRole('button', { name: /登\s*录/ });
     await userEvent.click(loginButton);
 
-    expect(await screen.findByRole('heading', { name: '实验室运营' })).toBeVisible();
+    // 等待 LabOpsPage 懒加载 + usePageHeaderRegistration useEffect 渲染标题
+    // 超时 5s 容忍 CI runner 性能波动（默认 1s 在慢机器上不够）
+    expect(await screen.findByRole('heading', { name: '实验室运营' }, { timeout: 5000 })).toBeVisible();
   });
 });
