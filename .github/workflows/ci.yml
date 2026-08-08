@@ -16,6 +16,7 @@ on:
 env:
   IRIP_JWT_SECRET: ci-test-secret-2026
   IRIP_BOOTSTRAP_ADMIN_PASSWORD: Admin-IRIP-2026
+  IRIP_ENV: test
 
 # F-18: 所有 Actions pin 到 commit SHA（非 tag），防止 supply-chain 攻击
 # actions/checkout@v4 -> 11d5960a326750d5838078e36cf38b85af677262

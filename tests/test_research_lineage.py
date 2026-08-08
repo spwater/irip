@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
-
 from packages.research.knowledge_reference import (
     SNIPPET_INLINE_THRESHOLD,
     SNIPPET_MAX_SIZE,
@@ -24,14 +23,15 @@ from packages.research.knowledge_reference import (
 )
 from packages.research.labels import NodeDisplayLabelGenerator
 from packages.research.lineage_writer import LineageWriterService
+from packages.research.provenance import (
+    DEFAULT_MAX_DEPTH,
+    UnifiedProvenanceQueryService,
+)
+
 from packages.research.models import (
     ProvenanceEdge,
     ProvenanceNode,
     ProvenanceQueryOptions,
-)
-from packages.research.provenance import (
-    DEFAULT_MAX_DEPTH,
-    UnifiedProvenanceQueryService,
 )
 
 # ============================================================

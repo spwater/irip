@@ -15,15 +15,15 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
-
 from packages.research.envelope import PermissionEnvelopeCalculator
+from packages.research.search import ResultSearchService
+
 from packages.research.models import (
     PermissionEnvelope,
     ProductRefCollection,
     PublishRequest,
 )
 from packages.research.publication import PublicationService
-from packages.research.search import ResultSearchService
 
 # ============================================================
 # Helpers

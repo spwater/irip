@@ -18,9 +18,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from packages.research.models_trusted import TaskType
 
 from packages.common.errors import AppError
-from packages.research.models_trusted import TaskType
 
 if TYPE_CHECKING:
     from packages.research.plan_service import PlanService
