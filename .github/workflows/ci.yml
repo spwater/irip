@@ -115,8 +115,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       # F-17: unit job 不跑需要 DB 的 integration 测试
-      # B-2: 纳入根级测试文件（tests/test_*.py），覆盖 371 个游离测试函数
-      - run: python -m pytest tests/unit tests/test_*.py -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=30
+      - run: python -m pytest tests/unit -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=30
 
   # F-17: Contract tests -- 独立 job
   test-contract:

@@ -33,6 +33,8 @@ def test_module_syntax_is_valid_python312():
     filepath = os.path.join(
         os.path.dirname(__file__),
         "..",
+        "..",
+        "..",
         "packages/standards/objects/object_graph.py",
     )
     with open(filepath) as f:
@@ -229,7 +231,7 @@ def test_no_other_file_passes_parent_id_to_industrial_object():
     Scans all .py files that contain 'IndustrialObject(' for the forbidden parent_id=.
     """
     this_file = os.path.abspath(__file__)
-    project_root = os.path.join(os.path.dirname(__file__), "..")
+    project_root = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 
     import subprocess
 

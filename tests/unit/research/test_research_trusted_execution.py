@@ -95,7 +95,7 @@ class TestMigration0075:
         import pathlib
 
         path = (
-            pathlib.Path(__file__).parent.parent
+            pathlib.Path(__file__).parent.parent.parent.parent
             / "migrations"
             / "versions"
             / "0075_research_trusted_execution.py"
@@ -109,7 +109,7 @@ class TestMigration0075:
         import pathlib
 
         path = (
-            pathlib.Path(__file__).parent.parent
+            pathlib.Path(__file__).parent.parent.parent.parent
             / "migrations"
             / "versions"
             / "0075_research_trusted_execution.py"
@@ -131,7 +131,7 @@ class TestMigration0075:
         import pathlib
 
         path = (
-            pathlib.Path(__file__).parent.parent
+            pathlib.Path(__file__).parent.parent.parent.parent
             / "migrations"
             / "versions"
             / "0075_research_trusted_execution.py"
@@ -697,7 +697,7 @@ class TestAPIRoutes:
         """main.py 条件注册 research_run_router。"""
         import pathlib
 
-        main_path = pathlib.Path(__file__).parent.parent / "apps" / "api" / "main.py"
+        main_path = pathlib.Path(__file__).parent.parent.parent.parent / "apps" / "api" / "main.py"
         text = main_path.read_text()
         assert "research_run_router" in text
 
@@ -706,7 +706,11 @@ class TestAPIRoutes:
         import pathlib
 
         comp_path = (
-            pathlib.Path(__file__).parent.parent / "apps" / "api" / "composition" / "__init__.py"
+            pathlib.Path(__file__).parent.parent.parent.parent
+            / "apps"
+            / "api"
+            / "composition"
+            / "__init__.py"
         )
         text = comp_path.read_text()
         assert "register_research_run" in text

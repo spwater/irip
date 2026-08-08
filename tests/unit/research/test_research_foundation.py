@@ -1370,7 +1370,7 @@ class TestResearchCatalog:
 class TestMigration0074:
     """验证 0074_research_foundation.py 迁移结构。"""
 
-    MIGRATIONS_DIR = Path(__file__).parents[1] / "migrations" / "versions"
+    MIGRATIONS_DIR = Path(__file__).parents[3] / "migrations" / "versions"
 
     def _load_migration_module(self):
         """动态加载 0074 迁移文件。"""

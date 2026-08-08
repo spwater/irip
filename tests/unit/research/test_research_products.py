@@ -591,7 +591,7 @@ class TestInsightExtractor:
 class TestMigration0076:
     """验证 0076_research_products.py 迁移结构。"""
 
-    MIGRATIONS_DIR = Path(__file__).parents[1] / "migrations" / "versions"
+    MIGRATIONS_DIR = Path(__file__).parents[3] / "migrations" / "versions"
 
     def _load_migration_module(self):
         """动态加载 0076 迁移文件。"""
@@ -1168,7 +1168,7 @@ class TestProductComposition:
 class TestFrontendAPI:
     """验证 researchProducts.ts API 函数和类型定义。"""
 
-    API_FILE = Path(__file__).parents[1] / "apps" / "web" / "src" / "api" / "researchProducts.ts"
+    API_FILE = Path(__file__).parents[3] / "apps" / "web" / "src" / "api" / "researchProducts.ts"
 
     def test_api_file_exists(self):
         """researchProducts.ts 文件存在。"""
@@ -1260,7 +1260,7 @@ class TestFrontendAPI:
 class TestFrontendComponents:
     """验证前端组件文件存在且结构正确。"""
 
-    COMPONENTS_DIR = Path(__file__).parents[1] / "apps" / "web" / "src" / "features" / "research"
+    COMPONENTS_DIR = Path(__file__).parents[3] / "apps" / "web" / "src" / "features" / "research"
 
     EXPECTED_COMPONENTS = [
         "CandidatePreviewPanel.tsx",
