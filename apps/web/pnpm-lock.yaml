@@ -44,7 +44,7 @@ importers:
       katex:
         specifier: ^0.18.1
         version: 0.18.1
-      plotly.js-basic-dist-min:
+      plotly.js-dist-min:
         specifier: ^3.7.0
         version: 3.7.0
       react:
@@ -96,9 +96,6 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.5.2
         version: 14.6.3(@testing-library/dom@10.4.1)
-      '@types/plotly.js-basic-dist-min':
-        specifier: ^2.12.4
-        version: 2.12.4
       '@types/react':
         specifier: ^18.3.12
         version: 18.3.31
@@ -1067,12 +1064,6 @@ packages:
 
   '@types/node@26.1.1':
     resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
-
-  '@types/plotly.js-basic-dist-min@2.12.4':
-    resolution: {integrity: sha512-BtvgBR52ZQ9N346gq8eAom9vwh1HAcGTxIUDrQXRMEP75XrSaOF/bXm8PtrZ9WGNUIxo9NxZ6+juKWamJKkYyQ==}
-
-  '@types/plotly.js@3.0.13':
-    resolution: {integrity: sha512-mWI1NZRDHDoiFiPEvUjR0P12fv21kmT8XSLrEjfNwIDahELaXXkSz38n6o+5SYsq0YEGxkK3ANqqM0cRl8uZdg==}
 
   '@types/prop-types@15.7.15':
     resolution: {integrity: sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==}
@@ -2556,8 +2547,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  plotly.js-basic-dist-min@3.7.0:
-    resolution: {integrity: sha512-84KPQhLTrO5IHu6DCte2KwA4bzSoVIdIs3uDPWid3sgeTX8L5RjpDARjCG3spgOwQ8MYE8PL+MeQ0DQRWA1Emw==}
+  plotly.js-dist-min@3.7.0:
+    resolution: {integrity: sha512-IRWNnBJZmKss3URDnicBK2nvt/VTSi/MD1GnUscAYFjwSuN6g/CTde5R1UC0RYtblehj8rkT4BL8r05e/c8j5Q==}
 
   possible-typed-array-names@1.1.0:
     resolution: {integrity: sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg==}
@@ -4463,12 +4454,6 @@ snapshots:
   '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
-
-  '@types/plotly.js-basic-dist-min@2.12.4':
-    dependencies:
-      '@types/plotly.js': 3.0.13
-
-  '@types/plotly.js@3.0.13': {}
 
   '@types/prop-types@15.7.15': {}
 
@@ -6458,7 +6443,7 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.2
 
-  plotly.js-basic-dist-min@3.7.0: {}
+  plotly.js-dist-min@3.7.0: {}
 
   possible-typed-array-names@1.1.0: {}
 
