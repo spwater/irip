@@ -33,8 +33,8 @@ export default defineConfig({
         },
       },
     },
-    // chunk 体积警告阈值：plotly.js-dist-min 固有体积 ~4.6MB，已通过 dynamic import 独立 chunk
-    chunkSizeWarningLimit: 5000,
+    // chunk 体积警告阈值：LabOpsPage ~1.6MB 含 echarts 动态加载
+    chunkSizeWarningLimit: 2000,
   },
   server: {
     port: 5173,

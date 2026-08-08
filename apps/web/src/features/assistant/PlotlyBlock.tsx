@@ -1,9 +1,12 @@
 /**
  * Plotly 图表渲染组件。
  *
- * 直接使用 plotly.js-dist-min 的 Plotly.newPlot() API 渲染，
+ * 直接使用 plotly.js-basic-dist-min 的 Plotly.newPlot() API 渲染，
  * 不用 react-plotly.js（其 Babel CommonJS 包装与 Vite ESM React 冲突，
  * 导致 "Cannot call a class as a function"）。
+ *
+ * 使用 basic 版本（scatter/bar/pie/heatmap 等基础图表 ~1MB）替代完整版（~4.8MB），
+ * 减少按需加载体积 77%。工业研究场景不需要 3D surface / geo maps / 金融图表等高级模块。
  *
  * 动态 import 按需加载，避免影响初始包体积。
  * 复用于：消息区全尺寸图表（height 400）+ 橱窗缩略图（height 120）。
@@ -24,12 +27,12 @@ type PlotlyModule = {
 let plotlyPromise: Promise<PlotlyModule> | null = null;
 
 /**
- * 动态加载 plotly.js-dist-min。
+ * 动态加载 plotly.js-basic-dist-min。
  * 使用模块级缓存确保只加载一次。
  */
 async function loadPlotly(): Promise<PlotlyModule> {
   if (plotlyPromise) return plotlyPromise;
-  plotlyPromise = import('plotly.js-dist-min').then((m) => m as unknown as PlotlyModule);
+  plotlyPromise = import('plotly.js-basic-dist-min').then((m) => m as unknown as PlotlyModule);
   return plotlyPromise;
 }
 
