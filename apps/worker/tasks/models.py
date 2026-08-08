@@ -214,7 +214,7 @@ async def _publish_model_async(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@celery_app.task(name="irip.model.train")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.model.train")
 def train_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：训练模型（创建 + 提交验证）。
 
@@ -235,7 +235,7 @@ def train_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@celery_app.task(name="irip.model.predict")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.model.predict")
 def predict_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行模型预测。
 
@@ -256,7 +256,7 @@ def predict_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@celery_app.task(name="irip.model.publish")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.model.publish")
 def publish_model_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：发布模型版本。
 

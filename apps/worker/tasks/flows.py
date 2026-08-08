@@ -146,7 +146,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
         }
 
 
-@celery_app.task(name="irip.flow.execute")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.flow.execute")
 def execute_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：执行流程。
 
@@ -219,7 +219,7 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
         )
 
 
-@celery_app.task(name="irip.flow.resume")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.flow.resume")
 def resume_flow_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：恢复流程执行。
 

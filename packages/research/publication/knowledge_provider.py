@@ -132,7 +132,7 @@ class KnowledgeProviderService:
         timeout = opts.timeout if opts.timeout > 0 else DEFAULT_PROVIDER_TIMEOUT
 
         # 并行检索
-        tasks: list[tuple[str, asyncio.Task]] = []  # type: ignore[type-arg]
+        tasks: list[tuple[str, asyncio.Task[Any]]] = []
         for name, provider in active_providers.items():
             task = asyncio.create_task(
                 asyncio.wait_for(

@@ -313,7 +313,7 @@ class EvidenceSnapshotService(ScopedSessionMixin):
         get_data = getattr(self._fact_provider, "get_fact_data", None)
         if get_data is not None:
             data = await get_data(fact_id)
-            return data  # type: ignore[no-any-return]
+            return data
         # 如果 fact_provider 不提供 get_fact_data，返回空字典（哈希仅基于字段名）
         return {}
 

@@ -34,7 +34,7 @@ class QueryScope:
     department_id: UUID
     object_root_id: UUID | None = None
 
-    def apply(self, query: sa.Select, entity_cls: type[Any] | None = None) -> sa.Select:  # type: ignore[type-arg]
+    def apply(self, query: sa.Select[Any], entity_cls: type[Any] | None = None) -> sa.Select[Any]:
         """将 scope 条件应用到 SQLAlchemy 查询。
 
         按 department_id 等值过滤（应用层快路径）。

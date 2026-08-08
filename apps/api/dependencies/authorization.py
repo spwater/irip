@@ -9,7 +9,7 @@
 ``AuthorizationService.require(user, action, resource)`` 显式检查。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
@@ -33,7 +33,7 @@ def get_authorization_service() -> AuthorizationService:
 AuthorizationServiceDep = Annotated[AuthorizationService, Depends(get_authorization_service)]
 
 
-def require_permission(action: str):  # type: ignore[no-untyped-def]
+def require_permission(action: str) -> Any:
     """创建 FastAPI 依赖：检查当前用户角色是否拥有指定权限。
 
     基于 BUILTIN_ROLES 权限矩阵进行角色级权限检查（非对象级）。

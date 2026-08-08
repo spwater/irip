@@ -144,7 +144,7 @@ async def readiness(
     try:
         import redis.asyncio as aioredis
 
-        client = aioredis.from_url(redis_url)  # type: ignore[no-untyped-call]
+        client = aioredis.from_url(redis_url)
         await client.ping()
         await client.aclose()
         checks["redis"] = {"status": "ok"}
@@ -191,7 +191,7 @@ async def readiness(
 
         import redis
 
-        r = redis.from_url(redis_url)  # type: ignore[no-untyped-call]
+        r = redis.from_url(redis_url)
         raw = r.get("irip:worker:heartbeat")
 
         if raw is not None:

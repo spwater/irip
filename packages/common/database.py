@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import event
@@ -65,7 +65,7 @@ def build_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
     )
 
     @event.listens_for(engine.sync_engine, "connect")
-    def _set_tenant_guc_default(dbapi_conn, _record):  # type: ignore[no-untyped-def]
+    def _set_tenant_guc_default(dbapi_conn: Any, _record: Any) -> None:
         """连接级别设置 GUC 默认值为空字符串。
 
         事务级别由 session_scope 设置实际租户 ID。

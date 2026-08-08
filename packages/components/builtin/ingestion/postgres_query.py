@@ -64,7 +64,7 @@ def _validate_select_only(query: str) -> None:
         )
 
     for stmt in parsed:
-        stmt_type = stmt.get_type()  # type: ignore[no-untyped-call]
+        stmt_type = stmt.get_type()
         if stmt_type != "SELECT":
             raise AppError(
                 code="forbidden_query",
@@ -73,7 +73,7 @@ def _validate_select_only(query: str) -> None:
                 fields={"statement_type": stmt_type or "UNKNOWN"},
             )
         # 二次检查：扫描所有 token 关键字
-        for token in stmt.flatten():  # type: ignore[no-untyped-call]
+        for token in stmt.flatten():
             if token.ttype in sqlparse.tokens.Keyword:
                 kw = str(token).upper()
                 if kw in _FORBIDDEN_KEYWORDS:

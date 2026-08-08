@@ -954,7 +954,7 @@ class ResearchOrchestrator:
                     mode_reason=coverage.mode_reason,
                 )
 
-        return coverage.to_dict()  # type: ignore[no-any-return]
+        return coverage.to_dict()
 
     async def _execute_mixed_step(
         self,
@@ -1231,7 +1231,7 @@ class ResearchOrchestrator:
             import redis as redis_lib
 
             redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-            r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+            r = redis_lib.from_url(redis_url)
             channel = f"research:run:{run_id}:events"
             message = json.dumps(
                 {"event": event_type, "data": json.dumps(payload, ensure_ascii=False)},

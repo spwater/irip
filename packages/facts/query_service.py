@@ -451,7 +451,7 @@ class FactQueryService(ScopedSessionMixin):
             except Exception:
                 _logger.warning("查找原始文件失败", exc_info=True)
 
-            return result_data  # type: ignore[no-any-return]
+            return result_data
 
     # ---- 私有方法 ----
 

@@ -185,9 +185,9 @@ class FileConnector:
         result = await self._artifact_service.open_stream(artifact_id)
         # result is (filename, size, stream)
         if isinstance(result, tuple) and len(result) == 3:
-            return result[2]  # type: ignore[no-any-return]
+            return result[2]
         # If result is already a stream
-        return result  # type: ignore[no-any-return]
+        return result
 
     # ---- 内部读取（从流） ----
 

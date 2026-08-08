@@ -173,7 +173,7 @@ class BackupRecordService(ScopedSessionMixin):
             BackupRecord | None: 备份记录，不存在时返回 None。
         """
         async with self._scoped_session() as session:
-            return await session.scalar(  # type: ignore[no-any-return]
+            return await session.scalar(
                 sa.select(BackupRecord).where(BackupRecord.job_id == job_id)
             )
 

@@ -453,7 +453,7 @@ class AnalysisRunService(ScopedSessionMixin):
                 return QueuePosition(position=0, ahead_count=0, estimated_wait_seconds=0)
 
             result = await self._scheduler.get_queue_position(str(run_id))
-            return result  # type: ignore[no-any-return]
+            return result
 
     async def check_publish_eligibility(
         self,

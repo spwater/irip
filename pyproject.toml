@@ -134,6 +134,54 @@ module = [
 ]
 ignore_missing_imports = true
 
+# 第三方库缺类型 stub — 关闭对应检查，移除 type: ignore
+[[tool.mypy.overrides]]
+module = [
+  "celery.*",
+  "redis.*",
+  "sqlparse.*",
+  "structlog.*",
+]
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+
+# worker 使用 celery 装饰器 — 关闭 untyped-decorator/no-untyped-call
+[[tool.mypy.overrides]]
+module = [
+  "apps.worker.*",
+  "apps.api.routers.health",
+  "apps.api.routers.research_run",
+  "apps.api.composition.research_run",
+  "packages.connectors.postgres_connector",
+  "packages.components.builtin.ingestion.postgres_query",
+  "packages.research.execution.orchestrator",
+]
+disallow_untyped_decorators = false
+disallow_untyped_calls = false
+
+# numpy 返回 Any — 关闭 warn_return_any
+[[tool.mypy.overrides]]
+module = "packages.ai.numeric.*"
+warn_return_any = false
+
+# json.loads / session.scalar 返回 Any — 关闭 warn_return_any
+[[tool.mypy.overrides]]
+module = [
+  "packages.plugins.converters.common.llm_utils",
+  "packages.common.logging_setup",
+  "packages.models.service",
+  "packages.connectors.file_connectors",
+  "packages.backups.service",
+  "packages.facts.query_service",
+  "packages.research.execution.orchestrator",
+  "packages.research.execution.run_service",
+  "packages.research.lineage.core_adapter",
+  "packages.research.products.artifact_service",
+  "packages.research.snapshots",
+  "apps.api.routers.flows",
+]
+warn_return_any = false
+
 # ---- uv / pip 国内镜像（架构文档 §1.4）----
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"

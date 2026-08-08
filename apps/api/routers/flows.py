@@ -867,7 +867,7 @@ async def persist_run_as_fact(
     from apps.api.routers._flow_fact_handler import persist_run_as_fact_handler
 
     result = await persist_run_as_fact_handler(service, current_user, run_id, body)
-    return result  # type: ignore[no-any-return]
+    return result
 
 
 @flows_router.get(

@@ -636,7 +636,7 @@ async def run_events(
 
     async def event_generator() -> Any:
         """SSE 事件生成器。"""
-        r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+        r = redis_lib.from_url(redis_url)
         pubsub = r.pubsub()
         pubsub.subscribe(channel)
 

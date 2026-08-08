@@ -14,7 +14,7 @@
 参照 apps/api/composition/research.py 模式。
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 
@@ -46,7 +46,7 @@ def register(ctx: CompositionContext) -> None:
     from packages.research.products.artifact_service import RunArtifactService
 
     # 构建共享单例
-    redis_client = redis_lib.from_url(ctx.redis_url)  # type: ignore[no-untyped-call]
+    redis_client = redis_lib.from_url(ctx.redis_url)
     context_router = ContextRouter()
     scheduler = ResearchScheduler(redis_client=redis_client)
 
@@ -143,7 +143,7 @@ def register(ctx: CompositionContext) -> None:
             SeriesStatisticsService,
         )
 
-        def _fact_query_factory(principal):  # type: ignore[no-untyped-def]
+        def _fact_query_factory(principal: Any) -> Any:
             from packages.facts.query_service import FactQueryService
 
             return FactQueryService(

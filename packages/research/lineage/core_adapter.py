@@ -272,7 +272,7 @@ class CoreFactProviderImpl:
 
         try:
             result = await self._query_service.get_fact_data(fact_id)
-            return result  # type: ignore[no-any-return]
+            return result
         except AppError as exc:
             if exc.code == "not_found":
                 raise AppError(

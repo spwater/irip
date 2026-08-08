@@ -454,7 +454,7 @@ class FactRepository:
             FlowRun as _FR,
         )
 
-        columns: list[sa.ColumnElement] = [  # type: ignore[type-arg]
+        columns: list[sa.ColumnElement[Any]] = [
             Fact.id.label("fact_id"),
             (Fact.fact_type if include_base else sa.null()).label("fact_type"),
             (Fact.subject_id if include_base else sa.null()).label("subject_id"),

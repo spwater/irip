@@ -863,17 +863,17 @@ class ExpressionInterpreter:
         av = a[mask]
         bv = b[mask]
         if op == "<":
-            return (av < bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av < bv).astype(np.float64)
         if op == "<=":
-            return (av <= bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av <= bv).astype(np.float64)
         if op == ">":
-            return (av > bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av > bv).astype(np.float64)
         if op == ">=":
-            return (av >= bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av >= bv).astype(np.float64)
         if op == "==":
-            return (av == bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av == bv).astype(np.float64)
         if op == "!=":
-            return (av != bv).astype(np.float64)  # type: ignore[no-any-return]
+            return (av != bv).astype(np.float64)
         raise NumericError(code="numeric_expression_rejected", message=f"unknown comparison: {op}")
 
     # ---- 函数调用 ----
@@ -1529,15 +1529,15 @@ class ExpressionInterpreter:
             )
 
     def _safe_div(self, a: np.ndarray, b: np.ndarray, op_name: str) -> np.ndarray:
-        return a / b  # type: ignore[no-any-return]
+        return a / b
 
     def _safe_mod(self, a: np.ndarray, b: np.ndarray, op_name: str) -> np.ndarray:
-        return np.mod(a, b)  # type: ignore[no-any-return]
+        return np.mod(a, b)
 
     def _safe_pow(
         self, a: np.ndarray, b: np.ndarray, op_name: str, exponent_is_int: bool
     ) -> np.ndarray:
-        return np.power(a, b)  # type: ignore[no-any-return]
+        return np.power(a, b)
 
     def _check_sqrt_domain(self, val: Any, name: str) -> None:
         """检查 sqrt 定义域 x >= 0。"""
@@ -1632,7 +1632,7 @@ class ExpressionInterpreter:
     def _trig(self, v: np.ndarray, func: Any, name: str) -> np.ndarray:
         if self._options.angle_unit == "degree":
             v = np.radians(v)
-        return func(v)  # type: ignore[no-any-return]
+        return func(v)
 
     def _inverse_trig(
         self, v: np.ndarray, func: Any, name: str, check_domain: str | None
@@ -1640,7 +1640,7 @@ class ExpressionInterpreter:
         result = func(v)
         if self._options.angle_unit == "degree":
             result = np.degrees(result)
-        return result  # type: ignore[no-any-return]
+        return result
 
     def _normalize_zero(self, val: float) -> float:
         """规范化 -0.0 为 0.0。"""

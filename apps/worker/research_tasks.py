@@ -60,7 +60,7 @@ def _build_orchestrator() -> Any:
     factory = build_session_factory(async_url)
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    redis_client = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+    redis_client = redis_lib.from_url(redis_url)
 
     # 从 ai_config 表读取研发助手模型配置，构建真实 AI provider
     ai_provider = None
@@ -166,7 +166,7 @@ def _build_orchestrator() -> Any:
     return orchestrator
 
 
-@celery_app.task(name="research.run.execute", bind=True)  # type: ignore[untyped-decorator]
+@celery_app.task(name="research.run.execute", bind=True)
 def execute_analysis_run(self: object, run_id: str) -> str:
     """Celery 任务：执行分析 Run。
 
@@ -191,7 +191,7 @@ def execute_analysis_run(self: object, run_id: str) -> str:
     return run_id
 
 
-@celery_app.task(name="research.heartbeat")  # type: ignore[untyped-decorator]
+@celery_app.task(name="research.heartbeat")
 def check_run_heartbeat() -> int:
     """Celery Beat 调度任务：检查活跃 Run 心跳。
 
@@ -204,7 +204,7 @@ def check_run_heartbeat() -> int:
     import redis as redis_lib
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+    r = redis_lib.from_url(redis_url)
 
     import sqlalchemy as sa
 
@@ -243,7 +243,7 @@ def check_run_heartbeat() -> int:
     return asyncio.run(_check())
 
 
-@celery_app.task(name="research.cleanup_warm")  # type: ignore[untyped-decorator]
+@celery_app.task(name="research.cleanup_warm")
 def cleanup_warm_containers() -> int:
     """Celery Beat 调度任务：清理过期保温容器。
 
@@ -257,7 +257,7 @@ def cleanup_warm_containers() -> int:
     from packages.research.execution.sandbox import WarmPoolManager
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+    r = redis_lib.from_url(redis_url)
     warm_pool = WarmPoolManager(redis_client=r)
 
     async def _cleanup() -> int:
@@ -267,7 +267,7 @@ def cleanup_warm_containers() -> int:
     return asyncio.run(_cleanup())
 
 
-@celery_app.task(name="research.promote_queued")  # type: ignore[untyped-decorator]
+@celery_app.task(name="research.promote_queued")
 def promote_queued_runs() -> int:
     """Celery Beat 调度任务：检查队列并提升等待 Run。
 
@@ -281,7 +281,7 @@ def promote_queued_runs() -> int:
     from packages.research.execution.scheduler import ResearchScheduler
 
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)  # type: ignore[no-untyped-call]
+    r = redis_lib.from_url(redis_url)
     scheduler = ResearchScheduler(redis_client=r)
 
     async def _promote() -> int:

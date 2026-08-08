@@ -102,7 +102,7 @@ def _register_handlers(executor: JobExecutor) -> None:
     """
     from apps.worker.tasks.flows import _execute_flow_async, _mark_job_failed, _resume_flow_async
 
-    async def _flow_execute_adapter(job) -> None:  # type: ignore[no-untyped-def]
+    async def _flow_execute_adapter(job: Any) -> None:
         """适配 flow_execute：直接 await async 函数，避免 asyncio.run 嵌套。
 
         H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。
@@ -128,7 +128,7 @@ def _register_handlers(executor: JobExecutor) -> None:
                 pass
             raise
 
-    async def _flow_resume_adapter(job) -> None:  # type: ignore[no-untyped-def]
+    async def _flow_resume_adapter(job: Any) -> None:
         """适配 flow_resume。
 
         H-03: 失败必须 raise（不返回 error dict），由 JobExecutor 统一提交状态。

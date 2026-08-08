@@ -163,7 +163,7 @@ class PostgresConnector:
             AppError: code="validation_failed"，当 SQL 不是单条 SELECT 语句时。
         """
         statements = sqlparse.parse(query)
-        non_empty = [s for s in statements if s.token_first(skip_ws=True, skip_cm=True) is not None]  # type: ignore[no-untyped-call]
+        non_empty = [s for s in statements if s.token_first(skip_ws=True, skip_cm=True) is not None]
         if len(non_empty) != 1:
             raise AppError(
                 code="validation_failed",
@@ -171,7 +171,7 @@ class PostgresConnector:
                 retryable=False,
                 fields={},
             )
-        stmt_type = non_empty[0].get_type()  # type: ignore[no-untyped-call]
+        stmt_type = non_empty[0].get_type()
         if stmt_type != "SELECT":
             raise AppError(
                 code="validation_failed",

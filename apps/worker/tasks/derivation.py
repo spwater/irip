@@ -143,7 +143,7 @@ async def _process_derivation_async(
         raise
 
 
-@celery_app.task(name="irip.derivation.process")  # type: ignore[untyped-decorator]
+@celery_app.task(name="irip.derivation.process")
 def process_derivation_job(job_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Celery 任务：处理推导作业。
 
