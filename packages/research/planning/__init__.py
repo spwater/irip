@@ -5,3 +5,9 @@
 - ContextRouter: 上下文路由
 - ModelGateway: 模型网关
 """
+
+# 向后兼容：re-export PlanService，
+# 使 ``from packages.research.planning import PlanService`` 仍可工作。
+from packages.research.planning.plan_service import PlanService
+
+__all__ = ["PlanService"]

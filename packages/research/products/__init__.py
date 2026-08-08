@@ -10,6 +10,6 @@
 
 # 向后兼容：re-export ProductService，
 # 使 ``from packages.research.products import ProductService`` 仍可工作。
-from packages.research.products.products import ProductService  # noqa: F401
+from packages.research.products.product_service import ProductService  # noqa: F401
 
 __all__ = ["ProductService"]

@@ -9,3 +9,9 @@
 - ThreeSegmentValidator: 三段式校验器
 - PermissionEnvelopeCalculator: 权限信封计算器
 """
+
+# 向后兼容：re-export ResearchOrchestrator，
+# 使 ``from packages.research.execution import ResearchOrchestrator`` 仍可工作。
+from packages.research.execution.orchestrator import ResearchOrchestrator  # noqa: F401
+
+__all__ = ["ResearchOrchestrator"]

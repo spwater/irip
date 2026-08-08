@@ -7,8 +7,9 @@
 - KnowledgeProviderService: 知识提供服务
 """
 
-# 向后兼容：re-export PublicationService，
-# 使 ``from packages.research.publication import PublicationService`` 仍可工作。
-from packages.research.publication.publication import PublicationService  # noqa: F401
+# re-export PublicationService，使 ``from packages.research.publication import
+# PublicationService`` 可工作。实现已按功能域拆分到 publisher / acl /
+# revision / reuse / _base，publication.py 仅保留兼容 re-export。
+from packages.research.publication.publisher import PublicationService  # noqa: F401
 
 __all__ = ["PublicationService"]

@@ -146,6 +146,8 @@ disallow_untyped_decorators = false
 disallow_untyped_calls = false
 
 # worker 使用 celery 装饰器 — 关闭 untyped-decorator/no-untyped-call
+# orchestrator 拆分后，原 orchestrator 模块的逻辑迁入下列子模块，
+# 一并保留 disallow_untyped_calls=false（redis.from_url 等第三方未类型化调用）。
 [[tool.mypy.overrides]]
 module = [
   "apps.worker.*",
@@ -155,6 +157,11 @@ module = [
   "packages.connectors.postgres_connector",
   "packages.components.builtin.ingestion.postgres_query",
   "packages.research.execution.orchestrator",
+  "packages.research.execution.orchestrator_base",
+  "packages.research.execution.orchestrator_core",
+  "packages.research.execution.context_builder",
+  "packages.research.execution.step_executor",
+  "packages.research.execution.result_assembler",
 ]
 disallow_untyped_decorators = false
 disallow_untyped_calls = false
@@ -165,6 +172,8 @@ module = "packages.ai.numeric.*"
 warn_return_any = false
 
 # json.loads / session.scalar 返回 Any — 关闭 warn_return_any
+# orchestrator 拆分后，原 orchestrator 模块的逻辑迁入下列子模块，
+# 一并保留 warn_return_any=false（ContextRouter 返回 Any 经 .to_dict() 透传）。
 [[tool.mypy.overrides]]
 module = [
   "packages.plugins.converters.common.llm_utils",
@@ -174,6 +183,11 @@ module = [
   "packages.backups.service",
   "packages.facts.query_service",
   "packages.research.execution.orchestrator",
+  "packages.research.execution.orchestrator_base",
+  "packages.research.execution.orchestrator_core",
+  "packages.research.execution.context_builder",
+  "packages.research.execution.step_executor",
+  "packages.research.execution.result_assembler",
   "packages.research.execution.run_service",
   "packages.research.lineage.core_adapter",
   "packages.research.products.artifact_service",
