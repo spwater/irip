@@ -524,7 +524,9 @@ jobs:
           --health-retries 10
     env:
       IRIP_TEST_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
-      IRIP_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+      # 迁移用 superuser (irip)，运行时 API 用非 superuser (irip_app) — RLS 生效
+      IRIP_ALEMBIC_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+      IRIP_DATABASE_URL: postgresql+psycopg://irip_app:irip_dev_password@localhost:55432/irip_test
       IRIP_REDIS_URL: redis://localhost:56379/0
       IRIP_MINIO_ENDPOINT: localhost:59000
       IRIP_MINIO_ACCESS_KEY: irip
