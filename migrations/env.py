@@ -9,6 +9,7 @@ target_metadata 指向 ``packages.common.database.Base.metadata``，
 """
 
 import asyncio
+import concurrent.futures
 import os
 from logging.config import fileConfig
 
@@ -102,4 +103,14 @@ async def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    asyncio.run(run_migrations_online())
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running event loop — safe to use asyncio.run()
+        asyncio.run(run_migrations_online())
+    else:
+        # Already inside a running event loop (e.g., pytest-asyncio tests).
+        # Run in a separate thread so asyncio.run() can create its own loop.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(asyncio.run, run_migrations_online())
+            future.result()
