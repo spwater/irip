@@ -679,8 +679,8 @@ jobs:
         ports:
           - 6379:6379
     env:
-      IRIP_DATABASE_URL: postgresql+asyncpg://irip:test-password@localhost:5432/irip
-      IRIP_ALEMBIC_DATABASE_URL: postgresql://irip:test-password@localhost:5432/irip
+      IRIP_DATABASE_URL: postgresql+psycopg://irip:test-password@localhost:5432/irip
+      IRIP_ALEMBIC_DATABASE_URL: postgresql+psycopg://irip:test-password@localhost:5432/irip
       IRIP_REDIS_URL: redis://localhost:6379/0
       IRIP_JWT_SECRET: ci-test-secret-2026
       IRIP_MASTER_KEY: ci-test-master-key-2026
