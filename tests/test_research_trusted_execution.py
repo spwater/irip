@@ -37,8 +37,9 @@ class TestTrustedEntities:
 
     def test_entities_inherit_base(self):
         """实体继承 Base。"""
-        from packages.common.database import Base
         from packages.research.entities_trusted import ResearchAnalysisRun
+
+        from packages.common.database import Base
 
         assert issubclass(ResearchAnalysisRun, Base)
 
@@ -313,7 +314,7 @@ class TestResearchScheduler:
         scheduler = ResearchScheduler(redis)
         import asyncio
 
-        success, pos = asyncio.get_event_loop().run_until_complete(
+        success, pos = asyncio.new_event_loop().run_until_complete(
             scheduler.acquire_slot("user1", "run1")
         )
         assert success is True
@@ -332,7 +333,7 @@ class TestResearchScheduler:
         scheduler = ResearchScheduler(redis)
         import asyncio
 
-        success, pos = asyncio.get_event_loop().run_until_complete(
+        success, pos = asyncio.new_event_loop().run_until_complete(
             scheduler.acquire_slot("user21", "run21")
         )
         assert success is False
@@ -349,7 +350,7 @@ class TestResearchScheduler:
         scheduler = ResearchScheduler(redis)
         import asyncio
 
-        success, pos = asyncio.get_event_loop().run_until_complete(
+        success, pos = asyncio.new_event_loop().run_until_complete(
             scheduler.acquire_slot("user1", "run2")
         )
         assert success is False
@@ -365,7 +366,7 @@ class TestResearchScheduler:
         scheduler = ResearchScheduler(redis)
         import asyncio
 
-        asyncio.get_event_loop().run_until_complete(scheduler.release_slot("user1", "run1"))
+        asyncio.new_event_loop().run_until_complete(scheduler.release_slot("user1", "run1"))
         redis.srem.assert_called_once()
         assert redis.delete.call_count == 2  # user key + heartbeat
 
@@ -685,12 +686,12 @@ class TestAPIRoutes:
 
         assert research_run_router.prefix == "/api/v1/research"
 
-    def test_router_has_15_endpoints(self):
-        """15 个端点。"""
+    def test_router_has_18_endpoints(self):
+        """18 个端点。"""
         from apps.api.routers.research_run import research_run_router
 
         routes = [r for r in research_run_router.routes if hasattr(r, "methods") and r.methods]
-        assert len(routes) == 15
+        assert len(routes) == 18
 
     def test_main_includes_router(self):
         """main.py 条件注册 research_run_router。"""

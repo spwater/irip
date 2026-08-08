@@ -30,20 +30,21 @@ if _PROJECT_ROOT not in sys.path:
 
 
 def test_imports():
-    """验证模块导入、注册表只有 2 个插件、种子数据只有 2 个 ingestion 工具。"""
+    """验证模块导入、注册表插件、种子数据一致。"""
     from packages.plugins import registry as plugin_registry
 
-    # 注册表只有 2 个插件
-    assert sorted(plugin_registry.list_plugins()) == ["llm_converter", "xrd_converter"], (
+    # 注册表有 4 个插件（xrd + llm + raman + tga）
+    expected_plugins = ["llm_converter", "raman_converter", "tga_converter", "xrd_converter"]
+    assert sorted(plugin_registry.list_plugins()) == expected_plugins, (
         f"注册表插件不符: {sorted(plugin_registry.list_plugins())}"
     )
 
-    # 种子数据只有 2 个 ingestion 工具
+    # 种子数据 ingestion 工具与注册表一致
     from packages.ai.tools import PLUGIN_TOOLS
 
     ingestion_tools = [t for t in PLUGIN_TOOLS if t.category == "ingestion"]
-    assert len(ingestion_tools) == 2, f"ingestion 工具数应为 2，实际 {len(ingestion_tools)}"
-    assert {t.name for t in ingestion_tools} == {"xrd_converter", "llm_converter"}
+    assert len(ingestion_tools) == 4, f"ingestion 工具数应为 4，实际 {len(ingestion_tools)}"
+    assert {t.name for t in ingestion_tools} == set(expected_plugins)
 
 
 # ============================================================

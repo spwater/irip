@@ -554,14 +554,14 @@ class TestInsightExtractor:
         """空步骤输出返回 None。"""
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(extractor.extract("", "context"))
+        result = asyncio.new_event_loop().run_until_complete(extractor.extract("", "context"))
         assert result is None
 
     def test_extract_whitespace_step_output_returns_none(self, extractor):
         """纯空白步骤输出返回 None。"""
         import asyncio
 
-        result = asyncio.get_event_loop().run_until_complete(extractor.extract("   ", "context"))
+        result = asyncio.new_event_loop().run_until_complete(extractor.extract("   ", "context"))
         assert result is None
 
     def test_prompt_version_constant(self, extractor):
@@ -1407,7 +1407,7 @@ class TestResearchCatalogImpl:
         from packages.research.catalog import ResearchCatalogStub
 
         stub = ResearchCatalogStub()
-        result = asyncio.get_event_loop().run_until_complete(stub.search_derived_data("query"))
+        result = asyncio.new_event_loop().run_until_complete(stub.search_derived_data("query"))
         assert result == []
 
     def test_catalog_impl_constructor_params(self):

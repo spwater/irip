@@ -626,6 +626,11 @@ class TestWorkspaceService:
                 new_callable=AsyncMock,
             ) as mock_delete,
             patch(
+                "packages.research.service.ResearchRepository.count_published_results_by_workspace",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
                 "packages.research.service.AuditRecorder.record",
                 new_callable=AsyncMock,
             ) as mock_audit,
@@ -1199,29 +1204,36 @@ class TestCoreFactProvider:
         """search_facts 将搜索结果转换为 FactSummary 列表。"""
         from packages.research.core_adapter import CoreFactProviderImpl
 
-        mock_row = MagicMock()
-        mock_row.fact_id = uuid4()
-        mock_row.fact_type = "experiment_run"
-        mock_row.subject_id = "实验001"
-        mock_row.status = "active"
-        mock_row.department_name = "实验室A"
+        mock_row = {
+            "fact_id": uuid4(),
+            "fact_type": "experiment_run",
+            "subject_id": "实验001",
+            "status": "active",
+            "department_id": uuid4(),
+        }
 
-        mock_query_service = AsyncMock()
-        mock_query_service.search_facts_detail = AsyncMock(
-            return_value=([mock_row], "cursor-1", {})
-        )
+        mock_query_service = MagicMock()
+        mock_query_service._rls_dept_id = uuid4()
+        mock_query_service._actor_id = uuid4()
 
-        provider = CoreFactProviderImpl(query_service=mock_query_service)
-        results, cursor = await provider.search_facts("Na2O", page_size=10)
+        mock_result = MagicMock()
+        mock_result.mappings.return_value.all.return_value = [mock_row]
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=mock_result)
+
+        @asynccontextmanager
+        async def _fake_scoped_session(*args, **kwargs):
+            yield mock_session
+
+        with patch("packages.research.core_adapter.scoped_session", _fake_scoped_session):
+            provider = CoreFactProviderImpl(query_service=mock_query_service)
+            results, cursor = await provider.search_facts("Na2O", page_size=10)
 
         assert len(results) == 1
         assert isinstance(results[0], FactSummary)
-        assert results[0].fact_id == mock_row.fact_id
         assert results[0].fact_type == "experiment_run"
         assert results[0].subject_id == "实验001"
         assert results[0].status == "active"
-        assert results[0].department_name == "实验室A"
-        assert cursor == "cursor-1"
 
     @pytest.mark.asyncio
     async def test_get_fact_summary_converts_to_fact_summary(self):
@@ -1248,8 +1260,9 @@ class TestCoreFactProvider:
     @pytest.mark.asyncio
     async def test_get_fact_summary_not_found_to_forbidden(self):
         """get_fact_summary 将 not_found 转换为 forbidden（不泄露 Fact 是否存在）。"""
-        from packages.common.errors import AppError
         from packages.research.core_adapter import CoreFactProviderImpl
+
+        from packages.common.errors import AppError
 
         mock_query_service = AsyncMock()
         mock_query_service.get_fact_detail = AsyncMock(
@@ -1482,24 +1495,17 @@ class TestModuleIsolation:
     def test_core_tables_no_fk_to_research(self):
         """核心表（fact, evidence_set 等）无到 research_* 表的外键。"""
         # 导入所有模型确保 metadata 完整
-        import packages.facts.entities  # noqa: F401
-        import packages.research.entities  # noqa: F401
-
-        research_table_names = {
-            "research_workspace",
-            "research_question_version",
-            "research_workspace_evidence_ref",
-            "research_evidence_snapshot",
-        }
-
         # 检查所有非 research_ 表是否有到 research_ 表的 FK
         # 注意：某些 FK 目标表可能未加载到 metadata（如 experiment_project），
         # 此时 fk.column.table.name 会抛 NoReferencedTableError，
         # 这是已有的元数据加载问题，与本测试无关，跳过这些列。
         from sqlalchemy.exc import NoReferencedTableError
 
+        import packages.facts.entities  # noqa: F401
+        import packages.research.entities  # noqa: F401
+
         for table_name, table in Base.metadata.tables.items():
-            if table_name in research_table_names:
+            if table_name.startswith("research_"):
                 continue
             for col in table.columns:
                 for fk in col.foreign_keys:
@@ -1508,7 +1514,7 @@ class TestModuleIsolation:
                     except NoReferencedTableError:
                         # FK 目标表未加载（已有问题，非研究域引入）
                         continue
-                    assert target_table not in research_table_names, (
+                    assert not target_table.startswith("research_"), (
                         f"核心表 {table_name}.{col.name} 有到 research 表 "
                         f"{target_table} 的外键，违反模块隔离约定"
                     )

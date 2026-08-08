@@ -235,7 +235,7 @@ class PermissionEnvelopeCalculator:
 
         首期简化：permission_envelope 记录了源数据的权限快照。
         如果 envelope 中有任何条目的 status 为非 active，则视为权限收紧为 private。
-        如果 envelope 为空，视为不限制（all）。
+        如果 envelope 为空（无实际权限条目），视为不限制（all）。
 
         Args:
             envelope: permission_envelope 字典。
@@ -243,10 +243,12 @@ class PermissionEnvelopeCalculator:
         Returns:
             str: ACL 类型。
         """
-        if not envelope:
+        # 过滤掉 _ 开头的元数据键（_snapshot_number/_workspace_id）
+        real_entries = {k: v for k, v in envelope.items() if not k.startswith("_")}
+        if not real_entries:
             return "all"
         # 检查所有源数据条目的状态
-        for _key, value in envelope.items():
+        for _key, value in real_entries.items():
             if isinstance(value, dict):
                 status = value.get("status", "active")
                 if status != "active":
