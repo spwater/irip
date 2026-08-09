@@ -132,7 +132,7 @@ start_worker() {
     fi
     
     log "启动 Celery Worker..."
-    .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info > /tmp/irip-worker.log 2>&1 &
+    .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --queues=irip-normal,irip-ops,irip-research > /tmp/irip-worker.log 2>&1 &
     echo $! > "$PID_DIR/worker.pid"
     sleep 3
     log "Worker 就绪 ✅"

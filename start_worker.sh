@@ -14,4 +14,4 @@ cd "$PROJECT_DIR"
 set -a && source .env && set +a
 
 # 启动 Worker
-exec .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2
+exec .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2 --queues=irip-normal,irip-ops,irip-research

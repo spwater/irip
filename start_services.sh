@@ -102,7 +102,7 @@ else
     echo "  Worker 已在运行"
   else
     load_env
-    nohup .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2 > /tmp/irip-worker.log 2>&1 &
+    nohup .venv/bin/celery -A apps.worker.celery_app worker --loglevel=info --concurrency=2 --queues=irip-normal,irip-ops,irip-research > /tmp/irip-worker.log 2>&1 &
     WORKER_PID=$!
     disown $WORKER_PID 2>/dev/null
     sleep 6
