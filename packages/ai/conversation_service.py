@@ -360,7 +360,10 @@ class ConversationService:
             result = await session.execute(
                 sa.select(AIMessage)
                 .where(AIMessage.conversation_id == conversation_id)
-                .order_by(sa.asc(AIMessage.created_at))
+                .order_by(
+                    sa.asc(AIMessage.created_at),
+                    sa.case((AIMessage.role == "user", 0), else_=1),
+                )
             )
             rows = result.scalars().all()
             return [

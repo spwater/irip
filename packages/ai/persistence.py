@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import Any
 from uuid import UUID
 
@@ -249,7 +250,7 @@ class MessagePersistence:
                 tool_calls_json=tool_calls_list,
                 citations_json=citations_list,
                 uncertainty=response.uncertainty,
-                created_at=now,
+                created_at=now + timedelta(microseconds=1),
             )
             session.add(ai_msg)
 
