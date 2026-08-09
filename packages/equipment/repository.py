@@ -22,27 +22,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from packages.equipment.entities import Equipment
 
 
-async def _get_descendant_dept_ids(session: AsyncSession, dept_id: UUID) -> list[UUID]:
-    """递归查询某部门及其所有后代部门的 ID 列表。
-
-    使用 PostgreSQL WITH RECURSIVE 递归 CTE 遍历 parent_id 层级。
-    """
-    stmt = sa.text(
-        """
-        WITH RECURSIVE dept_tree AS (
-            SELECT id FROM department WHERE id = CAST(:root_id AS uuid)
-            UNION ALL
-            SELECT d.id FROM department d
-            INNER JOIN dept_tree dt ON d.parent_id = dt.id
-        )
-        SELECT id FROM dept_tree
-        """
-    )
-    result = await session.execute(stmt.bindparams(root_id=str(dept_id)))
-    rows = result.fetchall()
-    return [UUID(str(row[0])) for row in rows]
-
-
 class EquipmentRepository:
     """设备仪器持久化仓库。
 
@@ -129,25 +108,9 @@ class EquipmentRepository:
             .limit(limit)
         )
 
-        # 部门过滤 + 可见性过滤
-        # department_id + visible_dept_id 同时存在时做 OR 可见性过滤
-        if department_id is not None and visible_dept_id is not None:
-            dept_ids = await _get_descendant_dept_ids(session, department_id)
-            dept_condition = (
-                Equipment.department_id.in_(dept_ids)
-                if dept_ids
-                else Equipment.department_id == department_id
-            )
-            visible_condition = Equipment.visible_departments.contains([str(visible_dept_id)])
-            query = query.where(sa.or_(dept_condition, visible_condition))
-        elif department_id is not None:
-            dept_ids = await _get_descendant_dept_ids(session, department_id)
-            if dept_ids:
-                query = query.where(Equipment.department_id.in_(dept_ids))
-            else:
-                query = query.where(Equipment.department_id == department_id)
-        elif visible_dept_id is not None:
-            query = query.where(Equipment.visible_departments.contains([str(visible_dept_id)]))
+        # 部门过滤：仅作为 UI 筛选保留，可见性由 RLS 保证
+        if department_id is not None:
+            query = query.where(Equipment.department_id == department_id)
 
         if status is not None:
             query = query.where(Equipment.status == status)

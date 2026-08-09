@@ -468,6 +468,7 @@ async def send_message(
                 href=str(c.get("href", "")),
             )
             for c in ([ct.to_dict() if hasattr(ct, "to_dict") else ct for ct in response.citations])
+            if c.get("object_type")  # 跳过 SignedCitation（无 object_type key）
         ],
         uncertainty=response.uncertainty,
         provider_mode=response.provider_mode,
@@ -616,6 +617,7 @@ async def list_messages(
                         href=str(c.get("href", "")),
                     )
                     for c in r.citations
+                    if c.get("object_type")  # 跳过 SignedCitation（无 object_type key）
                 ],
                 uncertainty=r.uncertainty,
                 created_at=r.created_at,

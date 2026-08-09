@@ -42,6 +42,12 @@ export function CitationList({
     return null;
   }
 
+  // 过滤掉无 object_type 的无效引用（历史 SignedCitation 数据）
+  const validCitations = citations.filter((c) => c.object_type);
+  if (validCitations.length === 0) {
+    return null;
+  }
+
   const handleClick = (href: string): void => {
     // href 为前端路由路径（如 /parameters/xxx）
     void navigate({ to: href });
@@ -54,7 +60,7 @@ export function CitationList({
       </Text>
       <List
         size="small"
-        dataSource={citations}
+        dataSource={validCitations}
         renderItem={(citation: Citation) => (
           <List.Item style={{ padding: '4px 0', border: 'none' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -65,12 +71,14 @@ export function CitationList({
               <Text type="secondary" style={{ fontSize: 11 }}>
                 {citation.version}
               </Text>
-              <Link
-                style={{ fontSize: 12 }}
-                onClick={() => handleClick(citation.href)}
-              >
-                查看详情 →
-              </Link>
+              {citation.href && (
+                <Link
+                  style={{ fontSize: 12 }}
+                  onClick={() => handleClick(citation.href)}
+                >
+                  查看详情 →
+                </Link>
+              )}
             </div>
           </List.Item>
         )}

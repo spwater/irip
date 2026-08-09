@@ -1,32 +1,40 @@
 #!/usr/bin/env bash
 # IRIP 本地开发启动脚本
-# 用法：./dev.sh [up|down|status]
-#   up     - 启动全部服务（Docker 基础设施 + API + Worker + Beat + 前端）
-#   down   - 停止全部服务
-#   status - 查看服务状态
+# 用法：./dev.sh [up|restart|down|status]
+#   up      - 启动全部服务（Docker 基础设施 + API + Worker + Beat + 前端）
+#   restart - 重启应用层服务（API + Worker + Beat + 前端），不动 Docker 容器
+#   down    - 停止全部服务（含 Docker 容器）
+#   status  - 查看服务状态
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# 加载 .env（安全方式：跳过无法解析的行）
+# ── 加载 .env ──────────────────────────────────────────────
+# 关键：Celery 用 os.getenv() 读环境变量，不像 uvicorn 有 --env-file 参数，
+# 所以必须在 shell 层面 export 环境变量，否则 Worker/Beat 连不上带密码的 Redis。
 if [ ! -f .env ]; then
     echo "❌ .env 文件不存在，请先创建"
     exit 1
 fi
-# 逐行读取，跳过含中文空格的行和注释行
-while IFS='=' read -r key value; do
-    # 跳过注释和空行
-    case "$key" in
-        \#*|"") continue ;;
-    esac
-    # 跳过值含空格的行（如中文 display_name）
-    if echo "$value" | grep -q ' '; then
-        continue
-    fi
-    export "$key=$value"
-done < .env
+load_env() {
+    while IFS= read -r line || [ -n "$line" ]; do
+        # 跳过空行和注释行
+        [[ -z "$line" ]] && continue
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        # 提取 key=value
+        key="${line%%=*}"
+        value="${line#*=}"
+        # 跳过无效 key（必须以字母/下划线开头）
+        [[ ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] && continue
+        # 去掉值两端的引号
+        value="${value#\"}" ; value="${value%\"}"
+        value="${value#\'}" ; value="${value%\'}"
+        export "$key=$value"
+    done < .env
+}
+load_env
 
 # 颜色
 RED='\033[0;31m'
@@ -105,7 +113,7 @@ start_api() {
     fi
     
     log "启动 API（uvicorn :8000）..."
-    .venv/bin/uvicorn apps.api.main:app --reload --port 8000 > /tmp/irip-api.log 2>&1 &
+    .venv/bin/uvicorn apps.api.main:app --reload --port 8000 --env-file .env > /tmp/irip-api.log 2>&1 &
     echo $! > "$PID_DIR/api.pid"
     sleep 3
     
@@ -185,6 +193,26 @@ stop_all() {
     log "全部停止 ✅"
 }
 
+# 只停应用层进程（不动 Docker 容器），用于 restart 子命令
+stop_apps() {
+    log "停止应用层进程（保留 Docker 容器）..."
+    for name in api worker beat web; do
+        if [ -f "$PID_DIR/$name.pid" ]; then
+            PID=$(cat "$PID_DIR/$name.pid")
+            if kill -0 "$PID" 2>/dev/null; then
+                kill "$PID" 2>/dev/null || true
+                log "停止 $name (PID: $PID)"
+            fi
+            rm -f "$PID_DIR/$name.pid"
+        fi
+    done
+    pkill -f "uvicorn apps.api.main:app" 2>/dev/null || true
+    pkill -f "celery.*apps.worker.celery_app" 2>/dev/null || true
+    pkill -f "vite --port 5173" 2>/dev/null || true
+    sleep 2
+    log "应用层进程已停止 ✅"
+}
+
 show_status() {
     echo -e "\n${CYAN}═══ IRIP 服务状态 ═══${NC}\n"
     
@@ -242,6 +270,19 @@ case "${1:-up}" in
         echo -e "  登录:   ${CYAN}admin@irip.local / ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:-agsdgfsdg21r34sf}${NC}"
         echo ""
         ;;
+    restart)
+        log "重启应用层服务（Docker 容器保持运行）..."
+        stop_apps
+        start_api
+        start_worker
+        start_beat
+        start_web
+        echo ""
+        log "重启完成 ✅"
+        echo -e "  API:    ${CYAN}http://localhost:8000${NC}"
+        echo -e "  前端:   ${CYAN}http://localhost:5173${NC}"
+        echo ""
+        ;;
     down)
         stop_all
         ;;
@@ -249,10 +290,11 @@ case "${1:-up}" in
         show_status
         ;;
     *)
-        echo "用法: ./dev.sh [up|down|status]"
-        echo "  up     - 启动全部服务"
-        echo "  down   - 停止全部服务"
-        echo "  status - 查看服务状态"
+        echo "用法: ./dev.sh [up|restart|down|status]"
+        echo "  up      - 启动全部服务"
+        echo "  restart - 重启应用层（保留 Docker 容器）"
+        echo "  down    - 停止全部服务"
+        echo "  status  - 查看服务状态"
         exit 1
         ;;
 esac

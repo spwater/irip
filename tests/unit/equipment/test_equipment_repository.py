@@ -13,7 +13,7 @@
 
 from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from packages.equipment.entities import Equipment
@@ -128,45 +128,21 @@ class TestSelectList:
     """select_list 测试。"""
 
     async def test_basic_list(self) -> None:
-        """基本列表查询。"""
+        """基本列表查询（带部门筛选）。"""
         equip = _make_equipment()
         session = AsyncMock()
         session.execute = AsyncMock(return_value=_make_result(rows=[(equip, "dept")]))
-
-        with patch(
-            "packages.equipment.repository._get_descendant_dept_ids",
-            new_callable=AsyncMock,
-            return_value=[uuid4()],
-        ):
-            result = await EquipmentRepository.select_list(session, department_id=uuid4(), limit=10)
-
+        result = await EquipmentRepository.select_list(session, department_id=uuid4(), limit=10)
         assert len(result) == 1
         assert result[0][0] is equip
         assert result[0][1] == "dept"
 
-    async def test_list_no_descendant_depts(self) -> None:
-        """无后代部门时直接按 department_id 过滤。"""
+    async def test_list_no_dept_filter(self) -> None:
+        """不传 department_id 时不做部门筛选（RLS 处理可见性）。"""
         equip = _make_equipment()
         session = AsyncMock()
         session.execute = AsyncMock(return_value=_make_result(rows=[(equip, "")]))
-
-        with patch(
-            "packages.equipment.repository._get_descendant_dept_ids",
-            new_callable=AsyncMock,
-            return_value=[],
-        ):
-            result = await EquipmentRepository.select_list(session, department_id=uuid4(), limit=10)
-
-        assert len(result) == 1
-
-    async def test_list_with_visible_dept_only(self) -> None:
-        """仅传 visible_dept_id 时按可见性过滤。"""
-        equip = _make_equipment()
-        session = AsyncMock()
-        session.execute = AsyncMock(return_value=_make_result(rows=[(equip, "")]))
-        result = await EquipmentRepository.select_list(
-            session, department_id=None, visible_dept_id=uuid4(), limit=10
-        )
+        result = await EquipmentRepository.select_list(session, department_id=None, limit=10)
         assert len(result) == 1
 
     async def test_list_with_status_filter(self) -> None:
@@ -191,23 +167,6 @@ class TestSelectList:
             limit=10,
         )
         assert result == []
-
-    async def test_list_both_dept_and_visible(self) -> None:
-        """同时传 department_id 和 visible_dept_id 做 OR 过滤。"""
-        equip = _make_equipment()
-        session = AsyncMock()
-        session.execute = AsyncMock(return_value=_make_result(rows=[(equip, "d")]))
-
-        with patch(
-            "packages.equipment.repository._get_descendant_dept_ids",
-            new_callable=AsyncMock,
-            return_value=[uuid4()],
-        ):
-            result = await EquipmentRepository.select_list(
-                session, department_id=uuid4(), visible_dept_id=uuid4(), limit=10
-            )
-
-        assert len(result) == 1
 
     async def test_list_no_filters(self) -> None:
         """无任何过滤条件。"""

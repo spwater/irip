@@ -197,23 +197,23 @@ class FactRepository:
     async def get_fact(
         session: AsyncSession,
         fact_id: UUID,
-        org_id: UUID,
+        org_id: UUID,  # 保留参数兼容调用方，可见性由 RLS 处理
     ) -> Fact:
-        """获取事实并校验组织归属。
+        """获取事实（可见性由 RLS 策略保证）。
 
         Args:
-            session: 异步会话。
+            session: 异步会话（已设 GUC，RLS 自动过滤不可见行）。
             fact_id: 事实 ID。
-            org_id: 部门 ID（用于校验归属）。
+            org_id: 部门 ID（保留兼容，不再用于过滤）。
 
         Returns:
             Fact: 事实 ORM 实体。
 
         Raises:
-            AppError: code="not_found"，当事实不存在或不属于该组织时。
+            AppError: code="not_found"，当事实不存在或 RLS 不可见时。
         """
         result = await session.execute(
-            sa.select(Fact).where(Fact.id == fact_id, Fact.department_id == org_id)
+            sa.select(Fact).where(Fact.id == fact_id)
         )
         fact = result.scalar_one_or_none()
         if fact is None:
@@ -268,7 +268,6 @@ class FactRepository:
             )
             .where(
                 Fact.search_vector.op("@@")(tsquery),
-                Fact.department_id == org_id,
             )
             .order_by(
                 Fact.created_at.desc(),
@@ -352,10 +351,10 @@ class FactRepository:
                 Fact.created_at.label("created_at"),
                 Fact.id.label("fact_uuid"),
             )
-            .where(Fact.department_id == org_id)
-            .order_by(Fact.created_at.asc(), Fact.id.asc())
-            .limit(fetch_limit)
         )
+        # 可见性由 RLS 策略保证（app.current_dept_id + app.current_user_id GUC）
+        # 不再在此处硬过滤 department_id == org_id，否则平台管理员看不到子部门数据
+        stmt = stmt.order_by(Fact.created_at.asc(), Fact.id.asc()).limit(fetch_limit)
 
         if "fact_type" in filters:
             stmt = stmt.where(Fact.fact_type == filters["fact_type"])

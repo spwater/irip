@@ -7,8 +7,7 @@
 
 import { Avatar, Tag, Typography } from 'antd';
 import CitationList from '@/features/assistant/CitationList';
-import ToolTrace from '@/features/assistant/ToolTrace';
-import type { Citation, ToolCallSummary } from '@/api/models-ai';
+import type { Citation } from '@/api/models-ai';
 import { renderMentions } from '../utils/mentionUtils';
 import { BlockifiedMarkdown } from './BlockifiedMarkdown';
 import { ROLE_AVATAR_TEXT, ROLE_COLOR, ROLE_LABEL, type MessageBubbleProps } from '../types';
@@ -25,7 +24,6 @@ export function MessageBubble({
   systemContext,
 }: MessageBubbleProps): JSX.Element {
   const isUser = msg.role === 'user';
-  const toolCalls: ToolCallSummary[] = msg.tool_calls ?? [];
   const citations: Citation[] = msg.citations ?? [];
   // irip-ai-collab: 发送者头像和显示名
   const senderAvatarUrl = msg.sender_avatar_url;
@@ -102,9 +100,6 @@ export function MessageBubble({
             />
           </div>
         )}
-
-        {/* Tool call traces (AI messages only) */}
-        {!isUser && toolCalls.length > 0 && <ToolTrace toolCalls={toolCalls} />}
 
         {/* Citation list (AI messages only) */}
         {!isUser && citations.length > 0 && <CitationList citations={citations} />}

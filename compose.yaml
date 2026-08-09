@@ -353,21 +353,11 @@ services:
         condition: service_healthy
     restart: "no"
 
-volumes:
-  pgdata:
-  pgrun:
-  miniodata:
-  redisdata:
-  backups:
-  # P2-I8: Loki 日志存储
-  loki-data:
-
-# ============================================================
-# P2-I8: 日志聚合系统（Loki + Promtail）
-# 通过 profiles: monitoring 控制，仅在生产/监控环境启动
-# structlog JSON 输出已就绪，Promtail 从 Docker 容器日志采集
-# ============================================================
-services:
+  # ============================================================
+  # P2-I8: 日志聚合系统（Loki + Promtail）
+  # 通过 profiles: monitoring 控制，仅在生产/监控环境启动
+  # structlog JSON 输出已就绪，Promtail 从 Docker 容器日志采集
+  # ============================================================
   loki:
     profiles: ["monitoring"]
     image: docker.m.daocloud.io/grafana/loki:3.2.1
@@ -433,3 +423,12 @@ services:
     ports:
       - "16686:16686"  # Jaeger UI
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  pgrun:
+  miniodata:
+  redisdata:
+  backups:
+  # P2-I8: Loki 日志存储
+  loki-data:

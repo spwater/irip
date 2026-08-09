@@ -330,21 +330,9 @@ class ObjectGraphService(ScopedSessionMixin):
             else:
                 query = query.where(IndustrialObject.object_type == object_type)
 
-        # 部门过滤 + 可见性过滤
-        # 可见性规则：department_id == dept_id OR visible_departments 包含 visible_dept_id
-        if department_id is not None and visible_dept_id is not None:
-            query = query.where(
-                sa.or_(
-                    IndustrialObject.department_id == department_id,
-                    IndustrialObject.visible_departments.contains([str(visible_dept_id)]),
-                )
-            )
-        elif department_id is not None:
+        # 部门过滤：仅作为 UI 筛选保留，可见性由 RLS 保证
+        if department_id is not None:
             query = query.where(IndustrialObject.department_id == department_id)
-        elif visible_dept_id is not None:
-            query = query.where(
-                IndustrialObject.visible_departments.contains([str(visible_dept_id)])
-            )
 
         if cursor is not None:
             cursor_created_at, cursor_id = _decode_list_cursor(cursor)
