@@ -970,9 +970,11 @@ def _extract_object_id(
         if items and isinstance(items[0], dict):
             return str(items[0].get("id") or items[0].get("fact_id") or "")
         # 回退：从参数中找 fact_ids / parameter_id
-        if "fact_ids" in tool_args and isinstance(
-            tool_args["fact_ids"], list
-        ) and tool_args["fact_ids"]:
+        if (
+            "fact_ids" in tool_args
+            and isinstance(tool_args["fact_ids"], list)
+            and tool_args["fact_ids"]
+        ):
             return str(tool_args["fact_ids"][0])
         if "parameter_id" in tool_args:
             return str(tool_args["parameter_id"])

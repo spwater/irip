@@ -212,9 +212,7 @@ class FactRepository:
         Raises:
             AppError: code="not_found"，当事实不存在或 RLS 不可见时。
         """
-        result = await session.execute(
-            sa.select(Fact).where(Fact.id == fact_id)
-        )
+        result = await session.execute(sa.select(Fact).where(Fact.id == fact_id))
         fact = result.scalar_one_or_none()
         if fact is None:
             raise AppError(
@@ -341,16 +339,14 @@ class FactRepository:
         fetch_limit = effective_size + 1
         filters = filters or {}
 
-        stmt = (
-            sa.select(
-                Fact.id.label("fact_id"),
-                Fact.fact_type.label("fact_type"),
-                Fact.status.label("status"),
-                Fact.object_id.label("object_id"),
-                Fact.subject_id.label("subject_id"),
-                Fact.created_at.label("created_at"),
-                Fact.id.label("fact_uuid"),
-            )
+        stmt = sa.select(
+            Fact.id.label("fact_id"),
+            Fact.fact_type.label("fact_type"),
+            Fact.status.label("status"),
+            Fact.object_id.label("object_id"),
+            Fact.subject_id.label("subject_id"),
+            Fact.created_at.label("created_at"),
+            Fact.id.label("fact_uuid"),
         )
         # 可见性由 RLS 策略保证（app.current_dept_id + app.current_user_id GUC）
         # 不再在此处硬过滤 department_id == org_id，否则平台管理员看不到子部门数据

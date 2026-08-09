@@ -221,13 +221,25 @@ async def check_management_permission(
         )
 
     from packages.common.database import session_scope
-    from packages.equipment.repository import _get_descendant_dept_ids
 
     async with session_scope(session_factory) as session:
-        descendants = await _get_descendant_dept_ids(session, current_user.department_id)
+        descendants_result = await session.execute(
+            sa.text(
+                """
+                WITH RECURSIVE dept_tree AS (
+                    SELECT id FROM department WHERE id = CAST(:root_id AS uuid)
+                    UNION ALL
+                    SELECT d.id FROM department d
+                    INNER JOIN dept_tree dt ON d.parent_id = dt.id
+                )
+                SELECT id FROM dept_tree
+                """
+            ).bindparams(root_id=str(current_user.department_id))
+        )
+        descendants = {UUID(str(row[0])) for row in descendants_result.fetchall()}
 
     # 排除本部门（严格后代）——同部门非所有者无管理权
-    descendants.discard(current_user.department_id)  # type: ignore[attr-defined]
+    descendants.discard(current_user.department_id)
 
     if entity_department_id not in descendants:
         # 5. 实验室负责人可管本部门成员的数据
