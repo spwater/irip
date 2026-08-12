@@ -264,6 +264,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       await apiFreezeSnapshot(workspaceId);
       message.success('快照已冻结');
       void fetchSnapshots();
+      onEvidenceChanged();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '冻结失败';
       message.error(msg);

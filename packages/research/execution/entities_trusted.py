@@ -73,6 +73,8 @@ class ResearchAnalysisPlanVersion(Base):
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
     created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
+    # Timeline refactoring: Plan versions are now scoped to a Turn, not a Workspace.
+    turn_id: Mapped[UUID] = mapped_column(GUID, nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -121,10 +123,14 @@ class ResearchAnalysisRun(Base):
         nullable=False,
     )
     plan_version_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_plan_version.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_plan_version.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     snapshot_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_evidence_snapshot.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_evidence_snapshot.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     run_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'queued'"))
@@ -142,6 +148,11 @@ class ResearchAnalysisRun(Base):
     coverage_summary: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     image_digest: Mapped[str] = mapped_column(sa.Text, nullable=False)
     created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
+    # Timeline refactoring: Run is now scoped to a Turn with attempt numbering.
+    turn_id: Mapped[UUID] = mapped_column(GUID, nullable=True)
+    attempt_number: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, server_default=sa.text("1")
+    )
 
     def __repr__(self) -> str:
         return (
@@ -304,7 +315,9 @@ class ResearchAiConversation(Base):
     role: Mapped[str] = mapped_column(sa.Text, nullable=False)
     content: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     run_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False

@@ -15,13 +15,13 @@ import { WorkspaceCard } from './WorkspaceCard';
 import { CreateWorkspaceModal } from './CreateWorkspaceModal';
 import { WorkspaceDetail } from './WorkspaceDetail';
 
-type StatusFilter = 'all' | 'draft' | 'archived';
+type StatusFilter = 'draft' | 'archived';
 
 export function ResearchPage(): JSX.Element {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('draft');
   const [searchText, setSearchText] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
@@ -30,10 +30,7 @@ export function ResearchPage(): JSX.Element {
     setLoading(true);
     setError(null);
     try {
-      const params: { status?: string; page_size?: number } = { page_size: 100 };
-      if (statusFilter !== 'all') {
-        params.status = statusFilter;
-      }
+      const params: { status?: string; page_size?: number } = { page_size: 100, status: statusFilter };
       const res = await apiListWorkspaces(params);
       let items = res.items;
       if (searchText.trim()) {
@@ -79,7 +76,6 @@ export function ResearchPage(): JSX.Element {
             value={statusFilter}
             onChange={(val) => setStatusFilter(val as StatusFilter)}
             options={[
-              { label: '全部', value: 'all' },
               { label: '活跃', value: 'draft' },
               { label: '归档', value: 'archived' },
             ]}

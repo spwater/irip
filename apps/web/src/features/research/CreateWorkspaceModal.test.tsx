@@ -35,10 +35,10 @@ describe('CreateWorkspaceModal', () => {
     expect(screen.getByText('新建研究工作空间')).toBeInTheDocument();
   });
 
-  it('renders name and question form fields', () => {
+  it('renders name form field but not question field', () => {
     renderModal({ open: true });
     expect(screen.getByText('工作空间名称')).toBeInTheDocument();
-    expect(screen.getByText('主研究问题')).toBeInTheDocument();
+    expect(screen.queryByText('主研究问题')).not.toBeInTheDocument();
   });
 
   it('shows validation error when submitting empty form', async () => {
@@ -48,12 +48,14 @@ describe('CreateWorkspaceModal', () => {
     expect(await screen.findByText('请输入名称')).toBeInTheDocument();
   });
 
-  it('calls apiCreateWorkspace with form values on submit', async () => {
+  it('calls apiCreateWorkspace with name only on submit', async () => {
     vi.mocked(apiCreateWorkspace).mockResolvedValueOnce({
       workspace_id: 'ws-001',
       name: '测试工作空间',
       status: 'draft',
-      current_question_version: 0,
+      latest_snapshot_number: null,
+      turn_count: 0,
+      active_run_status: null,
     });
     const onCreated = vi.fn();
     renderModal({ onCreated });
@@ -61,15 +63,11 @@ describe('CreateWorkspaceModal', () => {
     const nameInput = screen.getByPlaceholderText('如：Na2O 含量对烧结性能的影响研究');
     await userEvent.type(nameInput, '测试工作空间');
 
-    const questionInput = screen.getByPlaceholderText('如：不同 Na2O 含量对烧结矿冶金性能有何影响？');
-    await userEvent.type(questionInput, '测试研究问题');
-
     const okButton = screen.getByRole('button', { name: /创\s*建/ });
     await userEvent.click(okButton);
 
     expect(await vi.waitFor(() => vi.mocked(apiCreateWorkspace))).toHaveBeenCalledWith({
       name: '测试工作空间',
-      question_text: '测试研究问题',
     });
     expect(onCreated).toHaveBeenCalled();
   });

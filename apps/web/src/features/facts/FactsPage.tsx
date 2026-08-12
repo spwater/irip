@@ -149,6 +149,8 @@ export function FactsPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
       void queryClient.refetchQueries({ queryKey: ['facts'], exact: false });
+      // 同步刷新 AI 助手页面的 fact 缓存（queryKey 不同，需额外 invalidate）
+      void queryClient.invalidateQueries({ queryKey: ['facts-for-insert'], exact: false });
       message.success('事实已删除');
     },
     onError: (err: unknown) => message.error(String(err)),
@@ -160,6 +162,8 @@ export function FactsPage(): JSX.Element {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
       void queryClient.refetchQueries({ queryKey: ['facts'], exact: false });
+      // 同步刷新 AI 助手页面的 fact 缓存
+      void queryClient.invalidateQueries({ queryKey: ['facts-for-insert'], exact: false });
       message.success('该任务下所有数据已删除');
     },
     onError: (err: unknown) => message.error(String(err)),

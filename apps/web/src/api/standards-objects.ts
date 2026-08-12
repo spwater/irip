@@ -110,11 +110,15 @@ export async function apiDeleteObjectType(typeId: string): Promise<void> {
 // Ingestions API（/ingestions）
 // ============================================================
 
-export async function apiPreviewIngestion(file: File): Promise<SourcePreview> {
+export async function apiPreviewIngestion(
+  file: File,
+  signal?: AbortSignal,
+): Promise<SourcePreview> {
   const formData = new FormData();
   formData.append('file', file);
   const res = await http.post<SourcePreview>('/ingestions/preview', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    signal,
   });
   return res.data;
 }

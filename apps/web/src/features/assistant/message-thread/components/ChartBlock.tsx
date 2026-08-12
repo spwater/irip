@@ -24,7 +24,26 @@ const { Text } = Typography;
 export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
   const chartRef = useRef<HTMLDivElement>(null);
   // L-03: 保存 ECharts 实例到 ref，cleanup 时 dispose
-  const chartInstanceRef = useRef<{ dispose: () => void; resize: () => void } | null>(null);
+  const chartInstanceRef = useRef<{ dispose: () => void; resize: () => void; getDataURL: (opts?: Record<string, unknown>) => string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const handleExportPNG = () => {
+    if (!chartInstanceRef.current) return;
+    setExporting(true);
+    try {
+      const dataURL = chartInstanceRef.current.getDataURL({
+        type: 'png',
+        pixelRatio: 3,
+        backgroundColor: '#fff',
+      });
+      const link = document.createElement('a');
+      link.href = dataURL;
+      link.download = `chart_${Date.now()}.png`;
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // 防抖：流式传输中不立即渲染，等内容稳定（300ms 无变化）后再渲染
   const [debouncedStr, setDebouncedStr] = useState(optionStr);
@@ -81,6 +100,18 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
     if (safeOption.xAxis && !Array.isArray(safeOption.xAxis)) {
       safeOption.xAxis.nameLocation = 'middle';
       safeOption.xAxis.nameGap = 25;
+    }
+    // If both title and legend exist, push legend below title to avoid overlap
+    if (safeOption.title && safeOption.legend) {
+      const legend = { ...safeOption.legend };
+      if (legend.top === undefined) {
+        legend.top = 30;  // below the default title height
+      }
+      safeOption.legend = legend;
+      // Also push grid down so it doesn't overlap with legend
+      if (safeOption.grid.top === undefined) {
+        safeOption.grid.top = 60;
+      }
     }
 
     import('echarts').then((echarts) => {
@@ -166,10 +197,27 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
   }
 
   return (
-    <div
-      ref={chartRef}
-      style={{ width: '100%', height: 400, margin: '8px 0', position: 'relative' }}
-    />
+    <div style={{ width: '100%', margin: '8px 0', position: 'relative' }}>
+      <button
+        type="button"
+        onClick={handleExportPNG}
+        disabled={exporting}
+        style={{
+          position: 'absolute', right: 0, top: -4, zIndex: 10,
+          background: 'rgba(255,255,255,0.9)', border: '1px solid #d9d9d9',
+          borderRadius: 4, padding: '2px 8px', fontSize: 12,
+          cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s',
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.7')}
+      >
+        {exporting ? '导出中...' : '导出PNG'}
+      </button>
+      <div
+        ref={chartRef}
+        style={{ width: '100%', height: 400 }}
+      />
+    </div>
   );
 }
 

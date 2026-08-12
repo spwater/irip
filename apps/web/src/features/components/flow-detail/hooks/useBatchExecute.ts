@@ -4,7 +4,7 @@
  * 从 FlowDetail.tsx 提取。管理批量执行的全部状态和 handleBatchExecute 逻辑。
  */
 
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, useRef, type Dispatch, type SetStateAction } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { message } from 'antd';
 import {
@@ -49,6 +49,7 @@ export interface UseBatchExecuteResult {
   batchPrompt: string;
   setBatchPrompt: Dispatch<SetStateAction<string>>;
   handleBatchExecute: () => Promise<void>;
+  handleBatchCancel: () => void;
 }
 
 export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteResult {
@@ -70,6 +71,18 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
   const [batchOperator, setBatchOperator] = useState<string>('');
   const [batchPrompt, setBatchPrompt] = useState<string>('');
 
+  // Cancel flag — checked in the batch loop to allow user interruption
+  const cancelRef = useRef(false);
+
+  const handleBatchCancel = (): void => {
+    cancelRef.current = true;
+    setBatchProgress((prev) => ({
+      current: prev?.current ?? 0,
+      total: prev?.total ?? 0,
+      status: '正在取消...',
+    }));
+  };
+
   const handleBatchExecute = async (): Promise<void> => {
     if (!selectedFlowId || batchFiles.length === 0) return;
     if (!batchSelectedComp) {
@@ -77,6 +90,7 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
       return;
     }
     setBatchRunning(true);
+    cancelRef.current = false;
     setBatchProgress({ current: 0, total: batchFiles.length, status: '准备执行...' });
 
     // 检查是否需要先发布
@@ -130,6 +144,7 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
     const results: BatchItemResult[] = [];
 
     for (let i = 0; i < batchFiles.length; i++) {
+      if (cancelRef.current) break; // User pressed cancel
       const file = batchFiles[i];
       setBatchProgress({
         current: i,
@@ -169,7 +184,9 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
         // 4. 等待执行完成（轮询）— H-16: 轮询耗尽记超时
         let runStatus: string | null = null;
         for (let attempts = 0; attempts < BATCH_POLL_MAX_ATTEMPTS; attempts++) {
+          if (cancelRef.current) break;
           await new Promise((r) => setTimeout(r, BATCH_POLL_INTERVAL));
+          if (cancelRef.current) break;
           const updated = await apiGetFlowRun(run.id);
           runStatus = updated.status;
           if (FLOW_RUN_TERMINAL_STATUSES.includes(updated.status)) {
@@ -252,5 +269,6 @@ export function useBatchExecute(params: UseBatchExecuteParams): UseBatchExecuteR
     batchPrompt,
     setBatchPrompt,
     handleBatchExecute,
+    handleBatchCancel,
   };
 }

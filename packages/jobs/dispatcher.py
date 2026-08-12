@@ -26,6 +26,23 @@ logger = logging.getLogger(__name__)
 #: 默认批量拉取大小。
 DEFAULT_BATCH_SIZE: int = 100
 
+#: Research timeline 事件的显式路由白名单。
+#: 不允许由 payload 注入任意 task 名。
+RESEARCH_EVENT_ROUTES: dict[str, tuple[str, str]] = {
+    "research.recommendation.requested": (
+        "research.recommendations.generate",
+        "irip-research",
+    ),
+    "research.run.requested": (
+        "research.run.execute",
+        "irip-research",
+    ),
+    "research.candidate_extraction.requested": (
+        "research.candidates.extract",
+        "irip-research",
+    ),
+}
+
 
 class OutboxDispatcherService:
     """Outbox 事件周期调度服务。
@@ -114,8 +131,10 @@ class OutboxDispatcherService:
         按 job kind 路由的 Celery 队列；未配置 ``TaskSender`` 时跳过并返回 False，
         等待下一调度周期重试。
 
-        队列路由：从 outbox event payload 中读取 job kind（如有），
-        通过 JobKindPolicy 查询对应分层队列。无法确定 kind 时使用默认队列。
+        队列路由：
+        - research.* 事件走显式白名单路由表（RESEARCH_EVENT_ROUTES）
+        - 其他事件从 outbox event payload 中读取 job kind
+        - 无法确定 kind 时使用默认队列
 
         Args:
             event: 待发送的 outbox 事件。
@@ -130,7 +149,25 @@ class OutboxDispatcherService:
             )
             return False
         try:
-            queue: str = "irip-normal"
+            # Check research event routes first (explicit whitelist)
+            if event.event_type in RESEARCH_EVENT_ROUTES:
+                task_name, queue = RESEARCH_EVENT_ROUTES[event.event_type]
+                self._task_sender.send_task(
+                    task_name,
+                    args=[str(event.aggregate_id)],
+                    queue=queue,
+                )
+                logger.info(
+                    "Dispatched research event %s (type=%s, aggregate_id=%s, queue=%s)",
+                    event.id,
+                    event.event_type,
+                    event.aggregate_id,
+                    queue,
+                )
+                return True
+
+            # Default routing via job kind
+            default_queue: str = "irip-normal"
             payload: dict[str, Any] | None = event.payload
             if payload and "kind" in payload:
                 kind: str = str(payload["kind"])
@@ -138,18 +175,18 @@ class OutboxDispatcherService:
 
                 policy = JobKindPolicy.get_policy(kind)
                 if policy is not None:
-                    queue = policy.queue
+                    default_queue = policy.queue
             self._task_sender.send_task(
                 "jobs.execute",
                 args=[str(event.aggregate_id)],
-                queue=queue,
+                queue=default_queue,
             )
             logger.info(
                 "Dispatched event %s (type=%s, aggregate_id=%s, queue=%s)",
                 event.id,
                 event.event_type,
                 event.aggregate_id,
-                queue,
+                default_queue,
             )
             return True
         except Exception:

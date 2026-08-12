@@ -24,13 +24,13 @@ vi.mock('@/api/research', () => {
       if (state.listWorkspaces) return state.listWorkspaces;
       return { items: [], next_cursor: null };
     }),
-    apiCreateWorkspace: vi.fn(async (body: { name: string; question_text: string }) => {
+    apiCreateWorkspace: vi.fn(async (body: { name: string; question_text?: string }) => {
       return {
         workspace_id: 'ws-new-001',
         name: body.name,
         status: 'draft',
-        current_question_version: 1,
-        forked_from_id: null,
+        
+        
       };
     }),
     apiGetWorkspace: vi.fn(async () => ({
@@ -45,8 +45,8 @@ vi.mock('@/api/research', () => {
       workspace_id: 'ws-001',
       name: '新名称',
       status: 'draft',
-      current_question_version: 1,
-      forked_from_id: null,
+      
+      
     })),
     apiDeleteWorkspace: vi.fn(async () => {}),
     apiArchiveWorkspace: vi.fn(async () => {}),
@@ -54,8 +54,8 @@ vi.mock('@/api/research', () => {
       workspace_id: 'ws-fork-001',
       name: '分叉',
       status: 'draft',
-      current_question_version: 1,
-      forked_from_id: 'ws-001',
+      
+      
     })),
     apiUpdateQuestion: vi.fn(async () => ({
       version_id: 'qv-002',
@@ -155,8 +155,8 @@ describe('ResearchPage', () => {
           workspace_id: 'ws-001',
           name: 'Na2O 研究',
           status: 'draft',
-          current_question_version: 2,
-          forked_from_id: null,
+          
+          
         },
       ],
       next_cursor: null,
@@ -169,11 +169,10 @@ describe('ResearchPage', () => {
     });
   });
 
-  it('shows Segmented status filter with all/draft/archived options', async () => {
+  it('shows Segmented status filter with draft/archived options', async () => {
     renderWithQueryClient(<ResearchPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('全部')).toBeInTheDocument();
       expect(screen.getByText('活跃')).toBeInTheDocument();
       expect(screen.getByText('归档')).toBeInTheDocument();
     });
@@ -192,8 +191,9 @@ describe('WorkspaceCard', () => {
           workspace_id: 'ws-001',
           name: '测试工作空间',
           status: 'draft',
-          current_question_version: 3,
-          forked_from_id: null,
+          latest_snapshot_number: null,
+          turn_count: 0,
+          active_run_status: null,
         }}
         onClick={() => {}}
       />,
@@ -201,7 +201,6 @@ describe('WorkspaceCard', () => {
 
     expect(screen.getByText('测试工作空间')).toBeInTheDocument();
     expect(screen.getByText('活跃')).toBeInTheDocument();
-    expect(screen.getByText(/问题版本 v3/)).toBeInTheDocument();
   });
 
   it('displays archived status tag for archived workspace', () => {
@@ -211,8 +210,9 @@ describe('WorkspaceCard', () => {
           workspace_id: 'ws-002',
           name: '归档工作空间',
           status: 'archived',
-          current_question_version: 1,
-          forked_from_id: null,
+          latest_snapshot_number: null,
+          turn_count: 0,
+          active_run_status: null,
         }}
         onClick={() => {}}
       />,
@@ -222,40 +222,40 @@ describe('WorkspaceCard', () => {
     expect(screen.getByText('已归档')).toBeInTheDocument();
   });
 
-  it('shows fork info when forked_from_id is set', () => {
+  it('displays workspace name for any workspace', () => {
     renderWithQueryClient(
       <WorkspaceCard
         workspace={{
           workspace_id: 'ws-003',
           name: '分叉工作空间',
           status: 'draft',
-          current_question_version: 1,
-          forked_from_id: 'ws-parent-001',
+          latest_snapshot_number: null,
+          turn_count: 0,
+          active_run_status: null,
         }}
         onClick={() => {}}
       />,
     );
 
     expect(screen.getByText('分叉工作空间')).toBeInTheDocument();
-    expect(screen.getByText('分叉自其他工作空间')).toBeInTheDocument();
   });
 
-  it('does not show fork info when forked_from_id is null', () => {
+  it('displays workspace name for independent workspace', () => {
     renderWithQueryClient(
       <WorkspaceCard
         workspace={{
           workspace_id: 'ws-004',
           name: '独立工作空间',
           status: 'draft',
-          current_question_version: 1,
-          forked_from_id: null,
+          latest_snapshot_number: null,
+          turn_count: 0,
+          active_run_status: null,
         }}
         onClick={() => {}}
       />,
     );
 
     expect(screen.getByText('独立工作空间')).toBeInTheDocument();
-    expect(screen.queryByText('分叉自其他工作空间')).not.toBeInTheDocument();
   });
 
   it('calls onClick when card is clicked', () => {
@@ -266,8 +266,9 @@ describe('WorkspaceCard', () => {
           workspace_id: 'ws-005',
           name: '可点击工作空间',
           status: 'draft',
-          current_question_version: 1,
-          forked_from_id: null,
+          latest_snapshot_number: null,
+          turn_count: 0,
+          active_run_status: null,
         }}
         onClick={onClick}
       />,
@@ -283,14 +284,14 @@ describe('WorkspaceCard', () => {
 // ---------------------------------------------------------------------------
 
 describe('CreateWorkspaceModal', () => {
-  it('renders form with name and question_text inputs when open', () => {
+  it('renders form with name input only when open', () => {
     renderWithQueryClient(
       <CreateWorkspaceModal open={true} onClose={() => {}} onCreated={() => {}} />,
     );
 
     expect(screen.getByText('新建研究工作空间')).toBeInTheDocument();
     expect(screen.getByText('工作空间名称')).toBeInTheDocument();
-    expect(screen.getByText('主研究问题')).toBeInTheDocument();
+    expect(screen.queryByText('主研究问题')).not.toBeInTheDocument();
   });
 
   it('does not render modal content when closed', () => {
@@ -314,7 +315,7 @@ describe('CreateWorkspaceModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('shows validation error when creating without filling fields', async () => {
+  it('shows validation error when creating without filling name', async () => {
     renderWithQueryClient(
       <CreateWorkspaceModal open={true} onClose={() => {}} onCreated={() => {}} />,
     );
@@ -325,7 +326,6 @@ describe('CreateWorkspaceModal', () => {
 
     await waitFor(() => {
       expect(screen.getByText('请输入名称')).toBeInTheDocument();
-      expect(screen.getByText('请输入研究问题')).toBeInTheDocument();
     });
   });
 });

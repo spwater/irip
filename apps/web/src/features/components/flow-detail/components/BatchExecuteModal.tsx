@@ -33,6 +33,7 @@ export interface BatchExecuteModalProps {
   setBatchProgress: (val: { current: number; total: number; status: string } | null) => void;
   setBatchResults: (val: BatchItemResult[] | null) => void;
   handleBatchExecute: () => Promise<void>;
+  handleBatchCancel: () => void;
 }
 
 export function BatchExecuteModal(props: BatchExecuteModalProps): JSX.Element {
@@ -59,6 +60,7 @@ export function BatchExecuteModal(props: BatchExecuteModalProps): JSX.Element {
     setBatchProgress,
     setBatchResults,
     handleBatchExecute,
+    handleBatchCancel,
   } = props;
 
   return (
@@ -67,7 +69,11 @@ export function BatchExecuteModal(props: BatchExecuteModalProps): JSX.Element {
       open={open}
       onCancel={onCancel}
       footer={
-        batchRunning ? null : batchResults ? (
+        batchRunning ? (
+          <Button danger onClick={handleBatchCancel}>
+            取消执行
+          </Button>
+        ) : batchResults ? (
           <Button type="primary" onClick={() => {
             setBatchModalOpen(false);
             setBatchFiles([]);

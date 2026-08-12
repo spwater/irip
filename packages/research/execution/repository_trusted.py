@@ -213,8 +213,12 @@ class ResearchRepositoryTrusted:
         run_number: int,
         image_digest: str,
         created_by: UUID,
+        turn_id: UUID | None = None,
+        attempt_number: int = 1,
     ) -> ResearchAnalysisRun:
         """插入分析运行，返回 ORM 实体。
+
+        Timeline refactoring (Task 7): 新增 turn_id 和 attempt_number 参数。
 
         Args:
             session: 异步会话。
@@ -224,6 +228,8 @@ class ResearchRepositoryTrusted:
             run_number: Run 编号。
             image_digest: 镜像 digest。
             created_by: 创建人 ID。
+            turn_id: 关联 Turn ID（Timeline 模式，可选）。
+            attempt_number: 尝试编号（默认 1）。
 
         Returns:
             ResearchAnalysisRun: Run ORM 实体。
@@ -237,6 +243,8 @@ class ResearchRepositoryTrusted:
             status="queued",
             image_digest=image_digest,
             created_by=created_by,
+            turn_id=turn_id,
+            attempt_number=attempt_number,
         )
         session.add(run)
         await session.flush()

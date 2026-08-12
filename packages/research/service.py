@@ -27,7 +27,7 @@ from packages.research.dtos import (
     CreateWorkspaceCommand,
     EvidenceRefDTO,
     FactSummary,
-    QuestionVersionRef,
+    SnapshotRef,
     WorkspaceDetail,
     WorkspaceRef,
 )
@@ -125,23 +125,19 @@ class WorkspaceService(ScopedSessionMixin):
         self,
         command: CreateWorkspaceCommand,
     ) -> WorkspaceRef:
-        """创建工作空间 + 研究问题 v1。
+        """创建工作空间（只需名称）。
 
-        流程：
-        1. 插入 research_workspace（status=draft, current_question_version=0）；
-        2. 插入 research_question_version v1（question_text, sub_questions=[]）；
-        3. 更新 workspace.current_question_version = 1；
-        4. 审计。
+        Timeline refactoring: 不再创建 question version，不填 question_text。
+        新 Workspace 的首屏是数据载入状态。
 
         Args:
-            command: 创建命令（name + question_text）。
+            command: 创建命令（只含 name）。
 
         Returns:
             WorkspaceRef: 工作空间引用。
         """
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            # 1. 插入工作空间
             workspace = await ResearchRepository.insert_workspace(
                 session,
                 owner_user_id=actor_id,
@@ -150,20 +146,6 @@ class WorkspaceService(ScopedSessionMixin):
                 status="draft",
             )
 
-            # 2. 插入问题版本 v1
-            await ResearchRepository.insert_question_version(
-                session,
-                workspace_id=workspace.id,
-                version_number=1,
-                question_text=command.question_text,
-                sub_questions=[],
-                created_by=actor_id,
-            )
-
-            # 3. 更新工作空间当前版本号
-            await ResearchRepository.update_workspace_current_version(session, workspace.id, 1)
-
-            # 4. 审计
             await AuditRecorder.record(
                 session,
                 AuditEventData(
@@ -180,7 +162,9 @@ class WorkspaceService(ScopedSessionMixin):
                 workspace_id=workspace.id,
                 name=workspace.name,
                 status=workspace.status,
-                current_question_version=1,
+                latest_snapshot_number=None,
+                turn_count=0,
+                active_run_status=None,
             )
 
     async def list_workspaces(
@@ -214,8 +198,9 @@ class WorkspaceService(ScopedSessionMixin):
                     workspace_id=ws.id,
                     name=ws.name,
                     status=ws.status,
-                    current_question_version=ws.current_question_version,
-                    forked_from_id=ws.forked_from_id,
+                    latest_snapshot_number=None,  # TODO: from snapshot count
+                    turn_count=0,  # TODO: from turn count
+                    active_run_status=None,
                 )
                 for ws in items
             ]
@@ -267,12 +252,15 @@ class WorkspaceService(ScopedSessionMixin):
                 workspace_id=workspace.id,
                 name=name,
                 status=workspace.status,
-                current_question_version=workspace.current_question_version,
-                forked_from_id=workspace.forked_from_id,
+                latest_snapshot_number=None,
+                turn_count=0,
+                active_run_status=None,
             )
 
     async def get_workspace(self, workspace_id: UUID) -> WorkspaceDetail:
-        """获取工作空间详情（含当前问题版本 + 证据数 + 快照数）。
+        """获取工作空间详情。
+
+        Timeline refactoring: 移除 current_question，新增 latest_snapshot_number/turn_count/active_run_status。
 
         Args:
             workspace_id: 工作空间 ID。
@@ -294,20 +282,6 @@ class WorkspaceService(ScopedSessionMixin):
                     fields={"workspace_id": str(workspace_id)},
                 )
 
-            # 获取当前问题版本
-            current_question_orm = await ResearchRepository.get_latest_question_version(
-                session, workspace_id
-            )
-            current_question: QuestionVersionRef | None = None
-            if current_question_orm is not None:
-                current_question = QuestionVersionRef(
-                    version_id=current_question_orm.id,
-                    workspace_id=current_question_orm.workspace_id,
-                    version_number=current_question_orm.version_number,
-                    question_text=current_question_orm.question_text,
-                    sub_questions=list(current_question_orm.sub_questions or []),
-                )
-
             # 获取证据数
             evidence_count = await ResearchRepository.count_active_evidence_refs(
                 session, workspace_id
@@ -315,7 +289,6 @@ class WorkspaceService(ScopedSessionMixin):
 
             # 获取快照列表
             snapshots_orm = await ResearchRepository.list_snapshots(session, workspace_id)
-            from packages.research.dtos import SnapshotRef
 
             snapshots = [
                 SnapshotRef(
@@ -327,13 +300,17 @@ class WorkspaceService(ScopedSessionMixin):
                 for s in snapshots_orm
             ]
 
+            latest_snapshot_number = snapshots[0].snapshot_number if snapshots else None
+
             return WorkspaceDetail(
                 workspace_id=workspace.id,
                 name=workspace.name,
                 status=workspace.status,
-                current_question=current_question,
                 evidence_count=evidence_count,
                 snapshots=snapshots,
+                latest_snapshot_number=latest_snapshot_number,
+                turn_count=0,  # TODO: count turns
+                active_run_status=None,  # TODO: query active run
             )
 
     async def archive_workspace(self, workspace_id: UUID) -> None:
@@ -422,177 +399,9 @@ class WorkspaceService(ScopedSessionMixin):
                 ),
             )
 
-    async def fork_workspace(
-        self,
-        workspace_id: UUID,
-        new_name: str,
-    ) -> WorkspaceRef:
-        """分叉工作空间。
-
-        Q5 继承规则：仅继承主研究问题最新版本 + 证据引用列表（副本）。
-
-        Args:
-            workspace_id: 源工作空间 ID。
-            new_name: 新工作空间名称。
-
-        Returns:
-            WorkspaceRef: 新工作空间引用。
-
-        Raises:
-            AppError: code="not_found"，当源工作空间不存在时。
-        """
-        actor_id = self._require_actor()
-        async with self._scoped_session() as session:
-            # 1. 读取源工作空间
-            source = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
-            if source is None:
-                raise AppError(
-                    code="not_found",
-                    message="源研究工作空间不存在",
-                    retryable=False,
-                    fields={"workspace_id": str(workspace_id)},
-                )
-
-            # 2. 读取源最新问题版本
-            latest_question = await ResearchRepository.get_latest_question_version(
-                session, workspace_id
-            )
-
-            # 3. 读取源证据引用列表（active）
-            evidence_refs = await ResearchRepository.list_evidence_refs(
-                session, workspace_id, status="active"
-            )
-
-            # 4. 创建新工作空间
-            new_ws = await ResearchRepository.insert_workspace(
-                session,
-                owner_user_id=actor_id,
-                department_id=self._dept_id,
-                name=new_name,
-                status="draft",
-                forked_from_id=source.id,
-            )
-
-            # 5. 创建问题版本 v1（继承源最新问题文本）
-            if latest_question is not None:
-                await ResearchRepository.insert_question_version(
-                    session,
-                    workspace_id=new_ws.id,
-                    version_number=1,
-                    question_text=latest_question.question_text,
-                    sub_questions=list(latest_question.sub_questions or []),
-                    created_by=actor_id,
-                )
-            else:
-                await ResearchRepository.insert_question_version(
-                    session,
-                    workspace_id=new_ws.id,
-                    version_number=1,
-                    question_text="",
-                    sub_questions=[],
-                    created_by=actor_id,
-                )
-
-            # 更新工作空间版本号
-            await ResearchRepository.update_workspace_current_version(session, new_ws.id, 1)
-
-            # 6. 复制证据引用（副本而非共享引用）
-            for ref in evidence_refs:
-                await ResearchRepository.insert_evidence_ref(
-                    session,
-                    workspace_id=new_ws.id,
-                    source_namespace=ref.source_namespace,
-                    source_id=ref.source_id,
-                    source_version=ref.source_version,
-                    source_name=ref.source_name,
-                    added_by=actor_id,
-                )
-
-            # 审计
-            await AuditRecorder.record(
-                session,
-                AuditEventData(
-                    department_id=self._dept_id,
-                    action="research.workspace.fork",
-                    actor_user_id=actor_id,
-                    resource_type="research_workspace",
-                    resource_id=new_ws.id,
-                    payload={"forked_from": str(source.id)},
-                ),
-            )
-
-            return WorkspaceRef(
-                workspace_id=new_ws.id,
-                name=new_ws.name,
-                status=new_ws.status,
-                current_question_version=1,
-                forked_from_id=source.id,
-            )
-
-    async def update_question(
-        self,
-        workspace_id: UUID,
-        question_text: str,
-        sub_questions: list[str] | None = None,
-    ) -> QuestionVersionRef:
-        """更新研究问题（创建新版本）。
-
-        Args:
-            workspace_id: 工作空间 ID。
-            question_text: 新主研究问题文本。
-            sub_questions: 子问题列表（可选）。
-
-        Returns:
-            QuestionVersionRef: 新版本引用。
-
-        Raises:
-            AppError: code="not_found"，当工作空间不存在时。
-        """
-        actor_id = self._require_actor()
-        async with self._scoped_session() as session:
-            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
-            if workspace is None:
-                raise AppError(
-                    code="not_found",
-                    message="研究工作空间不存在",
-                    retryable=False,
-                    fields={"workspace_id": str(workspace_id)},
-                )
-
-            new_version_number = workspace.current_question_version + 1
-
-            version = await ResearchRepository.insert_question_version(
-                session,
-                workspace_id=workspace_id,
-                version_number=new_version_number,
-                question_text=question_text,
-                sub_questions=sub_questions if sub_questions is not None else [],
-                created_by=actor_id,
-            )
-
-            await ResearchRepository.update_workspace_current_version(
-                session, workspace_id, new_version_number
-            )
-
-            await AuditRecorder.record(
-                session,
-                AuditEventData(
-                    department_id=self._dept_id,
-                    action="research.question.update",
-                    actor_user_id=actor_id,
-                    resource_type="research_question_version",
-                    resource_id=version.id,
-                    payload={"version_number": new_version_number},
-                ),
-            )
-
-            return QuestionVersionRef(
-                version_id=version.id,
-                workspace_id=workspace_id,
-                version_number=new_version_number,
-                question_text=question_text,
-                sub_questions=sub_questions if sub_questions is not None else [],
-            )
+    # NOTE: fork_workspace and update_question removed in timeline refactoring.
+    # Questions now live in ResearchTurn.question_text_snapshot, not as versions.
+    # Forking is replaced by creating a new workspace and adding data.
 
     async def add_evidence(
         self,

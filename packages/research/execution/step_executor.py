@@ -4,8 +4,11 @@
 _execute_step（按 python/llm/mixed/knowledge 分发）、_execute_python_step
 （AI 生成代码 → 沙箱执行 → 收集输出，自动修错）、_execute_llm_step
 （ContextRouter 计算预算 → 超预算分块 → 模型调用 → 归并）、_execute_mixed_step
-（Python 先行 → LLM 阅读）、_extract_insight_candidate（成功后提取候选）
-与 _generate_fallback_script（AI 失败回退脚本）。
+（Python 先行 → LLM 阅读）与 _generate_fallback_script（AI 失败回退脚本）。
+
+Timeline refactoring (Task 8): _extract_insight_candidate 已删除。
+候选提取改为整轮 Run 完成后由独立 Celery 任务执行
+（CandidateExtractionService），不再在步骤内部逐步骤提取。
 
 关键约束：
 - 某步失败后依赖步骤停止（skipped），无依赖分支仍可继续；
@@ -139,19 +142,9 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                             mode_reason=coverage.get("mode_reason"),
                         )
 
-                # ── 阶段 3：Insight 候选提取钩子 ──
-                # LLM/混合步骤成功后，通过 InsightExtractor 提取结构化候选
-                if method in ("llm", "mixed") and self._insight_extractor is not None:
-                    try:
-                        await self._extract_insight_candidate(
-                            run_id, step_id, step_def, plan, method
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "Insight extraction failed for step %s: %s",
-                            step_key,
-                            exc,
-                        )
+                # ── Timeline refactoring (Task 8): 逐步骤候选提取已删除 ──
+                # 候选提取改为整轮 Run 完成后由独立 Celery 任务执行
+                # (CandidateExtractionService.enqueue_for_completed_run)
 
                 await self._publish_event(
                     run_id,
@@ -672,106 +665,9 @@ class StepExecutorMixin(ResearchOrchestratorBase):
 
         return "\n\n".join(parts)
 
-    async def _extract_insight_candidate(
-        self,
-        run_id: UUID,
-        step_id: UUID | None,
-        step_def: dict[str, Any],
-        plan: object,
-        method: str,
-    ) -> None:
-        """提取 Insight 候选（阶段 3 新增钩子）。
-
-        在 LLM/混合步骤成功后调用 InsightExtractor 提取结构化候选，
-        并保存为 InsightCandidate。
-
-        Args:
-            run_id: Run ID。
-            step_id: 步骤 ID。
-            step_def: 步骤定义。
-            plan: 计划版本 ORM。
-            method: 步骤方法（llm 或 mixed）。
-        """
-        if self._factory is None or self._insight_extractor is None:
-            return
-
-        # 获取步骤输出文本
-        step_output = ""
-        if method == "llm":
-            # LLM 步骤的输出即为模型回答
-            # 从最近的工件中获取输出文本
-            async with self._factory() as session:
-                from packages.research.execution.repository_trusted import (
-                    ResearchRepositoryTrusted,
-                )
-
-                if step_id is not None:
-                    artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(
-                        session, step_id
-                    )
-                    for a in artifacts:
-                        if a.artifact_type in ("log", "data"):
-                            try:
-                                content = await self._artifact_service.get_artifact(a.id)
-                                if content is not None:
-                                    step_output = content.content.decode("utf-8", errors="replace")
-                                    break
-                            except Exception:
-                                logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
-        elif method == "mixed":
-            # 混合步骤：LLM 部分的输出
-            step_output = step_def.get("question", "")
-
-        if not step_output:
-            step_output = step_def.get("question", "")
-
-        # 构建研究上下文
-        research_context = self._build_research_context(run_id, plan)
-
-        # 调用 InsightExtractor 提取
-        candidate_data = await self._insight_extractor.extract(
-            step_output=step_output,
-            research_context=research_context,
-        )
-
-        if candidate_data is None:
-            return
-
-        # 获取 workspace_id
-        async with self._factory() as session:
-            run = await self._repo.get_run(session, run_id)
-            if run is None:
-                return
-            workspace_id = run.workspace_id
-
-            # 保存 Insight 候选
-            from packages.research.repository import ResearchRepository
-
-            await ResearchRepository.insert_insight_candidate(
-                session,
-                workspace_id=workspace_id,
-                run_id=run_id,
-                step_id=step_id,
-                conclusion=candidate_data.conclusion,
-                scope=candidate_data.scope,
-                evidence_refs=candidate_data.evidence_refs,
-                method_refs=candidate_data.method_refs,
-                confidence_level=candidate_data.confidence_level,
-                limitations=candidate_data.limitations,
-                evidence_source_label=candidate_data.evidence_source_label,
-                ai_raw_text=candidate_data.ai_raw_text,
-                status="pending",
-            )
-
-        # 发布 SSE 事件通知前端有新候选
-        await self._publish_event(
-            run_id,
-            "insight.candidate.created",
-            {
-                "step_id": str(step_id) if step_id else None,
-                "conclusion": candidate_data.conclusion[:100],
-            },
-        )
+    # Timeline refactoring (Task 8): _extract_insight_candidate method removed.
+    # Candidate extraction is now handled by CandidateExtractionService as an
+    # independent Celery job after the entire Run completes, not per-step.
 
     def _generate_fallback_script(self, question: str) -> str:
         """生成回退 Python 脚本（AI 调用失败时使用）。

@@ -32,7 +32,6 @@ class WorkspaceRepository:
         department_id: UUID,
         name: str,
         status: str = "draft",
-        forked_from_id: UUID | None = None,
     ) -> ResearchWorkspace:
         """插入工作空间行，返回 ORM 实体。
 
@@ -42,7 +41,6 @@ class WorkspaceRepository:
             department_id: 部门 ID。
             name: 工作空间名称。
             status: 状态（默认 draft）。
-            forked_from_id: 分叉来源 ID（可选）。
 
         Returns:
             ResearchWorkspace: 工作空间 ORM 实体。
@@ -53,8 +51,7 @@ class WorkspaceRepository:
             department_id=department_id,
             name=name,
             status=status,
-            current_question_version=0,
-            forked_from_id=forked_from_id,
+            next_turn_number=1,
             lock_version=0,
         )
         session.add(workspace)
@@ -184,23 +181,50 @@ class WorkspaceRepository:
         )
 
     @staticmethod
-    async def update_workspace_current_version(
+    async def update_workspace_latest_snapshot(
         session: AsyncSession,
         workspace_id: UUID,
-        version_number: int,
+        snapshot_id: UUID,
     ) -> None:
-        """更新工作空间的当前问题版本号。
+        """更新工作空间的最新快照指针。
 
         Args:
             session: 异步会话。
             workspace_id: 工作空间 ID。
-            version_number: 新版本号。
+            snapshot_id: 快照 ID。
         """
         await session.execute(
             sa.update(ResearchWorkspace)
             .where(ResearchWorkspace.id == workspace_id)
-            .values(current_question_version=version_number, updated_at=sa.func.now())
+            .values(latest_snapshot_id=snapshot_id, updated_at=sa.func.now())
         )
+
+    @staticmethod
+    async def allocate_turn_number(
+        session: AsyncSession,
+        workspace_id: UUID,
+    ) -> int:
+        """原子分配下一个研究轮次编号。
+
+        锁定 Workspace 行，读取并递增 next_turn_number。
+
+        Args:
+            session: 异步会话。
+            workspace_id: 工作空间 ID。
+
+        Returns:
+            int: 分配到的轮次编号。
+        """
+        result = await session.execute(
+            sa.select(ResearchWorkspace)
+            .where(ResearchWorkspace.id == workspace_id)
+            .with_for_update()
+        )
+        ws = result.scalar_one()
+        allocated = ws.next_turn_number
+        ws.next_turn_number = allocated + 1
+        await session.flush()
+        return allocated
 
     @staticmethod
     async def delete_workspace(

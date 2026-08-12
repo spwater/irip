@@ -46,8 +46,9 @@ export type Workspace = {
   workspace_id: string;
   name: string;
   status: string;
-  current_question_version: number;
-  forked_from_id?: string | null;
+  latest_snapshot_number: number | null;
+  turn_count: number;
+  active_run_status: string | null;
 };
 
 export type WorkspaceListResponse = {
@@ -55,21 +56,15 @@ export type WorkspaceListResponse = {
   next_cursor: string | null;
 };
 
-export type QuestionVersion = {
-  version_id: string;
-  workspace_id: string;
-  version_number: number;
-  question_text: string;
-  sub_questions: string[];
-};
-
 export type WorkspaceDetail = {
   workspace_id: string;
   name: string;
   status: string;
-  current_question: QuestionVersion | null;
   evidence_count: number;
   snapshots: Snapshot[];
+  latest_snapshot_number: number | null;
+  turn_count: number;
+  active_run_status: string | null;
 };
 
 export type EvidenceRef = {
@@ -268,7 +263,7 @@ export type ConversationListResponse = {
 
 export async function apiCreateWorkspace(body: {
   name: string;
-  question_text: string;
+  question_text?: string;
 }): Promise<Workspace> {
   const res = await http.post<Workspace>('/research/workspaces', body);
   return res.data;
@@ -304,21 +299,7 @@ export async function apiArchiveWorkspace(id: string): Promise<void> {
   await http.post(`/research/workspaces/${id}/archive`);
 }
 
-export async function apiForkWorkspace(
-  id: string,
-  body: { new_name: string },
-): Promise<Workspace> {
-  const res = await http.post<Workspace>(`/research/workspaces/${id}/fork`, body);
-  return res.data;
-}
-
-export async function apiUpdateQuestion(
-  id: string,
-  body: { question_text: string; sub_questions?: string[] },
-): Promise<QuestionVersion> {
-  const res = await http.put<QuestionVersion>(`/research/workspaces/${id}/question`, body);
-  return res.data;
-}
+// Timeline refactoring: fork and updateQuestion APIs removed (routes deleted from backend)
 
 export async function apiAddEvidence(
   id: string,

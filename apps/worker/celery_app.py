@@ -33,7 +33,11 @@ celery_app: Celery = Celery(
     "irip",
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=["apps.worker.tasks", "apps.worker.research_tasks"],
+    include=[
+        "apps.worker.tasks",
+        "apps.worker.research_tasks",
+        "apps.worker.research_timeline_tasks",
+    ],
 )
 
 #: Celery 配置。

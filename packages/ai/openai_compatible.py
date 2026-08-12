@@ -21,6 +21,7 @@ REST API（如 OpenAI 官方、Azure OpenAI、本地 vLLM、Ollama 等）。
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -29,6 +30,8 @@ import httpx
 from packages.ai.providers import AIRequest, AIResponse
 from packages.common.errors import AppError
 from packages.common.safe_http import SafeHTTPClient
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAICompatibleProvider:
@@ -142,10 +145,15 @@ class OpenAICompatibleProvider:
                 fields={},
             ) from exc
         except httpx.HTTPError as exc:
-            # 不在消息中暴露密钥或完整 URL
+            # 不在消息中暴露密钥或完整 URL，但记录详细错误供排查
+            logger.error(
+                "AI provider HTTPError: type=%s, msg=%s",
+                type(exc).__name__,
+                str(exc)[:500],
+            )
             raise AppError(
                 code="ai_provider_error",
-                message="AI 服务连接失败",
+                message=(f"AI 服务连接失败: {type(exc).__name__}: {str(exc)[:200]}"),
                 retryable=True,
                 fields={},
             ) from exc

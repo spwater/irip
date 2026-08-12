@@ -96,3 +96,39 @@ def register(ctx: CompositionContext) -> None:
         return service
 
     ctx.app.dependency_overrides[get_snapshot_service] = _get_snapshot_service_dep
+
+    # ---- Timeline services (Task 11) ----
+    from apps.api.routers.research_timeline import (
+        get_conclusion_service,
+        get_recommendation_service,
+        get_timeline_query_service,
+        get_turn_service,
+    )
+    from packages.research.timeline.recommendation_service import RecommendationService
+    from packages.research.timeline.timeline_query_service import TimelineQueryService
+
+    ctx.app.dependency_overrides[get_timeline_query_service] = lambda: TimelineQueryService(
+        ctx.session_factory,
+    )
+    ctx.app.dependency_overrides[get_recommendation_service] = lambda: RecommendationService(
+        ctx.session_factory,
+    )
+
+    async def _get_turn_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ):
+        from packages.research.timeline.turn_service import TurnService
+
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        return TurnService(ctx.session_factory, dept_id, current_user.user_id)
+
+    async def _get_conclusion_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ):
+        from packages.research.timeline.conclusion_service import ConclusionService
+
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        return ConclusionService(ctx.session_factory, dept_id, current_user.user_id)
+
+    ctx.app.dependency_overrides[get_turn_service] = _get_turn_service_dep
+    ctx.app.dependency_overrides[get_conclusion_service] = _get_conclusion_service_dep

@@ -281,16 +281,8 @@ class _ReuseMixin(_PublicationBase):
                 status="draft",
             )
 
-            # 创建问题版本 v1
-            await ResearchRepository.insert_question_version(
-                session,
-                workspace_id=new_ws.id,
-                version_number=1,
-                question_text=question_text,
-                sub_questions=[],
-                created_by=actor_id,
-            )
-            await ResearchRepository.update_workspace_current_version(session, new_ws.id, 1)
+            # Timeline refactoring: question version removed, workspace created name-only
+            # No question version insertion needed
 
             # 将全部 DerivedDataset 作为证据加入
             for ref in latest_version.dataset_version_refs or []:
@@ -330,7 +322,6 @@ class _ReuseMixin(_PublicationBase):
                 workspace_id=new_ws.id,
                 name=workspace_name,
                 status="draft",
-                current_question_version=1,
             )
 
     # ============================================================

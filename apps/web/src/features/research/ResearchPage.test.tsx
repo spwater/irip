@@ -32,8 +32,8 @@ vi.mock('./WorkspaceDetail', () => ({
 }));
 
 const mockWorkspaces: Workspace[] = [
-  { workspace_id: 'ws-1', name: '烧结性能研究', status: 'draft', current_question_version: 1 },
-  { workspace_id: 'ws-2', name: '熔炼工艺优化', status: 'archived', current_question_version: 2 },
+  { workspace_id: 'ws-1', name: '烧结性能研究', status: 'draft', latest_snapshot_number: null, turn_count: 0, active_run_status: null },
+  { workspace_id: 'ws-2', name: '熔炼工艺优化', status: 'archived', latest_snapshot_number: null, turn_count: 0, active_run_status: null },
 ];
 
 function renderPage(): void {
@@ -55,9 +55,8 @@ describe('ResearchPage', () => {
     expect(screen.getByRole('button', { name: /新建\s*Workspace/ })).toBeInTheDocument();
   });
 
-  it('renders status filter segmented control with 全部/活跃/归档', () => {
+  it('renders status filter segmented control with 活跃/归档', () => {
     renderPage();
-    expect(screen.getByText('全部')).toBeInTheDocument();
     expect(screen.getByText('活跃')).toBeInTheDocument();
     expect(screen.getByText('归档')).toBeInTheDocument();
   });

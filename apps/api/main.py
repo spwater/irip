@@ -373,12 +373,14 @@ def create_app() -> FastAPI:
         from apps.api.routers.research_products import research_products_router
         from apps.api.routers.research_publish import research_publish_router
         from apps.api.routers.research_run import research_run_router
+        from apps.api.routers.research_timeline import research_timeline_router
 
         app.include_router(research_router)
         app.include_router(research_run_router)
         app.include_router(research_products_router)
         app.include_router(research_publish_router)
         app.include_router(research_lineage_router)
+        app.include_router(research_timeline_router)
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)

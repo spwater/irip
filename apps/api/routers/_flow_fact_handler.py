@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import sqlalchemy as sa
+
 from packages.common.artifacts import ArtifactService
 from packages.common.errors import AppError
 from packages.components.flow.flow_fact_service import FlowFactService
@@ -116,6 +118,7 @@ async def persist_run_as_fact_handler(
 
     # 4. 上传原始 PDF + 提取数据 JSON 到 artifact 存储
     pdf_artifact_id: UUID | None = None
+    pdf_artifact_sha256: str | None = None
     data_artifact_id: UUID | None = None
 
     try:
@@ -135,6 +138,20 @@ async def persist_run_as_fact_handler(
                 _candidate_artifact_id = UUID(source_path[len("artifact:") :])
                 if await flow_fact_svc.check_artifact_exists(_candidate_artifact_id):
                     pdf_artifact_id = _candidate_artifact_id
+                    # 查询 artifact 的 sha256 用于幂等键
+                    try:
+                        from packages.common.artifacts import Artifact as ArtifactEntity
+
+                        async with service.session_factory() as _sess:
+                            _art = await _sess.scalar(
+                                sa.select(ArtifactEntity).where(
+                                    ArtifactEntity.id == _candidate_artifact_id
+                                )
+                            )
+                            if _art:
+                                pdf_artifact_sha256 = _art.sha256
+                    except Exception:
+                        pass
             except ValueError:
                 pass
         elif source_path:
@@ -207,7 +224,11 @@ async def persist_run_as_fact_handler(
         subject_id=subject_id,
         started_at=run.started_at or run.created_at,
         ended_at=run.completed_at,
-        idempotency_key=f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}",
+        idempotency_key=(
+            f"file-{pdf_artifact_sha256}-{body.object_id}"
+            if pdf_artifact_sha256
+            else f"flow-run-{run_id}-{body.object_id}-{int(run.created_at.timestamp())}"
+        ),
         created_by=current_user.user_id,
         task_code=snapshot.task_code,
         task_name=group_name,

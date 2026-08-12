@@ -17,51 +17,38 @@ from uuid import UUID
 class CreateWorkspaceCommand:
     """创建工作空间命令。
 
+    Timeline refactoring: 只需要名称，不再需要 question_text。
+    进入工作空间后先加数据、确认快照，然后 AI 推荐问题。
+
     Attributes:
         name: 工作空间名称。
-        question_text: 主研究问题文本。
     """
 
     name: str
-    question_text: str
 
 
 @dataclass(frozen=True)
 class WorkspaceRef:
-    """工作空间引用（列表/创建/分叉响应）。
+    """工作空间引用（列表/创建响应）。
+
+    Timeline refactoring: 移除 current_question_version 和 forked_from_id，
+    新增 latest_snapshot_number、turn_count 和 active_run_status。
 
     Attributes:
         workspace_id: 工作空间 UUID。
         name: 工作空间名称。
         status: 状态（draft / archived）。
-        current_question_version: 当前问题版本号。
-        forked_from_id: 分叉来源 ID（可选）。
+        latest_snapshot_number: 最新快照编号（None 表示无快照）。
+        turn_count: 研究轮次数。
+        active_run_status: 活跃 Run 状态（None 表示无运行任务）。
     """
 
     workspace_id: UUID
     name: str
     status: str
-    current_question_version: int
-    forked_from_id: UUID | None = None
-
-
-@dataclass(frozen=True)
-class QuestionVersionRef:
-    """研究问题版本引用。
-
-    Attributes:
-        version_id: 版本 UUID。
-        workspace_id: 工作空间 UUID。
-        version_number: 版本号。
-        question_text: 主研究问题文本。
-        sub_questions: 子问题列表。
-    """
-
-    version_id: UUID
-    workspace_id: UUID
-    version_number: int
-    question_text: str
-    sub_questions: list[str] = field(default_factory=list)
+    latest_snapshot_number: int | None = None
+    turn_count: int = 0
+    active_run_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -126,23 +113,29 @@ class FactSummary:
 
 @dataclass(frozen=True)
 class WorkspaceDetail:
-    """工作空间详情（含当前问题版本 + 证据数 + 快照数）。
+    """工作空间详情。
+
+    Timeline refactoring: 移除 current_question，新增 turn_count 和 active_run_status。
 
     Attributes:
         workspace_id: 工作空间 UUID。
         name: 工作空间名称。
         status: 状态。
-        current_question: 当前问题版本引用。
         evidence_count: 活跃证据引用数。
         snapshots: 快照引用列表。
+        latest_snapshot_number: 最新快照编号（None 表示无快照）。
+        turn_count: 研究轮次数。
+        active_run_status: 活跃 Run 状态（None 表示无运行任务）。
     """
 
     workspace_id: UUID
     name: str
     status: str
-    current_question: QuestionVersionRef | None
     evidence_count: int
     snapshots: list[SnapshotRef] = field(default_factory=list)
+    latest_snapshot_number: int | None = None
+    turn_count: int = 0
+    active_run_status: str | None = None
 
 
 # ============================================================

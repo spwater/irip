@@ -316,19 +316,16 @@ class TestPlanReviewCardContract:
         return path.read_text()
 
     def test_research_canvas_has_handle_confirm_plan(self) -> None:
-        """ResearchCanvas 必须有 handleConfirmPlan（防止再次被注释掉）。"""
-        source = self._read_source(self.RESEARCH_CANVAS_PATH)
-        assert "handleConfirmPlan" in source, (
-            "handleConfirmPlan must exist in ResearchCanvas — do not comment it out!"
-        )
-        assert "onConfirm={handleConfirmPlan}" in source, (
-            "handleConfirmPlan must be passed to PlanReviewCard as onConfirm"
-        )
+        """ResearchCanvas has been removed in timeline refactoring — skip."""
+        import pytest
+
+        pytest.skip("ResearchCanvas.tsx removed in timeline refactoring")
 
     def test_research_canvas_has_no_adjust_button(self) -> None:
-        """ResearchCanvas 不应传递 onAdjust（调整计划按钮已删除）。"""
-        source = self._read_source(self.RESEARCH_CANVAS_PATH)
-        assert "onAdjust" not in source, "onAdjust should be removed from ResearchCanvas"
+        """ResearchCanvas has been removed in timeline refactoring — skip."""
+        import pytest
+
+        pytest.skip("ResearchCanvas.tsx removed in timeline refactoring")
 
     def test_plan_review_card_has_conditional_adjust_button(self) -> None:
         """PlanReviewCard 应包含调整计划按钮，且仅在 onAdjust 存在时条件渲染。
@@ -367,12 +364,7 @@ class TestPlanReviewCardContract:
         assert "确认计划" in source, "PlanReviewCard must have 确认计划 button"
 
     def test_research_canvas_has_no_commented_out_code(self) -> None:
-        """ResearchCanvas 不应有被注释掉的回调函数。"""
-        source = self._read_source(self.RESEARCH_CANVAS_PATH)
-        # 不应有注释掉的 handleSubmitRun / handleCancelRun
-        assert "// const handleSubmitRun" not in source, (
-            "handleSubmitRun should be deleted, not commented out"
-        )
-        assert "// const handleCancelRun" not in source, (
-            "handleCancelRun should be deleted, not commented out"
-        )
+        """ResearchCanvas has been removed in timeline refactoring — skip."""
+        import pytest
+
+        pytest.skip("ResearchCanvas.tsx removed in timeline refactoring")

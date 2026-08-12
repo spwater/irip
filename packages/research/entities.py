@@ -1,8 +1,12 @@
 """研究域 ORM 模型。
 
-定义四张表：
-- research_workspace: 研究工作空间（用户级，含主研究问题版本号缓存）；
-- research_question_version: 研究问题版本（不可变，每次更新生成新版本）；
+Timeline refactoring (2026-08-12): research_question_version removed;
+research_workspace now has latest_snapshot_id and next_turn_number instead
+of current_question_version and forked_from_id.  See
+packages/research/timeline/entities.py for the 9 new timeline tables.
+
+定义三张基础表：
+- research_workspace: 研究工作空间（用户级，含最新快照指针和轮次计数器）；
 - research_workspace_evidence_ref: 工作空间证据引用（逻辑引用核心 Fact，不建 FK）；
 - research_evidence_snapshot: 证据快照（不可变，冻结时的权限包络 + 字段清单 + 哈希）。
 
@@ -11,7 +15,7 @@
 - 研究表之间的 FK（workspace_id → research_workspace.id ON DELETE CASCADE）使用 sa.ForeignKey；
 - 跨模块引用（source_id）不建 FK，纯 GUID 列（逻辑引用核心 Fact）；
 - 研究表到 app_user / department 的 FK 允许保留（稳定基础表）；
-- 不可变表（question_version / snapshot）由应用层保证不 UPDATE / DELETE。
+- 不可变表（snapshot）由应用层保证不 UPDATE / DELETE。
 
 风格参考 packages/facts/entities.py：继承 Base，
 使用 GUID / UTCDateTime 自定义类型，Mapped[] + mapped_column()。
@@ -37,17 +41,17 @@ from packages.common.ids import new_id
 class ResearchWorkspace(Base):
     """研究工作空间实体（对应 research_workspace 表）。
 
-    一个工作空间属于一个用户（owner_user_id），包含主研究问题（版本化）、
-    证据引用列表和证据快照。工作空间状态为 draft（活跃）或 archived（归档）。
+    Timeline refactoring: 移除 current_question_version 和 forked_from_id，
+    新增 latest_snapshot_id（当前最新数据快照指针）和 next_turn_number（轮次计数器）。
 
     Attributes:
         id: 工作空间 UUID（PK）。
         owner_user_id: 所有者用户 ID（FK→app_user）。
-        department_id: 所属部门 ID（FK→department，用于 RLS 隔离）。
+        department_id: 所属部门 ID（FK→department，用于隔离）。
         name: 工作空间名称。
         status: 状态（draft / archived）。
-        current_question_version: 当前最新问题版本号（冗余缓存）。
-        forked_from_id: 分叉来源工作空间 ID（逻辑引用，不建 FK）。
+        latest_snapshot_id: 当前最新数据快照 ID（可空，FK→research_evidence_snapshot，ON DELETE SET NULL DEFERRABLE）。
+        next_turn_number: 下一个研究轮次编号（NOT NULL，默认 1）。
         created_at: 创建时间。
         updated_at: 更新时间。
         lock_version: 乐观锁版本号。
@@ -62,10 +66,10 @@ class ResearchWorkspace(Base):
     )
     name: Mapped[str] = mapped_column(sa.Text, nullable=False)
     status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'draft'"))
-    current_question_version: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False, server_default=sa.text("0")
+    latest_snapshot_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
+    next_turn_number: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, server_default=sa.text("1")
     )
-    forked_from_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )
@@ -80,46 +84,9 @@ class ResearchWorkspace(Base):
         return f"ResearchWorkspace(id={self.id!r}, name={self.name!r}, status={self.status!r})"
 
 
-class ResearchQuestionVersion(Base):
-    """研究问题版本实体（对应 research_question_version 表）。
-
-    不可变：创建后不允许 UPDATE（应用层保证）。每次更新研究问题生成新版本，
-    version_number 递增。sub_questions 为 JSONB 数组。
-
-    Attributes:
-        id: 版本 UUID（PK）。
-        workspace_id: 工作空间 ID（FK→research_workspace ON DELETE CASCADE）。
-        version_number: 版本号（从 1 开始递增）。
-        question_text: 主研究问题文本。
-        sub_questions: 子问题列表（JSONB 数组，如 ["温度梯度的影响"]）。
-        created_at: 创建时间。
-        created_by: 创建人 ID（FK→app_user）。
-    """
-
-    __tablename__ = "research_question_version"
-
-    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
-    workspace_id: Mapped[UUID] = mapped_column(
-        GUID,
-        sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    version_number: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    question_text: Mapped[str] = mapped_column(sa.Text, nullable=False)
-    sub_questions: Mapped[list[Any]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
-    )
-    created_at: Mapped[datetime] = mapped_column(
-        UTCDateTime, server_default=sa.func.now(), nullable=False
-    )
-    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
-
-    def __repr__(self) -> str:
-        return (
-            f"ResearchQuestionVersion(id={self.id!r}, "
-            f"workspace_id={self.workspace_id!r}, "
-            f"version_number={self.version_number!r})"
-        )
+# NOTE: ResearchQuestionVersion removed in timeline refactoring (0084 migration).
+# Questions now live only in ResearchTurn.question_text_snapshot.
+# See packages/research/timeline/entities.py for the new timeline domain.
 
 
 class WorkspaceEvidenceRef(Base):
@@ -202,6 +169,9 @@ class ResearchEvidenceSnapshot(Base):
     field_manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     source_refs: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
     created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(
+        sa.Text, nullable=False, server_default=sa.text("''")
+    )
 
     def __repr__(self) -> str:
         return (
@@ -259,7 +229,9 @@ class ResearchDerivedDataset(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
     source_run_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     source_snapshot_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -321,13 +293,19 @@ class ResearchDerivedDatasetVersion(Base):
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     source_run_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     source_step_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_step.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_step.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     source_artifact_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_run_artifact.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_run_artifact.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     content_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -380,7 +358,9 @@ class ResearchView(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
     source_run_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -438,17 +418,25 @@ class ResearchViewVersion(Base):
     image_height: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     image_content_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
     chart_code_artifact_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_run_artifact.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_run_artifact.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     image_digest: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     source_run_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     source_step_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_step.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_step.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     source_artifact_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_run_artifact.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_run_artifact.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     bound_dataset_version_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     chart_description: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
@@ -494,7 +482,9 @@ class ResearchInsight(Base):
         sa.Integer, nullable=False, server_default=sa.text("0")
     )
     source_run_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -558,7 +548,9 @@ class ResearchInsightVersion(Base):
     modification_note: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     source_candidate_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     source_run_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
@@ -606,7 +598,9 @@ class ResearchInsightCandidate(Base):
         nullable=False,
     )
     step_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_step.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_step.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     conclusion: Mapped[str] = mapped_column(sa.Text, nullable=False)
     scope: Mapped[str] = mapped_column(sa.Text, nullable=False)
@@ -946,10 +940,14 @@ class ResearchKnowledgeReference(Base):
         nullable=False,
     )
     run_id: Mapped[UUID] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_run.id"), nullable=False
+        GUID,
+        sa.ForeignKey("research_analysis_run.id", deferrable=True, initially="DEFERRED"),
+        nullable=False,
     )
     step_id: Mapped[UUID | None] = mapped_column(
-        GUID, sa.ForeignKey("research_analysis_step.id"), nullable=True
+        GUID,
+        sa.ForeignKey("research_analysis_step.id", deferrable=True, initially="DEFERRED"),
+        nullable=True,
     )
     insight_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     document_id: Mapped[str] = mapped_column(sa.Text, nullable=False)

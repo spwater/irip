@@ -39,13 +39,11 @@ from packages.research.dtos import (
     CreateWorkspaceCommand,
     EvidenceRefDTO,
     FactSummary,
-    QuestionVersionRef,
     SnapshotRef,
     WorkspaceRef,
 )
 from packages.research.entities import (
     ResearchEvidenceSnapshot,
-    ResearchQuestionVersion,
     ResearchWorkspace,
     WorkspaceEvidenceRef,
 )
@@ -79,9 +77,11 @@ class TestORMEntities:
         """ResearchWorkspace 继承 Base。"""
         assert issubclass(ResearchWorkspace, Base)
 
-    def test_research_question_version_inherits_base(self):
-        """ResearchQuestionVersion 继承 Base。"""
-        assert issubclass(ResearchQuestionVersion, Base)
+    def test_research_question_version_removed(self):
+        """ResearchQuestionVersion was removed in timeline refactoring."""
+        import packages.research.entities as ent
+
+        assert not hasattr(ent, "ResearchQuestionVersion")
 
     def test_workspace_evidence_ref_inherits_base(self):
         """WorkspaceEvidenceRef 继承 Base。"""
@@ -94,7 +94,7 @@ class TestORMEntities:
     def test_research_workspace_tablename(self):
         """表名正确。"""
         assert ResearchWorkspace.__tablename__ == "research_workspace"
-        assert ResearchQuestionVersion.__tablename__ == "research_question_version"
+        # ResearchQuestionVersion table removed in timeline refactoring
         assert WorkspaceEvidenceRef.__tablename__ == "research_workspace_evidence_ref"
         assert ResearchEvidenceSnapshot.__tablename__ == "research_evidence_snapshot"
 
@@ -108,8 +108,8 @@ class TestORMEntities:
             "department_id",
             "name",
             "status",
-            "current_question_version",
-            "forked_from_id",
+            "latest_snapshot_id",
+            "next_turn_number",
             "created_at",
             "updated_at",
             "lock_version",
@@ -132,44 +132,23 @@ class TestORMEntities:
         # name 不可为空
         assert not cols["name"].nullable
 
-        # forked_from_id 可为空（逻辑引用，不建 FK）
-        assert cols["forked_from_id"].nullable
-        assert len(cols["forked_from_id"].foreign_keys) == 0
-
         # status 默认值为 draft (server_default)
         assert cols["status"].server_default is not None
 
-        # current_question_version 默认值为 0 (server_default)
-        assert cols["current_question_version"].server_default is not None
+        # next_turn_number 默认值为 1 (server_default)
+        assert cols["next_turn_number"].server_default is not None
 
         # lock_version 默认值为 0 (server_default)
         assert cols["lock_version"].server_default is not None
 
-    def test_research_question_version_columns(self):
-        """ResearchQuestionVersion 字段类型与约束。"""
-        cols = ResearchQuestionVersion.__table__.columns
-        assert cols["id"].primary_key
-        assert not cols["workspace_id"].nullable
-
-        # workspace_id FK 到 research_workspace，ON DELETE CASCADE
-        fks = list(cols["workspace_id"].foreign_keys)
-        assert len(fks) == 1
-        assert fks[0].column.table.name == "research_workspace"
-        assert fks[0].ondelete == "CASCADE"
-
-        # version_number 不可为空
-        assert not cols["version_number"].nullable
-
-        # question_text 不可为空
-        assert not cols["question_text"].nullable
-
-        # sub_questions 类型为 JSONB
-        assert isinstance(cols["sub_questions"].type, JSONB)
-
-        # created_by FK 到 app_user
-        fks = list(cols["created_by"].foreign_keys)
-        assert len(fks) == 1
-        assert fks[0].column.table.name == "app_user"
+    def test_research_question_version_table_removed(self):
+        """ResearchQuestionVersion table was removed in timeline refactoring."""
+        cols = ResearchWorkspace.__table__.columns
+        col_names = {c.name for c in cols}
+        assert "current_question_version" not in col_names
+        assert "forked_from_id" not in col_names
+        assert "latest_snapshot_id" in col_names
+        assert "next_turn_number" in col_names
 
     def test_workspace_evidence_ref_columns(self):
         """WorkspaceEvidenceRef 字段类型与约束。"""
@@ -472,13 +451,11 @@ class TestWorkspaceService:
             fact_provider=mock_fact_provider,
         )
         with pytest.raises(AppError, match="操作需要已认证用户"):
-            await svc.create_workspace(
-                CreateWorkspaceCommand(name="test", question_text="question")
-            )
+            await svc.create_workspace(CreateWorkspaceCommand(name="test"))
 
     @pytest.mark.asyncio
     async def test_create_workspace_success(self, service):
-        """创建工作空间成功 — 验证插入 workspace + question v1 + 审计。"""
+        """创建工作空间成功（含研究问题）— 验证插入 workspace + question v1 + 审计。"""
         actor_id = service._actor_id
         dept_id = service._dept_id
         ws_id = uuid4()
@@ -491,11 +468,6 @@ class TestWorkspaceService:
         mock_ws.id = ws_id
         mock_ws.name = "测试工作空间"
         mock_ws.status = "draft"
-        mock_ws.current_question_version = 0
-
-        # Mock question version 返回
-        mock_qv = MagicMock()
-        mock_qv.id = qv_id
 
         with (
             patch(
@@ -504,34 +476,22 @@ class TestWorkspaceService:
                 return_value=mock_ws,
             ) as mock_insert_ws,
             patch(
-                "packages.research.service.ResearchRepository.insert_question_version",
-                new_callable=AsyncMock,
-                return_value=mock_qv,
-            ) as mock_insert_qv,
-            patch(
-                "packages.research.service.ResearchRepository.update_workspace_current_version",
-                new_callable=AsyncMock,
-            ) as mock_update_version,
-            patch(
                 "packages.research.service.AuditRecorder.record",
                 new_callable=AsyncMock,
             ) as mock_audit,
         ):
-            result = await service.create_workspace(
-                CreateWorkspaceCommand(name="测试工作空间", question_text="研究问题")
-            )
+            result = await service.create_workspace(CreateWorkspaceCommand(name="测试工作空间"))
 
         # 验证返回值
         assert isinstance(result, WorkspaceRef)
         assert result.workspace_id == ws_id
         assert result.name == "测试工作空间"
         assert result.status == "draft"
-        assert result.current_question_version == 1
+        assert result.latest_snapshot_number is None
+        assert result.turn_count == 0
 
         # 验证调用
         mock_insert_ws.assert_awaited_once()
-        mock_insert_qv.assert_awaited_once()
-        mock_update_version.assert_awaited_once()
         mock_audit.assert_awaited_once()
 
         # 验证审计事件 action
@@ -540,6 +500,36 @@ class TestWorkspaceService:
         assert event.action == "research.workspace.create"
         assert event.actor_user_id == actor_id
         assert event.department_id == dept_id
+
+    @pytest.mark.asyncio
+    async def test_create_workspace_without_question(self, service):
+        """创建工作空间不带研究问题 — 不插入 question version，current_question_version=0。"""
+        ws_id = uuid4()
+
+        _mock_scoped_session(service)
+
+        mock_ws = MagicMock()
+        mock_ws.id = ws_id
+        mock_ws.name = "空工作空间"
+        mock_ws.status = "draft"
+
+        with (
+            patch(
+                "packages.research.service.ResearchRepository.insert_workspace",
+                new_callable=AsyncMock,
+                return_value=mock_ws,
+            ) as mock_insert_ws,
+            patch(
+                "packages.research.service.AuditRecorder.record",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await service.create_workspace(CreateWorkspaceCommand(name="空工作空间"))
+
+        # 验证返回值
+        assert result.latest_snapshot_number is None
+        assert result.turn_count == 0
+        mock_insert_ws.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_archive_workspace_not_found(self, service):
@@ -643,6 +633,7 @@ class TestWorkspaceService:
         assert event.action == "research.workspace.delete"
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
     async def test_fork_workspace_inherits_evidence_refs(self, service):
         """分叉工作空间继承主研究问题最新版本 + 证据引用列表（副本）。"""
         source_ws_id = uuid4()
@@ -738,6 +729,7 @@ class TestWorkspaceService:
         assert event.action == "research.workspace.fork"
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
     async def test_fork_workspace_no_evidence(self, service):
         """分叉时源工作空间无证据引用，不插入证据。"""
         source_ws_id = uuid4()
@@ -801,6 +793,7 @@ class TestWorkspaceService:
         mock_insert_ref.assert_not_awaited()
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
     async def test_fork_workspace_no_question(self, service):
         """分叉时源工作空间无研究问题，新工作空间问题文本为空。"""
         source_ws_id = uuid4()
@@ -857,6 +850,7 @@ class TestWorkspaceService:
         assert mock_insert_qv.call_args.kwargs["question_text"] == ""
 
     @pytest.mark.asyncio
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
     async def test_update_question_creates_new_version(self, service):
         """更新研究问题创建新版本，版本号递增。"""
         ws_id = uuid4()
@@ -1525,9 +1519,12 @@ class TestModuleIsolation:
 
         research_tables = {t for t in Base.metadata.tables if t.startswith("research_")}
         assert "research_workspace" in research_tables
-        assert "research_question_version" in research_tables
+        # research_question_version removed in timeline refactoring
         assert "research_workspace_evidence_ref" in research_tables
         assert "research_evidence_snapshot" in research_tables
+        # New timeline tables
+        assert "research_turn" in research_tables
+        assert "research_conclusion" in research_tables
 
     def test_router_registration_gated_by_feature_flag(self):
         """功能开关闭时 research_router 不注册。"""
@@ -1555,12 +1552,13 @@ class TestModuleIsolation:
 class TestResearchAPI:
     """研究域 API 端点测试。"""
 
-    def test_router_has_14_endpoints(self):
-        """research_router 包含 14 个端点。"""
+    def test_router_has_expected_endpoints(self):
+        """research_router 包含预期数量的端点（timeline refactoring 后增减）。"""
         from apps.api.routers.research import research_router
 
         routes = [r for r in research_router.routes if hasattr(r, "methods") and r.methods]
-        assert len(routes) == 14, f"期望 14 个端点，实际 {len(routes)}"
+        # Timeline refactoring: removed fork/question routes, added restore endpoint
+        assert len(routes) == 13, f"期望 13 个端点，实际 {len(routes)}"
 
 
 # ---------------------------------------------------------------------------
@@ -1572,12 +1570,15 @@ class TestDataModels:
     """验证研究域数据类（models.py）正确性。"""
 
     def test_create_workspace_command_is_frozen(self):
-        """CreateWorkspaceCommand 为 frozen dataclass。"""
-        cmd = CreateWorkspaceCommand(name="test", question_text="question")
+        """CreateWorkspaceCommand 为 frozen dataclass（timeline: 只含 name）。"""
+        cmd = CreateWorkspaceCommand(name="test")
         assert cmd.name == "test"
-        assert cmd.question_text == "question"
         with pytest.raises(AttributeError):
             cmd.name = "other"
+
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
+    def test_create_workspace_command_without_question(self):
+        """Deprecated: question_text no longer exists on CreateWorkspaceCommand."""
 
     def test_workspace_ref_is_frozen(self):
         """WorkspaceRef 为 frozen dataclass。"""
@@ -1585,11 +1586,11 @@ class TestDataModels:
             workspace_id=uuid4(),
             name="test",
             status="draft",
-            current_question_version=1,
         )
         with pytest.raises(AttributeError):
             ref.name = "other"
 
+    @pytest.mark.skip(reason="Removed in timeline refactoring")
     def test_question_version_ref_default_sub_questions(self):
         """QuestionVersionRef 默认 sub_questions 为空列表。"""
         ref = QuestionVersionRef(
@@ -1642,7 +1643,6 @@ class TestDataModels:
             workspace_id=uuid4(),
             name="test",
             status="draft",
-            current_question=None,
             evidence_count=0,
         )
         assert detail.snapshots == []

@@ -32,6 +32,7 @@ from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.research.dtos import FactSummary, SnapshotRef
+from packages.research.entities import ResearchWorkspace
 from packages.research.repository import ResearchRepository
 from packages.research.service import CoreFactProviderProtocol
 
@@ -225,7 +226,51 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                 created_by=actor_id,
             )
 
-            # 9. 审计
+            # 9. 更新 workspace.latest_snapshot_id
+            import sqlalchemy as sa
+
+            await session.execute(
+                sa.update(ResearchWorkspace)
+                .where(ResearchWorkspace.id == workspace_id)
+                .values(latest_snapshot_id=snapshot.id, updated_at=sa.func.now())
+            )
+
+            # 10. 创建首快照推荐 batch + outbox 事件
+            from packages.jobs.outbox import OutboxDispatcher
+            from packages.research.timeline.contracts import (
+                RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
+                RECOMMENDATION_PROMPT_VERSION,
+            )
+            from packages.research.timeline.repository import TimelineRepository
+
+            idempotency_key = f"initial:{snapshot.id}"
+            existing_batch = await TimelineRepository.get_batch_by_idempotency(
+                session, workspace_id, idempotency_key
+            )
+            if existing_batch is None:
+                batch = await TimelineRepository.insert_batch(
+                    session,
+                    workspace_id=workspace_id,
+                    snapshot_id=snapshot.id,
+                    mode="initial",
+                    prompt_template_version=RECOMMENDATION_PROMPT_VERSION,
+                    output_schema_version=RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
+                    idempotency_key=idempotency_key,
+                )
+                await OutboxDispatcher.enqueue(
+                    session,
+                    aggregate_type="research_recommendation_batch",
+                    aggregate_id=batch.id,
+                    event_type="research.recommendation.requested",
+                    payload={"batch_id": str(batch.id), "mode": "initial"},
+                )
+                logger.info(
+                    "enqueued initial recommendation batch %s for snapshot %s",
+                    batch.id,
+                    snapshot.id,
+                )
+
+            # 11. 审计
             await AuditRecorder.record(
                 session,
                 AuditEventData(

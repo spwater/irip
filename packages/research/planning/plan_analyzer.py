@@ -107,10 +107,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             full_data_text = "\n\n".join(compact_data_parts)
 
-            # 4. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
-            research_question = question.question_text if question else ""
-            sub_questions = question.sub_questions if question and question.sub_questions else []
+            # 4. Timeline refactoring: question from Turn, not question version
+            research_question = ""
+            sub_questions: list[str] = []
 
             # 5. 使用编辑后的建议
             steps = plan.dag_structure.get("steps", []) if plan.dag_structure else []
@@ -371,11 +370,26 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
                 run_id = runs[0].id if runs else None
                 if run_id is None:
-                    run_id = await ResearchRepositoryTrusted.insert_run(  # type: ignore[assignment, call-arg]
-                        session,
-                        workspace_id=workspace_id,
-                        plan_id=plan_id,
-                        status="succeeded",
+                    # 纯 LLM 分析不走沙箱执行，直接创建简化 run 记录
+                    from packages.common.ids import new_id as _new_id2
+
+                    run_id = _new_id2()
+                    await session.execute(
+                        sa.text(
+                            "INSERT INTO research_analysis_run "
+                            "(id, workspace_id, plan_version_id, snapshot_id, "
+                            "run_number, status, submitted_at, image_digest, created_by) "
+                            "VALUES (:id, :wid, :pid, :sid, :num, "
+                            "'succeeded', now(), 'llm-only', :uid)"
+                        ),
+                        {
+                            "id": str(run_id),
+                            "wid": str(workspace_id),
+                            "pid": str(plan_id),
+                            "sid": str(snapshot_id),
+                            "num": 1,
+                            "uid": str(self._actor_id or new_id()),
+                        },
                     )
                 # 构建 S3 client
                 _endpoint = _os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
@@ -514,10 +528,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     fields={},
                 )
 
-            # 2. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
-            research_question = question.question_text if question else ""
-            sub_questions = question.sub_questions if question and question.sub_questions else []
+            # 2. Timeline refactoring: question from Turn, not question version
+            research_question = ""
+            sub_questions: list[str] = []
             sub_q_section = ""
             if sub_questions:
                 sub_q_lines = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
@@ -576,11 +589,27 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     if runs:
                         run_id = runs[0].id
                     else:
-                        run_id = await ResearchRepositoryTrusted.insert_run(  # type: ignore[assignment, call-arg]
-                            session,
-                            workspace_id=workspace_id,
-                            plan_id=plan_id,
-                            status="succeeded",
+                        # 纯 LLM 分析不走沙箱执行，直接创建简化 run 记录
+                        from packages.common.ids import new_id as _new_id3
+
+                        run_id = _new_id3()
+                        await session.execute(
+                            sa.text(
+                                "INSERT INTO research_analysis_run "
+                                "(id, workspace_id, plan_version_id, snapshot_id, "
+                                "run_number, status, submitted_at, image_digest, "
+                                "created_by) "
+                                "VALUES (:id, :wid, :pid, :sid, :num, "
+                                "'succeeded', now(), 'llm-only', :uid)"
+                            ),
+                            {
+                                "id": str(run_id),
+                                "wid": str(workspace_id),
+                                "pid": str(plan_id),
+                                "sid": str(snapshot_id),
+                                "num": 1,
+                                "uid": str(self._actor_id or new_id()),
+                            },
                         )
                     insight_run_id = str(run_id)
                     await session.execute(

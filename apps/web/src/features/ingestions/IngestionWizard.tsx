@@ -12,7 +12,7 @@ import {
   Upload,
   message,
 } from 'antd';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
 import {
   apiCreateJob,
@@ -63,14 +63,34 @@ export function IngestionWizard(): JSX.Element {
   const [jobId, setJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobSummary | null>(null);
 
+  // AbortController for canceling in-flight preview requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const cancelPendingRequest = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  const queryClient = useQueryClient();
+
   // ---- 预览 Mutation ----
   const previewMutation = useMutation({
-    mutationFn: (f: File) => apiPreviewIngestion(f),
+    mutationFn: (f: File) => {
+      cancelPendingRequest();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      return apiPreviewIngestion(f, controller.signal);
+    },
     onSuccess: (data) => {
       setPreviewData(data);
       setCurrentStep(1);
     },
     onError: (err: unknown) => {
+      // Don't show error if request was aborted (user cancelled)
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if ((err as { name?: string }).name === 'CanceledError') return;
       message.error(extractApiError(err));
     },
   });
@@ -134,6 +154,11 @@ export function IngestionWizard(): JSX.Element {
 
       // 终态：停止轮询
       if (TERMINAL_JOB_STATUSES.includes(status.status)) {
+        // 刷新 facts 缓存（包括 FactsPage 和 AI 助手的 fact 列表）
+        if (status.status === 'succeeded') {
+          void queryClient.invalidateQueries({ queryKey: ['facts'], exact: false });
+          void queryClient.invalidateQueries({ queryKey: ['facts-for-insert'], exact: false });
+        }
         setCurrentStep(4);
         return;
       }
@@ -204,6 +229,9 @@ export function IngestionWizard(): JSX.Element {
   };
 
   const handleReset = (): void => {
+    // Cancel any in-flight requests
+    cancelPendingRequest();
+
     // M-08: 清理轮询状态
     activeRef.current = false;
     if (timeoutRef.current) {
@@ -264,6 +292,17 @@ export function IngestionWizard(): JSX.Element {
             <div style={{ textAlign: 'center', padding: 24 }}>
               <Spin size="large" />
               <p style={{ marginTop: 16, color: 'var(--ocean-text-muted)' }}>正在上传...</p>
+              <Button
+                danger
+                size="small"
+                style={{ marginTop: 12 }}
+                onClick={() => {
+                  cancelPendingRequest();
+                  previewMutation.reset();
+                }}
+              >
+                取消
+              </Button>
             </div>
           ) : (
             <>

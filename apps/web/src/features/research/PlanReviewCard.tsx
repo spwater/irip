@@ -206,16 +206,21 @@ export function PlanReviewCard({
 
       {/* Confirm button for draft status */}
       {!isConfirmed && (
-        <Space style={{ marginBottom: 12 }}>
-          <Button type="primary" onClick={handleConfirm}>
-            确认计划
-          </Button>
-          {onAdjust && (
-            <Button size="small" onClick={onAdjust}>
-              调整计划
+        <div style={{ marginBottom: 12 }}>
+          <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
+            这是分析计划，确认后将进入「执行分析」阶段，AI 会基于完整数据生成实际分析结果。
+          </Typography.Text>
+          <Space>
+            <Button type="primary" onClick={handleConfirm}>
+              确认计划
             </Button>
-          )}
-        </Space>
+            {onAdjust && (
+              <Button size="small" onClick={onAdjust}>
+                调整计划
+              </Button>
+            )}
+          </Space>
+        </div>
       )}
 
       {/* Advice section */}

@@ -1,8 +1,7 @@
 /**
- * 工作空间卡片组件
+ * WorkspaceCard — 工作空间卡片
  *
- * 显示名称、主研究问题摘要（截断）、数据数量、更新时间。
- * 点击跳转 WorkspaceDetail。
+ * Timeline refactoring: 显示快照数、轮次数和活跃状态，不再显示问题版本。
  */
 import { Card, Tag } from 'antd';
 import type { Workspace } from '@/api/research';
@@ -28,13 +27,16 @@ export function WorkspaceCard({ workspace, onClick }: WorkspaceCardProps): JSX.E
       }
       extra={<Tag color={statusColor}>{statusLabel}</Tag>}
     >
-      <div style={{ fontSize: 13, color: 'var(--ocean-text-muted)', marginBottom: 8 }}>
-        问题版本 v{workspace.current_question_version}
+      <div style={{ fontSize: 13, color: 'var(--ocean-text-muted)', marginBottom: 4 }}>
+        {workspace.latest_snapshot_number != null
+          ? `快照 v${workspace.latest_snapshot_number}`
+          : '无快照'}
+        {workspace.turn_count > 0 && ` · ${workspace.turn_count} 轮研究`}
       </div>
-      {workspace.forked_from_id && (
-        <div style={{ fontSize: 12, color: 'var(--ocean-text-muted)' }}>
-          分叉自其他工作空间
-        </div>
+      {workspace.active_run_status && (
+        <Tag color="processing" style={{ fontSize: 12 }}>
+          运行中
+        </Tag>
       )}
     </Card>
   );

@@ -94,14 +94,20 @@ class AnalysisRunService(ScopedSessionMixin):
         workspace_id: UUID,
         plan_version_id: UUID,
         snapshot_id: UUID,
+        turn_id: UUID | None = None,
+        idempotency_key: str | None = None,
     ) -> "RunRef":
         """提交分析 Run。
+
+        Timeline refactoring (Task 7): 新增 turn_id 和 idempotency_key 参数。
+        当 turn_id 提供时，Run 绑定到 Turn 并自动计算 attempt_number。
+        idempotency_key 用于幂等提交（同 key 返回同 Run）。
 
         流程：
         1. 校验计划已确认（status='confirmed'）；
         2. 校验无活跃 Run（get_active_run_for_workspace 返回 None）；
         3. 获取 run_number（递增）；
-        4. insert_run(status='queued')；
+        4. insert_run(status='queued', turn_id, attempt_number)；
         5. scheduler.acquire_slot(user_id, run_id)：
            - 有槽位 → update_run_status('running') + send_task("research.run.execute")
            - 无槽位 → 保持 queued + update_run_queue_position
@@ -111,6 +117,8 @@ class AnalysisRunService(ScopedSessionMixin):
             workspace_id: 工作空间 ID。
             plan_version_id: 计划版本 ID。
             snapshot_id: 证据快照 ID。
+            turn_id: 关联的 Turn ID（Timeline 模式，可选）。
+            idempotency_key: 幂等键（可选）。
 
         Returns:
             RunRef: Run 引用（status=running 或 queued）。
@@ -157,6 +165,21 @@ class AnalysisRunService(ScopedSessionMixin):
             # 3. 获取 run_number
             run_number = await ResearchRepositoryTrusted.get_next_run_number(session, workspace_id)
 
+            # Timeline refactoring (Task 7): 计算 attempt_number
+            attempt_number = 1
+            if turn_id is not None:
+                import sqlalchemy as sa
+
+                from packages.research.execution.entities_trusted import (
+                    ResearchAnalysisRun as _Run,
+                )
+
+                count_result = await session.execute(
+                    sa.select(sa.func.count()).select_from(_Run).where(_Run.turn_id == turn_id)
+                )
+                existing_count = count_result.scalar_one()
+                attempt_number = existing_count + 1
+
             # 4. 插入 Run
             run = await ResearchRepositoryTrusted.insert_run(
                 session,
@@ -166,6 +189,8 @@ class AnalysisRunService(ScopedSessionMixin):
                 run_number=run_number,
                 image_digest=DEFAULT_IMAGE_DIGEST,
                 created_by=actor_id,
+                turn_id=turn_id,
+                attempt_number=attempt_number,
             )
 
             # 5. 调度

@@ -1,14 +1,12 @@
 """研究域 API 路由。
 
 端点分组（research_router, prefix=/api/v1/research）：
-  POST   /workspaces                    — 创建工作空间
+  POST   /workspaces                    — 创建工作空间（只需名称）
   GET    /workspaces                     — 列表（status/cursor/page_size）
   GET    /workspaces/{id}                — 详情
   PATCH  /workspaces/{id}                — 更新名称
   DELETE /workspaces/{id}                — 删除
   POST   /workspaces/{id}/archive        — 归档
-  POST   /workspaces/{id}/fork           — 分叉
-  PUT    /workspaces/{id}/question        — 更新研究问题（新版本）
   POST   /workspaces/{id}/evidence       — 加入证据
   DELETE /workspaces/{id}/evidence/{ref_id}  — 移除证据
   GET    /workspaces/{id}/evidence        — 证据列表
@@ -16,8 +14,8 @@
   GET    /workspaces/{id}/snapshots       — 快照列表
   GET    /facts/search                    — 搜索 Fact
 
+Timeline refactoring: 移除 POST /fork, PUT /question 端点。
 所有端点使用 require_permission("research:use") 权限依赖。
-参照 apps/api/routers/facts.py 的 DI 占位 + Pydantic 模型模式。
 """
 
 from typing import Annotated
@@ -31,7 +29,6 @@ from apps.api.dependencies.authorization import require_permission
 from packages.research.dtos import (
     EvidenceRefDTO,
     FactSummary,
-    QuestionVersionRef,
     SnapshotRef,
     WorkspaceDetail,
     WorkspaceRef,
@@ -71,29 +68,18 @@ research_router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
 
 class CreateWorkspaceRequest(BaseModel):
-    """创建工作空间请求。"""
+    """创建工作空间请求。
+
+    Timeline refactoring: 只需要名称，不再需要 question_text。
+    """
 
     name: str = Field(..., min_length=1, max_length=256)
-    question_text: str = Field(..., min_length=1, max_length=4096)
 
 
 class UpdateWorkspaceRequest(BaseModel):
     """更新工作空间名称请求。"""
 
     name: str = Field(..., min_length=1, max_length=256)
-
-
-class ForkWorkspaceRequest(BaseModel):
-    """分叉工作空间请求。"""
-
-    new_name: str = Field(..., min_length=1, max_length=256)
-
-
-class UpdateQuestionRequest(BaseModel):
-    """更新研究问题请求。"""
-
-    question_text: str = Field(..., min_length=1, max_length=4096)
-    sub_questions: list[str] = Field(default_factory=list)
 
 
 class AddEvidenceRequest(BaseModel):
@@ -107,13 +93,18 @@ class AddEvidenceRequest(BaseModel):
 
 
 class WorkspaceResponse(BaseModel):
-    """工作空间响应。"""
+    """工作空间响应。
+
+    Timeline refactoring: 移除 current_question_version 和 forked_from_id，
+    新增 latest_snapshot_number、turn_count 和 active_run_status。
+    """
 
     workspace_id: str
     name: str
     status: str
-    current_question_version: int
-    forked_from_id: str | None = None
+    latest_snapshot_number: int | None = None
+    turn_count: int = 0
+    active_run_status: str | None = None
 
 
 class WorkspaceListResponse(BaseModel):
@@ -121,16 +112,6 @@ class WorkspaceListResponse(BaseModel):
 
     items: list[WorkspaceResponse]
     next_cursor: str | None
-
-
-class QuestionVersionResponse(BaseModel):
-    """研究问题版本响应。"""
-
-    version_id: str
-    workspace_id: str
-    version_number: int
-    question_text: str
-    sub_questions: list[str]
 
 
 class SnapshotResponse(BaseModel):
@@ -143,14 +124,19 @@ class SnapshotResponse(BaseModel):
 
 
 class WorkspaceDetailResponse(BaseModel):
-    """工作空间详情响应。"""
+    """工作空间详情响应。
+
+    Timeline refactoring: 移除 current_question，新增快照/轮次/活跃状态。
+    """
 
     workspace_id: str
     name: str
     status: str
-    current_question: QuestionVersionResponse | None
     evidence_count: int
     snapshots: list[SnapshotResponse]
+    latest_snapshot_number: int | None = None
+    turn_count: int = 0
+    active_run_status: str | None = None
 
 
 class EvidenceRefResponse(BaseModel):
@@ -202,19 +188,9 @@ def _workspace_ref_to_response(ref: WorkspaceRef) -> WorkspaceResponse:
         workspace_id=str(ref.workspace_id),
         name=ref.name,
         status=ref.status,
-        current_question_version=ref.current_question_version,
-        forked_from_id=str(ref.forked_from_id) if ref.forked_from_id else None,
-    )
-
-
-def _question_ref_to_response(ref: QuestionVersionRef) -> QuestionVersionResponse:
-    """将 QuestionVersionRef 转为响应模型。"""
-    return QuestionVersionResponse(
-        version_id=str(ref.version_id),
-        workspace_id=str(ref.workspace_id),
-        version_number=ref.version_number,
-        question_text=ref.question_text,
-        sub_questions=ref.sub_questions,
+        latest_snapshot_number=ref.latest_snapshot_number,
+        turn_count=ref.turn_count,
+        active_run_status=ref.active_run_status,
     )
 
 
@@ -257,11 +233,11 @@ def _workspace_detail_to_response(detail: WorkspaceDetail) -> WorkspaceDetailRes
         workspace_id=str(detail.workspace_id),
         name=detail.name,
         status=detail.status,
-        current_question=(
-            _question_ref_to_response(detail.current_question) if detail.current_question else None
-        ),
         evidence_count=detail.evidence_count,
         snapshots=[_snapshot_ref_to_response(s) for s in detail.snapshots],
+        latest_snapshot_number=detail.latest_snapshot_number,
+        turn_count=detail.turn_count,
+        active_run_status=detail.active_run_status,
     )
 
 
@@ -274,13 +250,10 @@ async def create_workspace(
     current_user: ResearchUserDep,
     service: WorkspaceServiceDep,
 ) -> WorkspaceResponse:
-    """创建研究工作空间（含研究问题 v1）。"""
+    """创建研究工作空间（只需名称）。"""
     from packages.research.dtos import CreateWorkspaceCommand
 
-    command = CreateWorkspaceCommand(
-        name=body.name,
-        question_text=body.question_text,
-    )
+    command = CreateWorkspaceCommand(name=body.name)
     ref = await service.create_workspace(command)
     return _workspace_ref_to_response(ref)
 
@@ -348,39 +321,35 @@ async def archive_workspace(
     await service.archive_workspace(workspace_id)
 
 
-@research_router.post(
-    "/workspaces/{workspace_id}/fork",
-    response_model=WorkspaceResponse,
-    status_code=201,
-)
-async def fork_workspace(
+@research_router.post("/workspaces/{workspace_id}/restore", status_code=204)
+async def restore_workspace(
     workspace_id: UUID,
-    body: ForkWorkspaceRequest,
     current_user: ResearchUserDep,
     service: WorkspaceServiceDep,
-) -> WorkspaceResponse:
-    """分叉研究工作空间。"""
-    ref = await service.fork_workspace(workspace_id, body.new_name)
-    return _workspace_ref_to_response(ref)
+) -> None:
+    """恢复已归档的研究工作空间为活跃状态。"""
+    import os
 
+    import sqlalchemy as sa
 
-@research_router.put(
-    "/workspaces/{workspace_id}/question",
-    response_model=QuestionVersionResponse,
-)
-async def update_question(
-    workspace_id: UUID,
-    body: UpdateQuestionRequest,
-    current_user: ResearchUserDep,
-    service: WorkspaceServiceDep,
-) -> QuestionVersionResponse:
-    """更新研究问题（创建新版本）。"""
-    ref = await service.update_question(
-        workspace_id,
-        body.question_text,
-        body.sub_questions,
+    from packages.common.database import build_session_factory
+    from packages.research.entities import ResearchWorkspace
+
+    db_url = os.environ.get(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
     )
-    return _question_ref_to_response(ref)
+    factory = build_session_factory(db_url)
+    async with factory() as session:
+        await session.execute(
+            sa.update(ResearchWorkspace)
+            .where(ResearchWorkspace.id == workspace_id)
+            .values(status="draft", updated_at=sa.func.now())
+        )
+        await session.commit()
+
+
+# NOTE: fork_workspace and update_question endpoints removed in timeline refactoring.
 
 
 @research_router.post(

@@ -339,6 +339,7 @@ export function FlowDetail({
         setBatchProgress={batch.setBatchProgress}
         setBatchResults={batch.setBatchResults}
         handleBatchExecute={batch.handleBatchExecute}
+        handleBatchCancel={batch.handleBatchCancel}
       />
 
       {/* 隐藏的文件上传 input（供执行弹窗的 path 字段使用） */}

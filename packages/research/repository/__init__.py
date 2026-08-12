@@ -20,7 +20,8 @@ from packages.research.repository.favorite import FavoriteRepository
 from packages.research.repository.insight import InsightRepository
 from packages.research.repository.knowledge import KnowledgeReferenceRepository
 from packages.research.repository.lineage import LineageEdgeRepository
-from packages.research.repository.question import QuestionRepository
+
+# QuestionRepository removed in timeline refactoring — questions now live in ResearchTurn
 from packages.research.repository.result import ResultRepository
 from packages.research.repository.search import SearchRepository
 from packages.research.repository.view import ViewRepository
@@ -30,7 +31,6 @@ __all__ = [
     "_encode_cursor",
     "_decode_cursor",
     "WorkspaceRepository",
-    "QuestionRepository",
     "EvidenceRefRepository",
     "SnapshotRepository",
     "DatasetRepository",
@@ -47,7 +47,6 @@ __all__ = [
 
 class ResearchRepository(
     WorkspaceRepository,
-    QuestionRepository,
     EvidenceRefRepository,
     SnapshotRepository,
     DatasetRepository,

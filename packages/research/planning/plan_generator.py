@@ -13,6 +13,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.audit.events import AuditEventData
@@ -92,10 +93,39 @@ class PlanGeneratorMixin(PlanServiceBase):
             # 3. 构建数据 Profile
             data_profile = await self._build_data_profile(session, snapshot)
 
-            # 4. 获取研究问题（含子问题）
-            question = await ResearchRepository.get_latest_question_version(session, workspace_id)
-            research_question = question.question_text if question else ""
-            sub_questions = question.sub_questions if question and question.sub_questions else []
+            # 4. 获取研究问题 — Timeline refactoring: 从 Turn 读取，不再从 question version 读取
+            # 如果 plan 有 turn_id 关联（新 Timeline 模式），从 Turn.question_text_snapshot 读
+            # 否则回退到旧模式（兼容尚未迁移的 workspace）
+            research_question = ""
+            sub_questions: list[str] = []
+
+            # 检查是否有 Turn 关联（新 Timeline 模式）
+            from packages.research.timeline.entities import ResearchTurn
+
+            turn_result = await session.execute(
+                sa.select(ResearchTurn)
+                .where(ResearchTurn.evidence_snapshot_id == snapshot_id)
+                .order_by(ResearchTurn.turn_number.desc())
+                .limit(1)
+            )
+            turn = turn_result.scalar_one_or_none()
+            if turn is not None:
+                research_question = turn.question_text_snapshot
+                # 从 TurnContext 加载选中的历史结论作为子问题参考
+                from packages.research.timeline.context_builder import (
+                    TurnContextBuilder,
+                )
+
+                conclusions = await TurnContextBuilder.build_conclusion_inputs(session, turn.id)
+                # 把历史结论作为上下文注入（不作为子问题）
+                # 但确保 AI 能看到这些结论
+                if conclusions:
+                    sub_questions = [c.statement for c in conclusions]
+            else:
+                # 旧模式回退：从 question version 读（兼容）
+                # 注意：get_latest_question_version 已在 Task 1 中移除
+                # 如果 workspace 没有关联 Turn，使用空问题
+                research_question = ""
 
             # 5. 调用 AI 生成计划
             dag_json = await self._call_ai_for_plan(data_profile, research_question, sub_questions)
@@ -201,8 +231,6 @@ class PlanGeneratorMixin(PlanServiceBase):
             # 获取数据摘要
             get_data = getattr(self._fact_provider, "get_fact_data", None)
             if get_data is not None:
-                import json as _json
-
                 fact_data = await get_data(source_id)
                 if isinstance(fact_data, dict):
                     points = fact_data.get("points", [])
@@ -219,7 +247,7 @@ class PlanGeneratorMixin(PlanServiceBase):
                                 record_count += len(rows) if isinstance(rows, list) else 0
                     total_records += record_count
 
-                    # 构建数据摘要：包含实际数据内容
+                    # 构建数据摘要：仅包含结构和概要，不含具体数据行
                     summary_lines = [
                         f"数据源 {_idx + 1}/{len(source_refs)}:"
                         f" 来源={fact_name},"
@@ -227,13 +255,15 @@ class PlanGeneratorMixin(PlanServiceBase):
                         f" {len(fields)} 字段, {record_count} 条记录",
                     ]
                     if metadata:
-                        summary_lines.append(
-                            f"  元数据: {_json.dumps(metadata, ensure_ascii=False)[:500]}"
-                        )
+                        # 元数据只传 key 列表，不传具体值
+                        meta_keys = list(metadata.keys()) if isinstance(metadata, dict) else []
+                        summary_lines.append(f"  元数据字段: {meta_keys}")
                     if isinstance(points, list) and points:
-                        summary_lines.append(
-                            f"  数据点(前5条): {_json.dumps(points[:5], ensure_ascii=False)[:500]}"
-                        )
+                        # 只传 point 的 name 列表，不传具体值
+                        point_names = [
+                            p.get("name", "?") for p in points[:10] if isinstance(p, dict)
+                        ]
+                        summary_lines.append(f"  数据点指标: {point_names}")
                     if isinstance(series, list) and series:
                         for s in series[:3]:
                             if isinstance(s, dict):
@@ -244,11 +274,6 @@ class PlanGeneratorMixin(PlanServiceBase):
                                     f"  数据组[{sname}] 列={scols}"
                                     f" 行数={len(srows) if isinstance(srows, list) else 0}"
                                 )
-                                if isinstance(srows, list) and srows:
-                                    summary_lines.append(
-                                        f"    前5行:"
-                                        f" {_json.dumps(srows[:5], ensure_ascii=False)[:800]}"
-                                    )
                     data_summary_parts.append("\n".join(summary_lines))
 
         # 估算总 token 数（粗略：每条记录约 500 token）
@@ -288,13 +313,18 @@ class PlanGeneratorMixin(PlanServiceBase):
         else:
             data_text = basic_summary
         system_prompt = (
-            "你是一个研究分析规划专家。请根据用户提供的数据集和研究问题，"
-            "给出初步的分析建议。包括：\n"
-            "1. 数据概况（数据类型、规模、质量评估）\n"
-            "2. 建议的分析方法和路径\n"
-            "3. 建议的可视化方案（如柱状图、对比表格、散点图等）\n"
-            "4. 需要关注的关键点或潜在风险\n"
-            "请用 Markdown 格式输出，给出具体、可操作的建议。"
+            "你是一个研究分析规划专家。请根据用户提供的数据集概况和研究问题，"
+            "制定一份分析计划（不是分析报告）。\n\n"
+            "**关键要求：**\n"
+            "- 你是在「规划怎么分析」，不是在「执行分析」。\n"
+            "- 不要给出具体的数值结论、对比结果或数据分析发现——那是下一步执行分析的工作。\n"
+            "- 不要画图表或输出数据块——只需描述建议用什么图表类型。\n\n"
+            "请用 Markdown 格式输出以下内容：\n"
+            "1. **数据概况**：仅描述数据类型、规模、字段结构（不要引用具体数值）\n"
+            "2. **分析策略**：建议按什么思路分析，分几个步骤，每步做什么\n"
+            "3. **可视化建议**：建议用什么图表类型（如柱状图对比成分、折线图看趋势），但不要生成实际图表\n"
+            "4. **关注要点**：需要关注的关键点或潜在风险\n"
+            "请用 Markdown 格式输出，内容为分析计划，不要包含具体数值结论。"
         )
         if sub_questions:
             sub_q_text = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
@@ -359,11 +389,15 @@ class PlanGeneratorMixin(PlanServiceBase):
         advice = (
             f"## 数据概况\n"
             f"当前数据集包含 {record_count} 条记录、{field_count} 个字段。\n\n"
-            f"## 分析建议\n"
-            f"1. 首先检查数据的完整性和质量，确认无缺失值或异常值。\n"
-            f"2. 根据研究问题「{research_question[:80]}」，建议进行描述性统计和趋势分析。\n"
-            f"3. 关注关键指标的变化趋势和异常点。\n\n"
-            f"## 注意事项\n"
+            f"## 分析策略\n"
+            f"1. 第一步：数据质量检查——确认字段完整性，检查缺失值和异常值\n"
+            f"2. 第二步：描述性统计——对研究问题「{research_question[:80]}」相关的指标做统计汇总\n"
+            f"3. 第三步：对比分析——跨样品/跨条件对比关键指标差异\n\n"
+            f"## 可视化建议\n"
+            f"- 柱状图：适合成分对比\n"
+            f"- 折线图：适合趋势/累积分布\n"
+            f"- Markdown 表格：适合精确数值对比\n\n"
+            f"## 关注要点\n"
             f"- 数据量较小时需注意统计显著性\n"
             f"- 建议结合领域知识解读分析结果"
         )

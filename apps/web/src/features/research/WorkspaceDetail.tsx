@@ -1,17 +1,26 @@
 /**
- * Workspace 三栏布局容器
+ * WorkspaceDetail — 三栏布局
  *
- * 左栏：EvidencePanel（数据搜索 + 列表 + 冻结）
- * 中栏：ResearchCanvas（研究问题 + 分析建议 + 分析结果）
- * 右栏：ResearchShowcasePanel（Insight候选 + 已确认产物）
+ * 左栏: 数据快照
+ * 中栏: 研究时间线（卡片按序号排列，展开显示问题+分析结果）
+ * 右栏: 结论库
  */
-import { useEffect, useState } from 'react';
-import { Button, Row, Col, Spin, Modal, Input, message, Popconfirm, Tag } from 'antd';
-import { ArrowLeftOutlined, ForkOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons';
-import { apiGetWorkspace, apiForkWorkspace, apiDeleteWorkspace, apiArchiveWorkspace, type WorkspaceDetail as WorkspaceDetailType, type InsightCandidate } from '@/api/research';
+import { useEffect, useState, useCallback } from 'react';
+import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography } from 'antd';
+import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons';
+import { apiGetWorkspace, apiArchiveWorkspace, apiDeleteWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
+import { http } from '@/api/client';
 import { EvidencePanel } from './EvidencePanel';
-import { ResearchCanvas } from './ResearchCanvas';
-import { ResearchShowcasePanel } from './ResearchShowcasePanel';
+import { WorkspaceTimeline } from './WorkspaceTimeline';
+import { RecommendationPanel } from './RecommendationPanel';
+import { ConclusionLibrary } from './ConclusionLibrary';
+import { SynthesisComposer } from './SynthesisComposer';
+import { ResearchComposer } from './ResearchComposer';
+import { TurnDetailPanel } from './TurnDetailPanel';
+
+import type { ConclusionRef } from '@/api/researchTimeline';
+
+const { Text } = Typography;
 
 interface WorkspaceDetailProps {
   workspaceId: string;
@@ -21,18 +30,29 @@ interface WorkspaceDetailProps {
 export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): JSX.Element {
   const [detail, setDetail] = useState<WorkspaceDetailType | null>(null);
   const [loading, setLoading] = useState(true);
-  const [forkModalOpen, setForkModalOpen] = useState(false);
-  const [forkName, setForkName] = useState('');
-  const [forking, setForking] = useState(false);
+  const [selectedRevisionIds, setSelectedRevisionIds] = useState<Set<string>>(new Set());
+  const [composerQuestion, setComposerQuestion] = useState('');
+  const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
+  const [timelineKey, setTimelineKey] = useState(0);
+  const [recommendationRefreshKey, setRecommendationRefreshKey] = useState(0);
+  const [conclusions, setConclusions] = useState<ConclusionRef[]>([]);
 
-  // 共享状态：分析产物（中栏产生，右栏展示）
-  const [insightCandidate, setInsightCandidate] = useState<InsightCandidate | null>(null);
-  const [insightCandidateId, setInsightCandidateId] = useState<string | null>(null);
-  const [insightRunId, setInsightRunId] = useState<string | null>(null);
-  const [productsRefresh, setProductsRefresh] = useState(0);
-  const [latestRunId, setLatestRunId] = useState<string | null>(null);
+  const fetchConclusions = useCallback(async () => {
+    try {
+      const res = await http.get<{ items: ConclusionRef[] }>(
+        `/research/workspaces/${workspaceId}/conclusions`,
+      );
+      setConclusions(res.data.items || []);
+    } catch {
+      // silent
+    }
+  }, [workspaceId]);
 
-  const fetchDetail = async () => {
+  useEffect(() => {
+    fetchConclusions();
+  }, [fetchConclusions, timelineKey]);
+
+  const fetchDetail = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiGetWorkspace(workspaceId);
@@ -43,47 +63,15 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspaceId]);
 
   useEffect(() => {
     void fetchDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
-
-  // 获取最新 run ID
-  useEffect(() => {
-    void (async () => {
-      try {
-        const { apiListRuns } = await import('@/api/research');
-        const res = await apiListRuns(workspaceId);
-        const runs = res?.items ?? [];
-        if (runs.length > 0) {
-          setLatestRunId(runs[0].run_id);
-        }
-      } catch (err) {
-        console.error('加载 Run 列表失败', err);
-      }
-    })();
-  }, [workspaceId, productsRefresh]);
-
-  const handleFork = async () => {
-    if (!forkName.trim()) {
-      message.warning('请输入新工作空间名称');
-      return;
+    // Snapshot number changed → refresh recommendations
+    if (detail?.latest_snapshot_number) {
+      setRecommendationRefreshKey((k) => k + 1);
     }
-    setForking(true);
-    try {
-      await apiForkWorkspace(workspaceId, { new_name: forkName.trim() });
-      message.success('分叉成功');
-      setForkModalOpen(false);
-      setForkName('');
-      onBack();
-    } catch {
-      message.error('分叉失败');
-    } finally {
-      setForking(false);
-    }
-  };
+  }, [fetchDetail]);
 
   const handleArchive = async () => {
     try {
@@ -92,8 +80,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       onBack();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      const msg = axiosErr?.response?.data?.error?.message || '归档失败';
-      message.error(msg);
+      message.error(axiosErr?.response?.data?.error?.message || '归档失败');
     }
   };
 
@@ -104,9 +91,17 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       onBack();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
-      const msg = axiosErr?.response?.data?.error?.message || '删除失败（可能存在发布成果引用，请先归档）';
-      message.error(msg);
+      message.error(axiosErr?.response?.data?.error?.message || '删除失败');
     }
+  };
+
+  const handleToggleConclusion = (revisionId: string) => {
+    setSelectedRevisionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(revisionId)) next.delete(revisionId);
+      else next.add(revisionId);
+      return next;
+    });
   };
 
   if (loading) {
@@ -121,123 +116,176 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
     return <div style={{ padding: 24 }}>工作空间不存在</div>;
   }
 
+  const hasSnapshot = detail.latest_snapshot_number != null && detail.latest_snapshot_number > 0;
+
   return (
     <div style={{ padding: 16 }}>
+      {/* 顶部栏 */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center' }}>
         <Button icon={<ArrowLeftOutlined />} type="text" onClick={onBack}>
           返回列表
         </Button>
         <span style={{ fontSize: 18, fontWeight: 600, marginLeft: 8 }}>{detail.name}</span>
-        <Button
-          icon={<ForkOutlined />}
-          size="small"
-          style={{ marginLeft: 12 }}
-          onClick={() => {
-            setForkName(`${detail.name} - 分叉`);
-            setForkModalOpen(true);
-          }}
-        >
-          分叉
-        </Button>
         <span style={{ marginLeft: 12 }}>
           <Tag color={detail.status === 'draft' ? 'blue' : 'default'}>
             {detail.status === 'draft' ? '活跃' : '已归档'}
           </Tag>
         </span>
+        {hasSnapshot && (
+          <Tag color="cyan" style={{ marginLeft: 4 }}>
+            快照 v{detail.latest_snapshot_number}
+          </Tag>
+        )}
+        {detail.turn_count > 0 && (
+          <Tag style={{ marginLeft: 4 }}>{detail.turn_count} 轮研究</Tag>
+        )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
           {detail.status === 'draft' && (
             <Popconfirm
-              title="归档后可在列表归档筛选下查看，不可恢复为活跃"
+              title="归档后不可恢复为活跃"
               onConfirm={handleArchive}
               okText="确认归档"
               cancelText="取消"
             >
-              <Button size="small" icon={<InboxOutlined />}>
-                归档
-              </Button>
+              <Button size="small" icon={<InboxOutlined />}>归档</Button>
             </Popconfirm>
           )}
-          <Popconfirm
-            title="删除后不可恢复，仅无发布成果引用的工作空间可删除"
-            onConfirm={handleDelete}
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          {detail.status === 'archived' && (
+            <>
+              <Button size="small" onClick={async () => {
+                try {
+                  await http.post(`/research/workspaces/${workspaceId}/restore`);
+                  message.success('已恢复');
+                  fetchDetail();
+                } catch {
+                  message.error('恢复失败');
+                }
+              }}>恢复</Button>
+              <Popconfirm
+                title="删除后不可恢复"
+                onConfirm={handleDelete}
+                okText="确认删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
+              </Popconfirm>
+            </>
+          )}
         </div>
       </div>
+
       <Row gutter={16}>
-        <Col xs={24} lg={5}>
-          <EvidencePanel
-            workspaceId={workspaceId}
-            evidenceCount={detail.evidence_count}
-            onEvidenceChanged={fetchDetail}
-          />
+        {/* 左栏：研究问题 → AI推荐 → 提问区 → 数据快照 */}
+        <Col xs={24} lg={6}>
+          {/* 研究问题（AI推荐 + 提问区） */}
+          {hasSnapshot && (
+            <>
+              <RecommendationPanel
+                workspaceId={workspaceId}
+                snapshotNumber={detail?.latest_snapshot_number ?? null}
+                refreshKey={recommendationRefreshKey}
+                onAdopt={(question) => {
+                  setComposerQuestion(question);
+                }}
+              />
+              <div style={{ marginTop: 12 }}>
+                <ResearchComposer
+                  workspaceId={workspaceId}
+                  snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
+                  selectedRevisionIds={Array.from(selectedRevisionIds)}
+                  initialQuestion={composerQuestion}
+                onTurnCreated={() => {
+                  setSelectedRevisionIds(new Set());
+                  setComposerQuestion('');
+                  setTimelineKey((k) => k + 1);
+                  setRecommendationRefreshKey((k) => k + 1);
+                }}
+                />
+              </div>
+            </>
+          )}
+
+          {/* 数据快照 */}
+          <div style={{ marginTop: hasSnapshot ? 16 : 0 }}>
+            <Text strong style={{ fontSize: 15, marginBottom: 8, display: 'block' }}>
+              {'数据快照'}
+            </Text>
+            <EvidencePanel
+              workspaceId={workspaceId}
+              evidenceCount={detail.evidence_count}
+              onEvidenceChanged={fetchDetail}
+            />
+          </div>
         </Col>
-        <Col xs={24} lg={11}>
-          <ResearchCanvas
+
+        {/* 中栏：研究时间线 */}
+        <Col xs={24} lg={12}>
+          <Text strong style={{ fontSize: 15, marginBottom: 8, display: 'block' }}>
+            {'研究时间线'}
+          </Text>
+
+          {/* 时间线卡片列表 */}
+          <WorkspaceTimeline
+            key={timelineKey}
             workspaceId={workspaceId}
-            detail={detail}
-            onQuestionUpdated={fetchDetail}
-            insightCandidate={insightCandidate}
-            insightCandidateId={insightCandidateId}
-            insightRunId={insightRunId}
-            onInsightCandidateChange={(cand, cid, rid) => {
-              setInsightCandidate(cand);
-              setInsightCandidateId(cid);
-              setInsightRunId(rid);
-              if (rid) setLatestRunId(rid);
+            onTurnClick={(turnId) => {
+              setSelectedTurnId(turnId === selectedTurnId ? null : turnId);
             }}
-            onProductsRefresh={() => setProductsRefresh((prev) => prev + 1)}
+            onTurnCompleted={() => {
+              setRecommendationRefreshKey((k) => k + 1);
+            }}
           />
+
+          {/* 选中卡片的展开详情（内联在时间线下方） */}
+          {selectedTurnId && (
+            <TurnDetailPanel
+                workspaceId={workspaceId}
+                turnId={selectedTurnId}
+                onClose={() => setSelectedTurnId(null)}
+                onConclusionSaved={fetchConclusions}
+              />
+          )}
         </Col>
-        <Col xs={24} lg={8}>
-          <ResearchShowcasePanel
+
+        {/* 右栏：结论库 */}
+        <Col xs={24} lg={6}>
+          <Text strong style={{ fontSize: 15, marginBottom: 8, display: 'block' }}>
+            {'结论库'}
+          </Text>
+          <ConclusionLibrary
+            conclusions={conclusions}
+            selectedRevisionIds={selectedRevisionIds}
+            onToggle={handleToggleConclusion}
+            maxSelection={20}
             workspaceId={workspaceId}
-            insightCandidate={insightCandidate}
-            insightCandidateId={insightCandidateId}
-            insightRunId={insightRunId}
-            onInsightAccepted={() => {
-              setInsightCandidate(null);
-              setInsightCandidateId(null);
-              setInsightRunId(null);
-            }}
-            onInsightRejected={() => {
-              setInsightCandidate(null);
-              setInsightCandidateId(null);
-              setInsightRunId(null);
-            }}
-            productsRefresh={productsRefresh}
-            onProductsRefresh={() => setProductsRefresh((prev) => prev + 1)}
-            latestRunId={latestRunId}
+            onDeleted={fetchConclusions}
           />
+
+          {/* 综合所选入口 */}
+          {hasSnapshot && selectedRevisionIds.size >= 2 && (
+            <div style={{ marginTop: 16 }}>
+              <SynthesisComposer
+                workspaceId={workspaceId}
+                snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
+                selectedRevisionIds={Array.from(selectedRevisionIds)}
+                onCreated={() => {
+                  setSelectedRevisionIds(new Set());
+                  setTimelineKey((k) => k + 1);
+                }}
+              />
+            </div>
+          )}
+
+          {hasSnapshot && (
+            <div style={{ marginTop: 16, padding: 12, background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
+              <Text type="secondary" style={{ fontSize: 13 }}>
+                {'选择历史结论后可"用于下一轮"或"综合所选"。'}
+              </Text>
+            </div>
+          )}
         </Col>
       </Row>
-
-      {/* 分叉弹窗 */}
-      <Modal
-        title="分叉工作空间"
-        open={forkModalOpen}
-        onOk={handleFork}
-        onCancel={() => setForkModalOpen(false)}
-        confirmLoading={forking}
-        okText="确认分叉"
-        cancelText="取消"
-      >
-        <div style={{ marginBottom: 8, color: 'var(--ocean-text-muted)', fontSize: 13 }}>
-          分叉将继承当前工作空间的主研究问题（最新版本）和数据引用列表（副本），后续独立运行。
-        </div>
-        <Input
-          placeholder="新工作空间名称"
-          value={forkName}
-          onChange={(e) => setForkName(e.target.value)}
-          onPressEnter={handleFork}
-        />
-      </Modal>
     </div>
   );
 }

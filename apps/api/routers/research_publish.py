@@ -688,7 +688,6 @@ async def new_workspace_from_publication(
         "workspace_id": str(ref.workspace_id),
         "name": ref.name,
         "status": ref.status,
-        "current_question_version": ref.current_question_version,
     }
 
 

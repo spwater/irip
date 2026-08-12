@@ -175,6 +175,7 @@ class SnapshotRepository:
         field_manifest: dict[str, Any],
         source_refs: list[Any],
         created_by: UUID,
+        idempotency_key: str | None = None,
     ) -> ResearchEvidenceSnapshot:
         """插入证据快照，返回 ORM 实体。
 
@@ -187,6 +188,7 @@ class SnapshotRepository:
             field_manifest: 字段清单。
             source_refs: 源引用列表。
             created_by: 创建人 ID。
+            idempotency_key: 幂等键（未提供时自动生成）。
 
         Returns:
             ResearchEvidenceSnapshot: 快照 ORM 实体。
@@ -200,6 +202,7 @@ class SnapshotRepository:
             field_manifest=field_manifest,
             source_refs=source_refs,
             created_by=created_by,
+            idempotency_key=idempotency_key or f"snapshot:{workspace_id}:{snapshot_number}",
         )
         session.add(snapshot)
         await session.flush()
