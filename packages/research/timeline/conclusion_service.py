@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
@@ -35,7 +36,9 @@ from packages.research.timeline.contracts import (
     SaveCandidatesCommand,
 )
 from packages.research.timeline.entities import (
+    ResearchConclusion,
     ResearchConclusionCandidate,
+    ResearchConclusionRevision,
 )
 
 logger = logging.getLogger("research.conclusion_service")
@@ -491,3 +494,160 @@ class ConclusionService(ScopedSessionMixin):
                     resource_id=conclusion_id,
                 ),
             )
+
+    async def save_from_block(
+        self,
+        workspace_id: UUID,
+        turn_id: UUID,
+        statement: str,
+        block_type: str = "table",
+    ) -> dict:
+        """Save a table/chart/structured data block as a conclusion.
+
+        Creates a ResearchConclusion + first ResearchConclusionRevision.
+
+        Args:
+            workspace_id: Workspace ID.
+            turn_id: Source turn ID.
+            statement: Conclusion statement (may be JSON for structured data).
+            block_type: Block type (table | chart | structured).
+
+        Returns:
+            Dict with conclusion_id, statement, and status.
+
+        Raises:
+            AppError: validation_failed if statement is empty.
+            AppError: not_found if turn doesn't belong to workspace.
+        """
+        import uuid as _uuid
+
+        from packages.research.timeline.entities import ResearchTurn
+
+        if not statement.strip():
+            from packages.common.errors import AppError
+
+            raise AppError(
+                code="validation_failed", message="结论内容不能为空"
+            )
+
+        actor_id = self._require_actor()
+        async with self._scoped_session() as session:
+            # Verify turn belongs to workspace
+            turn = await session.get(ResearchTurn, turn_id)
+            if turn is None or turn.workspace_id != workspace_id:
+                from packages.common.errors import AppError
+
+                raise AppError(
+                    code="not_found", message="Turn not found", retryable=False
+                )
+
+            concl_id = _uuid.uuid4()
+            rev_id = _uuid.uuid4()
+
+            conclusion = ResearchConclusion(
+                id=concl_id,
+                workspace_id=workspace_id,
+                source_turn_id=turn_id,
+                source_type="ai_original",
+                evidence_status="data_supported",
+                status="active",
+                created_by=actor_id,
+                lock_version=0,
+            )
+            session.add(conclusion)
+            await session.flush()
+
+            revision = ResearchConclusionRevision(
+                id=rev_id,
+                conclusion_id=concl_id,
+                revision_number=1,
+                statement=statement,
+            )
+            session.add(revision)
+            await session.flush()
+
+            await session.execute(
+                sa.update(ResearchConclusion)
+                .where(ResearchConclusion.id == concl_id)
+                .values(current_revision_id=rev_id)
+            )
+            await session.commit()
+
+        return {
+            "conclusion_id": str(concl_id),
+            "statement": statement,
+            "status": "saved",
+        }
+
+    async def list_conclusions(
+        self,
+        workspace_id: UUID,
+    ) -> dict:
+        """List all active conclusions for a workspace.
+
+        Returns:
+            Dict with "items" list of conclusion dicts.
+        """
+        async with self._factory() as session:
+            result = await session.execute(
+                sa.select(ResearchConclusion).where(
+                    ResearchConclusion.workspace_id == workspace_id,
+                    ResearchConclusion.status == "active",
+                )
+            )
+            items = []
+            for concl in result.scalars():
+                rev = None
+                if concl.current_revision_id:
+                    rev = await session.get(
+                        ResearchConclusionRevision, concl.current_revision_id
+                    )
+                items.append({
+                    "conclusion_id": str(concl.id),
+                    "workspace_id": str(concl.workspace_id),
+                    "source_type": concl.source_type,
+                    "evidence_status": concl.evidence_status,
+                    "status": concl.status,
+                    "revision_number": rev.revision_number if rev else 0,
+                    "statement": rev.statement if rev else "",
+                })
+
+        return {"items": items}
+
+    async def delete_conclusion(
+        self,
+        workspace_id: UUID,
+        conclusion_id: UUID,
+    ) -> dict:
+        """Delete a conclusion (mark as archived).
+
+        Args:
+            workspace_id: Workspace ID for ownership check.
+            conclusion_id: Conclusion ID to delete.
+
+        Returns:
+            Dict with conclusion_id and status.
+
+        Raises:
+            AppError: not_found if conclusion doesn't exist.
+        """
+        from packages.common.errors import AppError
+
+        async with self._factory() as session:
+            result = await session.execute(
+                sa.select(ResearchConclusion).where(
+                    ResearchConclusion.id == conclusion_id,
+                    ResearchConclusion.workspace_id == workspace_id,
+                )
+            )
+            concl = result.scalar_one_or_none()
+            if concl is None:
+                raise AppError(
+                    code="not_found",
+                    message="Conclusion not found",
+                    retryable=False,
+                )
+            concl.status = "archived"
+            await session.commit()
+
+        return {"conclusion_id": str(conclusion_id), "status": "archived"}

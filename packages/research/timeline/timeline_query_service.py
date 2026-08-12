@@ -302,3 +302,141 @@ class TimelineQueryService:
                 saved_conclusions=saved_conclusions,
                 access_restricted=False,
             )
+
+    async def get_turn_detail_api(
+        self,
+        workspace_id: UUID,
+        turn_id: UUID,
+    ) -> dict[str, Any]:
+        """Get turn detail as a dict for API response (includes fact_context).
+
+        This is the API-facing version that returns a plain dict with
+        fact_context for ChartRefBlock rendering. Use get_turn_detail() for
+        the typed contract version.
+
+        Args:
+            workspace_id: Workspace ID (for ownership check).
+            turn_id: Turn ID.
+
+        Returns:
+            Dict with turn, selected_conclusions, result, fact_context,
+            extraction_status, candidates, saved_conclusions, access_restricted.
+
+        Raises:
+            AppError: not_found if turn doesn't exist or doesn't belong to workspace.
+        """
+        async with self._factory() as session:
+            turn = await TimelineRepository.get_turn(session, turn_id)
+            if turn is None or turn.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="Turn not found",
+                    retryable=False,
+                    fields={"turn_id": str(turn_id)},
+                )
+
+            # Selected conclusions
+            ctx_result = await session.execute(
+                sa.select(ResearchTurnContext)
+                .where(ResearchTurnContext.turn_id == turn_id)
+                .order_by(ResearchTurnContext.position)
+            )
+            selected: list[dict[str, Any]] = []
+            for ctx in ctx_result.scalars():
+                rev = await session.get(
+                    ResearchConclusionRevision, ctx.conclusion_revision_id
+                )
+                if rev is not None:
+                    concl = await session.get(ResearchConclusion, rev.conclusion_id)
+                    selected.append({
+                        "revision_id": str(ctx.conclusion_revision_id),
+                        "statement": rev.statement,
+                        "source_type": concl.source_type if concl else "manual",
+                        "evidence_status": concl.evidence_status if concl else "manual_unverified",
+                    })
+
+            # Candidates
+            cand_result = await session.execute(
+                sa.select(ResearchConclusionCandidate)
+                .where(ResearchConclusionCandidate.turn_id == turn_id)
+                .order_by(ResearchConclusionCandidate.ordinal)
+            )
+            candidates = [
+                {
+                    "candidate_id": str(c.id),
+                    "ordinal": c.ordinal,
+                    "statement": c.statement,
+                    "scope": c.scope,
+                    "confidence_level": c.confidence_level,
+                    "limitations": c.limitations,
+                    "status": c.status,
+                }
+                for c in cand_result.scalars()
+            ]
+
+            # Saved conclusions (for this workspace, active only)
+            concl_result = await session.execute(
+                sa.select(ResearchConclusion).where(
+                    ResearchConclusion.workspace_id == workspace_id,
+                    ResearchConclusion.status == "active",
+                )
+            )
+            saved: list[dict[str, Any]] = []
+            for concl in concl_result.scalars():
+                rev = (
+                    await session.get(
+                        ResearchConclusionRevision, concl.current_revision_id
+                    )
+                    if concl.current_revision_id
+                    else None
+                )
+                saved.append({
+                    "conclusion_id": str(concl.id),
+                    "workspace_id": str(concl.workspace_id),
+                    "source_type": concl.source_type,
+                    "evidence_status": concl.evidence_status,
+                    "status": concl.status,
+                    "revision_number": rev.revision_number if rev else 0,
+                    "statement": rev.statement if rev else "",
+                })
+
+            # Turn result
+            result: dict[str, Any] | None = None
+            result_row = await session.execute(
+                sa.select(ResearchTurnResult).where(ResearchTurnResult.turn_id == turn_id)
+            )
+            tr = result_row.scalar_one_or_none()
+            if tr is not None:
+                result = {
+                    "summary": tr.summary,
+                    "structured_output": tr.structured_output,
+                    "method_summary": tr.method_summary,
+                }
+
+            # Load fact_context for chart-ref rendering
+            from packages.research.timeline.fact_data_loader import FactDataLoader
+
+            fact_loader = FactDataLoader(self._factory)
+            fact_context = await fact_loader.load_fact_context_string(
+                session, workspace_id
+            )
+
+            return {
+                "turn": {
+                    "turn_id": str(turn.id),
+                    "workspace_id": str(turn.workspace_id),
+                    "turn_number": turn.turn_number,
+                    "kind": turn.kind,
+                    "status": turn.status,
+                    "question_text": turn.question_text_snapshot,
+                    "question_origin": turn.question_origin,
+                    "evidence_snapshot_id": str(turn.evidence_snapshot_id),
+                },
+                "selected_conclusions": selected,
+                "result": result,
+                "fact_context": fact_context,
+                "extraction_status": None,
+                "candidates": candidates,
+                "saved_conclusions": saved,
+                "access_restricted": False,
+            }

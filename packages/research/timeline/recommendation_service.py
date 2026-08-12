@@ -520,3 +520,55 @@ class RecommendationService:
                 status="queued",
                 item_count=0,
             )
+
+    async def get_active(self, workspace_id: UUID) -> dict:
+        """Get the latest recommendation batch and its items for a workspace.
+
+        Returns a dict suitable for API response:
+          - batch_id, workspace_id, status, items[]
+
+        If no batch exists, returns status="none" with empty items.
+        """
+        import sqlalchemy as sa
+
+        from packages.research.timeline.entities import (
+            ResearchRecommendationBatch,
+            ResearchRecommendationItem,
+        )
+
+        async with self._factory() as session:
+            result = await session.execute(
+                sa.select(ResearchRecommendationBatch)
+                .where(ResearchRecommendationBatch.workspace_id == workspace_id)
+                .order_by(ResearchRecommendationBatch.created_at.desc())
+                .limit(1)
+            )
+            batch = result.scalar_one_or_none()
+            if batch is None:
+                return {
+                    "batch_id": "",
+                    "workspace_id": str(workspace_id),
+                    "status": "none",
+                    "items": [],
+                }
+
+            items_result = await session.execute(
+                sa.select(ResearchRecommendationItem)
+                .where(ResearchRecommendationItem.batch_id == batch.id)
+                .order_by(ResearchRecommendationItem.position)
+            )
+            items = [
+                {
+                    "id": str(item.id),
+                    "question": item.question,
+                    "rationale": item.rationale or "",
+                }
+                for item in items_result.scalars()
+            ]
+
+            return {
+                "batch_id": str(batch.id),
+                "workspace_id": str(workspace_id),
+                "status": batch.status,
+                "items": items,
+            }

@@ -99,11 +99,13 @@ def register(ctx: CompositionContext) -> None:
 
     # ---- Timeline services (Task 11) ----
     from apps.api.routers.research_timeline import (
+        get_analysis_service,
         get_conclusion_service,
         get_recommendation_service,
         get_timeline_query_service,
         get_turn_service,
     )
+    from packages.research.timeline.analysis_service import AnalysisService
     from packages.research.timeline.recommendation_service import RecommendationService
     from packages.research.timeline.timeline_query_service import TimelineQueryService
 
@@ -111,6 +113,9 @@ def register(ctx: CompositionContext) -> None:
         ctx.session_factory,
     )
     ctx.app.dependency_overrides[get_recommendation_service] = lambda: RecommendationService(
+        ctx.session_factory,
+    )
+    ctx.app.dependency_overrides[get_analysis_service] = lambda: AnalysisService(
         ctx.session_factory,
     )
 

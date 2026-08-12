@@ -60,10 +60,15 @@ def get_recommendation_service() -> None:
     raise NotImplementedError("overridden by composition")
 
 
+def get_analysis_service() -> None:
+    raise NotImplementedError("overridden by composition")
+
+
 TimelineQueryDep = Annotated[object, Depends(get_timeline_query_service)]
 TurnServiceDep = Annotated[object, Depends(get_turn_service)]
 ConclusionServiceDep = Annotated[object, Depends(get_conclusion_service)]
 RecommendationServiceDep = Annotated[object, Depends(get_recommendation_service)]
+AnalysisServiceDep = Annotated[object, Depends(get_analysis_service)]
 
 
 # ---- Router ----
@@ -226,61 +231,23 @@ async def list_timeline(
 async def get_active_recommendation(
     workspace_id: UUID,
     current_user: ResearchUserDep,
+    service: RecommendationServiceDep,
 ) -> RecommendationBatchResponse:
     """Get the latest recommendation batch and its items for a workspace."""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import (
-        ResearchRecommendationBatch,
-        ResearchRecommendationItem,
-    )
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        # Get latest batch
-        result = await session.execute(
-            sa.select(ResearchRecommendationBatch)
-            .where(ResearchRecommendationBatch.workspace_id == workspace_id)
-            .order_by(ResearchRecommendationBatch.created_at.desc())
-            .limit(1)
-        )
-        batch = result.scalar_one_or_none()
-        if batch is None:
-            return RecommendationBatchResponse(
-                batch_id="",
-                workspace_id=str(workspace_id),
-                status="none",
-                items=[],
-            )
-
-        # Get items
-        items_result = await session.execute(
-            sa.select(ResearchRecommendationItem)
-            .where(ResearchRecommendationItem.batch_id == batch.id)
-            .order_by(ResearchRecommendationItem.position)
-        )
-        items = [
+    data = await service.get_active(workspace_id)
+    return RecommendationBatchResponse(
+        batch_id=data["batch_id"],
+        workspace_id=data["workspace_id"],
+        status=data["status"],
+        items=[
             RecommendationItemResponse(
-                id=str(item.id),
-                question=item.question,
-                rationale=item.rationale or "",
+                id=item["id"],
+                question=item["question"],
+                rationale=item["rationale"],
             )
-            for item in items_result.scalars()
-        ]
-
-        return RecommendationBatchResponse(
-            batch_id=str(batch.id),
-            workspace_id=str(batch.workspace_id),
-            status=batch.status,
-            items=items,
-        )
+            for item in data["items"]
+        ],
+    )
 
 
 @research_timeline_router.post(
@@ -518,189 +485,11 @@ async def get_turn_detail(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
+    service: TimelineQueryDep,
 ) -> dict:
     """Get detailed information about a single research turn."""
-    import os
+    return await service.get_turn_detail_api(workspace_id, turn_id)
 
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import (
-        ResearchConclusion,
-        ResearchConclusionCandidate,
-        ResearchConclusionRevision,
-        ResearchTurn,
-        ResearchTurnContext,
-        ResearchTurnResult,
-    )
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        turn = await session.get(ResearchTurn, turn_id)
-        if turn is None or turn.workspace_id != workspace_id:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="Turn not found", retryable=False)
-
-        # Selected conclusions
-        ctx_result = await session.execute(
-            sa.select(ResearchTurnContext)
-            .where(ResearchTurnContext.turn_id == turn_id)
-            .order_by(ResearchTurnContext.position)
-        )
-        selected = []
-        for ctx in ctx_result.scalars():
-            rev = await session.get(ResearchConclusionRevision, ctx.conclusion_revision_id)
-            if rev is not None:
-                concl = await session.get(ResearchConclusion, rev.conclusion_id)
-                selected.append(
-                    {
-                        "revision_id": str(ctx.conclusion_revision_id),
-                        "statement": rev.statement,
-                        "source_type": concl.source_type if concl else "manual",
-                        "evidence_status": concl.evidence_status if concl else "manual_unverified",
-                    }
-                )
-
-        # Candidates
-        cand_result = await session.execute(
-            sa.select(ResearchConclusionCandidate)
-            .where(ResearchConclusionCandidate.turn_id == turn_id)
-            .order_by(ResearchConclusionCandidate.ordinal)
-        )
-        candidates = [
-            {
-                "candidate_id": str(c.id),
-                "ordinal": c.ordinal,
-                "statement": c.statement,
-                "scope": c.scope,
-                "confidence_level": c.confidence_level,
-                "limitations": c.limitations,
-                "status": c.status,
-            }
-            for c in cand_result.scalars()
-        ]
-
-        # Saved conclusions
-        concl_result = await session.execute(
-            sa.select(ResearchConclusion).where(
-                ResearchConclusion.workspace_id == workspace_id,
-                ResearchConclusion.status == "active",
-            )
-        )
-        saved = []
-        for concl in concl_result.scalars():
-            rev = (
-                await session.get(ResearchConclusionRevision, concl.current_revision_id)
-                if concl.current_revision_id
-                else None
-            )
-            saved.append(
-                {
-                    "conclusion_id": str(concl.id),
-                    "workspace_id": str(concl.workspace_id),
-                    "source_type": concl.source_type,
-                    "evidence_status": concl.evidence_status,
-                    "status": concl.status,
-                    "revision_number": rev.revision_number if rev else 0,
-                    "statement": rev.statement if rev else "",
-                }
-            )
-
-        # Get turn result
-        result = None
-        result_row = await session.execute(
-            sa.select(ResearchTurnResult).where(ResearchTurnResult.turn_id == turn_id)
-        )
-        tr = result_row.scalar_one_or_none()
-        if tr is not None:
-            result = {
-                "summary": tr.summary,
-                "structured_output": tr.structured_output,
-                "method_summary": tr.method_summary,
-            }
-
-        # Load fact_data for chart-ref rendering (ChartRefBlock needs systemContext)
-        fact_context = None
-        try:
-            import json as _json
-
-            from packages.common.database import build_session_factory as _bsf
-            from packages.research.entities import WorkspaceEvidenceRef
-
-            analysis_db_url = os.environ.get(
-                "IRIP_ALEMBIC_DATABASE_URL",
-                "postgresql+psycopg://irip:irip_dev_password@localhost:5432/irip",
-            )
-            analysis_factory = _bsf(analysis_db_url)
-            async with analysis_factory() as fact_session:
-                refs_result = await fact_session.execute(
-                    sa.select(WorkspaceEvidenceRef).where(
-                        WorkspaceEvidenceRef.workspace_id == workspace_id,
-                        WorkspaceEvidenceRef.status == "active",
-                    )
-                )
-                refs = refs_result.scalars().all()
-
-                if refs:
-                    from apps.api.main import _build_s3_repo
-                    from packages.facts.query_service import FactQueryService
-                    from packages.research.lineage.core_adapter import CoreFactProviderImpl
-
-                    user_result = await fact_session.execute(
-                        sa.text(
-                            "SELECT id, department_id FROM app_user WHERE email = 'admin@irip.local' LIMIT 1"
-                        )
-                    )
-                    user_row = user_result.first()
-
-                    if user_row:
-                        s3_repo = _build_s3_repo()
-                        fact_query = FactQueryService(
-                            session_factory=analysis_factory,
-                            department_id=user_row[1],
-                            actor_id=user_row[0],
-                            s3_repo=s3_repo,
-                        )
-                        fact_provider = CoreFactProviderImpl(query_service=fact_query)
-
-                        # Build systemContext format: "### 样品: XXX\n```json\n{...}\n```"
-                        context_parts = []
-                        for ref in refs:
-                            data = await fact_provider.get_fact_data(ref.source_id)
-                            if isinstance(data, dict):
-                                label = ref.source_name or str(ref.source_id)
-                                context_parts.append(
-                                    f"### 样品: {label}\n```json\n{_json.dumps(data, ensure_ascii=False)}\n```"
-                                )
-                        if context_parts:
-                            fact_context = "\n\n".join(context_parts)
-        except Exception:
-            pass
-
-        return {
-            "turn": {
-                "turn_id": str(turn.id),
-                "workspace_id": str(turn.workspace_id),
-                "turn_number": turn.turn_number,
-                "kind": turn.kind,
-                "status": turn.status,
-                "question_text": turn.question_text_snapshot,
-                "question_origin": turn.question_origin,
-                "evidence_snapshot_id": str(turn.evidence_snapshot_id),
-            },
-            "selected_conclusions": selected,
-            "result": result,
-            "fact_context": fact_context,
-            "extraction_status": None,
-            "candidates": candidates,
-            "saved_conclusions": saved,
-            "access_restricted": False,
-        }
 
 
 @research_timeline_router.post(
@@ -766,38 +555,10 @@ async def delete_conclusion(
     workspace_id: UUID,
     conclusion_id: UUID,
     current_user: ResearchUserDep,
+    service: ConclusionServiceDep,
 ) -> dict:
     """Delete a conclusion (mark as archived)."""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import ResearchConclusion
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-
-    async with factory() as session:
-        result = await session.execute(
-            sa.select(ResearchConclusion).where(
-                ResearchConclusion.id == conclusion_id,
-                ResearchConclusion.workspace_id == workspace_id,
-            )
-        )
-        concl = result.scalar_one_or_none()
-        if concl is None:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="Conclusion not found")
-
-        concl.status = "archived"
-        await session.commit()
-
-    return {"conclusion_id": str(conclusion_id), "status": "archived"}
+    return await service.delete_conclusion(workspace_id, conclusion_id)
 
 
 @research_timeline_router.get(
@@ -806,49 +567,10 @@ async def delete_conclusion(
 async def list_conclusions(
     workspace_id: UUID,
     current_user: ResearchUserDep,
+    service: ConclusionServiceDep,
 ) -> dict:
     """List all active conclusions for a workspace."""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import (
-        ResearchConclusion,
-        ResearchConclusionRevision,
-    )
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-
-    async with factory() as session:
-        result = await session.execute(
-            sa.select(ResearchConclusion).where(
-                ResearchConclusion.workspace_id == workspace_id,
-                ResearchConclusion.status == "active",
-            )
-        )
-        items = []
-        for concl in result.scalars():
-            rev = None
-            if concl.current_revision_id:
-                rev = await session.get(ResearchConclusionRevision, concl.current_revision_id)
-            items.append(
-                {
-                    "conclusion_id": str(concl.id),
-                    "workspace_id": str(concl.workspace_id),
-                    "source_type": concl.source_type,
-                    "evidence_status": concl.evidence_status,
-                    "status": concl.status,
-                    "revision_number": rev.revision_number if rev else 0,
-                    "statement": rev.statement if rev else "",
-                }
-            )
-
-        return {"items": items}
+    return await service.list_conclusions(workspace_id)
 
 
 @research_timeline_router.post(
@@ -859,97 +581,19 @@ async def save_as_conclusion(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
+    service: ConclusionServiceDep,
     body: dict,
 ) -> dict:
     """Save a table/chart/structured data block as a conclusion."""
-    import os
-    import uuid
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import (
-        ResearchConclusion,
-        ResearchConclusionRevision,
-        ResearchTurn,
-    )
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-
     statement = body.get("statement", "")
     if not statement.strip():
         from packages.common.errors import AppError
 
         raise AppError(code="validation_failed", message="结论内容不能为空")
+    return await service.save_from_block(
+        workspace_id, turn_id, statement, body.get("block_type", "table")
+    )
 
-    scope = body.get("scope")
-    limitations = body.get("limitations")
-    block_type = body.get("block_type", "table")  # table | chart | structured
-
-    async with factory() as session:
-        # Verify turn belongs to workspace
-        turn = await session.get(ResearchTurn, turn_id)
-        if turn is None or turn.workspace_id != workspace_id:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="Turn not found")
-
-        # Get admin user ID
-        user_result = await session.execute(
-            sa.text("SELECT id FROM app_user WHERE email = 'admin@irip.local' LIMIT 1")
-        )
-        user_row = user_result.first()
-        if not user_row:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="User not found")
-
-        # Create conclusion
-        concl_id = uuid.uuid4()
-        rev_id = uuid.uuid4()
-
-        conclusion = ResearchConclusion(
-            id=concl_id,
-            workspace_id=workspace_id,
-            source_turn_id=turn_id,
-            source_type="ai_original",
-            evidence_status="data_supported",
-            status="active",
-            created_by=user_row[0],
-            lock_version=0,
-        )
-        session.add(conclusion)
-        await session.flush()
-
-        revision = ResearchConclusionRevision(
-            id=rev_id,
-            conclusion_id=concl_id,
-            revision_number=1,
-            statement=statement,
-            scope=scope,
-            limitations=limitations,
-            editor=user_row[0],
-        )
-        session.add(revision)
-        await session.flush()
-
-        # Set current revision
-        await session.execute(
-            sa.update(ResearchConclusion)
-            .where(ResearchConclusion.id == concl_id)
-            .values(current_revision_id=rev_id)
-        )
-        await session.commit()
-
-    return {
-        "conclusion_id": str(concl_id),
-        "statement": statement,
-        "status": "saved",
-    }
 
 
 @research_timeline_router.post(
@@ -959,216 +603,7 @@ async def run_analysis(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
+    service: AnalysisServiceDep,
 ) -> dict:
-    """Run analysis using old PlanService flow: generate plan → confirm → analyze_data."""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import ResearchTurn, ResearchTurnResult
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-
-    # 1. Load turn
-    async with factory() as session:
-        turn = await session.get(ResearchTurn, turn_id)
-        if turn is None or turn.workspace_id != workspace_id:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="Turn not found", retryable=False)
-        snapshot_id = turn.evidence_snapshot_id
-        if turn.status in ("question_draft", "run_failed"):
-            turn.status = "running"
-            await session.commit()
-
-    # 2. Build PlanService with same deps as old workspace
-    analysis_db_url = os.environ.get(
-        "IRIP_ALEMBIC_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:5432/irip",
-    )
-    analysis_factory = build_session_factory(analysis_db_url)
-
-    async with analysis_factory() as session:
-        user_result = await session.execute(
-            sa.text(
-                "SELECT id, department_id FROM app_user WHERE email = 'admin@irip.local' LIMIT 1"
-            )
-        )
-        user_row = user_result.first()
-
-    if not user_row:
-        from packages.common.errors import AppError
-
-        raise AppError(code="not_found", message="Admin user not found", retryable=False)
-
-    from apps.api.main import _build_s3_repo
-    from packages.facts.query_service import FactQueryService
-    from packages.research.execution.models_trusted import ModelConfig, TaskType
-    from packages.research.lineage.core_adapter import CoreFactProviderImpl
-    from packages.research.planning.model_gateway import ModelGateway
-    from packages.research.planning.plan_core import PlanService
-
-    s3_repo = _build_s3_repo()
-    fact_query = FactQueryService(
-        session_factory=analysis_factory,
-        department_id=user_row[1],
-        actor_id=user_row[0],
-        s3_repo=s3_repo,
-    )
-    fact_provider = CoreFactProviderImpl(query_service=fact_query)
-
-    # Build AI provider
-    from apps.api.routers.ai_config import get_active_ai_config, set_session_factory
-
-    set_session_factory(analysis_factory)
-
-    ai_config = await get_active_ai_config()
-    if not ai_config or not ai_config.get("base_url") or not ai_config.get("api_key"):
-        async with factory() as session:
-            turn = await session.get(ResearchTurn, turn_id)
-            if turn:
-                turn.status = "run_failed"
-                await session.commit()
-        from packages.common.errors import AppError
-
-        raise AppError(code="ai_config_missing", message="AI not configured", retryable=False)
-
-    from packages.ai.openai_compatible import OpenAICompatibleProvider
-
-    research_model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
-    thinking = ai_config.get("thinking_enabled", False)
-    ai_provider = OpenAICompatibleProvider(
-        api_key=ai_config["api_key"],
-        base_url=ai_config["base_url"],
-        model=research_model_name,
-        thinking_enabled=thinking,
-    )
-
-    model_registry = {
-        task: ModelConfig(
-            provider="openai_compatible",
-            model=research_model_name,
-            version="custom",
-            context_limit=128000,
-        )
-        for task in TaskType
-    }
-    model_gateway = ModelGateway(
-        provider=ai_provider,
-        audit_recorder=None,
-        model_registry=model_registry,
-    )
-
-    from packages.research.planning.context_router import ContextRouter
-
-    context_router = ContextRouter()
-
-    plan_service = PlanService(
-        session_factory=analysis_factory,
-        department_id=user_row[1],
-        actor_id=user_row[0],
-        fact_provider=fact_provider,
-        model_gateway=model_gateway,
-        context_router=context_router,
-    )
-
-    # 3. Generate plan → auto-confirm → analyze
-    try:
-        plan_ref = await plan_service.generate_plan(workspace_id, snapshot_id)
-        await plan_service.confirm_plan(workspace_id, plan_ref.plan_id)
-        result = await plan_service.analyze_data(workspace_id, plan_ref.plan_id, snapshot_id)
-
-        analysis_text = result.get("analysis_result", "")
-
-        # 4. Write TurnResult
-        async with factory() as session:
-            old_result = await session.execute(
-                sa.select(ResearchTurnResult).where(ResearchTurnResult.turn_id == turn_id)
-            )
-            old = old_result.scalar_one_or_none()
-            if old is not None:
-                await session.delete(old)
-                await session.flush()
-
-            result_row = ResearchTurnResult(
-                turn_id=turn_id,
-                run_id=None,
-                result_kind="analysis",
-                summary=analysis_text[:500],
-                structured_output={"analysis_markdown": analysis_text},
-                method_summary="PlanService generate_plan + analyze_data",
-                evidence_refs=[],
-            )
-            session.add(result_row)
-
-            turn = await session.get(ResearchTurn, turn_id)
-            if turn:
-                turn.status = "succeeded"
-            await session.commit()
-
-    except Exception as e:
-        async with factory() as session:
-            turn = await session.get(ResearchTurn, turn_id)
-            if turn:
-                turn.status = "run_failed"
-                await session.commit()
-        from packages.common.errors import AppError
-
-        raise AppError(
-            code="analysis_failed",
-            message=f"Analysis failed: {e}",
-            retryable=True,
-        )
-
-    # 5. Auto-trigger followup recommendations
-    try:
-        from packages.jobs.outbox import OutboxDispatcher
-        from packages.research.timeline.contracts import (
-            RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
-            RECOMMENDATION_PROMPT_VERSION,
-        )
-        from packages.research.timeline.repository import TimelineRepository
-
-        followup_key = f"followup:{turn_id}"
-        async with factory() as session:
-            existing = await TimelineRepository.get_batch_by_idempotency(
-                session, workspace_id, followup_key
-            )
-            if existing is None:
-                batch = await TimelineRepository.insert_batch(
-                    session,
-                    workspace_id=workspace_id,
-                    snapshot_id=snapshot_id,
-                    mode="followup",
-                    prompt_template_version=RECOMMENDATION_PROMPT_VERSION,
-                    output_schema_version=RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
-                    idempotency_key=followup_key,
-                )
-
-                followup_context = (
-                    f"上一轮分析问题: {turn.question_text_snapshot}\n"
-                    f"分析摘要: {analysis_text[:2000]}"
-                )
-
-                await OutboxDispatcher.enqueue(
-                    session,
-                    aggregate_type="research_recommendation_batch",
-                    aggregate_id=batch.id,
-                    event_type="research.recommendation.requested",
-                    payload={
-                        "batch_id": str(batch.id),
-                        "mode": "followup",
-                        "followup_context": followup_context[:4000],
-                    },
-                )
-                await session.commit()
-                logger.info("enqueued followup recommendation batch %s", batch.id)
-    except Exception as exc:
-        logger.warning("Failed to enqueue followup recommendations: %s", exc)
-
-    return {"turn_id": str(turn_id), "status": "succeeded", "summary": analysis_text[:200]}
+    """Run analysis using PlanService flow: generate plan → confirm → analyze_data."""
+    return await service.run_analysis(workspace_id, turn_id)
