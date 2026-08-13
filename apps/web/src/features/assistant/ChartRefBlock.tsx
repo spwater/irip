@@ -140,9 +140,11 @@ function findSample(samples: Map<string, SampleData>, target: string): SampleDat
 export function ChartRefBlock({
   specStr,
   systemContext,
+  sampleData,
 }: {
   specStr: string;
-  systemContext: string | null | undefined;
+  systemContext?: string | null;
+  sampleData?: Array<{ label: string; data: Record<string, unknown> }> | null;
 }): JSX.Element {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstanceRef = useRef<{ dispose: () => void; resize: () => void; getDataURL: (opts?: Record<string, unknown>) => string } | null>(null);
@@ -176,8 +178,30 @@ export function ChartRefBlock({
     }
   }, [specStr]);
 
-  // 从 systemContext 提取样品数据
-  const samples = useMemo(() => parseSamplesFromContext(systemContext), [systemContext]);
+  // 从结构化 sampleData 或 systemContext 文本提取样品数据
+  const samples = useMemo(() => {
+    // 优先使用结构化数据（无文本解析风险）
+    if (sampleData && sampleData.length > 0) {
+      const map = new Map<string, SampleData>();
+      const labelCount = new Map<string, number>();
+      for (const s of sampleData) {
+        const rawLabel = s.label;
+        const count = (labelCount.get(rawLabel) ?? 0) + 1;
+        labelCount.set(rawLabel, count);
+        const label = count > 1 ? `${rawLabel} (#${count})` : rawLabel;
+        const d = s.data;
+        map.set(label, {
+          label,
+          metadata: (d.metadata as Record<string, unknown>) ?? {},
+          points: (d.points as unknown[]) ?? [],
+          series: (d.series as { name: string; columns: string[]; rows: unknown[][] }[]) ?? [],
+        });
+      }
+      return map;
+    }
+    // 回退到文本解析（向后兼容旧接口）
+    return parseSamplesFromContext(systemContext);
+  }, [sampleData, systemContext]);
 
   // 构建 ECharts option
   const option = useMemo(() => {

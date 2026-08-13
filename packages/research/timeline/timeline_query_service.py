@@ -413,11 +413,11 @@ class TimelineQueryService:
                     "method_summary": tr.method_summary,
                 }
 
-            # Load fact_context for chart-ref rendering
+            # Load fact_samples (structured) + fact_context (text, for backward compat)
             from packages.research.timeline.fact_data_loader import FactDataLoader
 
             fact_loader = FactDataLoader(self._factory)
-            fact_context = await fact_loader.load_fact_context_string(
+            fact_samples = await fact_loader.load_fact_samples(
                 session, workspace_id
             )
 
@@ -434,7 +434,7 @@ class TimelineQueryService:
                 },
                 "selected_conclusions": selected,
                 "result": result,
-                "fact_context": fact_context,
+                "fact_samples": fact_samples,
                 "extraction_status": None,
                 "candidates": candidates,
                 "saved_conclusions": saved,

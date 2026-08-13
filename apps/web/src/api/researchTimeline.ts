@@ -122,7 +122,7 @@ export interface TurnDetail {
     evidence_status: EvidenceStatus;
   }>;
   result: Record<string, unknown> | null;
-  fact_context: string | null;
+  fact_samples: Array<{ label: string; data: Record<string, unknown> }> | null;
   extraction_status: ExtractionStatus | null;
   candidates: ConclusionCandidate[];
   saved_conclusions: ConclusionRef[];

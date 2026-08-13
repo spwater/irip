@@ -191,7 +191,7 @@ export function TurnDetailPanel({ workspaceId, turnId, onClose, onConclusionSave
                   const lang = className?.replace('language-', '') || '';
                   const codeStr = String(children || '').replace(/\n$/, '');
                   if (lang === 'chart-ref' || lang === 'chart') {
-                    return <ChartRefBlock key={`chartref-${codeStr.slice(0, 20)}`} specStr={codeStr} systemContext={detail.fact_context} />;
+                    return <ChartRefBlock key={`chartref-${codeStr.slice(0, 20)}`} specStr={codeStr} sampleData={detail.fact_samples} />;
                   }
                   if (lang === 'echarts') {
                     let echartsStr = codeStr

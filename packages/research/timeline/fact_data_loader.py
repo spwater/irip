@@ -139,6 +139,33 @@ class FactDataLoader:
 
         Returns None if no data or loading fails.
         """
+        samples = await self.load_fact_samples(session, workspace_id)
+        if not samples:
+            return None
+
+        context_parts: list[str] = []
+        for s in samples:
+            context_parts.append(
+                f"### 样品: {s['label']}\n"
+                f"```json\n{json.dumps(s['data'], ensure_ascii=False)}\n```"
+            )
+        return "\n\n".join(context_parts)
+
+    async def load_fact_samples(
+        self,
+        session: AsyncSession,
+        workspace_id: UUID,
+    ) -> list[dict[str, Any]] | None:
+        """Load fact_data as structured sample list for ChartRefBlock.
+
+        Returns a list of dicts, each containing:
+          - label: str (sample name)
+          - data: dict (full fact_data: metadata/points/series)
+
+        Returns None if no data or loading fails.
+        This is the structured alternative to load_fact_context_string —
+        no text parsing needed on the frontend.
+        """
         try:
             refs_result = await session.execute(
                 sa.select(WorkspaceEvidenceRef)
@@ -181,17 +208,13 @@ class FactDataLoader:
                 )
                 fact_provider = CoreFactProviderImpl(query_service=fact_query)
 
-                context_parts: list[str] = []
+                samples: list[dict[str, Any]] = []
                 for ref in refs:
                     data = await fact_provider.get_fact_data(ref.source_id)
                     if isinstance(data, dict):
                         label = ref.source_name or str(ref.source_id)
-                        context_parts.append(
-                            f"### 样品: {label}\n"
-                            f"```json\n{json.dumps(data, ensure_ascii=False)}\n```"
-                        )
-                if context_parts:
-                    return "\n\n".join(context_parts)
+                        samples.append({"label": label, "data": data})
+                return samples if samples else None
         except Exception as exc:
-            logger.warning("fact_context loading failed: %s", exc)
+            logger.warning("fact_samples loading failed: %s", exc)
         return None
