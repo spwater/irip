@@ -245,84 +245,25 @@ class RecommendationService:
                 evidence_count = 0
                 snapshot_number = "unknown"
 
-            # Load actual fact data (three-segment: metadata/points/series) for richer context
+            # Load actual fact data via shared FactDataLoader
             fact_data_str = ""
             try:
-                import os
+                from packages.research.timeline.fact_data_loader import FactDataLoader
 
-                import sqlalchemy as sa
-
-                from packages.common.database import build_session_factory
-                from packages.research.entities import WorkspaceEvidenceRef
-
-                analysis_db_url = os.environ.get(
-                    "IRIP_ALEMBIC_DATABASE_URL",
-                    "postgresql+psycopg://irip:irip_dev_password@localhost:5432/irip",
-                )
-                analysis_factory = build_session_factory(analysis_db_url)
-
-                async with analysis_factory() as fact_session:
-                    refs_result = await fact_session.execute(
-                        sa.select(WorkspaceEvidenceRef).where(
-                            WorkspaceEvidenceRef.workspace_id == batch.workspace_id,
-                            WorkspaceEvidenceRef.status == "active",
-                        )
+                fact_loader = FactDataLoader(self._factory)
+                async with self._factory() as session:
+                    fact_rows = await fact_loader.load_fact_rows(
+                        session, batch.workspace_id
                     )
-                    refs = refs_result.scalars().all()
-
-                    from packages.facts.query_service import FactQueryService
-                    from packages.research.lineage.core_adapter import CoreFactProviderImpl
-
-                    user_result = await fact_session.execute(
-                        sa.text(
-                            "SELECT id, department_id FROM app_user WHERE email = 'admin@irip.local' LIMIT 1"
-                        )
+                if fact_rows:
+                    fact_data_str = _json.dumps(
+                        fact_rows, ensure_ascii=False, indent=2
+                    )[:10000]
+                    logger.info(
+                        "recommendation fact_data loaded: %d rows, %d chars",
+                        len(fact_rows),
+                        len(fact_data_str),
                     )
-                    user_row = user_result.first()
-
-                    if user_row and refs:
-                        from apps.api.main import _build_s3_repo
-
-                        s3_repo = _build_s3_repo()
-                        fact_query = FactQueryService(
-                            session_factory=analysis_factory,
-                            department_id=user_row[1],
-                            actor_id=user_row[0],
-                            s3_repo=s3_repo,
-                        )
-                        fact_provider = CoreFactProviderImpl(query_service=fact_query)
-
-                        fact_rows = []
-                        for ref in refs:
-                            fact_info = {"source_name": ref.source_name or ""}
-                            try:
-                                data = await fact_provider.get_fact_data(ref.source_id)
-                                if isinstance(data, dict):
-                                    fact_info["metadata"] = data.get("metadata", {})
-                                    fact_info["points"] = data.get("points", [])
-                                    # Pass series with columns + first 5 rows (enough to see data content, not too much)
-                                    series_full = data.get("series", [])
-                                    fact_info["series"] = [
-                                        {
-                                            "name": s.get("name", ""),
-                                            "columns": s.get("columns", []),
-                                            "rows_sample": (s.get("rows", []) or [])[:5],
-                                        }
-                                        for s in series_full
-                                        if isinstance(s, dict)
-                                    ]
-                            except Exception as exc:
-                                logger.warning(
-                                    "Failed to load fact data for %s: %s", ref.source_id, exc
-                                )
-                            fact_rows.append(fact_info)
-
-                        fact_data_str = _json.dumps(fact_rows, ensure_ascii=False, indent=2)[:10000]
-                        logger.info(
-                            "recommendation fact_data loaded: %d rows, %d chars",
-                            len(fact_rows),
-                            len(fact_data_str),
-                        )
             except Exception as exc:
                 logger.warning("recommendation fact_data loading failed: %s", exc)
 
