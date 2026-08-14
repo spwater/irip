@@ -1,10 +1,10 @@
 """步骤执行 Mixin：按 method 分发执行步骤。
 
 拆分自 orchestrator.py（IRIP 拆分任务）。``StepExecutorMixin`` 承载
-_execute_step（按 python/llm/mixed/knowledge 分发）、_execute_python_step
-（AI 生成代码 → 沙箱执行 → 收集输出，自动修错）、_execute_llm_step
-（ContextRouter 计算预算 → 超预算分块 → 模型调用 → 归并）、_execute_mixed_step
-（Python 先行 → LLM 阅读）与 _generate_fallback_script（AI 失败回退脚本）。
+_execute_step（按 llm/knowledge 分发）和 _execute_llm_step
+（ContextRouter 计算预算 → 超预算分块 → 模型调用 → 归并）。
+
+沙箱执行（python/mixed method）已删除，当前仅支持 LLM 分析。
 
 Timeline refactoring (Task 8): _extract_insight_candidate 已删除。
 候选提取改为整轮 Run 完成后由独立 Celery 任务执行
@@ -12,30 +12,21 @@ Timeline refactoring (Task 8): _extract_insight_candidate 已删除。
 
 关键约束：
 - 某步失败后依赖步骤停止（skipped），无依赖分支仍可继续；
-- Python 步骤通过 SandboxRuntime 执行，自动修错最多 MAX_RETRY_ATTEMPTS 次；
 - LLM 步骤通过 ContextRouter 计算预算，超预算自动分块；
 - 每步发布 SSE 事件到 Redis pub/sub。
 """
 
-import logging
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from packages.audit.events import AuditEventData
-from packages.audit.repository import AuditRecorder
 from packages.research.execution.models_trusted import (
     CoverageDeclaration,
     ErrorClassification,
-    ExecutionResult,
     StepStatus,
     TaskType,
 )
 from packages.research.execution.orchestrator_base import (
-    DEFAULT_RESOURCE_LIMITS,
-    DEFAULT_WARM_DURATION,
-    MAX_RETRY_ATTEMPTS,
-    SANDBOX_IMAGE_DIGEST,
     ResearchOrchestratorBase,
     logger,
 )
@@ -56,9 +47,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
         """执行单个步骤。
 
         按 method 分发：
-        - python: 沙箱执行 Python 脚本（AI 生成代码 → 沙箱执行 → 收集输出）；
         - llm: ContextRouter 计算预算 → 超预算分块 → 模型调用 → 归并；
-        - mixed: Python 先行计算 → LLM 阅读结果；
         - knowledge: 本期跳过（子项目 5 接入）。
 
         Args:
@@ -72,7 +61,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             dict | None: 成功时返回覆盖声明 dict，失败时返回 None。
         """
         step_key = step_def.get("step_key", "unknown")
-        method = step_def.get("method", "python")
+        method = step_def.get("method", "llm")
 
         logger.info("Executing step: %s (method=%s)", step_key, method)
 
@@ -95,16 +84,8 @@ class StepExecutorMixin(ResearchOrchestratorBase):
         try:
             coverage: dict[str, Any] | None = None
 
-            if method == "python":
-                coverage = await self._execute_python_step(
-                    run_id, step_id, step_def, step_map, plan, created_by
-                )
-            elif method == "llm":
+            if method == "llm":
                 coverage = await self._execute_llm_step(run_id, step_id, step_def, plan)
-            elif method == "mixed":
-                coverage = await self._execute_mixed_step(
-                    run_id, step_id, step_def, step_map, plan, created_by
-                )
             elif method == "knowledge":
                 # 本期跳过知识库步骤（子项目 5 接入）
                 logger.warning("Knowledge step skipped (not implemented): %s", step_key)
@@ -141,10 +122,6 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                             is_sampled=coverage.get("is_sampled"),
                             mode_reason=coverage.get("mode_reason"),
                         )
-
-                # ── Timeline refactoring (Task 8): 逐步骤候选提取已删除 ──
-                # 候选提取改为整轮 Run 完成后由独立 Celery 任务执行
-                # (CandidateExtractionService.enqueue_for_completed_run)
 
                 await self._publish_event(
                     run_id,
@@ -202,218 +179,6 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             )
             return None
 
-    async def _execute_python_step(
-        self,
-        run_id: UUID,
-        step_id: UUID | None,
-        step_def: dict[str, Any],
-        step_map: dict[str, UUID],
-        plan: object,
-        created_by: UUID | None = None,
-    ) -> dict[str, Any] | None:
-        """执行 Python 步骤：AI 生成代码 → 沙箱执行 → 收集输出。
-
-        自动修错：失败时 AI 修复代码重试，最多 MAX_RETRY_ATTEMPTS 次。
-
-        Args:
-            run_id: Run ID。
-            step_id: 步骤 ID。
-            step_def: 步骤定义。
-            step_map: step_key → step_id 映射。
-            plan: 计划版本 ORM。
-
-        Returns:
-            dict | None: 成功时返回覆盖声明，失败时返回 None。
-        """
-        step_key = step_def.get("step_key", "unknown")
-        question = step_def.get("question", "")
-        expected_output = step_def.get("expected_output", "")
-
-        # 获取快照并准备输入包
-        async with self._factory() as session:
-            run = await self._repo.get_run(session, run_id)
-            if run is None:
-                return None
-            snapshot_id = run.snapshot_id
-
-        # 准备受控输入包
-        input_package_path = await self._prepare_input_package(snapshot_id)
-
-        # 创建容器
-        container_id = await self._sandbox.create_container(
-            input_package_path=input_package_path,
-            image_digest=SANDBOX_IMAGE_DIGEST,
-            resource_limits=DEFAULT_RESOURCE_LIMITS,
-        )
-
-        try:
-            # AI 生成 Python 脚本
-            system_prompt = (
-                f"你是一个 Python 数据分析专家。请针对以下问题生成可执行的 Python 脚本。\n"
-                f"问题: {question}\n"
-                f"预期输出: {expected_output}\n"
-                f"数据在 /input/evidence.json 中（JSON 格式）。\n"
-                f"输出文件写入 /workspace/output/ 目录。\n"
-                f"使用 pandas/numpy/scipy/matplotlib 等科学计算库。\n\n"
-                f"重要规则：\n"
-                f"1. 只返回纯 Python 代码，不要返回任何解释、说明、markdown 或自然语言文本。\n"
-                f"2. 不要使用 ```python 代码块包裹，直接返回代码本身。\n"
-                f"3. 代码必须是完整的可执行脚本，不能有语法错误。\n"
-                f"4. 第一行必须是 import 语句。\n"
-                f"5. 如果数据为空或不存在，代码应正常处理异常并输出空结果。"
-            )
-
-            attempt = 0
-            last_error = ""
-
-            while attempt < MAX_RETRY_ATTEMPTS:
-                attempt += 1
-
-                # 更新尝试次数
-                if step_id is not None:
-                    async with self._factory() as session:
-                        await self._repo.update_step_progress(
-                            session, step_id, attempt_count=attempt
-                        )
-
-                # AI 生成/修复代码
-                error_context = f"\n\n上次错误:\n{last_error}" if last_error else ""
-                try:
-                    response = await self._model_gateway.call(
-                        task_type=TaskType.CODE_GEN,
-                        system_prompt=system_prompt + error_context,
-                        data_context="",
-                        research_context=question,
-                    )
-                    script_content = (
-                        response.answer if hasattr(response, "answer") else str(response)
-                    )
-                    logger.info(
-                        "AI code gen response: %s, script_len=%d",
-                        type(response).__name__,
-                        len(script_content),
-                    )
-
-                    # 清理 AI 返回中的 markdown 代码块包裹
-                    script_content = script_content.strip()
-                    if script_content.startswith("```python"):
-                        script_content = script_content[len("```python") :].strip()
-                    elif script_content.startswith("```"):
-                        script_content = script_content[3:].strip()
-                    if script_content.endswith("```"):
-                        script_content = script_content[:-3].strip()
-
-                    # 检查是否为模拟响应或空回答 → 走 fallback
-                    if (
-                        not script_content
-                        or script_content.startswith("[模拟响应]")
-                        or len(script_content) < 50
-                    ):
-                        logger.warning("AI response too short or mock, using fallback script")
-                        script_content = self._generate_fallback_script(question)
-                except Exception as exc:
-                    logger.warning("AI code generation failed: %s", exc)
-                    script_content = self._generate_fallback_script(question)
-                    logger.info("Using fallback script: len=%d", len(script_content))
-
-                # 沙箱执行
-                result: ExecutionResult = await self._sandbox.execute(
-                    container_id=container_id,
-                    script_content=script_content,
-                    timeout_seconds=DEFAULT_RESOURCE_LIMITS.timeout_seconds,
-                )
-
-                if result.exit_code == 0 and not result.timed_out:
-                    # 执行成功 → 收集输出
-                    output_files = await self._sandbox.collect_output(
-                        container_id, ["*.json", "*.csv", "*.png", "*.txt", "*.log"]
-                    )
-
-                    # 持久化工件
-                    for of in output_files:
-                        # data 和 chart 类型默认 publishable，log 类型不 publishable
-                        if of.filename.endswith((".json", ".csv")):
-                            atype = "data"
-                            publishable = True
-                        elif of.filename.endswith((".png", ".svg", ".pdf")):
-                            atype = "chart"
-                            publishable = True
-                        else:
-                            atype = "log"
-                            publishable = False
-                        await self._artifact_service.collect_artifact(
-                            run_id=run_id,
-                            step_id=step_id,
-                            artifact_type=atype,
-                            artifact_key=of.filename,
-                            content=of.content,
-                            is_publishable=publishable,
-                        )
-
-                    # 保存代码工件
-                    await self._artifact_service.collect_artifact(
-                        run_id=run_id,
-                        step_id=step_id,
-                        artifact_type="code",
-                        artifact_key=f"{step_key}.py",
-                        content=script_content.encode("utf-8"),
-                        is_publishable=False,
-                    )
-
-                    return CoverageDeclaration(
-                        analysis_mode="full_compute",
-                        data_coverage_rate=1.0,
-                        llm_read_rate=0.0,
-                        is_sampled=False,
-                        mode_reason="Python 全量计算成功",
-                    ).to_dict()
-
-                else:
-                    # 执行失败
-                    last_error = result.stderr or "Unknown error"
-                    if result.timed_out:
-                        # 超时直接放弃
-                        logger.warning("Step %s timed out", step_key)
-                        # 审计沙箱超限
-                        async with self._factory() as session:
-                            if created_by is not None:
-                                from packages.common.tenant_guc import set_user_guc
-
-                                await set_user_guc(session, created_by)
-                            await AuditRecorder.record(
-                                session,
-                                AuditEventData(
-                                    department_id=UUID(int=0),
-                                    actor_user_id=created_by,
-                                    action="research.sandbox.timeout",
-                                    resource_type="research_analysis_step",
-                                    resource_id=step_id,
-                                    payload={"step_key": step_key, "attempt": attempt},
-                                ),
-                            )
-                        break
-
-                    logger.warning(
-                        "Step %s attempt %d failed: %s",
-                        step_key,
-                        attempt,
-                        last_error[:200],
-                    )
-
-            # 所有尝试均失败
-            return None
-
-        finally:
-            # 保温或销毁容器
-            try:
-                await self._sandbox.keep_warm(container_id, DEFAULT_WARM_DURATION)
-            except Exception as exc:
-                logger.warning("Failed to keep warm: %s", exc)
-                try:
-                    await self._sandbox.destroy_container(container_id)
-                except Exception:
-                    logging.getLogger(__name__).debug("cleanup failed", exc_info=True)
-
     async def _execute_llm_step(
         self,
         run_id: UUID,
@@ -429,13 +194,15 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             step_id: 步骤 ID。
             step_def: 步骤定义。
             plan: 计划版本 ORM。
-            python_output: Python 步骤输出文本（混合步骤中使用，替代快照数据）。
+            python_output: Python 步骤输出文本（保留参数兼容，当前不会传入）。
 
         Returns:
             dict | None: 成功时返回覆盖声明，失败时返回 None。
         """
         step_key = step_def.get("step_key", "unknown")
         question = step_def.get("question", "")
+
+        from packages.ai.prompt_store import get_prompt
 
         # 获取快照数据
         async with self._factory() as session:
@@ -444,7 +211,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 return None
             snapshot_id = run.snapshot_id
 
-        # 准备输入数据：混合步骤使用 Python 输出，独立步骤从快照加载
+        # 准备输入数据
         if python_output is not None:
             data_text = python_output
         else:
@@ -491,7 +258,7 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 try:
                     response = await self._model_gateway.call(
                         task_type=TaskType.LONG_CONTEXT,
-                        system_prompt=f"分析以下数据，回答问题: {question}",
+                        system_prompt=get_prompt("llm_step.system_prompt").format(question=question),
                         data_context=chunk.content,
                         research_context=question,
                     )
@@ -538,11 +305,11 @@ class StepExecutorMixin(ResearchOrchestratorBase):
             try:
                 response = await self._model_gateway.call(
                     task_type=TaskType.LONG_CONTEXT,
-                    system_prompt=f"分析以下数据，回答问题: {question}",
+                    system_prompt=get_prompt("llm_step.system_prompt").format(question=question),
                     data_context=data_text,
                     research_context=question,
                 )
-                # 保存 LLM 回答为工件（供 InsightExtractor 使用）
+                # 保存 LLM 回答为工件
                 if self._artifact_service is not None and step_id is not None:
                     try:
                         await self._artifact_service.collect_artifact(
@@ -581,123 +348,3 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 )
 
         return coverage.to_dict()
-
-    async def _execute_mixed_step(
-        self,
-        run_id: UUID,
-        step_id: UUID | None,
-        step_def: dict[str, Any],
-        step_map: dict[str, UUID],
-        plan: object,
-        created_by: UUID | None = None,
-    ) -> dict[str, Any] | None:
-        """执行混合步骤：Python 先行计算 → LLM 阅读结果。
-
-        Args:
-            run_id: Run ID。
-            step_id: 步骤 ID。
-            step_def: 步骤定义。
-            step_map: step_key → step_id 映射。
-            plan: 计划版本 ORM。
-
-        Returns:
-            dict | None: 成功时返回覆盖声明，失败时返回 None。
-        """
-        # 先执行 Python 部分
-        python_coverage = await self._execute_python_step(
-            run_id, step_id, step_def, step_map, plan, created_by
-        )
-        if python_coverage is None:
-            return None
-
-        # 收集 Python 步骤输出文本（从数据工件中读取）
-        python_output_text = await self._collect_step_output_text(step_id)
-
-        # 再执行 LLM 部分，使用 Python 输出作为数据上下文
-        llm_coverage = await self._execute_llm_step(
-            run_id, step_id, step_def, plan, python_output=python_output_text
-        )
-        if llm_coverage is None:
-            # LLM 失败不影响 Python 结果（P1-7 风格）
-            return python_coverage
-
-        # 混合覆盖声明
-        return CoverageDeclaration(
-            analysis_mode="mixed",
-            data_coverage_rate=1.0,
-            llm_read_rate=0.75,
-            is_sampled=False,
-            mode_reason="Python 全量计算 + LLM 语义分析混合",
-        ).to_dict()
-
-    async def _collect_step_output_text(self, step_id: UUID | None) -> str:
-        """从步骤的数据工件中收集输出文本（混合步骤 LLM 使用）。
-
-        Python 步骤执行后，输出文件（JSON/CSV）会作为 data 类型工件持久化。
-        本方法读取这些工件并拼接为文本，供 LLM 步骤作为数据上下文使用。
-
-        Args:
-            step_id: 步骤 ID。
-
-        Returns:
-            str: 拼接的输出文本，无数据工件时返回空字符串。
-        """
-        if step_id is None or self._artifact_service is None:
-            return ""
-
-        from packages.research.execution.repository_trusted import (
-            ResearchRepositoryTrusted,
-        )
-
-        parts: list[str] = []
-        async with self._factory() as session:
-            artifacts = await ResearchRepositoryTrusted.list_artifacts_by_step(session, step_id)
-            for a in artifacts:
-                if a.artifact_type == "data":
-                    try:
-                        content = await self._artifact_service.get_artifact(a.id)
-                        if content is not None:
-                            parts.append(content.content.decode("utf-8", errors="replace"))
-                    except Exception:
-                        logging.getLogger(__name__).debug(
-                            "Failed to read artifact %s", a.id, exc_info=True
-                        )
-
-        return "\n\n".join(parts)
-
-    # Timeline refactoring (Task 8): _extract_insight_candidate method removed.
-    # Candidate extraction is now handled by CandidateExtractionService as an
-    # independent Celery job after the entire Run completes, not per-step.
-
-    def _generate_fallback_script(self, question: str) -> str:
-        """生成回退 Python 脚本（AI 调用失败时使用）。
-
-        Args:
-            question: 步骤问题。
-
-        Returns:
-            str: Python 脚本内容。
-        """
-        return (
-            "import json\n"
-            "import os\n"
-            "\n"
-            "# Load evidence data\n"
-            "with open('/input/evidence.json', 'r') as f:\n"
-            "    data = json.load(f)\n"
-            "\n"
-            "# Basic data quality check\n"
-            "evidence = data.get('evidence', [])\n"
-            "report = {\n"
-            f"    'question': '{question}',\n"
-            "    'evidence_count': len(evidence),\n"
-            "    'status': 'basic_analysis_complete'\n"
-            "}\n"
-            "\n"
-            "# Write output\n"
-            "os.makedirs('/workspace/output', exist_ok=True)\n"
-            "with open('/workspace/output/result.json', 'w') as f:\n"
-            "    json.dump(report, f, indent=2)\n"
-            "\n"
-            "print('Analysis complete')\n"
-        )

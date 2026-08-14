@@ -3,7 +3,6 @@
 Celery 任务：
 - execute_analysis_run(run_id): 执行分析 Run（调用 ResearchOrchestrator.execute_run）
 - check_run_heartbeat(): 扫描活跃 Run 心跳，超时标记 failed（Beat 调度，每 30 秒）
-- cleanup_warm_containers(): 清理过期保温容器（Beat 调度，每 60 秒）
 - promote_queued_runs(): 检查队列并提升等待 Run（Beat 调度，每 5 秒）
 
 任务命名约定：<domain>.<verb>（如 research.run.execute）
@@ -31,7 +30,6 @@ def _build_orchestrator() -> Any:
     Worker 进程中通过此函数注入全部执行层依赖：
     - session_factory（数据库会话工厂）
     - ModelGateway（模型网关）— 从 ai_config 表读取研发助手模型配置
-    - SandboxRuntime（沙箱运行时）
     - ContextRouter（上下文路由器）
     - RunArtifactService（工件服务）
     - ResearchMemoryService（研究记忆服务）
@@ -45,7 +43,6 @@ def _build_orchestrator() -> Any:
     from packages.research.execution.models_trusted import ModelConfig, TaskType
     from packages.research.execution.orchestrator import ResearchOrchestrator
     from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
-    from packages.research.execution.sandbox import DockerSandboxRuntime, WarmPoolManager
     from packages.research.execution.scheduler import ResearchScheduler
     from packages.research.memory_service import ResearchMemoryService
     from packages.research.planning.context_router import ContextRouter
@@ -122,15 +119,6 @@ def _build_orchestrator() -> Any:
     # 构建上下文路由器（无状态）
     context_router = ContextRouter()
 
-    # 构建保温池管理器
-    warm_pool = WarmPoolManager(redis_client=redis_client)
-
-    # 构建沙箱运行时
-    sandbox = DockerSandboxRuntime(
-        docker_url=os.getenv("DOCKER_HOST", "unix:///var/run/docker.sock"),
-        warm_pool=warm_pool,
-    )
-
     # 构建调度器
     scheduler = ResearchScheduler(redis_client=redis_client)
 
@@ -146,22 +134,15 @@ def _build_orchestrator() -> Any:
     # 构建研究记忆服务
     memory_service = ResearchMemoryService(session_factory=factory)
 
-    # 构建 Insight 提取器（复用 AI provider）
-    from packages.research.products.insight_extractor import InsightExtractor
-
-    insight_extractor = InsightExtractor(model_gateway=model_gateway) if ai_provider else None
-
     # 构建编排器
     orchestrator = ResearchOrchestrator(
         repo=ResearchRepositoryTrusted,
         model_gateway=model_gateway,
-        sandbox=sandbox,
         context_router=context_router,
         artifact_service=artifact_service,
         memory_service=memory_service,
         scheduler=scheduler,
         session_factory=factory,
-        insight_extractor=insight_extractor,
     )
     return orchestrator
 
@@ -294,30 +275,6 @@ def check_run_heartbeat() -> int:
         return count
 
     return asyncio.run(_check())
-
-
-@celery_app.task(name="research.cleanup_warm", soft_time_limit=30, time_limit=60)
-def cleanup_warm_containers() -> int:
-    """Celery Beat 调度任务：清理过期保温容器。
-
-    每 60 秒执行。清理 Redis 中 TTL 过期的保温容器记录。
-
-    Returns:
-        int: 清理的容器记录数。
-    """
-    import redis as redis_lib
-
-    from packages.research.execution.sandbox import WarmPoolManager
-
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
-    r = redis_lib.from_url(redis_url)
-    warm_pool = WarmPoolManager(redis_client=r)
-
-    async def _cleanup() -> int:
-        result = await warm_pool.cleanup_expired()
-        return int(result)
-
-    return asyncio.run(_cleanup())
 
 
 @celery_app.task(name="research.promote_queued", soft_time_limit=30, time_limit=60)

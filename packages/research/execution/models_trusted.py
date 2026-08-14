@@ -432,66 +432,6 @@ class QueuePosition:
 
 
 # ============================================================
-# 沙箱值对象
-# ============================================================
-
-
-@dataclass(frozen=True)
-class ResourceLimits:
-    """沙箱资源限制。
-
-    Attributes:
-        cpu_count: CPU 核心数。
-        memory_mb: 内存限制（MB）。
-        timeout_seconds: 超时秒数。
-        disk_gb: 临时磁盘限制（GB）。
-        output_size_mb: 输出大小限制（MB）。
-    """
-
-    cpu_count: float = 2.0
-    memory_mb: int = 4096
-    timeout_seconds: int = 1200
-    disk_gb: int = 10
-    output_size_mb: int = 100
-
-
-@dataclass(frozen=True)
-class ExecutionResult:
-    """沙箱执行结果。
-
-    Attributes:
-        exit_code: 退出码（0 = 成功）。
-        stdout: 标准输出。
-        stderr: 标准错误。
-        timed_out: 是否超时。
-        duration_seconds: 执行时长（秒）。
-    """
-
-    exit_code: int
-    stdout: str = ""
-    stderr: str = ""
-    timed_out: bool = False
-    duration_seconds: int = 0
-
-
-@dataclass(frozen=True)
-class OutputFile:
-    """沙箱输出文件。
-
-    Attributes:
-        filename: 文件名。
-        content: 文件内容（bytes）。
-        content_hash: 内容哈希（SHA-256）。
-        size_bytes: 文件大小（字节）。
-    """
-
-    filename: str
-    content: bytes
-    content_hash: str = ""
-    size_bytes: int = 0
-
-
-# ============================================================
 # 计划范围边界
 # ============================================================
 

@@ -312,20 +312,9 @@ class PlanGeneratorMixin(PlanServiceBase):
             data_text = f"{basic_summary}\n\n各数据源详情:\n{data_profile.data_summary}"
         else:
             data_text = basic_summary
-        system_prompt = (
-            "你是一个研究分析规划专家。请根据用户提供的数据集概况和研究问题，"
-            "制定一份分析计划（不是分析报告）。\n\n"
-            "**关键要求：**\n"
-            "- 你是在「规划怎么分析」，不是在「执行分析」。\n"
-            "- 不要给出具体的数值结论、对比结果或数据分析发现——那是下一步执行分析的工作。\n"
-            "- 不要画图表或输出数据块——只需描述建议用什么图表类型。\n\n"
-            "请用 Markdown 格式输出以下内容：\n"
-            "1. **数据概况**：仅描述数据类型、规模、字段结构（不要引用具体数值）\n"
-            "2. **分析策略**：建议按什么思路分析，分几个步骤，每步做什么\n"
-            "3. **可视化建议**：建议用什么图表类型（如柱状图对比成分、折线图看趋势），但不要生成实际图表\n"
-            "4. **关注要点**：需要关注的关键点或潜在风险\n"
-            "请用 Markdown 格式输出，内容为分析计划，不要包含具体数值结论。"
-        )
+        from packages.ai.prompt_store import get_prompt
+
+        system_prompt = get_prompt("plan_generation.system_prompt")
         if sub_questions:
             sub_q_text = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
             research_context = (

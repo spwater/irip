@@ -32,7 +32,6 @@ _MOVED_MODULES: dict[str, str] = {
     # ---- execution ----
     "packages.research.orchestrator": "packages.research.execution.orchestrator",
     "packages.research.run_service": "packages.research.execution.run_service",
-    "packages.research.sandbox": "packages.research.execution.sandbox",
     "packages.research.scheduler": "packages.research.execution.scheduler",
     "packages.research.repository_trusted": "packages.research.execution.repository_trusted",
     "packages.research.entities_trusted": "packages.research.execution.entities_trusted",
@@ -41,7 +40,6 @@ _MOVED_MODULES: dict[str, str] = {
     "packages.research.envelope": "packages.research.execution.envelope",
     # ---- products（不含 products 自身——碰撞）----
     "packages.research.candidates": "packages.research.products.candidates",
-    "packages.research.insight_extractor": "packages.research.products.insight_extractor",
     "packages.research.artifact_service": "packages.research.products.artifact_service",
     "packages.research.catalog": "packages.research.products.catalog",
     # ---- publication（不含 publication 自身——碰撞）----

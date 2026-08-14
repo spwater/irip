@@ -1,9 +1,8 @@
 """研究域 — 研究产物子包。
 
-包含研究产物的管理、候选、洞察抽取、工件服务与目录：
+包含研究产物的管理、候选、工件服务与目录：
 - ProductService: 研究产物服务
 - CandidateService: 候选服务
-- InsightExtractor: 洞察抽取器
 - RunArtifactService: 运行工件服务
 - ResearchCatalogImpl: 研究目录
 """

@@ -568,8 +568,7 @@ class ResearchInsightVersion(Base):
 class ResearchInsightCandidate(Base):
     """Insight 候选实体（对应 research_insight_candidate 表）。
 
-    由 Orchestrator 在 LLM/混合步骤完成后通过 InsightExtractor 提取。
-    用户可接受/修改/拒绝。
+    由 PlanService.extract_insight 从分析结果中提取。用户可接受/修改/拒绝。
 
     Attributes:
         id: 候选 UUID（PK）。

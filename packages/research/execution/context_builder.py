@@ -1,15 +1,12 @@
-"""上下文构建 Mixin：范围检测、输入包与快照数据加载。
+"""上下文构建 Mixin：范围检测与快照数据加载。
 
 拆分自 orchestrator.py（IRIP 拆分任务）。``ContextBuilderMixin`` 承载
-范围越界检测（_check_scope）、受控输入包生成（_prepare_input_package）、
-快照数据文本加载（_load_snapshot_data）以及研究上下文构建
-（_build_research_context）。
+范围越界检测（_check_scope）、快照数据文本加载（_load_snapshot_data）
+以及研究上下文构建（_build_research_context）。
 """
 
 import asyncio
 import json
-import os
-import tempfile
 from typing import Any
 from uuid import UUID
 
@@ -76,50 +73,6 @@ class ContextBuilderMixin(ResearchOrchestratorBase):
             )
 
         return ScopeCheckResult(is_within_scope=True)
-
-    async def _prepare_input_package(self, snapshot_id: UUID) -> str:
-        """生成受控输入包（沙箱只读挂载）。
-
-        从 CoreFactProvider 获取快照数据 → 序列化为 JSON → 写入临时目录。
-
-        Args:
-            snapshot_id: 快照 ID。
-
-        Returns:
-            str: 输入包文件路径。
-        """
-        # 创建临时目录
-        tmp_dir = tempfile.mkdtemp(prefix=f"research_input_{snapshot_id}_")
-        input_path = os.path.join(tmp_dir, "evidence.json")
-
-        # 从数据库加载快照数据
-        input_data: dict[str, Any] = {"snapshot_id": str(snapshot_id), "evidence": []}
-
-        if self._factory is not None:
-            async with self._factory() as session:
-                from packages.research.repository import ResearchRepository
-
-                await ResearchRepository.list_snapshots(session, UUID(int=0))
-                # 获取快照关联的证据引用
-                # 此处简化：实际需要通过 CoreFactProvider 获取数据
-                # 构建输入包结构
-                input_data["evidence"] = [
-                    {
-                        "source_namespace": "core:fact",
-                        "source_id": "placeholder",
-                        "field_manifest": [],
-                        "data": {"metadata": {}, "points": [], "series": []},
-                    }
-                ]
-
-        # 写入 JSON 文件
-        def _write_input_file() -> None:
-            with open(input_path, "w", encoding="utf-8") as f:
-                json.dump(input_data, f, ensure_ascii=False, indent=2)
-
-        await asyncio.to_thread(_write_input_file)
-
-        return tmp_dir
 
     async def _load_snapshot_data(self, snapshot_id: UUID) -> str:
         """加载快照数据为文本（LLM 步骤使用）。

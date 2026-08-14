@@ -319,29 +319,10 @@ class OpenAICompatibleProvider:
 
     def _build_payload(self, request: AIRequest) -> dict[str, Any]:
         """构建 OpenAI Chat Completions 请求体。"""
-        # 基础 system 消息
-        system_content = (
-            "你是 IRIP 工业研发智能平台的 AI 助手。回答使用中文。"
-            "\n\n**数值计算规则（重要）：**"
-            "这是科研平台，数值必须精确，不允许心算。"
-            "\n1. 用户要求任何数值计算、算术运算、聚合或统计量时，"
-            "**必须**调用 evaluate_expression 或 describe_series 工具，"
-            "不得靠语言模型自身心算——即使看起来很简单（如 3+5）。"
-            "\n2. 已有 Fact/Artifact 引用时，优先传稳定 ID"
-            "（fact_id + series_index + column_name），"
-            "不要复制大型数组到内联参数。"
-            "\n3. 用户未说明'总体还是样本方差'时，describe_series 使用 variance_mode=both "
-            "并在回答中解释差异。"
-            "\n4. 工具失败后不得自行猜测数值结果，应说明错误和可修正的输入。"
-            "\n5. 结果带 warning、单位未验证或向量被截断时，回答必须明确披露。"
-            "\n\n数学公式：行内用 $...$，独立块用 $$...$$。"
-            "\n\n画图：用户明确要求画图时，用 ```echarts 代码块输出 ECharts JSON"
-            "（支持 bar/line/pie/scatter），或 ```plotly 代码块输出 Plotly JSON"
-            "（支持 error bar/box plot/3D scatter/heatmap）。"
-            "加载了实验数据时可用 ```chart-ref 代码块引用式画图"
-            "（字段：sample, series_index, x_col, y_col, chart_type, title, x_name, y_name）。"
-            "不画图时用文字和表格回答。"
-        )
+        # 基础 system 消息（从 config/prompts.yaml 加载）
+        from packages.ai.prompt_store import get_prompt
+
+        system_content = get_prompt("ai_assistant.system_prompt")
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (
             request.user_context.get("system_context") if request.user_context else None

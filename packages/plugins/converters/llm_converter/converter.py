@@ -66,6 +66,12 @@ class LlmConverter:
         """
         file_path = Path(params["file_path"])
         prompt: str = params.get("prompt", "")
+        # 组件未配置 prompt 时，从 config/prompts.yaml 加载默认提示词
+        if not prompt:
+            from packages.ai.prompt_store import get_prompt
+
+            prompt = get_prompt("converter_default_prompt.system_prompt")
+            logger.info("组件未配置 prompt，使用 YAML 默认提示词")
         engine: str = params.get("file_engine", "auto")
         image_dpi: int = params.get("image_dpi", 200)
         timeout: int = params.get("timeout", 300)

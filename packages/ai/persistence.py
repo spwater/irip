@@ -289,6 +289,7 @@ class MessagePersistence:
                 return
         else:
             # H-05: 使用 SafeHTTPClient（SSRF 防护）
+            from packages.ai.prompt_store import get_prompt
             from packages.common.safe_http import SafeHTTPClient
 
             try:
@@ -304,9 +305,8 @@ class MessagePersistence:
                             "messages": [
                                 {
                                     "role": "system",
-                                    "content": (
-                                        "请用一句话概括以下对话的主题，不超过15个字。"
-                                        "直接返回标题文本，不要解释、不要引号。"
+                                    "content": get_prompt(
+                                        "conversation_title.system_prompt"
                                     ),
                                 },
                                 {

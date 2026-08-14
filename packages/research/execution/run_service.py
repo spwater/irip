@@ -16,7 +16,6 @@ queued / running → cancelled
 """
 
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -38,11 +37,6 @@ from packages.research.execution.models_trusted import (
 from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
 logger = logging.getLogger("research.run_service")
-
-DEFAULT_IMAGE_DIGEST: str = os.getenv(
-    "RESEARCH_SANDBOX_IMAGE_DIGEST",
-    "sha256:research-sandbox-scipy-2026.08",
-)
 
 
 class AnalysisRunService(ScopedSessionMixin):
@@ -187,7 +181,7 @@ class AnalysisRunService(ScopedSessionMixin):
                 plan_version_id=plan_version_id,
                 snapshot_id=snapshot_id,
                 run_number=run_number,
-                image_digest=DEFAULT_IMAGE_DIGEST,
+                image_digest="llm-only",
                 created_by=actor_id,
                 turn_id=turn_id,
                 attempt_number=attempt_number,

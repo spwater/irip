@@ -118,11 +118,9 @@ class AIConversationService(ScopedSessionMixin):
             conversation_context = self._build_conversation_context(history)
 
             # 4. 调用 AI
-            system_prompt = (
-                "你是 IRIP 研究分析助手。请根据对话历史和研究上下文，"
-                "帮助用户理解分析进度、解释中间结果、建议下一步方向或修复错误。"
-                "回答应简洁、专业、可操作。"
-            )
+            from packages.ai.prompt_store import get_prompt
+
+            system_prompt = get_prompt("research_conversation.system_prompt")
 
             try:
                 response = await self._model_gateway.call(

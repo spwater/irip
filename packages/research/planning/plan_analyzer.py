@@ -116,6 +116,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
             advice_text = edited_advice or (steps[0].get("expected_output", "") if steps else "")
 
             # 6. LLM 数据分析
+            from packages.ai.prompt_store import get_prompt
+
             sub_q_section = ""
             sub_q_instruction = ""
             if sub_questions:
@@ -124,40 +126,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 sub_q_instruction = (
                     f"\n\n**你必须逐个回答以下子问题，每个子问题给出明确结论：**\n{sub_q_lines}\n"
                 )
-            analysis_system_prompt = (
-                "你是一个数据分析专家。请根据以下分析建议，对提供的完整数据进行实际分析。\n"
-                f"要求：\n"
-                "1. 按建议中的分析路径逐步执行\n"
-                "2. 给出具体的数值结论（如 A 组分在样品1中 X%，在样品2中 Y%，差 Z%）\n"
-                "3. 识别关键差异和特征\n"
-                "4. 根据分析建议中的可视化方案画出对应图表\n"
-                "   - 单个样品的连续数据（如光谱、粒度分布）用 ```chart-ref 代码块\n"
-                '     格式：{"sample":"样品标签","series_index":0,'
-                '"x_col":0,"y_col":1,"chart_type":"line","title":"标题"}\n'
-                "     前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点\n"
-                "   - 多样品对比、聚合统计等需要跨样品计算的场景用 ```echarts 代码块\n"
-                "     必须是合法的 JSON，不能用 JavaScript 函数\n"
-                '     tooltip formatter 用字符串模板如 "{b}: {c}%"，不要用 function\n'
-                "     支持 bar/line/pie/scatter 类型，数值用原始数字\n"
-                "   - 柱状图用于成分对比，折线图用于趋势/累积分布，散点图用于相关性\n"
-                "5. 对比数据用 Markdown 表格\n"
-                "6. 用中文回答，给出有数据支撑的结论\n"
-                "7. **重要：涉及精确统计量计算时（均值、标准差、方差、中位数、分位数、"
-                "偏度、峰度等），必须调用 describe_series 工具来计算，不要自己估算。**\n"
-                "   - 将需要计算的数据序列通过 inline 方式传入工具\n"
-                "   - 工具返回的结果是精确计算的，可以直接引用\n"
-                "   - 仅对定性判断和简单算术（如百分比差异）可以自行计算\n"
-                "8. 请根据问题内容，判断合适的结构化输出数据。对每个问题和子问题都执行一次：\n"
-                "   - 在报告末尾为每个问题/子问题分别附加一个 ```data 代码块\n"
-                '   - 代码块内为三段式 JSON：{"metadata": {}, "points": [], "series": []}\n'
-                "   - metadata: 报告级单值信息（如分析范围、方法、时间等）\n"
-                '   - points: 独立单值指标 [{"name": "指标名", "value": 数值, "unit": "单位"}]\n'
-                '   - series: 表格/序列数据 [{"name": "表名",'
-                ' "columns": ["列1", "列2"], "rows": [[值1, 值2], ...]}]\n'
-                "   - 数据必须来自实际分析结果，不要臆造\n"
-                "   - 如果某个问题/子问题不适合结构化输出（如纯定性判断），"
-                "可跳过该问题的 ```data 块\n"
-                f"{sub_q_instruction}"
+            analysis_system_prompt = get_prompt("data_analysis.system_prompt").format(
+                sub_q_instruction=sub_q_instruction
             )
             analysis_context = (
                 f"研究问题: {research_question}\n"
@@ -537,15 +507,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 sub_q_section = f"子问题:\n{sub_q_lines}\n"
 
             # 3. LLM Insight 提取
-            insight_system_prompt = (
-                "你是一个研究洞察提取专家。请从以下分析结果中提取结构化的 Insight。\n"
-                "返回 JSON 格式，包含以下字段：\n"
-                '{"conclusion": "核心结论", "scope": "适用范围", '
-                '"evidence_refs": [], "method_refs": [{"step_key": "analysis"}], '
-                '"confidence_level": "high/medium/low", "limitations": "局限性说明", '
-                '"evidence_source_label": "experimental_data"}\n'
-                "只返回 JSON，不要其他文字。"
-            )
+            from packages.ai.prompt_store import get_prompt
+
+            insight_system_prompt = get_prompt("insight_extraction_plan.system_prompt")
             insight_context = (
                 f"研究问题: {research_question}\n"
                 f"{sub_q_section}"

@@ -2,12 +2,11 @@
 
 测试范围：
 1. ThreeSegmentValidator：validate / infer_field_manifest / compute_content_hash（纯逻辑）
-2. InsightExtractor：_parse_insight_json / _validate_fields（纯逻辑）
 3. 迁移 0076：7 张表 DDL + revision 链 + 唯一约束
 4. ORM 实体：7 个新实体定义 + 字段与迁移一致性
 5. Repository 不可变保证：版本实体无 update/delete 方法
 6. API 端点：25+ 端点定义 + require_permission + 图片下载
-7. Composition 注册：ProductService / CandidateService / ResearchCatalogImpl / InsightExtractor
+7. Composition 注册：ProductService / CandidateService / ResearchCatalogImpl
 8. 前端 API：researchProducts.ts 函数与类型定义 + 路径匹配
 9. 前端组件：文件存在 + CandidateInsightCard 三按钮 + InsightModifyModal AI 原稿只读 + 修改原因必填
 
@@ -349,244 +348,6 @@ class TestThreeSegmentValidator:
 
 
 # ============================================================
-# 2. InsightExtractor 测试（纯逻辑）
-# ============================================================
-
-
-class TestInsightExtractor:
-    """InsightExtractor JSON 解析与字段校验。"""
-
-    @pytest.fixture
-    def extractor(self):
-        """创建 InsightExtractor 实例（mock ModelGateway）。"""
-        from packages.research.insight_extractor import InsightExtractor
-
-        return InsightExtractor(model_gateway=MagicMock())
-
-    def test_parse_insight_json_valid(self, extractor):
-        """合法 JSON 返回 InsightCandidateData，extraction_failed=False。"""
-        from packages.research.dtos import InsightCandidateData
-
-        raw = json.dumps(
-            {
-                "conclusion": "批次B-003的峰值异常源于温度波动",
-                "scope": "2026-Q2 生产的铝合金批次",
-                "evidence_refs": [{"type": "dataset", "name": "批次特征", "version": 1}],
-                "method_refs": [{"run_id": "r1", "step_key": "step2"}],
-                "confidence_level": "medium",
-                "limitations": "单批次验证，需扩大样本",
-                "evidence_source_label": "experimental_data",
-            }
-        )
-        result = extractor._parse_insight_json(raw)
-        assert result is not None
-        assert isinstance(result, InsightCandidateData)
-        assert result.extraction_failed is False
-        assert result.conclusion == "批次B-003的峰值异常源于温度波动"
-        assert result.evidence_source_label == "experimental_data"
-
-    def test_parse_insight_json_null_returns_none(self, extractor):
-        """AI 返回 null 时返回 None。"""
-        result = extractor._parse_insight_json("null")
-        assert result is None
-
-    def test_parse_insight_json_none_string_returns_none(self, extractor):
-        """AI 返回 none 时返回 None。"""
-        result = extractor._parse_insight_json("none")
-        assert result is None
-
-    def test_parse_insight_json_empty_returns_none(self, extractor):
-        """空字符串返回 None。"""
-        result = extractor._parse_insight_json("")
-        assert result is None
-
-    def test_parse_insight_json_whitespace_returns_none(self, extractor):
-        """纯空白返回 None。"""
-        result = extractor._parse_insight_json("   ")
-        assert result is None
-
-    def test_parse_insight_json_markdown_wrapped(self, extractor):
-        """markdown 代码块包裹的 JSON 正确解析。"""
-        raw = (
-            '```json\n{"conclusion": "test", "scope": "scope", '
-            '"evidence_refs": [], "method_refs": [], '
-            '"confidence_level": "high", "limitations": "none", '
-            '"evidence_source_label": "model_inference"}\n```'
-        )
-        result = extractor._parse_insight_json(raw)
-        assert result is not None
-        assert result.extraction_failed is False
-        assert result.conclusion == "test"
-
-    def test_parse_insight_json_invalid_json_returns_failed(self, extractor):
-        """非法 JSON 返回 extraction_failed=True。"""
-        result = extractor._parse_insight_json("this is not json at all")
-        assert result is not None
-        assert result.extraction_failed is True
-        assert result.ai_raw_text == "this is not json at all"
-
-    def test_parse_insight_json_missing_field_returns_failed(self, extractor):
-        """缺少必填字段返回 extraction_failed=True。"""
-        raw = json.dumps(
-            {
-                "conclusion": "test",
-                "scope": "scope",
-                # missing evidence_refs, method_refs,
-                # confidence_level, limitations, evidence_source_label
-            }
-        )
-        result = extractor._parse_insight_json(raw)
-        assert result is not None
-        assert result.extraction_failed is True
-
-    def test_parse_insight_json_non_dict_returns_none(self, extractor):
-        """JSON 解析为非 dict（如嵌套在花括号中的 list）时返回 None。"""
-        # 输入包含 { } 但解析后非 dict 的场景：实际上 { ... } 总是解析为 dict，
-        # 所以这里测试一个边界场景：纯数组输入会被 _extract_json_from_text 返回 None，
-        # 从而返回 extraction_failed=True 的结果（保留原文）。
-        result = extractor._parse_insight_json("[1, 2, 3]")
-        # 由于 [1, 2, 3] 没有花括号，_extract_json_from_text 返回 None，
-        # 代码保留 AI 原始文本并标记 extraction_failed=True
-        assert result is not None
-        assert result.extraction_failed is True
-        assert result.ai_raw_text == "[1, 2, 3]"
-
-    def test_validate_fields_all_present(self, extractor):
-        """7 个必填字段全部存在且非空 → True。"""
-        data = {
-            "conclusion": "结论",
-            "scope": "范围",
-            "evidence_refs": [{"type": "dataset"}],
-            "method_refs": [{"run_id": "r1"}],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": "experimental_data",
-        }
-        assert extractor._validate_fields(data) is True
-
-    def test_validate_fields_empty_evidence_refs_allowed(self, extractor):
-        """evidence_refs 和 method_refs 允许为空列表。"""
-        data = {
-            "conclusion": "结论",
-            "scope": "范围",
-            "evidence_refs": [],
-            "method_refs": [],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": "knowledge_base",
-        }
-        assert extractor._validate_fields(data) is True
-
-    @pytest.mark.parametrize(
-        "missing_field",
-        [
-            "conclusion",
-            "scope",
-            "evidence_refs",
-            "method_refs",
-            "confidence_level",
-            "limitations",
-            "evidence_source_label",
-        ],
-    )
-    def test_validate_fields_missing_any_field(self, extractor, missing_field):
-        """缺少任一必填字段返回 False。"""
-        data = {
-            "conclusion": "结论",
-            "scope": "范围",
-            "evidence_refs": [],
-            "method_refs": [],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": "experimental_data",
-        }
-        del data[missing_field]
-        assert extractor._validate_fields(data) is False
-
-    def test_validate_fields_empty_string_conclusion(self, extractor):
-        """conclusion 为空字符串返回 False。"""
-        data = {
-            "conclusion": "  ",
-            "scope": "范围",
-            "evidence_refs": [],
-            "method_refs": [],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": "experimental_data",
-        }
-        assert extractor._validate_fields(data) is False
-
-    def test_validate_fields_invalid_source_label(self, extractor):
-        """evidence_source_label 取值不合法返回 False。"""
-        data = {
-            "conclusion": "结论",
-            "scope": "范围",
-            "evidence_refs": [],
-            "method_refs": [],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": "invalid_label",
-        }
-        assert extractor._validate_fields(data) is False
-
-    @pytest.mark.parametrize(
-        "label",
-        [
-            "experimental_data",
-            "knowledge_base",
-            "model_inference",
-        ],
-    )
-    def test_validate_fields_valid_source_labels(self, extractor, label):
-        """三种合法 evidence_source_label 均通过。"""
-        data = {
-            "conclusion": "结论",
-            "scope": "范围",
-            "evidence_refs": [],
-            "method_refs": [],
-            "confidence_level": "high",
-            "limitations": "限制",
-            "evidence_source_label": label,
-        }
-        assert extractor._validate_fields(data) is True
-
-    def test_extract_empty_step_output_returns_none(self, extractor):
-        """空步骤输出返回 None。"""
-        import asyncio
-
-        result = asyncio.new_event_loop().run_until_complete(extractor.extract("", "context"))
-        assert result is None
-
-    def test_extract_whitespace_step_output_returns_none(self, extractor):
-        """纯空白步骤输出返回 None。"""
-        import asyncio
-
-        result = asyncio.new_event_loop().run_until_complete(extractor.extract("   ", "context"))
-        assert result is None
-
-    def test_prompt_version_constant(self, extractor):
-        """提示词版本常量存在。"""
-        assert extractor.PROMPT_VERSION == "insight_extraction_v1"
-
-    def test_insight_extraction_prompt_contains_required_fields(self, extractor):
-        """提示词包含 6 个必填字段 + evidence_source_label。"""
-        prompt = extractor.INSIGHT_EXTRACTION_PROMPT
-        for field in [
-            "conclusion",
-            "scope",
-            "evidence_refs",
-            "method_refs",
-            "confidence_level",
-            "limitations",
-            "evidence_source_label",
-        ]:
-            assert field in prompt
-
-
-# ============================================================
-# 3. 迁移文件 0076 验证
-# ============================================================
-
 
 class TestMigration0076:
     """验证 0076_research_products.py 迁移结构。"""
@@ -1108,7 +869,7 @@ class TestProductComposition:
 
     def test_composition_imports_services(self):
         """Composition 导入 ProductService / CandidateService
-        / ResearchCatalogImpl / InsightExtractor。"""
+        / ResearchCatalogImpl。"""
         # 读取源码验证导入（通过模块文件内容）
         import inspect
 
@@ -1118,7 +879,6 @@ class TestProductComposition:
         assert "ProductService" in source
         assert "CandidateService" in source
         assert "ResearchCatalogImpl" in source
-        assert "InsightExtractor" in source
 
     def test_composition_registers_product_service(self):
         """Composition 注册 ProductService 依赖覆盖。"""
@@ -1148,21 +908,6 @@ class TestProductComposition:
         source = inspect.getsource(register)
         assert "get_catalog" in source
         assert "ResearchCatalogImpl" in source
-
-    def test_composition_registers_insight_extractor(self):
-        """Composition 构建 InsightExtractor 供 Orchestrator 使用。"""
-        import inspect
-
-        from apps.api.composition.research_products import register
-
-        source = inspect.getsource(register)
-        assert "InsightExtractor" in source
-        assert "_insight_extractor" in source
-
-
-# ============================================================
-# 8. 前端 API 验证
-# ============================================================
 
 
 class TestFrontendAPI:
