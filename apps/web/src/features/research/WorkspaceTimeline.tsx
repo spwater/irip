@@ -122,7 +122,15 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
       {items.map((item) => (
         <div
           key={item.turn_id}
+          role="button"
+          tabIndex={0}
           onClick={() => onTurnClick?.(item.turn_id)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onTurnClick?.(item.turn_id);
+            }
+          }}
           style={{
             padding: "12px 16px",
             marginBottom: 8,

@@ -142,6 +142,8 @@ export function RecommendationPanel({ workspaceId, snapshotNumber, refreshKey, o
         {batch.items.map((item, i) => (
           <div
             key={item.id}
+            role="button"
+            tabIndex={0}
             style={{
               padding: "8px 10px",
               marginBottom: 6,
@@ -151,6 +153,12 @@ export function RecommendationPanel({ workspaceId, snapshotNumber, refreshKey, o
               cursor: "pointer",
             }}
             onClick={() => onAdopt(item.question, item.id)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onAdopt(item.question, item.id);
+              }
+            }}
           >
             <Text style={{ fontSize: 13, lineHeight: 1.5 }}>
               <span style={{ color: "#1890ff", fontWeight: 600, marginRight: 6 }}>

@@ -11,9 +11,9 @@ vi.mock('@/api/research', () => ({
 
 vi.mock('./WorkspaceCard', () => ({
   WorkspaceCard: ({ workspace, onClick }: { workspace: Workspace; onClick: () => void }) => (
-    <div data-testid={`ws-card-${workspace.workspace_id}`} onClick={onClick}>
+    <button type="button" data-testid={`ws-card-${workspace.workspace_id}`} onClick={onClick}>
       {workspace.name}
-    </div>
+    </button>
   ),
 }));
 

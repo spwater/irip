@@ -272,7 +272,7 @@ function StructuredDataBlock({ data, workspaceId, turnId, onSaved }: { data: Rec
       });
       message.success('已保存为结论');
       onSaved?.();
-    } catch (err) {
+    } catch (_err) {
       message.error('保存失败');
     } finally {
       setSaving(null);
