@@ -15,6 +15,7 @@ Key invariants:
 from __future__ import annotations
 
 import logging
+from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -501,7 +502,7 @@ class ConclusionService(ScopedSessionMixin):
         turn_id: UUID,
         statement: str,
         block_type: str = "table",
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Save a table/chart/structured data block as a conclusion.
 
         Creates a ResearchConclusion + first ResearchConclusionRevision.
@@ -526,9 +527,7 @@ class ConclusionService(ScopedSessionMixin):
         if not statement.strip():
             from packages.common.errors import AppError
 
-            raise AppError(
-                code="validation_failed", message="结论内容不能为空"
-            )
+            raise AppError(code="validation_failed", message="结论内容不能为空")
 
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
@@ -537,9 +536,7 @@ class ConclusionService(ScopedSessionMixin):
             if turn is None or turn.workspace_id != workspace_id:
                 from packages.common.errors import AppError
 
-                raise AppError(
-                    code="not_found", message="Turn not found", retryable=False
-                )
+                raise AppError(code="not_found", message="Turn not found", retryable=False)
 
             concl_id = _uuid.uuid4()
             rev_id = _uuid.uuid4()
@@ -582,7 +579,7 @@ class ConclusionService(ScopedSessionMixin):
     async def list_conclusions(
         self,
         workspace_id: UUID,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """List all active conclusions for a workspace.
 
         Returns:
@@ -599,18 +596,18 @@ class ConclusionService(ScopedSessionMixin):
             for concl in result.scalars():
                 rev = None
                 if concl.current_revision_id:
-                    rev = await session.get(
-                        ResearchConclusionRevision, concl.current_revision_id
-                    )
-                items.append({
-                    "conclusion_id": str(concl.id),
-                    "workspace_id": str(concl.workspace_id),
-                    "source_type": concl.source_type,
-                    "evidence_status": concl.evidence_status,
-                    "status": concl.status,
-                    "revision_number": rev.revision_number if rev else 0,
-                    "statement": rev.statement if rev else "",
-                })
+                    rev = await session.get(ResearchConclusionRevision, concl.current_revision_id)
+                items.append(
+                    {
+                        "conclusion_id": str(concl.id),
+                        "workspace_id": str(concl.workspace_id),
+                        "source_type": concl.source_type,
+                        "evidence_status": concl.evidence_status,
+                        "status": concl.status,
+                        "revision_number": rev.revision_number if rev else 0,
+                        "statement": rev.statement if rev else "",
+                    }
+                )
 
         return {"items": items}
 
@@ -618,7 +615,7 @@ class ConclusionService(ScopedSessionMixin):
         self,
         workspace_id: UUID,
         conclusion_id: UUID,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Delete a conclusion (mark as archived).
 
         Args:

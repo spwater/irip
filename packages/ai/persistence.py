@@ -305,9 +305,7 @@ class MessagePersistence:
                             "messages": [
                                 {
                                     "role": "system",
-                                    "content": get_prompt(
-                                        "conversation_title.system_prompt"
-                                    ),
+                                    "content": get_prompt("conversation_title.system_prompt"),
                                 },
                                 {
                                     "role": "user",

@@ -125,7 +125,8 @@ class SynthesisService:
                 "- agreements: 共识（有则 present + items，无则 not_applicable + []）",
                 "- conflicts: 冲突（有则 present + items，无则 not_applicable + []）",
                 "- limitations: 限制（有则 present + items，无则 not_applicable + []）",
-                "- new_hypotheses: 待验证的新假设（有则 present + items，无则 not_applicable + []）",
+                "- new_hypotheses: 待验证的新假设"
+                "（有则 present + items，无则 not_applicable + []）",
                 "",
                 '不得用 present: ["无冲突"] 代替 not_applicable: []。',
                 "不得生成占位噪音。",

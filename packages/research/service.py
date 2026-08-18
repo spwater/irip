@@ -260,7 +260,8 @@ class WorkspaceService(ScopedSessionMixin):
     async def get_workspace(self, workspace_id: UUID) -> WorkspaceDetail:
         """获取工作空间详情。
 
-        Timeline refactoring: 移除 current_question，新增 latest_snapshot_number/turn_count/active_run_status。
+        Timeline refactoring: 移除 current_question，新增
+        latest_snapshot_number/turn_count/active_run_status。
 
         Args:
             workspace_id: 工作空间 ID。

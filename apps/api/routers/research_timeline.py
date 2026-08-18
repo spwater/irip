@@ -21,54 +21,59 @@ New routes:
 """
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 import fastapi
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
-
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.research.timeline.analysis_service import AnalysisService
+from packages.research.timeline.conclusion_service import ConclusionService
 from packages.research.timeline.contracts import (
     CreateManualConclusionCommand,
     CreateSynthesisTurnCommand,
     CreateTurnCommand,
     ReviseConclusionCommand,
 )
+from packages.research.timeline.recommendation_service import RecommendationService
+from packages.research.timeline.timeline_query_service import TimelineQueryService
+from packages.research.timeline.turn_service import TurnService
+
+logger = logging.getLogger(__name__)
 
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
 
 # ---- DI placeholders (overridden by composition/research.py) ----
 
 
-def get_timeline_query_service() -> None:
+def get_timeline_query_service() -> TimelineQueryService:
     raise NotImplementedError("overridden by composition")
 
 
-def get_turn_service() -> None:
+def get_turn_service() -> TurnService:
     raise NotImplementedError("overridden by composition")
 
 
-def get_conclusion_service() -> None:
+def get_conclusion_service() -> ConclusionService:
     raise NotImplementedError("overridden by composition")
 
 
-def get_recommendation_service() -> None:
+def get_recommendation_service() -> RecommendationService:
     raise NotImplementedError("overridden by composition")
 
 
-def get_analysis_service() -> None:
+def get_analysis_service() -> AnalysisService:
     raise NotImplementedError("overridden by composition")
 
 
-TimelineQueryDep = Annotated[object, Depends(get_timeline_query_service)]
-TurnServiceDep = Annotated[object, Depends(get_turn_service)]
-ConclusionServiceDep = Annotated[object, Depends(get_conclusion_service)]
-RecommendationServiceDep = Annotated[object, Depends(get_recommendation_service)]
-AnalysisServiceDep = Annotated[object, Depends(get_analysis_service)]
+TimelineQueryDep = Annotated[TimelineQueryService, Depends(get_timeline_query_service)]
+TurnServiceDep = Annotated[TurnService, Depends(get_turn_service)]
+ConclusionServiceDep = Annotated[ConclusionService, Depends(get_conclusion_service)]
+RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommendation_service)]
+AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 
 
 # ---- Router ----
@@ -100,7 +105,7 @@ class FollowupRecommendationRequest(BaseModel):
 
 
 class SaveCandidatesRequest(BaseModel):
-    selections: list[dict] = Field(..., min_length=1, max_length=20)
+    selections: list[dict[str, Any]] = Field(..., min_length=1, max_length=20)
     idempotency_key: str = Field(..., min_length=1, max_length=128)
 
 
@@ -297,10 +302,10 @@ async def retry_recommendation(
         await session.commit()
 
         # Create outbox event
-        from packages.jobs.outbox import OutboxEvent
+        from packages.jobs.outbox import OutboxDispatcher
 
         async with factory() as session2:
-            await OutboxEvent.enqueue(
+            await OutboxDispatcher.enqueue(
                 session2,
                 aggregate_type="research_recommendation_batch",
                 aggregate_id=batch.id,
@@ -486,10 +491,9 @@ async def get_turn_detail(
     turn_id: UUID,
     current_user: ResearchUserDep,
     service: TimelineQueryDep,
-) -> dict:
+) -> dict[str, Any]:
     """Get detailed information about a single research turn."""
     return await service.get_turn_detail_api(workspace_id, turn_id)
-
 
 
 @research_timeline_router.post(
@@ -499,7 +503,7 @@ async def start_planning(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
-) -> dict:
+) -> dict[str, Any]:
     """Start generating an analysis plan for a turn."""
     import os
 
@@ -529,23 +533,29 @@ async def start_planning(
 async def extract_text_from_file(
     current_user: ResearchUserDep,
     file: Annotated[bytes, fastapi.Form()],
-) -> dict:
+) -> dict[str, Any]:
     """Extract text from uploaded file for background context."""
     import os
     import tempfile
+
+    from anyio import to_thread
 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp") as tmp:
         tmp.write(file)
         tmp_path = tmp.name
 
     try:
-        with open(tmp_path, encoding="utf-8", errors="replace") as f:
-            text = f.read()
+        text = await to_thread.run_sync(_read_text_file, tmp_path)
         if len(text) > 10000:
             text = text[:10000]
         return {"text": text}
     finally:
         os.unlink(tmp_path)
+
+
+def _read_text_file(path: str) -> str:
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
 
 
 @research_timeline_router.delete(
@@ -556,7 +566,7 @@ async def delete_conclusion(
     conclusion_id: UUID,
     current_user: ResearchUserDep,
     service: ConclusionServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """Delete a conclusion (mark as archived)."""
     return await service.delete_conclusion(workspace_id, conclusion_id)
 
@@ -568,7 +578,7 @@ async def list_conclusions(
     workspace_id: UUID,
     current_user: ResearchUserDep,
     service: ConclusionServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """List all active conclusions for a workspace."""
     return await service.list_conclusions(workspace_id)
 
@@ -582,8 +592,8 @@ async def save_as_conclusion(
     turn_id: UUID,
     current_user: ResearchUserDep,
     service: ConclusionServiceDep,
-    body: dict,
-) -> dict:
+    body: dict[str, Any],
+) -> dict[str, Any]:
     """Save a table/chart/structured data block as a conclusion."""
     statement = body.get("statement", "")
     if not statement.strip():
@@ -595,7 +605,6 @@ async def save_as_conclusion(
     )
 
 
-
 @research_timeline_router.post(
     "/workspaces/{workspace_id}/turns/{turn_id}/analyze",
 )
@@ -604,6 +613,6 @@ async def run_analysis(
     turn_id: UUID,
     current_user: ResearchUserDep,
     service: AnalysisServiceDep,
-) -> dict:
+) -> dict[str, Any]:
     """Run analysis using PlanService flow: generate plan → confirm → analyze_data."""
     return await service.run_analysis(workspace_id, turn_id)

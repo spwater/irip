@@ -50,7 +50,8 @@ class ResearchWorkspace(Base):
         department_id: 所属部门 ID（FK→department，用于隔离）。
         name: 工作空间名称。
         status: 状态（draft / archived）。
-        latest_snapshot_id: 当前最新数据快照 ID（可空，FK→research_evidence_snapshot，ON DELETE SET NULL DEFERRABLE）。
+        latest_snapshot_id: 当前最新数据快照 ID（可空，FK→research_evidence_snapshot，
+            ON DELETE SET NULL DEFERRABLE）。
         next_turn_number: 下一个研究轮次编号（NOT NULL，默认 1）。
         created_at: 创建时间。
         updated_at: 更新时间。

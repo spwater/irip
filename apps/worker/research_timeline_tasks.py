@@ -7,13 +7,15 @@ to prevent duplicate execution.
 import logging
 import os
 from typing import Any
+from uuid import UUID
 
 from celery import shared_task
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 logger = logging.getLogger(__name__)
 
 
-def _get_session_factory():
+def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Build a session factory from env vars."""
     from packages.common.database import build_session_factory
 
@@ -49,7 +51,7 @@ def generate_recommendations(self: Any, batch_id: str) -> dict[str, Any]:
         factory = _get_session_factory()
         gateway = await build_gateway_from_config()
         service = RecommendationService(session_factory=factory, model_gateway=gateway)
-        ref = await service.execute_batch(batch_id)
+        ref = await service.execute_batch(UUID(batch_id))
         return {
             "batch_id": str(ref.batch_id),
             "status": ref.status,

@@ -18,7 +18,6 @@ import importlib
 import importlib.util
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
@@ -348,6 +347,7 @@ class TestThreeSegmentValidator:
 
 
 # ============================================================
+
 
 class TestMigration0076:
     """验证 0076_research_products.py 迁移结构。"""

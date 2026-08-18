@@ -459,7 +459,6 @@ class TestWorkspaceService:
         actor_id = service._actor_id
         dept_id = service._dept_id
         ws_id = uuid4()
-        qv_id = uuid4()
 
         _mock_scoped_session(service)
 
@@ -848,54 +847,6 @@ class TestWorkspaceService:
         # 验证问题文本为空字符串
         mock_insert_qv.assert_awaited_once()
         assert mock_insert_qv.call_args.kwargs["question_text"] == ""
-
-    @pytest.mark.asyncio
-    @pytest.mark.skip(reason="Removed in timeline refactoring")
-    async def test_update_question_creates_new_version(self, service):
-        """更新研究问题创建新版本，版本号递增。"""
-        ws_id = uuid4()
-        mock_ws = MagicMock()
-        mock_ws.id = ws_id
-        mock_ws.current_question_version = 2
-
-        mock_qv = MagicMock()
-        mock_qv.id = uuid4()
-
-        _mock_scoped_session(service)
-
-        with (
-            patch(
-                "packages.research.service.ResearchRepository.get_workspace",
-                new_callable=AsyncMock,
-                return_value=mock_ws,
-            ),
-            patch(
-                "packages.research.service.ResearchRepository.insert_question_version",
-                new_callable=AsyncMock,
-                return_value=mock_qv,
-            ) as mock_insert_qv,
-            patch(
-                "packages.research.service.ResearchRepository.update_workspace_current_version",
-                new_callable=AsyncMock,
-            ) as mock_update_version,
-            patch(
-                "packages.research.service.AuditRecorder.record",
-                new_callable=AsyncMock,
-            ),
-        ):
-            result = await service.update_question(ws_id, "新研究问题", ["子问题A", "子问题B"])
-
-        # 验证版本号递增
-        assert isinstance(result, QuestionVersionRef)
-        assert result.version_number == 3
-
-        # 验证插入新版本时版本号为 3
-        assert mock_insert_qv.call_args.kwargs["version_number"] == 3
-
-        # 验证更新了工作空间版本号
-        mock_update_version.assert_awaited_once()
-        assert mock_update_version.call_args.args[1] == ws_id
-        assert mock_update_version.call_args.args[2] == 3
 
     @pytest.mark.asyncio
     async def test_search_facts_delegates_to_provider(self, service, mock_fact_provider):
@@ -1589,17 +1540,6 @@ class TestDataModels:
         )
         with pytest.raises(AttributeError):
             ref.name = "other"
-
-    @pytest.mark.skip(reason="Removed in timeline refactoring")
-    def test_question_version_ref_default_sub_questions(self):
-        """QuestionVersionRef 默认 sub_questions 为空列表。"""
-        ref = QuestionVersionRef(
-            version_id=uuid4(),
-            workspace_id=uuid4(),
-            version_number=1,
-            question_text="问题",
-        )
-        assert ref.sub_questions == []
 
     def test_evidence_ref_dto_is_frozen(self):
         """EvidenceRefDTO 为 frozen dataclass。"""

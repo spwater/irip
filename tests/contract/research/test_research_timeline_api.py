@@ -55,7 +55,8 @@ class TestPageSizeValidation:
 
 
 class TestOldRoutesRemoved:
-    """Verify old routes (question, fork, analyze-data, extract-insight) are NOT in timeline router."""
+    """Verify old routes (question, fork, analyze-data, extract-insight)
+    are NOT in timeline router."""
 
     def _get_routes(self) -> set[str]:
         return {r.path for r in research_timeline_router.routes}

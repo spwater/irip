@@ -1,6 +1,7 @@
 """Tests for recommendation service: NFKC dedup, retry, parsing."""
 
 import pytest
+from pydantic import ValidationError
 
 from packages.research.timeline.contracts import RecommendationOutput
 
@@ -58,21 +59,21 @@ class TestRecommendationOutputValidation:
         assert len(output.questions) == 4
 
     def test_zero_questions_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(questions=[])
 
     def test_five_questions_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(
                 questions=[{"question": f"问题{i}描述", "rationale": "理由"} for i in range(5)]
             )
 
     def test_short_question_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(questions=[{"question": "Q", "rationale": "理由"}])
 
     def test_empty_rationale_rejected(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(questions=[{"question": "问题", "rationale": ""}])
 
 
@@ -103,7 +104,7 @@ class TestResearchEventRoutes:
     def test_no_arbitrary_task_injection(self) -> None:
         from packages.jobs.dispatcher import RESEARCH_EVENT_ROUTES
 
-        for event_type, (task_name, queue) in RESEARCH_EVENT_ROUTES.items():
+        for _event_type, (task_name, queue) in RESEARCH_EVENT_ROUTES.items():
             assert task_name.startswith("research.")
             assert queue == "irip-research"
 

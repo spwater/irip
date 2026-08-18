@@ -28,7 +28,7 @@ import logging
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -53,15 +53,14 @@ def _load_yaml() -> dict[str, Any]:
     """
     if not _CONFIG_PATH.exists():
         raise FileNotFoundError(
-            f"提示词配置文件不存在: {_CONFIG_PATH}\n"
-            "请确保 config/prompts.yaml 已创建。"
+            f"提示词配置文件不存在: {_CONFIG_PATH}\n请确保 config/prompts.yaml 已创建。"
         )
     with open(_CONFIG_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     if data is None:
         data = {}
     logger.debug("Loaded prompts from %s, top-level keys: %s", _CONFIG_PATH, list(data.keys()))
-    return data
+    return cast(dict[str, Any], data)
 
 
 @lru_cache(maxsize=1)

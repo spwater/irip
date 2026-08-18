@@ -258,7 +258,9 @@ class StepExecutorMixin(ResearchOrchestratorBase):
                 try:
                     response = await self._model_gateway.call(
                         task_type=TaskType.LONG_CONTEXT,
-                        system_prompt=get_prompt("llm_step.system_prompt").format(question=question),
+                        system_prompt=get_prompt("llm_step.system_prompt").format(
+                            question=question
+                        ),
                         data_context=chunk.content,
                         research_context=question,
                     )

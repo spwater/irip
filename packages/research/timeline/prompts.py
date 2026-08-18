@@ -20,29 +20,21 @@ RECOMMENDATION_OUTPUT_SCHEMA_VERSION = get_prompt(
     "research_recommendation.output_schema_version", "recommendation-output-v1"
 )
 
-RECOMMENDATION_SYSTEM_PROMPT = get_prompt(
-    "research_recommendation.system_prompt"
-)
+RECOMMENDATION_SYSTEM_PROMPT = get_prompt("research_recommendation.system_prompt")
 
-RECOMMENDATION_USER_TEMPLATE = get_prompt(
-    "research_recommendation.user_template"
-)
+RECOMMENDATION_USER_TEMPLATE = get_prompt("research_recommendation.user_template")
 
 
 # ============================================================
 # Synthesis prompts
 # ============================================================
 
-SYNTHESIS_PROMPT_VERSION = get_prompt(
-    "research_synthesis.version", "research-synthesis-v1"
-)
+SYNTHESIS_PROMPT_VERSION = get_prompt("research_synthesis.version", "research-synthesis-v1")
 SYNTHESIS_OUTPUT_SCHEMA_VERSION = get_prompt(
     "research_synthesis.output_schema_version", "synthesis-result-v1"
 )
 
-SYNTHESIS_SYSTEM_PROMPT = get_prompt(
-    "research_synthesis.system_prompt"
-)
+SYNTHESIS_SYSTEM_PROMPT = get_prompt("research_synthesis.system_prompt")
 
 
 # ============================================================
@@ -56,6 +48,4 @@ CANDIDATE_EXTRACTION_SCHEMA_VERSION = get_prompt(
     "candidate_extraction.output_schema_version", "candidate-extraction-output-v1"
 )
 
-CANDIDATE_EXTRACTION_SYSTEM_PROMPT = get_prompt(
-    "candidate_extraction.system_prompt"
-)
+CANDIDATE_EXTRACTION_SYSTEM_PROMPT = get_prompt("candidate_extraction.system_prompt")

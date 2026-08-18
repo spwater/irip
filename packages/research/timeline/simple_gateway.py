@@ -81,7 +81,8 @@ async def build_gateway_from_config() -> SimpleGateway | None:
     base_url = config.get("base_url")
     api_key = config.get("api_key")
     model_name = config.get("research_model_name") or config.get("model_name", "")
-    thinking = config.get("thinking_enabled", False)
+    thinking_raw = config.get("thinking_enabled", "false")
+    thinking = thinking_raw.lower() in ("1", "true", "yes", "on")
 
     if not base_url or not api_key:
         logger.warning("AI config missing base_url or api_key")

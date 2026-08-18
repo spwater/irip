@@ -238,7 +238,7 @@ class RecommendationService:
                     :1000
                 ]
                 evidence_count = len(snapshot.source_refs)
-                snapshot_number = snapshot.snapshot_number
+                snapshot_number = str(snapshot.snapshot_number)
             else:
                 field_manifest_str = "[]"
                 source_refs_str = "[]"
@@ -252,13 +252,9 @@ class RecommendationService:
 
                 fact_loader = FactDataLoader(self._factory)
                 async with self._factory() as fact_session:
-                    fact_rows = await fact_loader.load_fact_rows(
-                        fact_session, batch.workspace_id
-                    )
+                    fact_rows = await fact_loader.load_fact_rows(fact_session, batch.workspace_id)
                 if fact_rows:
-                    fact_data_str = _json.dumps(
-                        fact_rows, ensure_ascii=False, indent=2
-                    )[:10000]
+                    fact_data_str = _json.dumps(fact_rows, ensure_ascii=False, indent=2)[:10000]
                     logger.info(
                         "recommendation fact_data loaded: %d rows, %d chars",
                         len(fact_rows),
@@ -323,7 +319,7 @@ class RecommendationService:
                     if raw_str.startswith("```"):
                         lines = raw_str.split("\n")
                         # Remove first line (```json) and last line (```)
-                        lines = [l for l in lines if not l.strip().startswith("```")]
+                        lines = [line for line in lines if not line.strip().startswith("```")]
                         raw_str = "\n".join(lines).strip()
 
                     data = json.loads(raw_str) if isinstance(raw_str, str) else raw_str
@@ -462,7 +458,7 @@ class RecommendationService:
                 item_count=0,
             )
 
-    async def get_active(self, workspace_id: UUID) -> dict:
+    async def get_active(self, workspace_id: UUID) -> dict[str, Any]:
         """Get the latest recommendation batch and its items for a workspace.
 
         Returns a dict suitable for API response:

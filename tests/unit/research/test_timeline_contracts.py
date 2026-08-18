@@ -3,6 +3,7 @@
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from packages.research.timeline.contracts import (
     MAX_CONCLUSION_REVISIONS,
@@ -30,21 +31,21 @@ class TestRecommendationOutput:
         assert len(output.questions) == count
 
     def test_rejects_zero(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(questions=[])
 
     def test_rejects_five(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendationOutput(
                 questions=[RecommendedQuestion(question=f"Q{i}", rationale="r") for i in range(5)]
             )
 
     def test_question_min_length(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendedQuestion(question="Q", rationale="r")
 
     def test_rationale_required(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             RecommendedQuestion(question="A valid question", rationale="")
 
 
@@ -60,11 +61,11 @@ class TestSynthesisSection:
         assert section.items == []
 
     def test_present_without_items_raises(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             SynthesisSection(status="present", items=[])
 
     def test_not_applicable_with_items_raises(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             SynthesisSection(status="not_applicable", items=["不应该有"])
 
 
@@ -92,7 +93,7 @@ class TestSynthesisResult:
         assert result.conflicts.items == []
 
     def test_empty_summary_raises(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             SynthesisResult(
                 summary="",
                 agreements=SynthesisSection(status="not_applicable", items=[]),

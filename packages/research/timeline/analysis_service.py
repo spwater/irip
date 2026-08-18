@@ -4,11 +4,10 @@ Extracted from the inline run_analysis endpoint in research_timeline.py.
 
 Flow:
   1. Load turn + snapshot
-  2. Load fact_data via FactDataLoader
-  3. Build AI provider + model gateway
-  4. Call PlanService (generate_plan → confirm_plan → analyze_data)
-  5. Persist result to ResearchTurnResult
-  6. Auto-trigger followup recommendations
+  2. Build AI provider + model gateway
+  3. Call PlanService (generate_plan → confirm_plan → analyze_data)
+  4. Persist result to ResearchTurnResult
+  5. Auto-trigger followup recommendations
 """
 
 from __future__ import annotations
@@ -34,8 +33,8 @@ logger = logging.getLogger("research.analysis_service")
 class AnalysisService:
     """Orchestrates the full analysis flow for a research turn.
 
-    Depends on session_factory for DB access and uses FactDataLoader
-    for loading experiment data.
+    Data is loaded through CoreFactProvider (injected into PlanService),
+    keeping the experiment data access read-only and department-scoped.
     """
 
     def __init__(
@@ -74,9 +73,7 @@ class AnalysisService:
         async with factory() as session:
             turn = await session.get(ResearchTurn, turn_id)
             if turn is None or turn.workspace_id != workspace_id:
-                raise AppError(
-                    code="not_found", message="Turn not found", retryable=False
-                )
+                raise AppError(code="not_found", message="Turn not found", retryable=False)
             if turn.status not in ("question_draft", "run_failed", "succeeded"):
                 raise AppError(
                     code="state_conflict",
@@ -102,26 +99,16 @@ class AnalysisService:
                 retryable=False,
             )
 
-        # 3. Load fact_data
-        from packages.research.timeline.fact_data_loader import FactDataLoader
-
-        fact_loader = FactDataLoader(factory)
-        async with factory() as session:
-            fact_rows = await fact_loader.load_fact_rows(session, workspace_id)
-
-        # 4. Build full_data_text for PlanService
-        import json as _json
-
-        full_data_text = _json.dumps(fact_rows, ensure_ascii=False, indent=2)[:256000]
-
-        # 5. Build AI provider + model gateway + PlanService
+        # 3. Build AI provider + model gateway + PlanService
         from packages.ai.openai_compatible import OpenAICompatibleProvider
         from packages.research.execution.models_trusted import ModelConfig, TaskType
+        from packages.research.planning.context_router import ContextRouter
         from packages.research.planning.model_gateway import ModelGateway
         from packages.research.planning.plan_core import PlanService
-        from packages.research.planning.context_router import ContextRouter
 
-        research_model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
+        research_model_name = ai_config.get("research_model_name") or ai_config.get(
+            "model_name", ""
+        )
         thinking = ai_config.get("research_thinking_enabled", False)
         ai_provider = OpenAICompatibleProvider(
             api_key=ai_config["api_key"],
@@ -161,9 +148,7 @@ class AnalysisService:
             )
             user_row = user_result.first()
             if not user_row:
-                raise AppError(
-                    code="not_found", message="Admin user not found", retryable=False
-                )
+                raise AppError(code="not_found", message="Admin user not found", retryable=False)
 
             from apps.api.main import _build_s3_repo
             from packages.facts.query_service import FactQueryService
@@ -220,10 +205,11 @@ class AnalysisService:
                     _pattern = _re.compile(
                         r"(?m)^(" + _tag + r")\s*\n(\{[\s\S]*?\})\s*(?:\n\n|\n(?!\s*[}\]])|$)"
                     )
-                    analysis_text = _pattern.sub(
-                        lambda m, t=_tag: "```" + t + "\n" + m.group(2) + "\n```",
-                        analysis_text,
-                    )
+
+                    def _repl(m: _re.Match[str], _t: str = _tag) -> str:
+                        return "```" + _t + "\n" + m.group(2) + "\n```"
+
+                    analysis_text = _pattern.sub(_repl, analysis_text)
 
                 async with factory() as session:
                     turn = await session.get(ResearchTurn, turn_id)
@@ -231,9 +217,7 @@ class AnalysisService:
                         turn.status = "succeeded"
 
                     result_row = await session.execute(
-                        sa.select(ResearchTurnResult).where(
-                            ResearchTurnResult.turn_id == turn_id
-                        )
+                        sa.select(ResearchTurnResult).where(ResearchTurnResult.turn_id == turn_id)
                     )
                     tr = result_row.scalar_one_or_none()
                     if tr is None:
@@ -287,8 +271,7 @@ class AnalysisService:
                         )
 
                         followup_context = (
-                            f"上一轮分析问题: {question_text}\n"
-                            f"分析摘要: {analysis_text[:2000]}"
+                            f"上一轮分析问题: {question_text}\n分析摘要: {analysis_text[:2000]}"
                         )
 
                         await OutboxDispatcher.enqueue(
@@ -303,13 +286,9 @@ class AnalysisService:
                             },
                         )
                         await session.commit()
-                        logger.info(
-                            "enqueued followup recommendation batch %s", batch.id
-                        )
+                        logger.info("enqueued followup recommendation batch %s", batch.id)
             except Exception as exc:
-                logger.warning(
-                    "Failed to enqueue followup recommendations: %s", exc
-                )
+                logger.warning("Failed to enqueue followup recommendations: %s", exc)
 
         return {
             "turn_id": str(turn_id),

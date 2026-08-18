@@ -61,7 +61,10 @@ class ResearchRecommendationBatch(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchRecommendationBatch(id={self.id!r}, mode={self.mode!r}, status={self.status!r})"
+        return (
+            f"ResearchRecommendationBatch(id={self.id!r}, mode={self.mode!r}, "
+            f"status={self.status!r})"
+        )
 
 
 class ResearchRecommendationItem(Base):
@@ -128,7 +131,10 @@ class ResearchTurn(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchTurn(id={self.id!r}, turn_number={self.turn_number!r}, status={self.status!r})"
+        return (
+            f"ResearchTurn(id={self.id!r}, turn_number={self.turn_number!r}, "
+            f"status={self.status!r})"
+        )
 
 
 class ResearchTurnContext(Base):
@@ -153,7 +159,10 @@ class ResearchTurnContext(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchTurnContext(turn_id={self.turn_id!r}, revision_id={self.conclusion_revision_id!r})"
+        return (
+            f"ResearchTurnContext(turn_id={self.turn_id!r}, "
+            f"revision_id={self.conclusion_revision_id!r})"
+        )
 
 
 class ResearchTurnResult(Base):
@@ -186,7 +195,10 @@ class ResearchTurnResult(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchTurnResult(id={self.id!r}, turn_id={self.turn_id!r}, result_kind={self.result_kind!r})"
+        return (
+            f"ResearchTurnResult(id={self.id!r}, turn_id={self.turn_id!r}, "
+            f"result_kind={self.result_kind!r})"
+        )
 
 
 class CandidateExtractionJob(Base):
@@ -223,7 +235,10 @@ class CandidateExtractionJob(Base):
     )
 
     def __repr__(self) -> str:
-        return f"CandidateExtractionJob(id={self.id!r}, run_id={self.run_id!r}, status={self.status!r})"
+        return (
+            f"CandidateExtractionJob(id={self.id!r}, run_id={self.run_id!r}, "
+            f"status={self.status!r})"
+        )
 
 
 class ResearchConclusionCandidate(Base):
@@ -264,7 +279,10 @@ class ResearchConclusionCandidate(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchConclusionCandidate(id={self.id!r}, ordinal={self.ordinal!r}, status={self.status!r})"
+        return (
+            f"ResearchConclusionCandidate(id={self.id!r}, ordinal={self.ordinal!r}, "
+            f"status={self.status!r})"
+        )
 
 
 class ResearchConclusion(Base):
@@ -316,7 +334,10 @@ class ResearchConclusion(Base):
     )
 
     def __repr__(self) -> str:
-        return f"ResearchConclusion(id={self.id!r}, source_type={self.source_type!r}, status={self.status!r})"
+        return (
+            f"ResearchConclusion(id={self.id!r}, source_type={self.source_type!r}, "
+            f"status={self.status!r})"
+        )
 
 
 class ResearchConclusionRevision(Base):

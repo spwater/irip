@@ -58,8 +58,7 @@ class FactDataLoader:
             List of fact_data dicts (empty if loading fails).
         """
         refs_result = await session.execute(
-            sa.select(WorkspaceEvidenceRef)
-            .where(
+            sa.select(WorkspaceEvidenceRef).where(
                 WorkspaceEvidenceRef.workspace_id == workspace_id,
                 WorkspaceEvidenceRef.status == "active",
             )
@@ -118,12 +117,11 @@ class FactDataLoader:
                                 "columns": s.get("columns", []),
                                 "rows_sample": (s.get("rows", []) or [])[:5],
                             }
-                            for s in series_full if isinstance(s, dict)
+                            for s in series_full
+                            if isinstance(s, dict)
                         ]
                 except Exception as exc:
-                    logger.warning(
-                        "Failed to load fact data for %s: %s", ref.source_id, exc
-                    )
+                    logger.warning("Failed to load fact data for %s: %s", ref.source_id, exc)
                 fact_rows.append(fact_info)
 
             return fact_rows
@@ -146,8 +144,7 @@ class FactDataLoader:
         context_parts: list[str] = []
         for s in samples:
             context_parts.append(
-                f"### 样品: {s['label']}\n"
-                f"```json\n{json.dumps(s['data'], ensure_ascii=False)}\n```"
+                f"### 样品: {s['label']}\n```json\n{json.dumps(s['data'], ensure_ascii=False)}\n```"
             )
         return "\n\n".join(context_parts)
 
@@ -168,8 +165,7 @@ class FactDataLoader:
         """
         try:
             refs_result = await session.execute(
-                sa.select(WorkspaceEvidenceRef)
-                .where(
+                sa.select(WorkspaceEvidenceRef).where(
                     WorkspaceEvidenceRef.workspace_id == workspace_id,
                     WorkspaceEvidenceRef.status == "active",
                 )

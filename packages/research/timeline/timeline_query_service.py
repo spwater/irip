@@ -343,17 +343,19 @@ class TimelineQueryService:
             )
             selected: list[dict[str, Any]] = []
             for ctx in ctx_result.scalars():
-                rev = await session.get(
-                    ResearchConclusionRevision, ctx.conclusion_revision_id
-                )
+                rev = await session.get(ResearchConclusionRevision, ctx.conclusion_revision_id)
                 if rev is not None:
                     concl = await session.get(ResearchConclusion, rev.conclusion_id)
-                    selected.append({
-                        "revision_id": str(ctx.conclusion_revision_id),
-                        "statement": rev.statement,
-                        "source_type": concl.source_type if concl else "manual",
-                        "evidence_status": concl.evidence_status if concl else "manual_unverified",
-                    })
+                    selected.append(
+                        {
+                            "revision_id": str(ctx.conclusion_revision_id),
+                            "statement": rev.statement,
+                            "source_type": concl.source_type if concl else "manual",
+                            "evidence_status": concl.evidence_status
+                            if concl
+                            else "manual_unverified",
+                        }
+                    )
 
             # Candidates
             cand_result = await session.execute(
@@ -384,21 +386,21 @@ class TimelineQueryService:
             saved: list[dict[str, Any]] = []
             for concl in concl_result.scalars():
                 rev = (
-                    await session.get(
-                        ResearchConclusionRevision, concl.current_revision_id
-                    )
+                    await session.get(ResearchConclusionRevision, concl.current_revision_id)
                     if concl.current_revision_id
                     else None
                 )
-                saved.append({
-                    "conclusion_id": str(concl.id),
-                    "workspace_id": str(concl.workspace_id),
-                    "source_type": concl.source_type,
-                    "evidence_status": concl.evidence_status,
-                    "status": concl.status,
-                    "revision_number": rev.revision_number if rev else 0,
-                    "statement": rev.statement if rev else "",
-                })
+                saved.append(
+                    {
+                        "conclusion_id": str(concl.id),
+                        "workspace_id": str(concl.workspace_id),
+                        "source_type": concl.source_type,
+                        "evidence_status": concl.evidence_status,
+                        "status": concl.status,
+                        "revision_number": rev.revision_number if rev else 0,
+                        "statement": rev.statement if rev else "",
+                    }
+                )
 
             # Turn result
             result: dict[str, Any] | None = None
@@ -417,9 +419,7 @@ class TimelineQueryService:
             from packages.research.timeline.fact_data_loader import FactDataLoader
 
             fact_loader = FactDataLoader(self._factory)
-            fact_samples = await fact_loader.load_fact_samples(
-                session, workspace_id
-            )
+            fact_samples = await fact_loader.load_fact_samples(session, workspace_id)
 
             return {
                 "turn": {

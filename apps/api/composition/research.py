@@ -10,13 +10,17 @@
 参照 apps/api/composition/facts.py 模式。
 """
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
 
 from apps.api.composition import CompositionContext, lookup_dept_id
 from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.research import get_snapshot_service, get_workspace_service
+
+if TYPE_CHECKING:
+    from packages.research.timeline.conclusion_service import ConclusionService
+    from packages.research.timeline.turn_service import TurnService
 
 
 def register(ctx: CompositionContext) -> None:
@@ -121,7 +125,7 @@ def register(ctx: CompositionContext) -> None:
 
     async def _get_turn_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    ):
+    ) -> "TurnService":
         from packages.research.timeline.turn_service import TurnService
 
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
@@ -129,7 +133,7 @@ def register(ctx: CompositionContext) -> None:
 
     async def _get_conclusion_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
-    ):
+    ) -> "ConclusionService":
         from packages.research.timeline.conclusion_service import ConclusionService
 
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)

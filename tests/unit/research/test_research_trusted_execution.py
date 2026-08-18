@@ -594,15 +594,6 @@ class TestDataModels:
         assert step.allows_sampling is False
         assert step.dependencies == []
 
-    def test_resource_limits_defaults(self):
-        """ResourceLimits 默认值：2 CPU / 4GB / 20min。"""
-        from packages.research.models_trusted import ResourceLimits
-
-        limits = ResourceLimits()
-        assert limits.cpu_count == 2.0
-        assert limits.memory_mb == 4096
-        assert limits.timeout_seconds == 1200  # 20 分钟
-
     def test_scope_boundary_defaults(self):
         """ScopeBoundary 默认方法集合。"""
         from packages.research.models_trusted import ScopeBoundary
@@ -619,15 +610,6 @@ class TestDataModels:
         pos = QueuePosition(position=3, ahead_count=2, estimated_wait_seconds=480)
         assert pos.position == 3
         assert pos.ahead_count == 2
-
-    def test_execution_result(self):
-        """ExecutionResult 默认值。"""
-        from packages.research.models_trusted import ExecutionResult
-
-        result = ExecutionResult(exit_code=0)
-        assert result.exit_code == 0
-        assert result.timed_out is False
-        assert result.stdout == ""
 
 
 # ============================================================

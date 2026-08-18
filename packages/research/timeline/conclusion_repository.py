@@ -348,7 +348,8 @@ class ConclusionRepository:
         cursor: str | None = None,
         page_size: int = 20,
     ) -> tuple[list[ResearchConclusion], str | None]:
-        """List active conclusions in a workspace, cursor-paginated by (updated_at, id) descending."""
+        """List active conclusions in a workspace, cursor-paginated by
+        (updated_at, id) descending."""
         if page_size < 1 or page_size > 50:
             raise AppError(
                 code="validation_failed",
