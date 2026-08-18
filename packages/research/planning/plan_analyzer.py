@@ -30,6 +30,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
         plan_id: UUID,
         snapshot_id: UUID,
         edited_advice: str | None = None,
+        turn_id: UUID | None = None,
     ) -> dict[str, Any]:
         """基于分析建议执行数据分析（Step 2，不含 Insight 提取）。
 
@@ -38,6 +39,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
             plan_id: 计划版本 ID。
             snapshot_id: 证据快照 ID。
             edited_advice: 用户编辑后的分析建议文本（可选，为空则用原始建议）。
+            turn_id: 关联的 Turn ID（Timeline 模式，可选；独立 analyze-data
+                端点无 turn 时传 None，run 的 turn_id 落 NULL）。
 
         Returns:
             dict: {analysis_result: str}
@@ -346,15 +349,31 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 if run_id is None:
                     # 纯 LLM 分析不走沙箱执行，直接创建简化 run 记录
                     from packages.common.ids import new_id as _new_id2
+                    from packages.research.execution.entities_trusted import ResearchAnalysisRun
 
                     run_id = _new_id2()
+                    # attempt_number 在同 turn 多次分析时递增，避免撞
+                    # uq_run_turn_attempt (turn_id, attempt_number) 唯一约束；
+                    # turn_id 为 None（独立 analyze-data 端点）时恒为 1，
+                    # PostgreSQL 中 NULL 不参与唯一冲突，多条可共存。
+                    if turn_id is not None:
+                        _attempt_row = await session.execute(
+                            sa.select(sa.func.count())
+                            .select_from(ResearchAnalysisRun)
+                            .where(ResearchAnalysisRun.turn_id == turn_id)
+                        )
+                        attempt_number = _attempt_row.scalar_one() + 1
+                    else:
+                        attempt_number = 1
+
                     await session.execute(
                         sa.text(
                             "INSERT INTO research_analysis_run "
                             "(id, workspace_id, plan_version_id, snapshot_id, "
-                            "run_number, status, submitted_at, image_digest, created_by) "
+                            "run_number, status, submitted_at, image_digest, "
+                            "created_by, turn_id, attempt_number) "
                             "VALUES (:id, :wid, :pid, :sid, :num, "
-                            "'succeeded', now(), 'llm-only', :uid)"
+                            "'succeeded', now(), 'llm-only', :uid, :turn_id, :attempt)"
                         ),
                         {
                             "id": str(run_id),
@@ -363,6 +382,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             "sid": str(snapshot_id),
                             "num": 1,
                             "uid": str(self._actor_id or new_id()),
+                            "turn_id": str(turn_id) if turn_id is not None else None,
+                            "attempt": attempt_number,
                         },
                     )
                 # 构建 S3 client

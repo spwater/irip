@@ -188,6 +188,7 @@ class AnalysisService:
                     workspace_id=workspace_id,
                     plan_id=plan.plan_id,
                     snapshot_id=snapshot_id,
+                    turn_id=turn_id,
                 )
 
                 # 7. Persist result
@@ -246,7 +247,11 @@ class AnalysisService:
                         await session.commit()
                 raise AppError(
                     code="analysis_failed",
-                    message=f"Analysis failed: {e}",
+                    message=(
+                        e.message
+                        if isinstance(e, AppError) and e.message
+                        else f"Analysis failed: {e}"
+                    ),
                     retryable=True,
                 ) from e
 
