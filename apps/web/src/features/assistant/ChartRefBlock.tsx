@@ -42,6 +42,7 @@ const { Text } = Typography;
 type SeriesSpec = {
   sample: string;
   series_index?: number;
+  series_name?: string;
   x_col: number;
   y_col: number;
   name?: string;
@@ -52,6 +53,7 @@ type ChartRefSpec = {
   series?: SeriesSpec[];
   sample?: string;
   series_index?: number;
+  series_name?: string;
   x_col?: number;
   y_col?: number;
   chart_type?: string;
@@ -211,7 +213,8 @@ export function ChartRefBlock({
     const seriesList: SeriesSpec[] = spec.series ?? [
       {
         sample: spec.sample ?? '',
-        series_index: spec.series_index ?? 0,
+        series_index: spec.series_index,
+        series_name: spec.series_name,
         x_col: spec.x_col ?? 0,
         y_col: spec.y_col ?? 1,
       },
@@ -229,7 +232,23 @@ export function ChartRefBlock({
         setError(`未找到样品: ${s.sample}`);
         return null;
       }
-      const seriesData = sample.series[s.series_index ?? 0];
+      const seriesData = (() => {
+        // 1. If series_name specified, find by name (fuzzy match)
+        if (s.series_name) {
+          const found = sample.series.find(
+            (sr) => sr.name.includes(s.series_name!) || s.series_name!.includes(sr.name)
+          );
+          if (found) return found;
+        }
+        // 2. Use series_index if specified
+        const idx = s.series_index ?? 0;
+        const byIdx = sample.series[idx];
+        if (byIdx) return byIdx;
+        // 3. Fallback: find the series with the most rows (likely the main data)
+        return sample.series.reduce((a, b) =>
+          (b.rows?.length ?? 0) > (a.rows?.length ?? 0) ? b : a
+        );
+      })();
       if (!seriesData) {
         setError(`样品 ${s.sample} 无 series[${s.series_index ?? 0}]`);
         return null;

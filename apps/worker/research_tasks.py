@@ -333,3 +333,16 @@ def promote_queued_runs() -> int:
         return valid_promoted
 
     return asyncio.run(_promote())
+
+
+@celery_app.task(name="research.cleanup_warm", soft_time_limit=30, time_limit=60)
+def cleanup_warm_containers() -> int:
+    """Celery Beat 调度任务：清理过期保温容器。
+
+    每 60 秒执行。沙箱执行链路已搁置，保温容器功能未启用，
+    此任务为 no-op 占位，避免 Beat 调度未注册任务报错。
+
+    Returns:
+        int: 0（当前无操作）。
+    """
+    return 0

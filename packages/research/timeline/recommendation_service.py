@@ -251,9 +251,9 @@ class RecommendationService:
                 from packages.research.timeline.fact_data_loader import FactDataLoader
 
                 fact_loader = FactDataLoader(self._factory)
-                async with self._factory() as session:
+                async with self._factory() as fact_session:
                     fact_rows = await fact_loader.load_fact_rows(
-                        session, batch.workspace_id
+                        fact_session, batch.workspace_id
                     )
                 if fact_rows:
                     fact_data_str = _json.dumps(

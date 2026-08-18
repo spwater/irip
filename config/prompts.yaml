@@ -201,7 +201,9 @@ data_analysis:
     3. 识别关键差异和特征
     4. 根据分析建议中的可视化方案画出对应图表
        - 单个样品的连续数据（如光谱、粒度分布）用 ```chart-ref 代码块
-         格式：{"sample":"样品标签","series_index":0,"x_col":0,"y_col":1,"chart_type":"line","title":"标题"}
+         格式：{"sample":"样品标签","series_name":"series的name字段值","x_col":0,"y_col":1,"chart_type":"line","title":"标题"}
+         series_name 用数据中 series 数组里对应序列的 name 字段值（如"XRD衍射谱"）
+         也可以用 series_index 数字索引，但优先用 series_name 按名称匹配更准确
          前端会自动从已加载数据中提取完整数据画图，无需在指令中重复数据点
        - 多样品对比、聚合统计等需要跨样品计算的场景用 ```echarts 代码块
          必须是合法的 JSON，不能用 JavaScript 函数

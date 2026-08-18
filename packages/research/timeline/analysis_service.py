@@ -189,48 +189,42 @@ class AnalysisService:
 
             # 6. Generate plan → auto-confirm → analyze
             try:
-                from packages.research.timeline.turn_plan_adapter import (
-                    TurnPlanAdapter,
-                )
-                from packages.research.timeline.turn_run_adapter import (
-                    TurnRunAdapter,
-                )
-
-                plan_adapter = TurnPlanAdapter(
-                    session_factory=analysis_factory,
-                    workspace_id=workspace_id,
-                    turn_id=turn_id,
-                )
-                run_adapter = TurnRunAdapter(
-                    session_factory=analysis_factory,
-                    workspace_id=workspace_id,
-                    turn_id=turn_id,
-                )
-                plan_service.set_adapters(plan_adapter, run_adapter)
-
                 plan = await plan_service.generate_plan(
                     workspace_id=workspace_id,
-                    evidence_snapshot_id=snapshot_id,
-                    research_question=question_text,
-                    data_context=full_data_text,
+                    snapshot_id=snapshot_id,
                 )
 
                 plan = await plan_service.confirm_plan(
                     workspace_id=workspace_id,
-                    plan_id=plan.id,
+                    plan_id=plan.plan_id,
                 )
 
                 analysis_result = await plan_service.analyze_data(
                     workspace_id=workspace_id,
-                    plan_id=plan.id,
+                    plan_id=plan.plan_id,
+                    snapshot_id=snapshot_id,
                 )
 
                 # 7. Persist result
-                analysis_text = (
-                    analysis_result
-                    if isinstance(analysis_result, str)
-                    else str(analysis_result)
-                )
+                # analyze_data returns a dict with "analysis_result" and "data_context"
+                if isinstance(analysis_result, dict):
+                    analysis_text = analysis_result.get("analysis_result", "")
+                elif isinstance(analysis_result, str):
+                    analysis_text = analysis_result
+                else:
+                    analysis_text = str(analysis_result)
+                # Fix missing ``` code fences for chart-ref/echarts/data blocks
+                import re as _re
+
+                for _tag in ("chart-ref", "echarts", "data"):
+                    _pattern = _re.compile(
+                        r"(?m)^(" + _tag + r")\s*\n(\{[\s\S]*?\})\s*(?:\n\n|\n(?!\s*[}\]])|$)"
+                    )
+                    analysis_text = _pattern.sub(
+                        lambda m, t=_tag: "```" + t + "\n" + m.group(2) + "\n```",
+                        analysis_text,
+                    )
+
                 async with factory() as session:
                     turn = await session.get(ResearchTurn, turn_id)
                     if turn:
@@ -342,9 +336,13 @@ class AnalysisService:
             row = result.first()
             if row is None:
                 return None
+            from packages.common.crypto import EnvelopeCrypto
+
+            crypto = EnvelopeCrypto.from_env()
+            decrypted_key = crypto.decrypt(row[1])
             return {
                 "base_url": row[0],
-                "api_key": row[1],
+                "api_key": decrypted_key,
                 "model_name": row[2],
                 "research_model_name": row[3],
                 "research_thinking_enabled": row[4],

@@ -126,8 +126,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 sub_q_instruction = (
                     f"\n\n**你必须逐个回答以下子问题，每个子问题给出明确结论：**\n{sub_q_lines}\n"
                 )
-            analysis_system_prompt = get_prompt("data_analysis.system_prompt").format(
-                sub_q_instruction=sub_q_instruction
+            analysis_system_prompt = get_prompt("data_analysis.system_prompt").replace(
+                "{sub_q_instruction}", sub_q_instruction
             )
             analysis_context = (
                 f"研究问题: {research_question}\n"
