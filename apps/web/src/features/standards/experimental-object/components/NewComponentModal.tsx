@@ -50,7 +50,7 @@ export function NewComponentModal(props: NewComponentModalProps): JSX.Element {
       okText="发布"
       cancelText="取消"
       width={680}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={compForm} layout="vertical">
         <div style={{ marginBottom: 16 }}>

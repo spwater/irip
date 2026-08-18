@@ -1,7 +1,7 @@
 # IRIP 阶段性交付文档
 
-> 更新时间：2026-08-08（Asia/Shanghai）
-> 代码基线：`main`，整理前最新业务提交 `62c4711`
+> 更新时间：2026-08-18（Asia/Shanghai）
+> 代码基线：`main`，整理前最新业务提交 `f4260b7`
 > 项目版本：`0.8.0`
 > 当前定位：内部 Alpha / 功能原型，不作为生产发布批准
 
@@ -130,7 +130,7 @@ FastAPI routers -> composition/providers -> domain services/repositories
 
 ### 5.4 数据库迁移
 
-Alembic 当前唯一 head 为 `0082`。迁移序列由压缩基线 `0001_squashed_baseline.py` 和 `0062`–`0082` 的增量组成。近期增量的主要内容包括：
+Alembic 当前唯一 head 为 `0084`。迁移序列由压缩基线 `0001_squashed_baseline.py` 和 `0062`–`0084` 的增量组成。近期增量的主要内容包括：
 
 - 部门字段补齐、回填、非空约束、RLS 切换和旧 organization 退役；
 - AI meta prompt 与会话配置；
@@ -227,7 +227,7 @@ bash scripts/release-gate.sh
 | Ruff lint | 通过 | `apps packages tests`：All checks passed |
 | Ruff format check | 通过 | 492 files already formatted |
 | mypy | 通过 | 354 个源文件，0 issues |
-| Alembic heads | 通过 | 唯一 head：`0082` |
+| Alembic heads | 通过 | 唯一 head：`0084` |
 | 后端全量 pytest | 未完成 | 进入集成测试前已有 95 passed、2 skipped；随后 Testcontainers 拉取 `testcontainers/ryuk:0.8.1` 受阻，人工中止 |
 | 前端生产构建 | 通过 | TypeScript 检查和 Vite 构建完成；存在动态/静态混合导入提示及大 chunk |
 | 前端 Vitest | 未通过 | 12 个文件中 6 passed、6 failed；29 tests passed，失败文件在收集/运行阶段触发 Ant Design colors 的 ESM/CJS 加载错误 |

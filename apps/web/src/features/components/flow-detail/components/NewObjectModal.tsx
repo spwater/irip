@@ -50,7 +50,7 @@ export function NewObjectModal(props: NewObjectModalProps): JSX.Element {
         </Space>
       }
       width={600}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={newObjectForm} layout="vertical" initialValues={{ department_id: currentUserDepartmentId }}>
         <Form.Item name="display_name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>

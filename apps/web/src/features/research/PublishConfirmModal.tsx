@@ -264,7 +264,7 @@ export function PublishConfirmModal({
       cancelText="取消"
       okButtonProps={{ disabled: !canPublish() }}
       width={720}
-      destroyOnClose
+      destroyOnHidden
     >
       <Spin spinning={publishing}>
         {/* 选定成果区 */}

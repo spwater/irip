@@ -90,7 +90,7 @@ export function FactModal({ open, onClose, onSuccess, factId }: FactModalProps):
       confirmLoading={submitting}
       okText={factId ? '保存' : '创建'}
       cancelText="取消"
-      destroyOnClose
+      destroyOnHidden
     >
       <Form form={form} layout="vertical">
         <Form.Item

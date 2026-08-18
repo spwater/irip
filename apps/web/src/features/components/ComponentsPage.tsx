@@ -526,7 +526,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
         okText="发布"
         cancelText="取消"
         width={680}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ marginBottom: 16 }}>
           <Space align="center">
@@ -612,7 +612,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
         okText="发布新版本"
         cancelText="取消"
         width={680}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ marginBottom: 16 }}>
           <Space align="center">

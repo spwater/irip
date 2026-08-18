@@ -512,7 +512,7 @@ export function EquipmentPage({
           void queryClient.invalidateQueries({ queryKey: ['exp-objects'] });
         }}
         width={960}
-        destroyOnClose
+        destroyOnHidden
       >
         <ExperimentalObjectPage
           presetEquipmentId={objDrawerEquipId}

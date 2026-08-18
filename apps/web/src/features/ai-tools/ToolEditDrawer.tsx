@@ -135,7 +135,7 @@ export function ToolEditDrawer({
       open={open}
       onClose={onClose}
       width={600}
-      destroyOnClose
+      destroyOnHidden
       extra={
         <Button
           type="primary"

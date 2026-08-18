@@ -591,7 +591,7 @@ export function DepartmentManagement(): JSX.Element {
           void queryClient.invalidateQueries({ queryKey: ['equipment'] });
         }}
         width={960}
-        destroyOnClose
+        destroyOnHidden
       >
         <EquipmentPage
           presetDeptId={equipDrawerDeptId}

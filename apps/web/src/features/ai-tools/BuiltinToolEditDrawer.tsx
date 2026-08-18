@@ -66,7 +66,7 @@ export function BuiltinToolEditDrawer({
       open={open}
       onClose={onClose}
       width={500}
-      destroyOnClose
+      destroyOnHidden
       extra={
         <Button
           type="primary"
