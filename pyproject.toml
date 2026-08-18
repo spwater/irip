@@ -206,6 +206,7 @@ warn_return_any = false
 # ---- uv / pip 国内镜像（架构文档 §1.4）----
 [[tool.uv.index]]
 url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+default = true
 
 [tool.dependency-groups]
 dev = []

@@ -236,7 +236,7 @@ export function MentionInput({
 
   return (
     <Dropdown
-      overlay={menu}
+      dropdownRender={() => menu}
       open={mentionSearch !== null && filteredUsers.length > 0}
       onOpenChange={(open) => {
         if (!open) setMentionSearch(null);
