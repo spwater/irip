@@ -141,6 +141,8 @@ if docker compose -f "$TEST_COMPOSE_FILE" up -d; then
     export IRIP_MINIO_ACCESS_KEY="irip"
     export IRIP_MINIO_SECRET_KEY="irip_dev_password"
     export IRIP_MINIO_BUCKET="irip-test"
+    # 迁移 0082（Secret 加密）在 IRIP_ENV=test 下跳过 master key 需求（可重复迁移）
+    export IRIP_ENV="test"
 
     # 执行迁移到 head
     echo "  执行 alembic upgrade head..."
