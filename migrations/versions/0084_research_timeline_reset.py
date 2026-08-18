@@ -579,6 +579,14 @@ def downgrade() -> None:
     op.drop_constraint(
         "research_conclusion_current_revision_fkey", "research_conclusion", type_="foreignkey"
     )
+    # 关键修复：research_turn_context.conclusion_revision_id 有 FK 指向
+    # research_conclusion_revision（upgrade 第 537 行添加），必须先删该 FK
+    # 否则 drop research_conclusion_revision 会触发 DependentObjectsStillExist。
+    op.drop_constraint(
+        "research_turn_context_conclusion_revision_fkey",
+        "research_turn_context",
+        type_="foreignkey",
+    )
     op.drop_table("research_conclusion_revision")
     op.drop_table("research_conclusion")
     op.drop_table("research_conclusion_candidate")
@@ -600,10 +608,14 @@ def downgrade() -> None:
     )
     op.drop_column("research_analysis_plan_version", "turn_id")
     # Recreate old workspace-level unique index
-    op.create_unique_constraint(
+    # 注意：0083 及之前此对象是纯 INDEX（非 constraint，见升级前的 pg_indexes），
+    # 故用 create_index 而非 create_unique_constraint。否则 rebuild 成 constraint 后，
+    # 再次 upgrade 的 DROP INDEX 会报 DependentObjectsStillExist（constraint 依赖同名 index）。
+    op.create_index(
         "ix_research_analysis_plan_version_workspace_version",
         "research_analysis_plan_version",
         ["workspace_id", "version_number"],
+        unique=True,
     )
 
     # Revert research_evidence_snapshot changes
