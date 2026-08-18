@@ -300,8 +300,12 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     analysis_result,
                 )
             except Exception as exc:
-                logger.warning("Analysis step failed: %s", exc)
-                analysis_result = f"分析失败: {exc}"
+                logger.exception("Analysis step failed for plan %s", plan_id)
+                raise AppError(
+                    code="analysis_failed",
+                    message=f"Analysis failed: {exc}",
+                    retryable=True,
+                ) from exc
 
             # 7. 持久化分析结果到 dag_structure
             try:

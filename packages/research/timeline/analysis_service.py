@@ -234,6 +234,11 @@ class AnalysisService:
                     await session.commit()
 
             except Exception as e:
+                logger.exception(
+                    "Analysis failed for turn %s (workspace %s)",
+                    turn_id,
+                    workspace_id,
+                )
                 async with factory() as session:
                     turn = await session.get(ResearchTurn, turn_id)
                     if turn:

@@ -126,10 +126,18 @@ class ErrorCode(enum.Enum):
     # ---- 403 补充：研究发布权限 ----
     ACL_EXCEEDS_ENVELOPE = ("acl_exceeds_envelope", 403)
 
+    # ---- 409 补充：研究时间轴状态机 ----
+    STATE_CONFLICT = ("state_conflict", 409)
+    ANALYSIS_BUSY = ("analysis_busy", 409)
+
+    # ---- 422 补充：研究分析配置 ----
+    AI_CONFIG_MISSING = ("ai_config_missing", 422)
+
     # ---- 500 服务器内部错误 ----
     INTERNAL_ERROR = ("internal_error", 500)
     INGESTION_ERROR = ("ingestion_error", 500)
     MAX_RETRIES_EXCEEDED = ("max_retries_exceeded", 500)
+    ANALYSIS_FAILED = ("analysis_failed", 500)
 
     # ---- 502 上游网关错误 ----
     CONNECTOR_ERROR = ("connector_error", 502)
