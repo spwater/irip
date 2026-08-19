@@ -42,6 +42,7 @@ export function ExperimentalObjectPage({
     if (presetEquipmentId) {
       setEditingItem(null);
       form.resetFields();
+      form.setFieldsValue({ equipment_id: presetEquipmentId, visible_departments: [] });
       setModalOpen(true);
       onPresetConsumed?.();
     }
@@ -59,7 +60,7 @@ export function ExperimentalObjectPage({
   const handleCreate = (): void => {
     setEditingItem(null);
     form.resetFields();
-    form.setFieldsValue({ visible_departments: [], component_id: undefined });
+    form.setFieldsValue({ visible_departments: [], component_id: undefined, equipment_id: undefined });
     setModalOpen(true);
   };
 
@@ -74,6 +75,7 @@ export function ExperimentalObjectPage({
       department_id: detail.department_id ?? undefined,
       visible_departments: detail.visible_departments ?? [],
       component_id: detail.component_id ?? undefined,
+      equipment_id: detail.equipment_id ?? undefined,
     });
     setModalOpen(true);
   };
@@ -91,6 +93,7 @@ export function ExperimentalObjectPage({
             department_id: values.department_id,
             visible_departments: values.visible_departments ?? [],
             component_id: values.component_id ?? null,
+            equipment_id: values.equipment_id ?? null,
           },
         });
       } else {
@@ -101,6 +104,7 @@ export function ExperimentalObjectPage({
           department_id: values.department_id,
           visible_departments: values.visible_departments ?? [],
           component_id: values.component_id || undefined,
+          equipment_id: values.equipment_id || undefined,
         });
       }
     } catch {
@@ -194,6 +198,7 @@ export function ExperimentalObjectPage({
         allDeptOptions={queries.allDeptOptions}
         deptTreeData={queries.deptTreeData}
         componentOptions={queries.componentOptions}
+        equipmentOptions={queries.equipmentOptions}
         onCancel={closeModal}
         onOk={handleSubmit}
         onDelete={handleDelete}

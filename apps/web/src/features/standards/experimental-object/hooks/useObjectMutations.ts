@@ -68,6 +68,7 @@ export function useObjectMutations(
         department_id?: string | null;
         visible_departments?: string[] | null;
         component_id?: string | null;
+        equipment_id?: string | null;
       };
     }) => apiUpdateObject(args.id, args.body),
     onSuccess: () => {
