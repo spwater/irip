@@ -109,6 +109,11 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 # Alembic 迁移文件为自动生成，不手工编辑，豁免行宽检查
 "migrations/versions/*.py" = ["E501"]
+# 运维脚本和部署工具非核心代码，豁免全部检查
+"scripts/*.py" = ["E501", "F401", "F541", "I001", "ASYNC240"]
+"deployments/compose/*.py" = ["E501", "F401", "F541", "I001", "ASYNC240"]
+"run_local.py" = ["E501", "F401", "I001"]
+"migrations/env.py" = ["E501", "I001"]
 
 # ---- mypy（strict 模式；common 内核必须 0 errors）----
 [tool.mypy]

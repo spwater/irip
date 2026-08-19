@@ -17,6 +17,7 @@ WorkspaceService 提供研究工作空间的创建、列表、详情、归档、
 from typing import TYPE_CHECKING, Any, Protocol
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
@@ -204,6 +205,47 @@ class WorkspaceService(ScopedSessionMixin):
                 )
                 for ws in items
             ]
+            # 批量查询 turn_count 和 active_run_status
+            if items:
+                from packages.research.execution.entities_trusted import ResearchAnalysisRun
+                from packages.research.timeline.entities import ResearchTurn
+
+                ws_ids = [ws.id for ws in items]
+                # turn_count per workspace
+                turn_rows = await session.execute(
+                    sa.select(
+                        ResearchTurn.workspace_id,
+                        sa.func.count().label("cnt"),
+                    )
+                    .where(ResearchTurn.workspace_id.in_(ws_ids))
+                    .group_by(ResearchTurn.workspace_id)
+                )
+                turn_map = {row[0]: row[1] for row in turn_rows}
+                # active run status per workspace
+                active_rows = await session.execute(
+                    sa.select(
+                        ResearchAnalysisRun.workspace_id,
+                        ResearchAnalysisRun.status,
+                    )
+                    .where(
+                        ResearchAnalysisRun.workspace_id.in_(ws_ids),
+                        ResearchAnalysisRun.status.in_(
+                            ["queued", "planning", "running"]
+                        ),
+                    )
+                )
+                active_map = {row[0]: row[1] for row in active_rows}
+                refs = [
+                    WorkspaceRef(
+                        workspace_id=ws.id,
+                        name=ws.name,
+                        status=ws.status,
+                        latest_snapshot_number=None,
+                        turn_count=turn_map.get(ws.id, 0),
+                        active_run_status=active_map.get(ws.id),
+                    )
+                    for ws in items
+                ]
             return refs, next_cursor
 
     async def update_workspace_name(
@@ -303,6 +345,29 @@ class WorkspaceService(ScopedSessionMixin):
 
             latest_snapshot_number = snapshots[0].snapshot_number if snapshots else None
 
+            # 查询 turn_count 和 active_run_status
+            from packages.research.execution.entities_trusted import ResearchAnalysisRun
+            from packages.research.timeline.entities import ResearchTurn
+
+            turn_count_row = await session.execute(
+                sa.select(sa.func.count())
+                .select_from(ResearchTurn)
+                .where(ResearchTurn.workspace_id == workspace_id)
+            )
+            turn_count = turn_count_row.scalar() or 0
+
+            active_run_row = await session.execute(
+                sa.select(ResearchAnalysisRun.status)
+                .where(
+                    ResearchAnalysisRun.workspace_id == workspace_id,
+                    ResearchAnalysisRun.status.in_(
+                        ["queued", "planning", "running"]
+                    ),
+                )
+                .limit(1)
+            )
+            active_run_status = active_run_row.scalar()
+
             return WorkspaceDetail(
                 workspace_id=workspace.id,
                 name=workspace.name,
@@ -310,8 +375,8 @@ class WorkspaceService(ScopedSessionMixin):
                 evidence_count=evidence_count,
                 snapshots=snapshots,
                 latest_snapshot_number=latest_snapshot_number,
-                turn_count=0,  # TODO: count turns
-                active_run_status=None,  # TODO: query active run
+                turn_count=turn_count,
+                active_run_status=active_run_status,
             )
 
     async def archive_workspace(self, workspace_id: UUID) -> None:
