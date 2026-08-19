@@ -336,7 +336,7 @@ def test_release_gate_contains_all_steps() -> None:
 def test_release_gate_contains_cleanup() -> None:
     """验证发布门脚本包含清理步骤。"""
     content = _read_file("scripts/release-gate.sh")
-    assert "docker compose down" in content, "发布门脚本缺少清理步骤"
+    assert "down -v" in content, "发布门脚本缺少 docker compose down 清理步骤"
     assert "trap" in content, "发布门脚本缺少 trap 清理机制"
 
 
@@ -345,7 +345,7 @@ def test_release_gate_contains_compose_project_name() -> None:
     """验证发布门脚本使用隔离的 Compose 项目名。"""
     content = _read_file("scripts/release-gate.sh")
     assert "COMPOSE_PROJECT_NAME" in content, "发布门脚本应使用隔离的 COMPOSE_PROJECT_NAME"
-    assert "irip-release-gate" in content, "发布门脚本应使用 irip-release-gate 项目名"
+    assert "irip-test-infra" in content, "发布门脚本应使用 irip-test-infra 项目名"
 
 
 # ---------------------------------------------------------------------------
