@@ -186,6 +186,7 @@ export function ExperimentalObjectPage({
         loading={queries.isLoading}
         deptMap={queries.deptMap}
         componentMap={queries.componentMap}
+        equipmentMap={queries.equipmentMap}
         onEdit={handleEdit}
         onToggleStatus={handleToggleStatus}
       />
