@@ -268,7 +268,9 @@ class TimelineRepository:
         cursor: str | None = None,
         page_size: int = DEFAULT_PAGE_SIZE,
     ) -> tuple[list[ResearchTurn], str | None]:
-        """List turns in ascending (turn_number, id) order with keyset pagination.
+        """List turns in descending (turn_number, id) order with keyset pagination.
+
+        Newest turns first — timeline renders newest question at the top.
 
         Args:
             session: Async DB session.
@@ -286,8 +288,8 @@ class TimelineRepository:
             sa.select(ResearchTurn)
             .where(ResearchTurn.workspace_id == workspace_id)
             .order_by(
-                ResearchTurn.turn_number.asc(),
-                ResearchTurn.id.asc(),
+                ResearchTurn.turn_number.desc(),
+                ResearchTurn.id.desc(),
             )
             .limit(page_size + 1)  # +1 to detect if there's a next page
         )
@@ -297,10 +299,10 @@ class TimelineRepository:
             cursor_turn_number, cursor_id = decode_cursor(cursor)
             stmt = stmt.where(
                 sa.or_(
-                    ResearchTurn.turn_number > cursor_turn_number,
+                    ResearchTurn.turn_number < cursor_turn_number,
                     sa.and_(
                         ResearchTurn.turn_number == cursor_turn_number,
-                        ResearchTurn.id > cursor_id,
+                        ResearchTurn.id < cursor_id,
                     ),
                 )
             )

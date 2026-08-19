@@ -176,35 +176,20 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       </div>
 
       <Row gutter={16}>
-        {/* 左栏：研究问题 → AI推荐 → 提问区 → 数据快照 */}
+        {/* 左栏：AI推荐 → 数据快照 */}
         <Col xs={24} lg={6}>
-          {/* 研究问题（AI推荐 + 提问区） */}
+          {/* AI 推荐问题 */}
           {hasSnapshot && (
-            <>
-              <RecommendationPanel
-                workspaceId={workspaceId}
-                snapshotNumber={detail?.latest_snapshot_number ?? null}
-                refreshKey={recommendationRefreshKey}
-                onAdopt={(question) => {
-                  setComposerQuestion(question);
-                }}
-              />
-              <div style={{ marginTop: 12 }}>
-                <ResearchComposer
-                  workspaceId={workspaceId}
-                  snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
-                  selectedRevisionIds={Array.from(selectedRevisionIds)}
-                  initialQuestion={composerQuestion}
-                onTurnCreated={() => {
-                  setSelectedRevisionIds(new Set());
-                  setComposerQuestion('');
-                  setTimelineKey((k) => k + 1);
-                  setRecommendationRefreshKey((k) => k + 1);
-                }}
-                />
-              </div>
-            </>
+            <RecommendationPanel
+              workspaceId={workspaceId}
+              snapshotNumber={detail?.latest_snapshot_number ?? null}
+              refreshKey={recommendationRefreshKey}
+              onAdopt={(question) => {
+                setComposerQuestion(question);
+              }}
+            />
           )}
+
 
           {/* 数据快照 */}
           <div style={{ marginTop: hasSnapshot ? 16 : 0 }}>
@@ -221,6 +206,24 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
 
         {/* 中栏：研究时间线 */}
         <Col xs={24} lg={12}>
+          {/* 提问区（位于时间线上方，新问题与已有问题按倒序排列） */}
+          {hasSnapshot && (
+            <div style={{ marginBottom: 16 }}>
+              <ResearchComposer
+                workspaceId={workspaceId}
+                snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
+                selectedRevisionIds={Array.from(selectedRevisionIds)}
+                initialQuestion={composerQuestion}
+                onTurnCreated={() => {
+                  setSelectedRevisionIds(new Set());
+                  setComposerQuestion('');
+                  setTimelineKey((k) => k + 1);
+                  setRecommendationRefreshKey((k) => k + 1);
+                }}
+              />
+            </div>
+          )}
+
           <Text strong style={{ fontSize: 15, marginBottom: 8, display: 'block' }}>
             {'研究时间线'}
           </Text>
