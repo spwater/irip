@@ -174,3 +174,16 @@ class TestArchiveDoesNotDelete:
         source = inspect.getsource(ConclusionService.archive)
         assert "archive_conclusion" in source
         assert "delete" not in source.lower() or "delete" not in source
+
+
+class TestSaveFromBlockEditor:
+    """save_from_block must set editor on the revision (NOT NULL column)."""
+
+    def test_save_from_block_sets_editor(self) -> None:
+        """Regression: revision `editor` is NOT NULL; omitting it caused
+        IntegrityError on the save-as-conclusion endpoint."""
+        import inspect
+
+        source = inspect.getsource(ConclusionService.save_from_block)
+        assert "editor=actor_id" in source
+        assert "ResearchConclusionRevision(" in source

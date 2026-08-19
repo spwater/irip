@@ -559,6 +559,7 @@ class ConclusionService(ScopedSessionMixin):
                 conclusion_id=concl_id,
                 revision_number=1,
                 statement=statement,
+                editor=actor_id,
             )
             session.add(revision)
             await session.flush()
