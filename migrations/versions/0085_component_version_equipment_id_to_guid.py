@@ -21,8 +21,8 @@ Create Date: 2026-08-20
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0085_component_version_equipment"
-down_revision = "0084_research_timeline_reset"
+revision = "0085"
+down_revision = "0084"
 branch_labels = None
 depends_on = None
 

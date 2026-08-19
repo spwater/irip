@@ -226,12 +226,9 @@ class WorkspaceService(ScopedSessionMixin):
                     sa.select(
                         ResearchAnalysisRun.workspace_id,
                         ResearchAnalysisRun.status,
-                    )
-                    .where(
+                    ).where(
                         ResearchAnalysisRun.workspace_id.in_(ws_ids),
-                        ResearchAnalysisRun.status.in_(
-                            ["queued", "planning", "running"]
-                        ),
+                        ResearchAnalysisRun.status.in_(["queued", "planning", "running"]),
                     )
                 )
                 active_map = {row[0]: row[1] for row in active_rows}
@@ -360,9 +357,7 @@ class WorkspaceService(ScopedSessionMixin):
                 sa.select(ResearchAnalysisRun.status)
                 .where(
                     ResearchAnalysisRun.workspace_id == workspace_id,
-                    ResearchAnalysisRun.status.in_(
-                        ["queued", "planning", "running"]
-                    ),
+                    ResearchAnalysisRun.status.in_(["queued", "planning", "running"]),
                 )
                 .limit(1)
             )
