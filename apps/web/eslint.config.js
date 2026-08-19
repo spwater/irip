@@ -35,6 +35,15 @@ export default tseslint.config(
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
+      // 禁止使用 AntD 5.x 已 deprecated 的 destroyOnClose（改用 destroyOnHidden）
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='destroyOnClose']",
+          message: "AntD 5.25+ 已废弃 destroyOnClose，请改用 destroyOnHidden（语义等价）。",
+        },
+      ],
+
       // TypeScript: 忽略 _ 前缀的未使用变量
       '@typescript-eslint/no-unused-vars': [
         'error',

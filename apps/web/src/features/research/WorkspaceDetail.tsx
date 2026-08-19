@@ -247,7 +247,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
             footer={null}
             width={1200}
             centered
-            destroyOnClose
+            destroyOnHidden
             title={'研究分析报告'}
             styles={{ body: { maxHeight: '76vh', overflowY: 'auto', paddingTop: 8 } }}
           >
