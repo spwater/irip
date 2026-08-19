@@ -202,7 +202,7 @@ class FlowFactService(ScopedSessionMixin):
                                     )
                                     .outerjoin(
                                         Equipment,
-                                        _CV.equipment_id == sa.cast(Equipment.id, sa.Text),
+                                        _CV.equipment_id == Equipment.id,
                                     )
                                     .where(_C.name == comp_name)
                                     .where(_CV.equipment_id.isnot(None))

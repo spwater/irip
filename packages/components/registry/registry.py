@@ -143,7 +143,7 @@ class ComponentVersion(Base):
     manifest_sha256: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 从 manifest 提取的实验对象编码（独立列，便于查询关联）
     experimental_object_code: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
-    equipment_id: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    equipment_id: Mapped[UUID | None] = mapped_column(GUID, nullable=True)
     runtime: Mapped[str] = mapped_column(sa.Text, nullable=False)
     port_schemas: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     status: Mapped[str] = mapped_column(
@@ -262,7 +262,7 @@ class ComponentRegistryService(ScopedSessionMixin):
         self,
         manifest: ComponentManifest,
         experimental_object_code: str | None = None,
-        equipment_id: str | None = None,
+        equipment_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
     ) -> ComponentVersion:

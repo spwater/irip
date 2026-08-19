@@ -76,7 +76,7 @@ class PublishComponentRequest(BaseModel):
         None,
         description="关联实验对象编码（独立字段，不再从 YAML 解析）",
     )
-    equipment_id: str | None = Field(
+    equipment_id: UUID | None = Field(
         None,
         description="关联设备 UUID（独立字段）",
     )
