@@ -202,6 +202,27 @@ export function TurnDetailPanel({ workspaceId, turnId, onClose, onConclusionSave
                     }
                     return <ChartBlock key={`echarts-${codeStr.slice(0, 20)}`} optionStr={echartsStr} />;
                   }
+                  if (lang === 'describe_series' || lang === 'describe-series' || lang === 'describeSeries') {
+                    try {
+                      const parsed = JSON.parse(codeStr);
+                      const rawData = Array.isArray(parsed) ? parsed[0] : parsed;
+                      if (rawData && Array.isArray(rawData.data)) {
+                        const name = typeof rawData.name === 'string' ? rawData.name : '数据序列';
+                        const data = rawData.data.map((v: unknown) => (typeof v === 'number' ? v : Number(v)));
+                        const option = {
+                          title: { text: name, left: 'center' },
+                          tooltip: { trigger: 'axis' },
+                          xAxis: { type: 'category', data: data.map((_: number, i: number) => i + 1), name: '序号' },
+                          yAxis: { type: 'value' },
+                          series: [{ name, type: 'line', data, smooth: true }],
+                        };
+                        return <ChartBlock key={`describe-${codeStr.slice(0, 20)}`} optionStr={JSON.stringify(option)} />;
+                      }
+                    } catch {
+                      // fall through to default code rendering
+                    }
+                    return <code className={className}>{children}</code>;
+                  }
                   if (lang === 'data' || lang === 'json') {
                     try {
                       const parsed = JSON.parse(codeStr);
