@@ -13,7 +13,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChartRefBlock } from '@/features/assistant/ChartRefBlock';
 import { ChartBlock } from '@/features/assistant/message-thread/components/ChartBlock';
-import { ArrowLeftOutlined } from '@ant-design/icons';
 import { http } from '@/api/client';
 import type { TurnDetail } from '@/api/researchTimeline';
 
@@ -22,7 +21,6 @@ const { Text, Paragraph } = Typography;
 interface Props {
   workspaceId: string;
   turnId: string;
-  onClose: () => void;
   onConclusionSaved?: () => void;
 }
 
@@ -40,7 +38,7 @@ const STATUS_LABELS: Record<string, string> = {
   concluded: '已结论',
 };
 
-export function TurnDetailPanel({ workspaceId, turnId, onClose, onConclusionSaved }: Props) {
+export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Props) {
   const [detail, setDetail] = useState<TurnDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -89,22 +87,10 @@ export function TurnDetailPanel({ workspaceId, turnId, onClose, onConclusionSave
   const isActive = ['queued', 'running', 'planning'].includes(turn.status);
 
   return (
-    <div
-      style={{
-        marginTop: 12,
-        padding: 16,
-        border: '1px solid #d6e4ff',
-        borderRadius: 8,
-        background: '#faffff',
-      }}
-    >
+    <div style={{ padding: '0 4px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
         <Text strong>
-          <ArrowLeftOutlined
-            style={{ marginRight: 8, cursor: 'pointer' }}
-            onClick={onClose}
-          />
           {'轮次 #'}{turn.turn_number}
         </Text>
         <Tag color={

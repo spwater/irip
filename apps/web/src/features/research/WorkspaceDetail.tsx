@@ -6,7 +6,7 @@
  * 右栏: 结论库
  */
 import { useEffect, useState, useCallback } from 'react';
-import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography } from 'antd';
+import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography, Modal } from 'antd';
 import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons';
 import { apiGetWorkspace, apiArchiveWorkspace, apiDeleteWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
 import { http } from '@/api/client';
@@ -240,15 +240,25 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
             }}
           />
 
-          {/* 选中卡片的展开详情（内联在时间线下方） */}
-          {selectedTurnId && (
-            <TurnDetailPanel
+          {/* 选中卡片的展开详情（弹窗呈现，内容更宽） */}
+          <Modal
+            open={!!selectedTurnId}
+            onCancel={() => setSelectedTurnId(null)}
+            footer={null}
+            width={1200}
+            centered
+            destroyOnClose
+            title={'研究分析报告'}
+            styles={{ body: { maxHeight: '76vh', overflowY: 'auto', paddingTop: 8 } }}
+          >
+            {selectedTurnId && (
+              <TurnDetailPanel
                 workspaceId={workspaceId}
                 turnId={selectedTurnId}
-                onClose={() => setSelectedTurnId(null)}
                 onConclusionSaved={fetchConclusions}
               />
-          )}
+            )}
+          </Modal>
         </Col>
 
         {/* 右栏：结论库 */}
