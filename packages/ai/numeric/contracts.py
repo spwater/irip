@@ -88,12 +88,12 @@ class NumericPrincipal:
     """数值工具调用主体（从已认证请求上下文构造，不从工具参数构造）。
 
     Attributes:
-        user_id: 已认证用户 UUID。
+        user_id: 已认证用户 UUID（系统内部调用时可为 None）。
         department_id: 当前部门 UUID（RLS 作用域）。
         roles: 用户角色代码元组。
     """
 
-    user_id: UUID
+    user_id: UUID | None
     department_id: UUID
     roles: tuple[str, ...]
 

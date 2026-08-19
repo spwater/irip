@@ -189,7 +189,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     from packages.ai.numeric import NumericPrincipal
 
                     principal = NumericPrincipal(
-                        user_id=self._actor_id or UUID("00000000-0000-0000-0000-000000000000"),
+                        user_id=self._actor_id,
                         department_id=self._dept_id,
                         roles=(),
                     )
