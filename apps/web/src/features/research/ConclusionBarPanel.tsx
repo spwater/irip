@@ -110,7 +110,7 @@ export function ConclusionBarPanel({
               style={{ marginBottom: 8, cursor: 'pointer' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <Text strong>{r.name}</Text>
                   <div style={{ marginTop: 4, fontSize: 12 }}>
                     <Tag color={r.status === 'published' ? 'green' : 'default'}>
