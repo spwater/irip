@@ -99,29 +99,25 @@ export function ResultCard({
         </Space>
       }
     >
-      {/* 摘要 */}
-      <div style={{ marginBottom: 8 }}>
-        <Text
-          type="secondary"
-          style={{ fontSize: 13 }}
-          ellipsis={{ tooltip: item.summary }}
-        >
-          {item.summary || '无摘要'}
-        </Text>
-      </div>
-
-      {/* 标签 */}
-      {item.tags.length > 0 && (
-        <div style={{ marginBottom: 8 }}>
-          <Space size={4} wrap>
-            {item.tags.slice(0, 5).map((tag) => (
-              <Tag key={tag} style={{ fontSize: 10, margin: 0 }}>
-                {tag}
-              </Tag>
+      {/* 分析问题（从 summary 解析） */}
+      {(() => {
+        let questions: string[] = [];
+        try {
+          const parsed = JSON.parse(item.summary || '');
+          if (parsed?.metadata?.analysis_questions) {
+            questions = parsed.metadata.analysis_questions;
+          }
+        } catch { /* not JSON */ }
+        return questions.length > 0 ? (
+          <div style={{ marginBottom: 8 }}>
+            {questions.map((q, i) => (
+              <Text key={i} type="secondary" style={{ fontSize: 12, display: 'block' }}>
+                {i + 1}. {q}
+              </Text>
             ))}
-          </Space>
-        </div>
-      )}
+          </div>
+        ) : null;
+      })()}
 
       {/* 底部信息 */}
       <div

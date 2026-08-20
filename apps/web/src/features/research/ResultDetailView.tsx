@@ -5,7 +5,7 @@
  * 左侧：发布数据来源（Descriptions 表格）
  * 右侧：发布数据详情（Tabs: 元数据/单点数据/序列数据）
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Row,
   Col,
@@ -33,6 +33,7 @@ import {
   apiUpdateResultMetadata,
   apiWithdrawResult,
 } from '@/api/researchPublish';
+import { apiGetResultDetail, type SourceFact } from '@/api/researchResults';
 import { tryParseStructured } from './ConclusionLibrary';
 
 const { Text } = Typography;
@@ -64,6 +65,15 @@ export function ResultDetailView({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(resultRef.name);
   const [savingName, setSavingName] = useState(false);
+  const [sourceFacts, setSourceFacts] = useState<SourceFact[]>([]);
+
+  useEffect(() => {
+    if (workspaceId) {
+      apiGetResultDetail(workspaceId, resultId).then((d) => {
+        setSourceFacts(d.source_facts ?? []);
+      }).catch(() => {});
+    }
+  }, [workspaceId, resultId]);
 
   // 保存名称编辑
   const handleSaveName = useCallback(async () => {
@@ -232,6 +242,20 @@ export function ResultDetailView({
               </Descriptions.Item>
             </Descriptions>
           </Card>
+          {sourceFacts.length > 0 && (
+            <Card size="small" title={`引用数据（${sourceFacts.length}）`} style={{ marginTop: 8 }}>
+              <Table
+                size="small"
+                dataSource={sourceFacts}
+                rowKey={(r) => r.fact_id}
+                pagination={{ pageSize: 5, size: 'small' }}
+                columns={[
+                  { title: '数据名称', dataIndex: 'name', key: 'name', ellipsis: true, width: '55%' },
+                  { title: '测量设备', dataIndex: 'equipment_name', key: 'equipment_name', ellipsis: true, width: '40%', render: (v: string) => v || '-' },
+                ]}
+              />
+            </Card>
+          )}
         </Col>
 
         {/* 右侧：发布数据详情 */}
