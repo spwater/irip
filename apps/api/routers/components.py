@@ -328,7 +328,7 @@ async def list_components(
                 runtime=ver.runtime,
                 experimental_object_code=ver.experimental_object_code
                 or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
-                equipment_id=getattr(ver, "equipment_id", None),
+                equipment_id=str(ver.equipment_id) if ver.equipment_id else None,
                 department_id=str(comp.department_id) if comp.department_id else None,
                 status=comp.status,
                 manifest_sha256=ver.manifest_sha256,
@@ -373,7 +373,7 @@ async def get_component(
         active_version_id=str(comp.active_version_id) if comp.active_version_id else None,
         experimental_object_code=ver.experimental_object_code
         or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
-        equipment_id=getattr(ver, "equipment_id", None),
+        equipment_id=str(ver.equipment_id) if ver.equipment_id else None,
         department_id=str(comp.department_id) if comp.department_id else None,
         visible_departments=list(comp.visible_departments or []),
         manifest_sha256=ver.manifest_sha256,
