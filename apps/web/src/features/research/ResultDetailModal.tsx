@@ -101,7 +101,7 @@ export function ResultDetailModal({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={1000}
+      width={1200}
       destroyOnClose
     >
       {isLoading || !detail ? (
