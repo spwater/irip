@@ -253,6 +253,10 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                 code({ className, children }) {
                   const lang = className?.replace('language-', '') || '';
                   const codeStr = String(children || '').replace(/\n$/, '');
+                  // debug: 记录 code 块
+                  if (lang === 'echarts' || lang === 'chart-ref' || lang === 'chart') {
+                    console.log('[TurnDetailPanel] code block: lang=%s, len=%d, first50=%s', lang, codeStr.length, codeStr.substring(0, 50));
+                  }
                   const isBlock =
                     lang === 'chart-ref' ||
                     lang === 'chart' ||
