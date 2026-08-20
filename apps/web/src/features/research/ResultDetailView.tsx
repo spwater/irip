@@ -204,6 +204,11 @@ export function ResultDetailView({
         <Col span={10}>
           <Card size="small" title="发布数据来源">
             <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="成果 ID">
+                <Text copyable code style={{ fontSize: 12 }}>
+                  {resultId}
+                </Text>
+              </Descriptions.Item>
               <Descriptions.Item label="状态">
                 <Tag color={resultRef.status === 'published' ? 'green' : 'default'}>
                   {resultRef.status}

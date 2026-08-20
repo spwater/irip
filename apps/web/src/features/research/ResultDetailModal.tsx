@@ -114,6 +114,11 @@ export function ResultDetailModal({
           <Col span={10}>
             <DetailSection title="发布数据来源">
               <Descriptions bordered column={1} size="small">
+                <Descriptions.Item label="成果 ID">
+                  <Text copyable code style={{ fontSize: 12 }}>
+                    {detail.id}
+                  </Text>
+                </Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Tag color={detail.status === 'published' ? 'green' : 'default'}>
                     {detail.status}
