@@ -218,7 +218,22 @@ async def persist_run_as_fact_handler(
                 file_stem = Path(val).stem
                 break
     if not file_stem:
-        # 仍无文件名时，用 source_artifact_id 后 8 位做区分后缀
+        # 仍无文件名时，从 artifact 表查原始文件名
+        _art_id = pdf_artifact_id or data_artifact_id
+        if _art_id:
+            try:
+                from packages.common.artifacts import Artifact as ArtifactEntity
+
+                async with service.session_factory() as _sess:
+                    _art = await _sess.scalar(
+                        sa.select(ArtifactEntity).where(ArtifactEntity.id == _art_id)
+                    )
+                    if _art and _art.filename:
+                        file_stem = Path(_art.filename).stem
+            except Exception:
+                _logger.warning("failed to resolve artifact filename", exc_info=True)
+    if not file_stem:
+        # 最终回退：用 artifact_id 后 8 位
         _art_id_str = str(pdf_artifact_id or data_artifact_id or "")
         if _art_id_str:
             file_stem = _art_id_str[-8:]
