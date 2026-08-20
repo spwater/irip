@@ -1,10 +1,11 @@
 /**
  * ResultDetailView — 成果包详情页
  *
- * 左侧：衍生来源（Workspace/研究问题/源数据/Snapshot/Run/版本历史/权限变更记录）
- * 右侧：版本内容（metadata/points/series/Views/Insights Tab）
+ * 布局参考 FactDetail.tsx：Row gutter=16, Col span=10/14
+ * 左侧：发布数据来源（Descriptions 表格）
+ * 右侧：发布数据详情（Tabs: 元数据/单点数据/序列数据）
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Row,
   Col,
@@ -13,37 +14,28 @@ import {
   Space,
   Typography,
   Button,
-  Spin,
   Tabs,
-  Empty,
+  Table,
+  Descriptions,
   message,
   Input,
-  Drawer,
   Popconfirm,
 } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
 import {
   ArrowLeftOutlined,
   EditOutlined,
   StarFilled,
   StarOutlined,
-  HistoryOutlined,
-  SafetyOutlined,
 } from '@ant-design/icons';
 import type { ResultDetail, ResultVersionDetail } from '@/api/researchPublish';
 import {
-  apiGetPublicationProvenance,
   apiUpdateResultMetadata,
   apiWithdrawResult,
-  type ProvenanceInfo,
 } from '@/api/researchPublish';
-import { apiQueryResultProvenance } from '@/api/researchLineage';
-import { ResultVersionHistory } from './ResultVersionHistory';
-import { AclRevisionList } from './AclRevisionList';
-import { PermissionEnvelopeView } from './PermissionEnvelopeView';
-import { ProvenanceTab } from './ProvenanceTab';
-import { tryParseStructured, StructuredConclusionDisplay } from './ConclusionLibrary';
+import { tryParseStructured } from './ConclusionLibrary';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 export type ResultDetailViewProps = {
   resultId: string;
@@ -54,7 +46,6 @@ export type ResultDetailViewProps = {
   workspaceId?: string;
 };
 
-type VersionTab = 'metadata' | 'provenance';
 
 export function ResultDetailView({
   resultId,
@@ -67,41 +58,13 @@ export function ResultDetailView({
   const resultRef = detail.result;
   const currentVersion = detail.current_version;
 
-  const [activeTab, setActiveTab] = useState<VersionTab>('metadata');
-  const [versionDetail, setVersionDetail] = useState<ResultVersionDetail | null>(
+  const [versionDetail] = useState<ResultVersionDetail | null>(
     currentVersion ?? null,
   );
-  const [provenance, setProvenance] = useState<ProvenanceInfo | null>(null);
-  const [loadingProvenance, setLoadingProvenance] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(resultRef.name);
   const [savingName, setSavingName] = useState(false);
-  const [aclDrawerOpen, setAclDrawerOpen] = useState(false);
 
-  // 加载来源信息
-  const fetchProvenance = useCallback(async () => {
-    setLoadingProvenance(true);
-    try {
-      const info = await apiGetPublicationProvenance(resultId);
-      setProvenance(info);
-    } catch (err) {
-      console.error('加载来源信息失败', err);
-    } finally {
-      setLoadingProvenance(false);
-    }
-  }, [resultId]);
-
-  useEffect(() => {
-    void fetchProvenance();
-  }, [fetchProvenance]);
-
-  // 版本选择回调
-  const handleVersionSelect = useCallback((v: ResultVersionDetail) => {
-    setVersionDetail(v);
-    setActiveTab('metadata');
-  }, []);
-
-  // 加载内部对象（dataset/view/insight）
   // 保存名称编辑
   const handleSaveName = useCallback(async () => {
     if (!editName.trim()) {
@@ -140,46 +103,28 @@ export function ResultDetailView({
     }
   }, [resultId]);
 
-  const tabItems = [
+  // 解析结构化数据
+  const structured = versionDetail?.summary
+    ? tryParseStructured(versionDetail.summary)
+    : null;
+  const metadata = (structured?.metadata as Record<string, unknown> | undefined) ?? {};
+  const points = (structured?.points as Array<Record<string, unknown>> | undefined) ?? [];
+  const seriesList = (structured?.series as Array<Record<string, unknown>> | undefined) ?? [];
+
+  // 单点数据表格列
+  const pointColumns: ColumnsType<Record<string, unknown>> = [
+    { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
     {
-      key: 'metadata' as VersionTab,
-      label: '数据预览',
-      children: versionDetail ? (() => {
-        const structured = versionDetail.summary
-          ? tryParseStructured(versionDetail.summary)
-          : null;
-        if (structured) {
-          return <StructuredConclusionDisplay data={structured} />;
-        }
-        return versionDetail.summary ? (
-          <Paragraph style={{ fontSize: 13 }}>
-            {versionDetail.summary}
-          </Paragraph>
-        ) : (
-          <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-        );
-      })() : (
-        <Empty description="暂无版本信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ),
+      title: '值', dataIndex: 'value', key: 'value', ellipsis: true,
+      render: (val: unknown) => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'number') return val;
+        return String(val);
+      },
     },
     {
-      key: 'provenance' as VersionTab,
-      label: '数据溯源',
-      children: versionDetail ? (
-        <ProvenanceTab
-          fetchGraph={async (maxDepth: number) => {
-            return apiQueryResultProvenance(
-              resultId,
-              versionDetail.version_number,
-              maxDepth,
-            );
-          }}
-          title="成果版本溯源"
-          height={520}
-        />
-      ) : (
-        <Empty description="无版本数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ),
+      title: '单位', dataIndex: 'unit', key: 'unit', ellipsis: true,
+      render: (val: unknown) => (val === null || val === undefined ? '-' : String(val)),
     },
   ];
 
@@ -237,13 +182,6 @@ export function ResultDetailView({
           {isFavorited ? <StarFilled /> : <StarOutlined />}
         </span>
         <div style={{ marginLeft: 'auto' }}>
-          <Button
-            size="small"
-            icon={<SafetyOutlined />}
-            onClick={() => setAclDrawerOpen(true)}
-          >
-            权限变更记录
-          </Button>
           {resultRef.status === 'published' && (
             <Popconfirm
               title="确认撤回此成果包？"
@@ -253,12 +191,7 @@ export function ResultDetailView({
               cancelText="取消"
               okButtonProps={{ danger: true }}
             >
-              <Button
-                size="small"
-                danger
-                loading={withdrawing}
-                style={{ marginLeft: 8 }}
-              >
+              <Button size="small" danger loading={withdrawing}>
                 撤回
               </Button>
             </Popconfirm>
@@ -266,137 +199,154 @@ export function ResultDetailView({
         </div>
       </div>
 
-      {/* 主体：左右布局 */}
       <Row gutter={16}>
-        {/* 左栏：衍生来源 */}
-        <Col xs={24} lg={8}>
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
-            {/* 来源信息 */}
-            <Card size="small" title="衍生来源" style={{ marginBottom: 12 }}>
-              {loadingProvenance ? (
-                <div style={{ textAlign: 'center', padding: 12 }}>
-                  <Spin size="small" />
-                </div>
-              ) : provenance ? (
-                <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>成果包 ID</Text>
-                    <div>
-                      <Text style={{ fontSize: 12 }}>
-                        {provenance.result_id ?? resultId}
-                      </Text>
-                    </div>
-                  </div>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Evidence Snapshots</Text>
-                    <div>
-                      {provenance.evidence_snapshot_ids.length > 0 ? (
-                        (provenance.evidence_snapshot_labels ?? provenance.evidence_snapshot_ids.map((sid) => ({ id: sid, label: sid.substring(0, 8) + '…' }))).map((s) => (
-                          <Tag key={s.id} style={{ fontSize: 10, margin: '2px 4px 2px 0' }}>
-                            {s.label}
-                          </Tag>
-                        ))
-                      ) : (
-                        <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Analysis Runs</Text>
-                    <div>
-                      {provenance.analysis_run_ids.length > 0 ? (
-                        (provenance.analysis_run_labels ?? provenance.analysis_run_ids.map((rid) => ({ id: rid, label: rid.substring(0, 8) + '…' }))).map((r) => (
-                          <Tag key={r.id} style={{ fontSize: 10, margin: '2px 4px 2px 0' }}>
-                            {r.label}
-                          </Tag>
-                        ))
-                      ) : (
-                        <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
-                      )}
-                    </div>
-                  </div>
-                  {Object.keys(provenance.source_run_statuses).length > 0 && (
-                    <div>
-                      <Text type="secondary" style={{ fontSize: 12 }}>Run 状态</Text>
-                      <div>
-                        {Object.entries(provenance.source_run_statuses).map(([rid, status]) => {
-                          const runLabel = provenance.analysis_run_labels?.find((r) => r.id === rid)?.label ?? rid.substring(0, 8) + '…';
-                          return (
-                          <div key={rid} style={{ fontSize: 11 }}>
-                            <Text code style={{ fontSize: 10 }}>{runLabel}</Text>
-                            <Tag
-                              color={status === 'succeeded' ? 'green' : status === 'failed' ? 'red' : 'default'}
-                              style={{ fontSize: 10, margin: '0 4px' }}
-                            >
-                              {status}
-                            </Tag>
-                          </div>
-                          );
-                        })}
+        {/* 左侧：发布数据来源 */}
+        <Col span={10}>
+          <Card size="small" title="发布数据来源">
+            <Descriptions bordered column={1} size="small">
+              <Descriptions.Item label="成果 ID">
+                <Text copyable code style={{ fontSize: 12 }}>
+                  {resultId}
+                </Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="来源结论 ID">
+                {versionDetail?.release_notes ? (
+                  <Text copyable code style={{ fontSize: 12 }}>
+                    {versionDetail.release_notes}
+                  </Text>
+                ) : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="版本号">
+                v{versionDetail?.version_number ?? 0}
+              </Descriptions.Item>
+              <Descriptions.Item label="状态">
+                <Tag color={resultRef.status === 'published' ? 'green' : 'default'}>
+                  {resultRef.status}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label="来源轮次">
+                {Array.isArray(metadata.source_turns) && (metadata.source_turns as number[]).length > 0
+                  ? (metadata.source_turns as number[]).map((t) => (
+                      <Tag key={t} color="blue" style={{ margin: 2 }}>#{t}</Tag>
+                    ))
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="来源 Run">
+                {Array.isArray(metadata.source_runs) && (metadata.source_runs as string[]).length > 0
+                  ? (metadata.source_runs as string[]).map((r) => (
+                      <div key={r}>
+                        <Text copyable code style={{ fontSize: 11 }}>{r}</Text>
                       </div>
+                    ))
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="分析问题">
+                {Array.isArray(metadata.analysis_questions) && (metadata.analysis_questions as string[]).length > 0
+                  ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {(metadata.analysis_questions as string[]).map((q, i) => (
+                        <Text key={i} style={{ fontSize: 12 }}>{i + 1}. {q}</Text>
+                      ))}
                     </div>
-                  )}
-                </Space>
-              ) : (
-                <Empty description="无来源信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-              )}
-            </Card>
-
-            {/* 权限包络 */}
-            {versionDetail && (
-              <PermissionEnvelopeView
-                envelope={versionDetail.published_permission_envelope}
-                effectiveAcl={resultRef.current_acl_type}
-              />
-            )}
-
-            {/* 版本历史 */}
-            <ResultVersionHistory
-              resultId={resultId}
-              workspaceId={workspaceId}
-              versionHistory={detail.version_history}
-              onVersionSelect={handleVersionSelect}
-            />
-          </Space>
+                  )
+                  : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="创建时间">
+                {versionDetail?.published_at
+                  ? new Date(versionDetail.published_at).toLocaleString('zh-CN', { hour12: false })
+                  : '-'}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
         </Col>
 
-        {/* 右栏：版本内容 */}
-        <Col xs={24} lg={16}>
+        {/* 右侧：发布数据详情 */}
+        <Col span={14}>
           <Card
             size="small"
-            title={
-              <Space>
-                <HistoryOutlined />
-                <Text strong>
-                  版本内容 v{versionDetail?.version_number ?? resultRef.current_version}
-                </Text>
-                {versionDetail && (
-                  <Tag color={versionDetail.status === 'active' ? 'green' : versionDetail.status === 'withdrawn' ? 'red' : 'default'}>
-                    {versionDetail.status}
-                  </Tag>
-                )}
-              </Space>
-            }
+            title={`发布数据详情（${points.length} 个指标，${seriesList.length} 组序列）`}
           >
             <Tabs
-              activeKey={activeTab}
-              onChange={(key) => setActiveTab(key as VersionTab)}
-              items={tabItems}
+              defaultActiveKey="metadata"
               size="small"
+              items={[
+                {
+                  key: 'metadata',
+                  label: '元数据',
+                  children: Object.keys(metadata).length > 0 ? (
+                    <Descriptions bordered column={1} size="small">
+                      {Object.entries(metadata).map(([k, v]) => (
+                        <Descriptions.Item key={k} label={k}>
+                          {v === null || v === undefined ? '-'
+                            : Array.isArray(v) ? v.join(', ')
+                            : typeof v === 'object' ? JSON.stringify(v)
+                            : String(v)}
+                        </Descriptions.Item>
+                      ))}
+                    </Descriptions>
+                  ) : (
+                    <Text type="secondary">暂无元数据</Text>
+                  ),
+                },
+                {
+                  key: 'points',
+                  label: `单点数据（${points.length}）`,
+                  children: points.length > 0 ? (
+                    <Table
+                      columns={pointColumns}
+                      dataSource={points}
+                      rowKey={(_, idx) => String(idx)}
+                      size="small"
+                      pagination={false}
+                      scroll={{ y: 400 }}
+                    />
+                  ) : (
+                    <Text type="secondary">暂无单点数据</Text>
+                  ),
+                },
+                {
+                  key: 'series',
+                  label: `序列数据（${seriesList.length}）`,
+                  children: seriesList.length > 0 ? (
+                    seriesList.map((s, i) => {
+                      const name = (s.name as string) ?? `序列 ${i + 1}`;
+                      const columns = (s.columns as string[]) ?? [];
+                      const rows = (s.rows as unknown[][]) ?? [];
+                      return (
+                        <Card key={i} size="small" title={name} style={{ marginBottom: 12 }}>
+                          <Table
+                            size="small"
+                            pagination={false}
+                            rowKey={(_, idx) => String(idx)}
+                            dataSource={rows.map((row, ri) => {
+                              const obj: Record<string, unknown> = { _key: ri };
+                              columns.forEach((c, ci) => { obj[c] = row[ci]; });
+                              return obj;
+                            })}
+                            columns={columns.map((c) => ({
+                              title: c,
+                              dataIndex: c,
+                              key: c,
+                              ellipsis: true,
+                              render: (val: unknown) => {
+                                if (val === null || val === undefined) return '-';
+                                if (typeof val === 'number') return val;
+                                return String(val);
+                              },
+                            }))}
+                          />
+                        </Card>
+                      );
+                    })
+                  ) : (
+                    <Text type="secondary">暂无序列数据</Text>
+                  ),
+                },
+              ]}
             />
           </Card>
         </Col>
       </Row>
-
-      {/* ACL 变更记录抽屉 */}
-      <Drawer
-        title="权限变更记录"
-        open={aclDrawerOpen}
-        onClose={() => setAclDrawerOpen(false)}
-        width={500}
-      >
-        <AclRevisionList revisions={detail.acl_revisions} />
-      </Drawer>
     </div>
   );
 }
