@@ -67,7 +67,6 @@ export function ConclusionBarPanel({
   const { data: results, isLoading: resultsLoading } = useQuery({
     queryKey: ['research-results', workspaceId],
     queryFn: () => apiListResults(workspaceId),
-    enabled: activeTab === 'results',
   });
 
   // 发布 mutation
