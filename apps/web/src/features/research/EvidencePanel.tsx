@@ -587,6 +587,15 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                                           onClick={(e) => e.stopPropagation()}
                                         />
                                         <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
+                                        {f.equipment_name && (
+                                          <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{f.equipment_name}</Tag>
+                                        )}
+                                        {f.run_operator && (
+                                          <Text type="secondary" style={{ fontSize: 11 }}>{f.run_operator}</Text>
+                                        )}
+                                        {f.data_summary && (
+                                          <Text type="secondary" style={{ fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.data_summary}</Text>
+                                        )}
                                       </div>
                                     ))}
                                   </div>

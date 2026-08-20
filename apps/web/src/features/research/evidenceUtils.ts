@@ -7,7 +7,13 @@
 import type { FactSummary } from '@/api/types';
 
 // ---- 树形分组类型 ----
-export type FactItem = { fact_id: string; subject_id: string };
+export type FactItem = {
+  fact_id: string;
+  subject_id: string;
+  equipment_name?: string | null;
+  run_operator?: string | null;
+  data_summary?: string | null;
+};
 export type TaskGroup = { taskName: string; facts: FactItem[] };
 export type ProjectGroup = { projectName: string; tasks: Record<string, TaskGroup> };
 export type FactGroups = Record<string, ProjectGroup>;
@@ -39,6 +45,9 @@ export function buildFactGroups(
     groups[projKey].tasks[taskKey].facts.push({
       fact_id: f.fact_id,
       subject_id: f.subject_id,
+      equipment_name: f.equipment_name,
+      run_operator: f.run_operator,
+      data_summary: f.data_summary,
     });
   }
   return groups;
