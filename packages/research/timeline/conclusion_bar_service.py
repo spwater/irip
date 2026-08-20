@@ -16,6 +16,7 @@ Key invariants:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import UTC, datetime
@@ -29,6 +30,8 @@ from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
 from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.entities import ResearchResult, ResearchResultVersion
+from packages.research.repository.result import ResultRepository
 from packages.research.timeline.conclusion_bar_repository import ConclusionBarRepository
 from packages.research.timeline.contracts import (
     AssembleFinalConclusionCommand,
@@ -295,6 +298,230 @@ class ConclusionBarService(ScopedSessionMixin):
         }
 
     # ============================================================
+    # Publish & Results (Requirement 3)
+    # ============================================================
+
+    async def publish_conclusion(
+        self,
+        workspace_id: UUID,
+        conclusion_id: UUID,
+        title: str | None,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Publish a ResearchConclusion as a simplified ResearchResult.
+
+        Creates a ResearchResult (status="published") with one
+        ResearchResultVersion (version_number=1) whose ``summary`` holds the
+        parsed structured data from the conclusion's current revision statement.
+        Does NOT go through the full PublicationService flow.
+
+        Args:
+            workspace_id: Workspace ID for ownership check.
+            conclusion_id: The conclusion to publish.
+            title: Optional result title (falls back to metadata.title or "最终结论").
+            idempotency_key: Client-supplied idempotency key.
+
+        Returns:
+            Dict with result_id and version_number.
+
+        Raises:
+            AppError: not_found if conclusion or its revision is missing.
+        """
+        actor_id = self._require_actor()
+        async with self._scoped_session() as session:
+            # 1. Load conclusion + verify workspace ownership
+            conclusion = await session.get(ResearchConclusion, conclusion_id)
+            if conclusion is None or conclusion.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="结论不存在或不属于该工作空间",
+                    retryable=False,
+                    fields={"conclusion_id": str(conclusion_id)},
+                )
+
+            # 2. Load current revision
+            revision: ResearchConclusionRevision | None = None
+            if conclusion.current_revision_id:
+                revision = await session.get(
+                    ResearchConclusionRevision,
+                    conclusion.current_revision_id,
+                )
+            if revision is None:
+                raise AppError(
+                    code="not_found",
+                    message="结论没有有效版本",
+                    retryable=False,
+                    fields={"conclusion_id": str(conclusion_id)},
+                )
+
+            # 3. Parse revision.statement as JSON (if possible)
+            statement_text = revision.statement
+            try:
+                statement_json: Any = json.loads(statement_text)
+            except (json.JSONDecodeError, TypeError):
+                statement_json = {"statement": statement_text}
+
+            # 4. Determine result name (title param > metadata.title > "最终结论")
+            default_title = "最终结论"
+            if isinstance(statement_json, dict):
+                meta = statement_json.get("metadata")
+                if isinstance(meta, dict) and meta.get("title"):
+                    default_title = str(meta["title"])
+            result_name = title or default_title
+
+            # 5. Create ResearchResult (stable identity)
+            result = ResearchResult(
+                workspace_id=workspace_id,
+                owner_user_id=actor_id,
+                name=result_name,
+                status="published",
+                current_version=0,
+                current_acl_type="private",
+                current_explicit_user_ids=[],
+                lock_version=0,
+            )
+            session.add(result)
+            await session.flush()
+
+            # 6. Create ResearchResultVersion (v1, immutable)
+            summary_str = json.dumps(statement_json, ensure_ascii=False)
+            content_hash = hashlib.sha256(summary_str.encode("utf-8")).hexdigest()
+            version = ResearchResultVersion(
+                result_id=result.id,
+                version_number=1,
+                title=result_name,
+                summary=summary_str,
+                tags=[],
+                release_notes=str(conclusion_id),
+                dataset_version_refs=[],
+                view_version_refs=[],
+                insight_version_refs=[],
+                evidence_snapshot_ids=[],
+                analysis_run_ids=[],
+                source_run_statuses={},
+                publisher=actor_id,
+                content_hash=content_hash,
+                published_permission_envelope={},
+                status="active",
+            )
+            session.add(version)
+            await session.flush()
+
+            # 7. Update ResearchResult.current_version = 1
+            await session.execute(
+                sa.update(ResearchResult)
+                .where(ResearchResult.id == result.id)
+                .values(current_version=1, updated_at=sa.func.now())
+            )
+
+            # 8. Audit
+            await AuditRecorder.record(
+                session,
+                AuditEventData(
+                    department_id=self._dept_id,
+                    action="research.conclusion.publish",
+                    actor_user_id=actor_id,
+                    resource_type="research_result",
+                    resource_id=result.id,
+                    payload={
+                        "conclusion_id": str(conclusion_id),
+                        "idempotency_key": idempotency_key,
+                    },
+                ),
+            )
+
+        return {
+            "result_id": str(result.id),
+            "version_number": 1,
+        }
+
+    async def list_results(self, workspace_id: UUID) -> dict[str, Any]:
+        """List all ResearchResults for a workspace (newest first).
+
+        Args:
+            workspace_id: Workspace ID.
+
+        Returns:
+            Dict with "items" list of {id, name, status, current_version, created_at}.
+        """
+        async with self._scoped_session() as session:
+            results = await ResultRepository.list_results_by_workspace(session, workspace_id)
+            return {
+                "items": [
+                    {
+                        "id": str(r.id),
+                        "name": r.name,
+                        "status": r.status,
+                        "current_version": r.current_version,
+                        "created_at": r.created_at.isoformat() if r.created_at else "",
+                    }
+                    for r in results
+                ]
+            }
+
+    async def get_result_detail(
+        self,
+        workspace_id: UUID,
+        result_id: UUID,
+    ) -> dict[str, Any]:
+        """Get a single ResearchResult detail + latest version summary.
+
+        Args:
+            workspace_id: Workspace ID for ownership check.
+            result_id: ResearchResult ID.
+
+        Returns:
+            Dict with result fields + version detail (parsed structured data).
+
+        Raises:
+            AppError: not_found if result doesn't exist or cross-workspace.
+        """
+        async with self._scoped_session() as session:
+            result = await ResultRepository.get_result(session, result_id)
+            if result is None or result.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="成果不存在或不属于该工作空间",
+                    retryable=False,
+                    fields={"result_id": str(result_id)},
+                )
+
+            version = await ResultRepository.get_latest_result_version(session, result_id)
+
+            # Parse version.summary as structured data (if possible)
+            summary_data: Any = None
+            source_conclusion_id = ""
+            if version is not None:
+                if version.summary:
+                    try:
+                        summary_data = json.loads(version.summary)
+                    except (json.JSONDecodeError, TypeError):
+                        summary_data = {"statement": version.summary}
+                # release_notes stores the source conclusion_id
+                if version.release_notes:
+                    source_conclusion_id = version.release_notes
+
+            return {
+                "id": str(result.id),
+                "name": result.name,
+                "status": result.status,
+                "current_version": result.current_version,
+                "created_at": result.created_at.isoformat() if result.created_at else "",
+                "version": {
+                    "version_number": version.version_number if version else 0,
+                    "title": version.title if version else "",
+                    "summary": summary_data,
+                    "source_conclusion_id": source_conclusion_id,
+                    "published_at": version.published_at.isoformat()
+                    if version and version.published_at
+                    else "",
+                    "status": version.status if version else "",
+                }
+                if version
+                else None,
+            }
+
+    # ============================================================
     # Internal helpers
     # ============================================================
 
@@ -405,11 +632,22 @@ class ConclusionBarService(ScopedSessionMixin):
 
         Combines metadata (deduped keys), concatenates points and series,
         and builds a ``_tracing`` array with each item's provenance.
+
+        Enhanced metadata (Requirement 2):
+          - ``analysis_questions``: deduped list of question_text from source_info.
+          - ``source_turns``: deduped list of turn_number from source_info.
+          - ``source_runs``: deduped list of run_id from source_info (if present).
+          - ``summary``: auto-generated one-line description, e.g.
+            "基于 3 个分析区块（来自轮次 #1、#2），汇总得出以下结论。"
+          - ``_tracing`` remains at the outermost level (not inside metadata).
         """
         merged_metadata: dict[str, Any] = {"title": title}
         merged_points: list[Any] = []
         merged_series: list[Any] = []
         tracing: list[dict[str, Any]] = []
+        analysis_questions: list[str] = []
+        source_turns: list[int] = []
+        source_runs: list[str] = []
 
         for item in items:
             extracted = self._extract_structured(item)
@@ -422,6 +660,25 @@ class ConclusionBarService(ScopedSessionMixin):
             merged_series.extend(extracted["series"])
 
             source = dict(item.source_info or {})
+
+            # Extract analysis question text (deduped, order-preserved)
+            question_text = source.get("question_text")
+            if isinstance(question_text, str) and question_text.strip():
+                if question_text not in analysis_questions:
+                    analysis_questions.append(question_text)
+
+            # Extract turn numbers (deduped)
+            turn_number = source.get("turn_number")
+            if isinstance(turn_number, int) and turn_number not in source_turns:
+                source_turns.append(turn_number)
+
+            # Extract run IDs (deduped, only if present)
+            run_id = source.get("run_id")
+            if run_id is not None:
+                run_id_str = str(run_id)
+                if run_id_str not in source_runs:
+                    source_runs.append(run_id_str)
+
             tracing.append(
                 {
                     "bar_item_id": str(item.id),
@@ -433,6 +690,19 @@ class ConclusionBarService(ScopedSessionMixin):
 
         merged_metadata["source_count"] = len(items)
         merged_metadata["assembled_at"] = datetime.now(UTC).isoformat()
+        merged_metadata["analysis_questions"] = analysis_questions
+        merged_metadata["source_turns"] = source_turns
+        merged_metadata["source_runs"] = source_runs
+
+        # Auto-generate summary (pure string concatenation, no LLM)
+        sorted_turns = sorted(source_turns)
+        turns_str = "、".join(f"#{t}" for t in sorted_turns)
+        if turns_str:
+            merged_metadata["summary"] = (
+                f"基于 {len(items)} 个分析区块（来自轮次 {turns_str}），汇总得出以下结论。"
+            )
+        else:
+            merged_metadata["summary"] = f"基于 {len(items)} 个分析区块，汇总得出以下结论。"
 
         return {
             "metadata": merged_metadata,

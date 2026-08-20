@@ -173,6 +173,49 @@ class FinalizeResponse(BaseModel):
     item_count: int
 
 
+# ---- Publish & Results request/response models ----
+
+
+class PublishConclusionRequest(BaseModel):
+    title: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class PublishConclusionResponse(BaseModel):
+    result_id: str
+    version_number: int
+
+
+class ResultItemResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    current_version: int
+    created_at: str
+
+
+class ResultListResponse(BaseModel):
+    items: list[ResultItemResponse]
+
+
+class ResultVersionResponse(BaseModel):
+    version_number: int
+    title: str
+    summary: dict[str, Any] | list[Any] | None
+    source_conclusion_id: str
+    published_at: str
+    status: str
+
+
+class ResultDetailResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    current_version: int
+    created_at: str
+    version: ResultVersionResponse | None
+
+
 # ---- Response models ----
 
 
@@ -783,4 +826,81 @@ async def finalize_conclusion(
         conclusion_id=result["conclusion_id"],
         statement=result["statement"],
         item_count=result["item_count"],
+    )
+
+
+# ---- Publish & Results endpoints ----
+
+
+@research_timeline_router.post(
+    "/workspaces/{workspace_id}/conclusions/{conclusion_id}/publish",
+    response_model=PublishConclusionResponse,
+    status_code=201,
+)
+async def publish_conclusion(
+    workspace_id: UUID,
+    conclusion_id: UUID,
+    body: PublishConclusionRequest,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> PublishConclusionResponse:
+    """Publish a ResearchConclusion as a simplified ResearchResult."""
+    result = await service.publish_conclusion(
+        workspace_id=workspace_id,
+        conclusion_id=conclusion_id,
+        title=body.title,
+        idempotency_key=body.idempotency_key,
+    )
+    return PublishConclusionResponse(
+        result_id=result["result_id"],
+        version_number=result["version_number"],
+    )
+
+
+@research_timeline_router.get(
+    "/workspaces/{workspace_id}/results",
+    response_model=ResultListResponse,
+)
+async def list_results(
+    workspace_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> ResultListResponse:
+    """List all ResearchResults for a workspace (newest first)."""
+    data = await service.list_results(workspace_id)
+    return ResultListResponse(items=[ResultItemResponse(**item) for item in data["items"]])
+
+
+@research_timeline_router.get(
+    "/workspaces/{workspace_id}/results/{result_id}",
+    response_model=ResultDetailResponse,
+)
+async def get_result_detail(
+    workspace_id: UUID,
+    result_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> ResultDetailResponse:
+    """Get a single ResearchResult detail + latest version summary."""
+    data = await service.get_result_detail(workspace_id, result_id)
+    version_data = data.get("version")
+    version = (
+        ResultVersionResponse(
+            version_number=version_data["version_number"],
+            title=version_data["title"],
+            summary=version_data["summary"],
+            source_conclusion_id=version_data["source_conclusion_id"],
+            published_at=version_data["published_at"],
+            status=version_data["status"],
+        )
+        if version_data
+        else None
+    )
+    return ResultDetailResponse(
+        id=data["id"],
+        name=data["name"],
+        status=data["status"],
+        current_version=data["current_version"],
+        created_at=data["created_at"],
+        version=version,
     )

@@ -270,11 +270,6 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
             maxSelection={20}
             onConclusionsChanged={fetchConclusions}
             hasSnapshot={hasSnapshot}
-            snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
-            onSynthesisCreated={() => {
-              setSelectedRevisionIds(new Set());
-              setTimelineKey((k) => k + 1);
-            }}
           />
         </Col>
       </Row>
