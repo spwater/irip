@@ -615,4 +615,30 @@ async def run_analysis(
     service: AnalysisServiceDep,
 ) -> dict[str, Any]:
     """Run analysis using PlanService flow: generate plan → confirm → analyze_data."""
-    return await service.run_analysis(workspace_id, turn_id)
+    try:
+        return await service.run_analysis(workspace_id, turn_id)
+    except Exception:
+        # 兜底：确保任何未捕获异常都回滚 turn 状态为 run_failed
+        import logging
+        import os
+
+        from packages.common.session import build_session_factory
+
+        from packages.research.timeline.entities import ResearchTurn
+
+        logger = logging.getLogger("irip.research")
+        logger.exception("run_analysis failed, resetting turn %s to run_failed", turn_id)
+        try:
+            db_url = os.environ.get(
+                "IRIP_DATABASE_URL",
+                "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
+            )
+            factory = build_session_factory(db_url)
+            async with factory() as session:
+                t = await session.get(ResearchTurn, turn_id)
+                if t and t.status not in ("succeeded", "run_failed"):
+                    t.status = "run_failed"
+                    await session.commit()
+        except Exception:
+            pass
+        raise
