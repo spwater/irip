@@ -130,10 +130,10 @@ export function ConclusionBar({ workspaceId, onFinalized }: Props): JSX.Element 
           <div
             key={item.id}
             style={{
-              padding: '8px 12px',
-              marginBottom: 8,
+              padding: '4px 6px',
+              marginBottom: 4,
               border: '1px solid #f0f0f0',
-              borderRadius: 6,
+              borderRadius: 4,
               background: isChecked ? 'rgba(22, 134, 174, 0.04)' : '#fff',
             }}
           >
@@ -141,12 +141,12 @@ export function ConclusionBar({ workspaceId, onFinalized }: Props): JSX.Element 
               <Checkbox
                 checked={isChecked}
                 onChange={() => handleToggle(item.id)}
-                style={{ marginRight: 8, marginTop: 2 }}
+                style={{ marginRight: 4, marginTop: 1 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ marginBottom: 4 }}>
-                  <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
-                  <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>
+                <div style={{ marginBottom: 2 }}>
+                  <Text strong style={{ fontSize: 11 }}>{item.title}</Text>
+                  <Text type="secondary" style={{ fontSize: 9, marginLeft: 4 }}>
                     {item.source_info?.turn_number != null
                       ? `轮次 #${item.source_info.turn_number}`
                       : ''}

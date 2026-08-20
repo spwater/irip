@@ -23,12 +23,18 @@ export function BarItemRenderer({ item }: Props): JSX.Element {
 
   if (blockType === 'echarts' || blockType === 'chart_ref') {
     return (
-      <ChartBlock optionStr={JSON.stringify(snapshot)} />
+      <div style={{ zoom: 0.5, transformOrigin: 'top left' }}>
+        <ChartBlock optionStr={JSON.stringify(snapshot)} />
+      </div>
     );
   }
 
   if (blockType === 'structured') {
-    return <StructuredConclusionDisplay data={snapshot} />;
+    return (
+      <div style={{ zoom: 0.5, transformOrigin: 'top left' }}>
+        <StructuredConclusionDisplay data={snapshot} />
+      </div>
+    );
   }
 
   if (blockType === 'table') {
@@ -38,23 +44,25 @@ export function BarItemRenderer({ item }: Props): JSX.Element {
       return <Text type="secondary">{'（空表格）'}</Text>;
     }
     return (
-      <Table
-        size="small"
-        pagination={rows.length > 20 ? { pageSize: 10, size: 'small' as const } : false}
-        dataSource={rows.map((row, i) => {
-          const rowObj: Record<string, unknown> = { key: i };
-          columns.forEach((col, ci) => {
-            rowObj[col] = row[ci];
-          });
-          return rowObj;
-        })}
-        columns={columns.map((col, ci) => ({
-          title: col,
-          dataIndex: col,
-          key: ci,
-        }))}
-        scroll={{ x: true }}
-      />
+      <div style={{ zoom: 0.5, transformOrigin: 'top left' }}>
+        <Table
+          size="small"
+          pagination={rows.length > 20 ? { pageSize: 10, size: 'small' as const } : false}
+          dataSource={rows.map((row, i) => {
+            const rowObj: Record<string, unknown> = { key: i };
+            columns.forEach((col, ci) => {
+              rowObj[col] = row[ci];
+            });
+            return rowObj;
+          })}
+          columns={columns.map((col, ci) => ({
+            title: col,
+            dataIndex: col,
+            key: ci,
+          }))}
+          scroll={{ x: true }}
+        />
+      </div>
     );
   }
 
