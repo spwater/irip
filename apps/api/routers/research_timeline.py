@@ -213,6 +213,7 @@ class ResultDetailResponse(BaseModel):
     status: str
     current_version: int
     created_at: str
+    source_facts: list[dict[str, Any]] = Field(default_factory=list)
     version: ResultVersionResponse | None
 
 

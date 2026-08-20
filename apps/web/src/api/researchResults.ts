@@ -52,6 +52,14 @@ export type ResultVersionDetail = {
   status: string;
 };
 
+/** 引用数据项 */
+export type SourceFact = {
+  fact_id: string;
+  name: string;
+  task_name: string;
+  equipment_name: string;
+};
+
 /** 成果详情 */
 export type ResultDetail = {
   id: string;
@@ -59,6 +67,7 @@ export type ResultDetail = {
   status: string;
   current_version: number;
   created_at: string;
+  source_facts: SourceFact[];
   version: ResultVersionDetail | null;
 };
 

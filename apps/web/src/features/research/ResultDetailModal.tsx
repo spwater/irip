@@ -136,6 +136,38 @@ export function ResultDetailModal({
                 </Descriptions.Item>
               </Descriptions>
             </DetailSection>
+
+            {detail.source_facts && detail.source_facts.length > 0 && (
+              <DetailSection title={`引用数据（${detail.source_facts.length}）`}>
+                <Table
+                  size="small"
+                  dataSource={detail.source_facts}
+                  rowKey={(r) => r.fact_id}
+                  pagination={{ pageSize: 5, size: 'small' }}
+                  columns={[
+                    {
+                      title: '数据名称',
+                      dataIndex: 'name',
+                      key: 'name',
+                      ellipsis: true,
+                    },
+                    {
+                      title: '任务',
+                      dataIndex: 'task_name',
+                      key: 'task_name',
+                      ellipsis: true,
+                    },
+                    {
+                      title: '设备',
+                      dataIndex: 'equipment_name',
+                      key: 'equipment_name',
+                      ellipsis: true,
+                      render: (v: string) => v || '-',
+                    },
+                  ]}
+                />
+              </DetailSection>
+            )}
           </Col>
 
           {/* 右侧：数据预览 */}

@@ -501,12 +501,38 @@ class ConclusionBarService(ScopedSessionMixin):
                 if version.release_notes:
                     source_conclusion_id = version.release_notes
 
+            # 提取 workspace 最新快照中的 fact 列表（用于展示"用到的数据"）
+            source_facts: list[dict[str, Any]] = []
+            snap_row = await session.execute(
+                sa.text(
+                    "SELECT source_refs, field_manifest FROM research_evidence_snapshot "
+                    "WHERE workspace_id = :wid ORDER BY snapshot_number DESC LIMIT 1"
+                ),
+                {"wid": str(workspace_id)},
+            )
+            snap = snap_row.first()
+            if snap is not None:
+                refs = snap[0] if snap[0] else []
+                manifest = snap[1] if snap[1] else {}
+                for ref in refs:
+                    fid = str(ref.get("id", ""))
+                    if not fid:
+                        continue
+                    fm = manifest.get(fid, {}) if isinstance(manifest, dict) else {}
+                    source_facts.append({
+                        "fact_id": fid,
+                        "name": fm.get("name", fm.get("task_name", fid[:8])),
+                        "task_name": fm.get("task_name", ""),
+                        "equipment_name": fm.get("equipment_name", ""),
+                    })
+
             return {
                 "id": str(result.id),
                 "name": result.name,
                 "status": result.status,
                 "current_version": result.current_version,
                 "created_at": result.created_at.isoformat() if result.created_at else "",
+                "source_facts": source_facts,
                 "version": {
                     "version_number": version.version_number if version else 0,
                     "title": version.title if version else "",
