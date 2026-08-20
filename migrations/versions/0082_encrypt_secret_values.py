@@ -23,6 +23,7 @@ depends_on = None
 def upgrade() -> None:
     """Encrypt existing plaintext secret values."""
     import base64
+    import binascii
     import os
 
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -39,7 +40,15 @@ def upgrade() -> None:
     if not raw_key:
         raw_key = base64.b64encode(b"0" * 32).decode("ascii")
 
-    key = base64.b64decode(raw_key)
+    try:
+        key = base64.b64decode(raw_key)
+    except (binascii.Error, ValueError):
+        if is_test_env:
+            key = base64.b64decode(base64.b64encode(b"0" * 32))
+        else:
+            raise ValueError(
+                "IRIP_MASTER_KEY is not valid base64. Provide a base64-encoded 32-byte key."
+            ) from None
     if len(key) != 32:
         raise ValueError(f"Master key must be 32 bytes, got {len(key)} bytes")
 
