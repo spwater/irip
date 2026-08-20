@@ -112,7 +112,6 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             # 4. Timeline refactoring: question from Turn, not question version
             research_question = ""
-            sub_questions: list[str] = []
 
             # 5. 使用编辑后的建议
             steps = plan.dag_structure.get("steps", []) if plan.dag_structure else []
@@ -121,22 +120,12 @@ class PlanAnalyzerMixin(PlanServiceBase):
             # 6. LLM 数据分析
             from packages.ai.prompt_store import get_prompt
 
-            sub_q_section = ""
-            sub_q_instruction = ""
-            if sub_questions:
-                sub_q_lines = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
-                sub_q_section = f"子问题:\n{sub_q_lines}\n"
-                sub_q_instruction = (
-                    f"\n\n**你必须逐个回答以下子问题，每个子问题给出明确结论：**\n{sub_q_lines}\n"
-                )
             analysis_system_prompt = get_prompt("data_analysis.system_prompt").replace(
-                "{sub_q_instruction}", sub_q_instruction
+                "{sub_q_instruction}", ""
             )
             analysis_context = (
                 f"研究问题: {research_question}\n"
-                f"{sub_q_section}"
-                f"分析建议:\n{advice_text}\n\n"
-                f"以下是完整实验数据：\n{full_data_text}"
+                f"分析建议:\n{advice_text}"
             )
 
             analysis_result = ""
@@ -545,11 +534,6 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             # 2. Timeline refactoring: question from Turn, not question version
             research_question = ""
-            sub_questions: list[str] = []
-            sub_q_section = ""
-            if sub_questions:
-                sub_q_lines = "\n".join(f"  - {sq}" for sq in sub_questions if sq.strip())
-                sub_q_section = f"子问题:\n{sub_q_lines}\n"
 
             # 3. LLM Insight 提取
             from packages.ai.prompt_store import get_prompt
@@ -557,7 +541,6 @@ class PlanAnalyzerMixin(PlanServiceBase):
             insight_system_prompt = get_prompt("insight_extraction_plan.system_prompt")
             insight_context = (
                 f"研究问题: {research_question}\n"
-                f"{sub_q_section}"
                 f"分析建议:\n{advice_text}\n\n"
                 f"分析结果:\n{analysis_result}"
             )
