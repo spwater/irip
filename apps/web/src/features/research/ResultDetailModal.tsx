@@ -165,13 +165,6 @@ export function ResultDetailModal({
                       ellipsis: true,
                       render: (v: string) => v || '-',
                     },
-                    {
-                      title: '摘要',
-                      dataIndex: 'data_summary',
-                      key: 'data_summary',
-                      ellipsis: true,
-                      render: (v: string) => v || '-',
-                    },
                   ]}
                 />
               </DetailSection>
