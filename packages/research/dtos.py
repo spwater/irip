@@ -748,6 +748,7 @@ class ResultRef:
     status: str
     current_version: int
     current_acl_type: str
+    workspace_id: UUID | None = None
 
 
 @dataclass(frozen=True)

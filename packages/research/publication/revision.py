@@ -173,6 +173,7 @@ class _RevisionMixin(_PublicationBase):
                 status=result.status,
                 current_version=result.current_version,
                 current_acl_type=result.current_acl_type,
+                workspace_id=result.workspace_id,
             )
 
     # ============================================================
@@ -259,6 +260,7 @@ class _RevisionMixin(_PublicationBase):
                     status=result.status,
                     current_version=result.current_version,
                     current_acl_type=result.current_acl_type,
+                    workspace_id=result.workspace_id,
                 ),
                 current_version=current_version_detail,
                 version_history=version_history,
