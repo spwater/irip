@@ -41,7 +41,7 @@ _ai_config_table = sa.Table(
         "assistant_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("true")
     ),
     sa.Column(
-        "research_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("false")
+        "research_thinking_enabled", sa.Boolean, nullable=False, server_default=sa.text("true")
     ),
     sa.Column("updated_at", UTCDateTime, server_default=sa.func.now(), nullable=False),
     sa.Column("updated_by", GUID, nullable=True),
@@ -77,7 +77,7 @@ async def upsert_config(
     meta_prompt: str | None = None,
     model_thinking_enabled: bool = False,
     assistant_thinking_enabled: bool = True,
-    research_thinking_enabled: bool = False,
+    research_thinking_enabled: bool = True,
     updated_at: datetime,
     updated_by: UUID | None = None,
 ) -> dict[str, Any] | None:
