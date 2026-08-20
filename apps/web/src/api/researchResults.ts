@@ -95,7 +95,7 @@ export async function apiListResults(
   workspaceId: string,
 ): Promise<ResultItem[]> {
   const res = await http.get<ResultListResponse>(
-    `${BASE}/workspaces/${workspaceId}/results`,
+    `${BASE}/workspaces/${workspaceId}/conclusion-results`,
   );
   return res.data.items ?? [];
 }
@@ -106,7 +106,7 @@ export async function apiGetResultDetail(
   resultId: string,
 ): Promise<ResultDetail> {
   const res = await http.get<ResultDetail>(
-    `${BASE}/workspaces/${workspaceId}/results/${resultId}`,
+    `${BASE}/workspaces/${workspaceId}/conclusion-results/${resultId}`,
   );
   return res.data;
 }

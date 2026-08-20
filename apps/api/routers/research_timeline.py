@@ -858,7 +858,7 @@ async def publish_conclusion(
 
 
 @research_timeline_router.get(
-    "/workspaces/{workspace_id}/results",
+    "/workspaces/{workspace_id}/conclusion-results",
     response_model=ResultListResponse,
 )
 async def list_results(
@@ -872,7 +872,7 @@ async def list_results(
 
 
 @research_timeline_router.get(
-    "/workspaces/{workspace_id}/results/{result_id}",
+    "/workspaces/{workspace_id}/conclusion-results/{result_id}",
     response_model=ResultDetailResponse,
 )
 async def get_result_detail(
