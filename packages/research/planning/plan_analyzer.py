@@ -337,6 +337,15 @@ class PlanAnalyzerMixin(PlanServiceBase):
             else:
                 attempt_number = 1
 
+            # run_number 按 workspace 内已有最大值 +1，避免 uq_rar_workspace_run 冲突
+            _max_row = await session.execute(
+                sa.select(sa.func.max(ResearchAnalysisRun.run_number)).where(
+                    ResearchAnalysisRun.workspace_id == workspace_id
+                )
+            )
+            _max_num = _max_row.scalar() or 0
+            run_number = _max_num + 1
+
             await session.execute(
                 sa.text(
                     "INSERT INTO research_analysis_run "
@@ -351,7 +360,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     "wid": str(workspace_id),
                     "pid": str(plan_id),
                     "sid": str(snapshot_id),
-                    "num": 1,
+                    "num": run_number,
                     "uid": str(self._actor_id or new_id()),
                     "turn_id": str(turn_id) if turn_id is not None else None,
                     "attempt": attempt_number,
