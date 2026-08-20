@@ -88,11 +88,6 @@ class AnalysisService:
         # 2. Load AI config
         ai_config = await self._load_ai_config()
         if not ai_config or not ai_config.get("base_url") or not ai_config.get("api_key"):
-            async with factory() as session:
-                t = await session.get(ResearchTurn, turn_id)
-                if t:
-                    t.status = "run_failed"
-                    await session.commit()
             raise AppError(
                 code="ai_config_missing",
                 message="AI not configured",
