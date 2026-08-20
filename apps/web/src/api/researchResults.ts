@@ -58,6 +58,8 @@ export type SourceFact = {
   name: string;
   task_name: string;
   equipment_name: string;
+  operator: string;
+  data_summary: string;
 };
 
 /** 成果详情 */

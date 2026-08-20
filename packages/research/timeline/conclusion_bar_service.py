@@ -541,7 +541,8 @@ class ConclusionBarService(ScopedSessionMixin):
                     # 先从 fact 表查名称，查不到用 field_manifest 的第一个字段名
                     fact_row = await session.execute(
                         sa.text(
-                            "SELECT subject_id, task_name, equipment_name FROM fact "
+                            "SELECT subject_id, task_name, equipment_name, "
+                            "run_operator, data_summary FROM fact "
                             "WHERE id = :fid LIMIT 1"
                         ),
                         {"fid": fid},
@@ -554,6 +555,8 @@ class ConclusionBarService(ScopedSessionMixin):
                                 "name": fr[0] or fid[:8],
                                 "task_name": fr[1] or "",
                                 "equipment_name": fr[2] or "",
+                                "operator": fr[3] or "",
+                                "data_summary": fr[4] or "",
                             }
                         )
                     else:
