@@ -533,11 +533,12 @@ class ConclusionBarService(ScopedSessionMixin):
             snap = snap_row.first()
             if snap is not None:
                 refs = snap[0] if snap[0] else []
+                manifest = snap[1] if snap[1] else {}
                 for ref in refs:
                     fid = str(ref.get("id", ""))
                     if not fid:
                         continue
-                    # 从 fact 表查名称
+                    # 先从 fact 表查名称，查不到用 field_manifest 的第一个字段名
                     fact_row = await session.execute(
                         sa.text(
                             "SELECT task_name, equipment_name FROM fact "
@@ -556,10 +557,13 @@ class ConclusionBarService(ScopedSessionMixin):
                             }
                         )
                     else:
+                        # fact 表无记录，用 field_manifest 的第一个字段名做名称
+                        fm_val = manifest.get(fid, []) if isinstance(manifest, dict) else []
+                        first_field = fm_val[0] if isinstance(fm_val, list) and fm_val else fid[:8]
                         source_facts.append(
                             {
                                 "fact_id": fid,
-                                "name": fid[:8],
+                                "name": first_field,
                                 "task_name": "",
                                 "equipment_name": "",
                             }
