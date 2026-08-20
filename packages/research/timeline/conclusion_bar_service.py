@@ -690,7 +690,7 @@ class ConclusionBarService(ScopedSessionMixin):
             from packages.ai.openai_compatible import OpenAICompatibleProvider
             from packages.ai.providers import AIRequest
 
-            model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
+            model_name = ai_config.get("model_name") or ai_config.get("research_model_name", "")
             logger.info("_summarize_title: calling LLM model=%s, prompt_len=%d", model_name, len(prompt))
             provider = OpenAICompatibleProvider(
                 api_key=ai_config["api_key"],
