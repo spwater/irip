@@ -109,6 +109,9 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
     value: e.id,
     label: e.display_name || e.code,
   }));
+  const equipmentMap = new Map(
+    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name || e.code]),
+  );
 
   const { data: deptData } = useQuery({
     queryKey: ['departments-for-component-filter'],
@@ -385,6 +388,16 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
       render: (deptId: string | null) => {
         if (!deptId) return <Text type="secondary">-</Text>;
         return deptNameMap.get(deptId) ?? <Text code>{deptId.slice(0, 8)}</Text>;
+      },
+    },
+    {
+      title: '设备仪器',
+      dataIndex: 'equipment_id',
+      key: 'equipment_id',
+      width: 150,
+      render: (equipId: string | null) => {
+        if (!equipId) return <Text type="secondary">-</Text>;
+        return equipmentMap.get(equipId) ?? <Text code>{equipId.slice(0, 8)}</Text>;
       },
     },
     {
