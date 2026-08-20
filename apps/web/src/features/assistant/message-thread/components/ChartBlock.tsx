@@ -95,22 +95,26 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
 
     // Enhance option with safe defaults
     const safeOption = { ...parsed };
-    if (!safeOption.grid) safeOption.grid = {};
-    safeOption.grid.containLabel = true;
-    if (safeOption.xAxis && !Array.isArray(safeOption.xAxis)) {
-      safeOption.xAxis.nameLocation = 'middle';
-      safeOption.xAxis.nameGap = 25;
-    }
-    // If both title and legend exist, push legend below title to avoid overlap
-    if (safeOption.title && safeOption.legend) {
-      const legend = { ...safeOption.legend };
-      if (legend.top === undefined) {
-        legend.top = 30;  // below the default title height
+    // 饼图不需要 grid 设置
+    const isPie = Array.isArray(safeOption.series) && safeOption.series.some((s: { type?: string }) => s.type === 'pie');
+    if (!isPie) {
+      if (!safeOption.grid) safeOption.grid = {};
+      safeOption.grid.containLabel = true;
+      if (safeOption.xAxis && !Array.isArray(safeOption.xAxis)) {
+        safeOption.xAxis.nameLocation = 'middle';
+        safeOption.xAxis.nameGap = 25;
       }
-      safeOption.legend = legend;
-      // Also push grid down so it doesn't overlap with legend
-      if (safeOption.grid.top === undefined) {
-        safeOption.grid.top = 60;
+      // If both title and legend exist, push legend below title to avoid overlap
+      if (safeOption.title && safeOption.legend) {
+        const legend = { ...safeOption.legend };
+        if (legend.top === undefined) {
+          legend.top = 30;  // below the default title height
+        }
+        safeOption.legend = legend;
+        // Also push grid down so it doesn't overlap with legend
+        if (safeOption.grid.top === undefined) {
+          safeOption.grid.top = 60;
+        }
       }
     }
 
