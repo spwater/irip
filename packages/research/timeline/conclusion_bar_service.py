@@ -533,22 +533,37 @@ class ConclusionBarService(ScopedSessionMixin):
             snap = snap_row.first()
             if snap is not None:
                 refs = snap[0] if snap[0] else []
-                manifest = snap[1] if snap[1] else {}
                 for ref in refs:
                     fid = str(ref.get("id", ""))
                     if not fid:
                         continue
-                    fm = manifest.get(fid, {}) if isinstance(manifest, dict) else {}
-                    if not isinstance(fm, dict):
-                        fm = {}
-                    source_facts.append(
-                        {
-                            "fact_id": fid,
-                            "name": fm.get("name", fm.get("task_name", fid[:8])),
-                            "task_name": fm.get("task_name", ""),
-                            "equipment_name": fm.get("equipment_name", ""),
-                        }
+                    # 从 fact 表查名称
+                    fact_row = await session.execute(
+                        sa.text(
+                            "SELECT task_name, equipment_name FROM fact "
+                            "WHERE id = :fid LIMIT 1"
+                        ),
+                        {"fid": fid},
                     )
+                    fr = fact_row.first()
+                    if fr is not None:
+                        source_facts.append(
+                            {
+                                "fact_id": fid,
+                                "name": fr[0] or fid[:8],
+                                "task_name": fr[0] or "",
+                                "equipment_name": fr[1] or "",
+                            }
+                        )
+                    else:
+                        source_facts.append(
+                            {
+                                "fact_id": fid,
+                                "name": fid[:8],
+                                "task_name": "",
+                                "equipment_name": "",
+                            }
+                        )
 
             return {
                 "id": str(result.id),
