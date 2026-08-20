@@ -114,9 +114,6 @@ export function ResultDetailModal({
           <Col span={10}>
             <DetailSection title="发布数据来源">
               <Descriptions bordered column={1} size="small">
-                <Descriptions.Item label="版本号">
-                  v{version?.version_number ?? 0}
-                </Descriptions.Item>
                 <Descriptions.Item label="状态">
                   <Tag color={detail.status === 'published' ? 'green' : 'default'}>
                     {detail.status}
