@@ -204,18 +204,6 @@ export function ResultDetailView({
         <Col span={10}>
           <Card size="small" title="发布数据来源">
             <Descriptions bordered column={1} size="small">
-              <Descriptions.Item label="成果 ID">
-                <Text copyable code style={{ fontSize: 12 }}>
-                  {resultId}
-                </Text>
-              </Descriptions.Item>
-              <Descriptions.Item label="来源结论 ID">
-                {versionDetail?.release_notes ? (
-                  <Text copyable code style={{ fontSize: 12 }}>
-                    {versionDetail.release_notes}
-                  </Text>
-                ) : '-'}
-              </Descriptions.Item>
               <Descriptions.Item label="版本号">
                 v{versionDetail?.version_number ?? 0}
               </Descriptions.Item>
@@ -231,15 +219,6 @@ export function ResultDetailView({
                     ))
                   : '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="来源 Run">
-                {Array.isArray(metadata.source_runs) && (metadata.source_runs as string[]).length > 0
-                  ? (metadata.source_runs as string[]).map((r) => (
-                      <div key={r}>
-                        <Text copyable code style={{ fontSize: 11 }}>{r}</Text>
-                      </div>
-                    ))
-                  : '-'}
-              </Descriptions.Item>
               <Descriptions.Item label="分析问题">
                 {Array.isArray(metadata.analysis_questions) && (metadata.analysis_questions as string[]).length > 0
                   ? (
@@ -251,7 +230,7 @@ export function ResultDetailView({
                   )
                   : '-'}
               </Descriptions.Item>
-              <Descriptions.Item label="创建时间">
+              <Descriptions.Item label="发布时间">
                 {versionDetail?.published_at
                   ? new Date(versionDetail.published_at).toLocaleString('zh-CN', { hour12: false })
                   : '-'}

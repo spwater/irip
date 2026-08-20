@@ -72,11 +72,6 @@ export function ResultDetailModal({
     return Array.isArray(questions) ? (questions as string[]) : [];
   }, [metadata]);
 
-  const sourceRuns = useMemo(() => {
-    const runs = metadata.source_runs;
-    return Array.isArray(runs) ? (runs as string[]) : [];
-  }, [metadata]);
-
   // 单点数据表格列
   const pointColumns: ColumnsType<Record<string, unknown>> = [
     { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
@@ -117,22 +112,8 @@ export function ResultDetailModal({
         <Row gutter={16}>
           {/* 左侧：数据溯源信息 */}
           <Col span={10}>
-            <DetailSection title="数据溯源">
+            <DetailSection title="发布数据来源">
               <Descriptions bordered column={1} size="small">
-                <Descriptions.Item label="成果 ID">
-                  <Text copyable code style={{ fontSize: 12 }}>
-                    {detail.id}
-                  </Text>
-                </Descriptions.Item>
-                <Descriptions.Item label="来源结论 ID">
-                  {version?.source_conclusion_id ? (
-                    <Text copyable code style={{ fontSize: 12 }}>
-                      {version.source_conclusion_id}
-                    </Text>
-                  ) : (
-                    '-'
-                  )}
-                </Descriptions.Item>
                 <Descriptions.Item label="版本号">
                   v{version?.version_number ?? 0}
                 </Descriptions.Item>
@@ -150,17 +131,6 @@ export function ResultDetailModal({
                       ))
                     : '-'}
                 </Descriptions.Item>
-                <Descriptions.Item label="来源 Run">
-                  {sourceRuns.length > 0
-                    ? sourceRuns.map((r) => (
-                        <div key={r}>
-                          <Text copyable code style={{ fontSize: 11 }}>
-                            {r}
-                          </Text>
-                        </div>
-                      ))
-                    : '-'}
-                </Descriptions.Item>
                 <Descriptions.Item label="分析问题">
                   {analysisQuestions.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -173,9 +143,6 @@ export function ResultDetailModal({
                   ) : (
                     '-'
                   )}
-                </Descriptions.Item>
-                <Descriptions.Item label="创建时间">
-                  {fmtTime(detail.created_at)}
                 </Descriptions.Item>
                 <Descriptions.Item label="发布时间">
                   {fmtTime(version?.published_at)}
