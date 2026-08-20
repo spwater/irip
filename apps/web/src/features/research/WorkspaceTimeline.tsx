@@ -162,14 +162,33 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
             <Text strong style={{ flex: 1, minWidth: 0 }}>
               {"#"}{item.turn_number} {item.question_text}
             </Text>
-            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-              <Tag color={STATUS_COLORS[item.status] || "default"}>
-                {STATUS_LABELS[item.status] || item.status}
-              </Tag>
+            <Tag color={STATUS_COLORS[item.status] || "default"}>
+              {STATUS_LABELS[item.status] || item.status}
+            </Tag>
+          </div>
+          <Button
+            type="link"
+            size="small"
+            loading={analyzing === item.turn_id}
+            onClick={(e) => handleAnalyze(e, item.turn_id)}
+            style={{ position: "absolute", right: 8, top: 38, padding: 0, fontSize: 12, height: 16, lineHeight: "16px", transform: "translateX(-16px)" }}
+          >
+            {item.status === "question_draft" ? "开始分析" : "重新分析"}
+          </Button>
+          <div style={{ marginTop: 4, fontSize: 12, color: "#999", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <span>{"快照 v"}{item.snapshot_number}</span>
+              {item.selected_conclusion_count > 0 && (
+                <span>{" · 引用 "}{item.selected_conclusion_count}{" 条结论"}</span>
+              )}
+              {item.has_result && <span>{" · 有结果"}</span>}
+              {item.has_candidates && <span>{" · 有候选"}</span>}
+            </div>
+            <div onClick={(e) => e.stopPropagation()}>
               <Popconfirm
                 title="确认删除此轮次？"
                 description="删除后不可恢复，关联的分析结果也会一并删除。"
-                onConfirm={(e) => { e?.stopPropagation(); handleDelete(e as unknown as React.MouseEvent, item.turn_id); }}
+                onConfirm={() => handleDelete({ stopPropagation: () => {} } as React.MouseEvent, item.turn_id)}
                 okText="删除"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -184,23 +203,6 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
                 />
               </Popconfirm>
             </div>
-          </div>
-          <Button
-            type="link"
-            size="small"
-            loading={analyzing === item.turn_id}
-            onClick={(e) => handleAnalyze(e, item.turn_id)}
-            style={{ position: "absolute", right: 8, top: 38, padding: 0, fontSize: 12, height: 16, lineHeight: "16px", transform: "translateX(-16px)" }}
-          >
-            {item.status === "question_draft" ? "开始分析" : "重新分析"}
-          </Button>
-          <div style={{ marginTop: 4, fontSize: 12, color: "#999" }}>
-            <span>{"快照 v"}{item.snapshot_number}</span>
-            {item.selected_conclusion_count > 0 && (
-              <span>{" · 引用 "}{item.selected_conclusion_count}{" 条结论"}</span>
-            )}
-            {item.has_result && <span>{" · 有结果"}</span>}
-            {item.has_candidates && <span>{" · 有候选"}</span>}
           </div>
         </div>
       ))}
