@@ -113,6 +113,7 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
       if (echartsStr.includes('function')) {
         echartsStr = echartsStr.replace(/"formatter"\s*:\s*function[\s\S]*?\}\s*,/g, '"formatter": "{b}: {c}",');
       }
+      console.log('[echarts] codeStr len=%d, starts=%s, ends=%s', echartsStr.length, echartsStr.substring(0, 20), echartsStr.substring(echartsStr.length - 20));
       return <ChartBlock optionStr={echartsStr} />;
     }
     if (lang === 'describe_series' || lang === 'describe-series' || lang === 'describeSeries') {
