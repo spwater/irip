@@ -693,7 +693,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: alembic upgrade head
       - name: Seed test data
-        run: python -m packages.auth.seed_users
+        run: python scripts/seed_users.py
       - name: Start API in background
         run: |
           uvicorn apps.api.main:create_app --factory --host 0.0.0.0 --port 8000 &
