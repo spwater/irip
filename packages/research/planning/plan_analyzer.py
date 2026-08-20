@@ -617,9 +617,18 @@ class PlanAnalyzerMixin(PlanServiceBase):
                         runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
                         if runs:
                             run_id = runs[0].id
-                    else:
-                        # 纯 LLM 分析不走沙箱执行，直接创建简化 run 记录
+                    if run_id is None:
+                        # 无任何 run，创建简化 run 记录（run_number 递增避免冲突）
                         from packages.common.ids import new_id as _new_id3
+
+                        _max_row = await session.execute(
+                            sa.text(
+                                "SELECT COALESCE(MAX(run_number), 0) "
+                                "FROM research_analysis_run WHERE workspace_id = :wid"
+                            ),
+                            {"wid": str(workspace_id)},
+                        )
+                        _max_num = _max_row.scalar() or 0
 
                         run_id = _new_id3()
                         await session.execute(
@@ -636,7 +645,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                 "wid": str(workspace_id),
                                 "pid": str(plan_id),
                                 "sid": str(snapshot_id),
-                                "num": 1,
+                                "num": _max_num + 1,
                                 "uid": str(self._actor_id or new_id()),
                             },
                         )
