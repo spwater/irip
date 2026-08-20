@@ -718,7 +718,8 @@ class ConclusionBarService(ScopedSessionMixin):
             if len(title) > 30:
                 title = title[:30]
             return title or fallback
-        except Exception:
+        except Exception as e:
+            logger.warning("LLM summarize title failed: %s", e, exc_info=True)
             logger.warning("LLM summarize title failed, using fallback")
             return fallback
 
