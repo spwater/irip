@@ -477,7 +477,21 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     except Exception as exc:
                         logger.warning("Failed to save chart block: %s", exc)
 
-            return {"analysis_result": analysis_result, "data_context": full_data_text}
+            result_data = {
+                "analysis_result": analysis_result,
+                "data_context": full_data_text,
+            }
+
+        # analyze_data 的 session 已 commit，在 session 外自动提取 Insight
+        try:
+            await self.extract_insight(
+                workspace_id=workspace_id,
+                plan_id=plan_id,
+                snapshot_id=snapshot_id,
+            )
+        except Exception as exc:
+            logger.warning("Auto extract_insight after analyze_data failed: %s", exc)
+        return result_data
 
     async def extract_insight(
         self,
