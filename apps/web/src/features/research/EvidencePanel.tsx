@@ -587,6 +587,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                                           onClick={(e) => e.stopPropagation()}
                                         />
                                         <Text style={{ fontSize: 13, fontFamily: 'monospace' }}>{f.subject_id}</Text>
+                                        <Text type="secondary" style={{ fontSize: 11, fontFamily: 'monospace' }}>#{f.fact_id.slice(0, 8)}</Text>
                                         {f.equipment_name && (
                                           <Tag color="cyan" style={{ fontSize: 10, margin: 0, padding: '0 4px' }}>{f.equipment_name}</Tag>
                                         )}
