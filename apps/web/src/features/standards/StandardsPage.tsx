@@ -5,7 +5,7 @@ import { EquipmentPage } from '@/features/equipment/EquipmentPage';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
 /** 合法的 Tab key 集合。 */
-const VALID_TABS = ['departments', 'exp-objects', 'equipment'] as const;
+const VALID_TABS = ['departments', 'equipment', 'exp-objects'] as const;
 type StandardsTab = (typeof VALID_TABS)[number];
 
 /**
@@ -36,8 +36,8 @@ export function StandardsPage(): JSX.Element {
       title: '实验室建设',
       tabs: [
         { key: 'departments', label: '组织机构' },
-        { key: 'exp-objects', label: '实验对象' },
         { key: 'equipment', label: '设备仪器' },
+        { key: 'exp-objects', label: '实验对象' },
       ],
       activeTab,
       onTabChange: handleTabChange,
