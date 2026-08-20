@@ -654,7 +654,7 @@ class ConclusionBarService(ScopedSessionMixin):
         Returns:
             简短标题字符串（≤ 30 字）。LLM 调用失败时回退到 metadata.title 或 "最终结论"。
         """
-        fallback = assembled.get("metadata", {}).get("title", "最终结论")
+        fallback = assembled.get("metadata", {}).get("title", "") or "最终结论"
         if not isinstance(fallback, str):
             fallback = "最终结论"
 
