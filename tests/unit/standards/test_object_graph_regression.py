@@ -93,7 +93,7 @@ def test_industrial_object_nullable_constraints():
 
 
 def test_industrial_object_optional_columns():
-    """Optional columns description and equipment_id must exist and be nullable."""
+    """Optional column description must exist and be nullable."""
     from packages.standards.objects import IndustrialObject
 
     col_info = {
@@ -101,7 +101,7 @@ def test_industrial_object_optional_columns():
         for c in IndustrialObject.__table__.columns
     }
 
-    for opt_col in ("description", "equipment_id"):
+    for opt_col in ("description",):
         assert opt_col in col_info, f"Optional column {opt_col} missing"
         assert col_info[opt_col]["nullable"] is True, f"{opt_col} should be nullable"
 
@@ -199,7 +199,8 @@ def test_add_object_has_all_constructor_fields():
 
     # These columns should be explicitly set in the constructor
     # id, department_id, object_type, code, display_name, description(optional),
-    # equipment_id(optional), visible_departments, visibility_scope, owner_user_id,
+    # equipment_id has been removed (moved to component_version).
+    # visible_departments, visibility_scope, owner_user_id,
     # status, created_at, updated_at, lock_version
     required_in_constructor = {
         "id",

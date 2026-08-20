@@ -65,7 +65,6 @@ class ObjectGraphService(ScopedSessionMixin):
         display_name: str,
         description: str | None = None,
         parent_id: UUID | None = None,
-        equipment_id: UUID | None = None,
         component_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
@@ -78,7 +77,6 @@ class ObjectGraphService(ScopedSessionMixin):
             display_name: 中文显示名。
             description: 描述（可选）。
             parent_id: 父对象 ID（可选，便捷反规范化字段）。
-            equipment_id: 关联设备 ID（可选）。
             component_id: 关联数据接口 ID（可选）。
             department_id: 所属部门 ID（可选，跨实验室可见性基准）。
             visible_departments: 可见单位 ID 列表（可选，默认空数组）。
@@ -130,7 +128,6 @@ class ObjectGraphService(ScopedSessionMixin):
                 code=code,
                 display_name=display_name,
                 description=description,
-                equipment_id=equipment_id,
                 component_id=component_id,
                 visible_departments=visible_departments or [],
                 visibility_scope="tree",
@@ -166,7 +163,6 @@ class ObjectGraphService(ScopedSessionMixin):
         display_name: str,
         description: str | None = None,
         object_type: str | None = None,
-        equipment_id: UUID | None = None,
         component_id: UUID | None = None,
         department_id: UUID | None = None,
         visible_departments: list[str] | None = None,
@@ -177,7 +173,6 @@ class ObjectGraphService(ScopedSessionMixin):
             object_id: 对象 UUID。
             display_name: 新显示名。
             description: 新描述。
-            equipment_id: 新关联设备 ID。
             component_id: 新关联数据接口 ID（None 表示清空关联）。
             department_id: 新所属部门 ID（None 表示不修改）。
             visible_departments: 新可见单位 ID 列表（None 表示不修改）。
@@ -194,7 +189,6 @@ class ObjectGraphService(ScopedSessionMixin):
             obj.description = description
             if object_type is not None:
                 obj.object_type = object_type
-            obj.equipment_id = equipment_id
             obj.component_id = component_id
             if department_id is not None:
                 obj.department_id = department_id

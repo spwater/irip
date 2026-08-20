@@ -81,7 +81,6 @@ class CreateObjectRequest(BaseModel):
     object_type: str = Field(..., max_length=50, description="对象类型")
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
-    equipment_id: UUID | None = Field(None, description="关联设备 ID")
     component_id: str | None = Field(None, description="关联数据接口 ID（可选）")
     department_id: str | None = Field(None, description="所属部门 UUID")
     visible_departments: list[str] = Field(default_factory=list, description="可见单位 UUID 列表")
@@ -99,7 +98,6 @@ class ObjectResponse(BaseModel):
     code: str
     display_name: str
     description: str | None
-    equipment_id: str | None
     component_id: str | None
     visible_departments: list[str]
     status: str
@@ -116,7 +114,6 @@ class ObjectListItem(BaseModel):
     code: str
     display_name: str
     description: str | None
-    equipment_id: str | None
     component_id: str | None
     department_id: str | None
     visible_departments: list[str]
@@ -165,7 +162,6 @@ async def create_object(
         code=gen_code("obj"),
         display_name=body.display_name,
         description=body.description,
-        equipment_id=body.equipment_id,
         component_id=UUID(body.component_id) if body.component_id else None,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,
@@ -254,7 +250,6 @@ class UpdateObjectRequest(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200)
     description: str | None = Field(None, max_length=2000)
     object_type: str | None = Field(None, max_length=50, description="对象类型（可选，修改时传入）")
-    equipment_id: UUID | None = Field(None, description="关联设备 ID")
     component_id: str | None = Field(None, description="关联数据接口 ID（可选，None 表示清空关联）")
     department_id: str | None = Field(None, description="新所属部门 UUID（None 表示不修改）")
     visible_departments: list[str] | None = Field(
@@ -300,7 +295,6 @@ async def update_object(
         display_name=body.display_name,
         description=body.description,
         object_type=body.object_type,
-        equipment_id=body.equipment_id,
         component_id=UUID(body.component_id) if body.component_id else None,
         department_id=UUID(body.department_id) if body.department_id else None,
         visible_departments=body.visible_departments,
@@ -387,7 +381,6 @@ def _object_to_response(obj: IndustrialObject) -> ObjectResponse:
         code=obj.code,
         display_name=obj.display_name,
         description=obj.description,
-        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,
         component_id=str(obj.component_id) if obj.component_id else None,
         visible_departments=list(getattr(obj, "visible_departments", []) or []),
         status=obj.status,
@@ -406,7 +399,6 @@ def _object_to_list_item(obj: IndustrialObject) -> ObjectListItem:
         code=obj.code,
         display_name=obj.display_name,
         description=obj.description,
-        equipment_id=str(obj.equipment_id) if obj.equipment_id else None,
         component_id=str(obj.component_id) if obj.component_id else None,
         visible_departments=list(getattr(obj, "visible_departments", []) or []),
         status=obj.status,

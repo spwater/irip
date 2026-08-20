@@ -20,7 +20,6 @@ export async function apiCreateObject(body: {
   display_name: string;
   object_type: string;
   description?: string;
-  equipment_id?: string;
   component_id?: string;
   department_id?: string;
   visible_departments?: string[];
@@ -47,7 +46,6 @@ export async function apiUpdateObject(objectId: string, body: {
   display_name: string;
   description?: string | null;
   object_type?: string;
-  equipment_id?: string | null;
   component_id?: string | null;
   department_id?: string | null;
   visible_departments?: string[] | null;

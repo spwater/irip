@@ -734,33 +734,6 @@ class FactQueryService(ScopedSessionMixin):
                                                 ).scalar_one_or_none()
                                                 if obj:
                                                     ds["object_name"] = obj.display_name
-                                                    if obj.equipment_id:
-                                                        from packages.equipment.entities import (
-                                                            Equipment,
-                                                        )
-
-                                                        eq_stmt = sa.select(Equipment).where(
-                                                            Equipment.id == obj.equipment_id
-                                                        )
-                                                        eq = (
-                                                            await sess.execute(eq_stmt)
-                                                        ).scalar_one_or_none()
-                                                        if eq:
-                                                            ds["equipment_name"] = eq.display_name
-                                                            if eq.department_id:
-                                                                dept_stmt = sa.select(
-                                                                    Department
-                                                                ).where(
-                                                                    Department.id
-                                                                    == eq.department_id
-                                                                )
-                                                                dept = (
-                                                                    await sess.execute(dept_stmt)
-                                                                ).scalar_one_or_none()
-                                                                if dept:
-                                                                    ds["department_name"] = (
-                                                                        dept.display_name
-                                                                    )
                                             data_source_list.append(ds)
                                         task_info["data_interface"] = (
                                             ", ".join(comp_names) if comp_names else None

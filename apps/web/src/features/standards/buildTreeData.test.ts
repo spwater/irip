@@ -30,7 +30,6 @@ const materialObj1: IndustrialObject = {
   object_type: 'material',
   description: '水泥熟料样品',
   status: 'active',
-  equipment_id: null,
   component_id: null,
   department_id: 'dept-001',
   visible_departments: [],

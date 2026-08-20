@@ -42,7 +42,6 @@ export function buildTreeData(
         description: typeItem.description,
         status: '',
         department_id: null,
-        equipment_id: null,
         component_id: null,
         visible_departments: [],
         visibility_scope: 'tree',
