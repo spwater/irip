@@ -10,11 +10,12 @@
  * 发布成功后自动切换到发布成果 Tab，并刷新 results 列表。
  */
 import { useState } from 'react';
-import { Card, Empty, Spin, Tabs, Tag, Typography } from 'antd';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Card, Empty, Popconfirm, Spin, Tabs, Tag, Typography, message } from 'antd';
+import { DeleteOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConclusionBar } from './ConclusionBar';
 import { ResultDetailModal } from './ResultDetailModal';
-import { apiListResults } from '@/api/researchResults';
+import { apiDeleteResult, apiListResults, apiRepublishResult, apiWithdrawResult } from '@/api/researchResults';
 
 const { Text } = Typography;
 
@@ -55,6 +56,28 @@ export function ConclusionBarPanel({
     setDetailOpen(true);
   };
 
+  const refresh = (): void => {
+    void queryClient.invalidateQueries({ queryKey: ['research-results', workspaceId] });
+  };
+
+  const withdrawMutation = useMutation({
+    mutationFn: (resultId: string) => apiWithdrawResult(workspaceId, resultId),
+    onSuccess: () => { message.success('已撤回'); refresh(); },
+    onError: () => message.error('撤回失败'),
+  });
+
+  const republishMutation = useMutation({
+    mutationFn: (resultId: string) => apiRepublishResult(workspaceId, resultId),
+    onSuccess: () => { message.success('已发布'); refresh(); },
+    onError: () => message.error('发布失败'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (resultId: string) => apiDeleteResult(workspaceId, resultId),
+    onSuccess: () => { message.success('已删除'); refresh(); },
+    onError: () => message.error('删除失败'),
+  });
+
 
   const items = [
     {
@@ -87,16 +110,60 @@ export function ConclusionBarPanel({
               style={{ marginBottom: 8, cursor: 'pointer' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }} onClick={(e) => e.stopPropagation()}>
                   <Text strong>{r.name}</Text>
                   <div style={{ marginTop: 4, fontSize: 12 }}>
                     <Tag color={r.status === 'published' ? 'green' : 'default'}>
-                      {r.status}
+                      {r.status === 'published' ? '已发布' : '已撤回'}
                     </Tag>
                     <Text type="secondary" style={{ marginLeft: 8 }}>
                       {fmtTime(r.created_at)}
                     </Text>
                   </div>
+                </div>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                  {r.status === 'withdrawn' && (
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<SendOutlined />}
+                      loading={republishMutation.isPending && republishMutation.variables === r.id}
+                      onClick={() => republishMutation.mutate(r.id)}
+                      style={{ color: '#52c41a' }}
+                    />
+                  )}
+                  {r.status === 'published' && (
+                    <Popconfirm
+                      title="确认撤回此成果？"
+                      onConfirm={() => withdrawMutation.mutate(r.id)}
+                      okText="撤回"
+                      cancelText="取消"
+                    >
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<UndoOutlined />}
+                        loading={withdrawMutation.isPending && withdrawMutation.variables === r.id}
+                        style={{ color: '#faad14' }}
+                      />
+                    </Popconfirm>
+                  )}
+                  <Popconfirm
+                    title="确认永久删除此成果？"
+                    description="删除后不可恢复"
+                    onConfirm={() => deleteMutation.mutate(r.id)}
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      size="small"
+                      type="text"
+                      icon={<DeleteOutlined />}
+                      loading={deleteMutation.isPending && deleteMutation.variables === r.id}
+                      danger
+                    />
+                  </Popconfirm>
                 </div>
               </div>
             </Card>

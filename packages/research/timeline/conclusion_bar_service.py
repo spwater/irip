@@ -571,6 +571,54 @@ class ConclusionBarService(ScopedSessionMixin):
                 else None,
             }
 
+    async def withdraw_result(
+        self, workspace_id: UUID, result_id: UUID
+    ) -> None:
+        """Withdraw a published result (status -> withdrawn)."""
+        async with self._scoped_session() as session:
+            result = await ResultRepository.get_result(session, result_id)
+            if result is None or result.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="成果不存在或不属于该工作空间",
+                    retryable=False,
+                    fields={"result_id": str(result_id)},
+                )
+            result.status = "withdrawn"
+            await session.commit()
+
+    async def republish_result(
+        self, workspace_id: UUID, result_id: UUID
+    ) -> None:
+        """Re-publish a withdrawn result (status -> published)."""
+        async with self._scoped_session() as session:
+            result = await ResultRepository.get_result(session, result_id)
+            if result is None or result.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="成果不存在或不属于该工作空间",
+                    retryable=False,
+                    fields={"result_id": str(result_id)},
+                )
+            result.status = "published"
+            await session.commit()
+
+    async def delete_result(
+        self, workspace_id: UUID, result_id: UUID
+    ) -> None:
+        """Delete a result permanently."""
+        async with self._scoped_session() as session:
+            result = await ResultRepository.get_result(session, result_id)
+            if result is None or result.workspace_id != workspace_id:
+                raise AppError(
+                    code="not_found",
+                    message="成果不存在或不属于该工作空间",
+                    retryable=False,
+                    fields={"result_id": str(result_id)},
+                )
+            await session.delete(result)
+            await session.commit()
+
     # ============================================================
     # Internal helpers
     # ============================================================

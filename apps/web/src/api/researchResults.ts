@@ -119,3 +119,33 @@ export async function apiGetResultDetail(
   );
   return res.data;
 }
+
+/** 撤回成果（published -> withdrawn） */
+export async function apiWithdrawResult(
+  workspaceId: string,
+  resultId: string,
+): Promise<void> {
+  await http.patch(
+    `${BASE}/workspaces/${workspaceId}/conclusion-results/${resultId}/withdraw`,
+  );
+}
+
+/** 删除成果（永久删除） */
+export async function apiDeleteResult(
+  workspaceId: string,
+  resultId: string,
+): Promise<void> {
+  await http.delete(
+    `${BASE}/workspaces/${workspaceId}/conclusion-results/${resultId}`,
+  );
+}
+
+/** 重新发布成果（withdrawn -> published） */
+export async function apiRepublishResult(
+  workspaceId: string,
+  resultId: string,
+): Promise<void> {
+  await http.patch(
+    `${BASE}/workspaces/${workspaceId}/conclusion-results/${resultId}/publish`,
+  );
+}

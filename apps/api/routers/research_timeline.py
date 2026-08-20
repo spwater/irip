@@ -903,5 +903,48 @@ async def get_result_detail(
         status=data["status"],
         current_version=data["current_version"],
         created_at=data["created_at"],
+        source_facts=data.get("source_facts", []),
         version=version,
     )
+
+
+@research_timeline_router.patch(
+    "/workspaces/{workspace_id}/conclusion-results/{result_id}/withdraw",
+)
+async def withdraw_result(
+    workspace_id: UUID,
+    result_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> dict[str, Any]:
+    """Withdraw a published result (status -> withdrawn)."""
+    await service.withdraw_result(workspace_id, result_id)
+    return {"ok": True}
+
+
+@research_timeline_router.patch(
+    "/workspaces/{workspace_id}/conclusion-results/{result_id}/publish",
+)
+async def republish_result(
+    workspace_id: UUID,
+    result_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> dict[str, Any]:
+    """Re-publish a withdrawn result (status -> published)."""
+    await service.republish_result(workspace_id, result_id)
+    return {"ok": True}
+
+
+@research_timeline_router.delete(
+    "/workspaces/{workspace_id}/conclusion-results/{result_id}",
+)
+async def delete_result(
+    workspace_id: UUID,
+    result_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> dict[str, Any]:
+    """Delete a result permanently."""
+    await service.delete_result(workspace_id, result_id)
+    return {"ok": True}
