@@ -398,6 +398,17 @@ class OpenAICompatibleProvider:
                 fields={},
             )
 
+        # 日志：finish_reason 和 usage（排查截断问题）
+        _finish_reason = choices[0].get("finish_reason", "unknown")
+        _usage = data.get("usage", {})
+        if _finish_reason != "stop" or _usage:
+            logger.info(
+                "LLM response: finish_reason=%s, content_len=%d, usage=%s",
+                _finish_reason,
+                len(str((choices[0].get("message") or {}).get("content") or "")),
+                _usage,
+            )
+
         message: dict[str, Any] = choices[0].get("message") or {}
         answer: str = str(message.get("content") or "")
 
