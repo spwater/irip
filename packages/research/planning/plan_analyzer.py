@@ -629,6 +629,62 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             "ai_raw": analysis_result[:8000],
                         },
                     )
+                    # 同步写入 research_conclusion_candidate（前端 TurnDetailPanel 读的表）
+                    try:
+                        # 从 run 获取 turn_id
+                        run_row = await session.execute(
+                            sa.text(
+                                "SELECT turn_id FROM research_analysis_run WHERE id = :rid"
+                            ),
+                            {"rid": str(run_id)},
+                        )
+                        turn_row = run_row.first()
+                        if turn_row and turn_row[0]:
+                            turn_id_val = str(turn_row[0])
+                            # 创建 extraction_job
+                            extraction_id = new_id()
+                            await session.execute(
+                                sa.text(
+                                    "INSERT INTO research_candidate_extraction_job "
+                                    "(id, workspace_id, turn_id, run_id, status, attempt) "
+                                    "VALUES (:id, :wid, :tid, :rid, 'succeeded', 1)"
+                                ),
+                                {
+                                    "id": str(extraction_id),
+                                    "wid": str(workspace_id),
+                                    "tid": turn_id_val,
+                                    "rid": str(run_id),
+                                },
+                            )
+                            # 创建 conclusion_candidate
+                            await session.execute(
+                                sa.text(
+                                    "INSERT INTO research_conclusion_candidate "
+                                    "(id, extraction_id, turn_id, ordinal, statement, "
+                                    "scope, confidence_level, limitations, status, created_at) "
+                                    "VALUES (:id, :eid, :tid, 1, :stmt, :scope, "
+                                    ":confidence, :limitations, 'pending', now())"
+                                ),
+                                {
+                                    "id": str(new_id()),
+                                    "eid": str(extraction_id),
+                                    "tid": turn_id_val,
+                                    "stmt": insight_candidate.get("conclusion", ""),
+                                    "scope": insight_candidate.get("scope", ""),
+                                    "confidence": insight_candidate.get(
+                                        "confidence_level", "medium"
+                                    ),
+                                    "limitations": insight_candidate.get("limitations", ""),
+                                },
+                            )
+                            logger.info(
+                                "extract_insight: conclusion_candidate created for turn %s",
+                                turn_id_val,
+                            )
+                    except Exception as exc2:
+                        logger.warning(
+                            "extract_insight: failed to sync conclusion_candidate: %s", exc2
+                        )
                 except (SQLAlchemyError, TypeError, KeyError) as exc:
                     logger.warning("Failed to save insight candidate: %s", exc)
                     insight_candidate_id = None
