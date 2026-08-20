@@ -677,6 +677,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             {"rid": str(run_id)},
                         )
                         turn_row = run_row.first()
+                        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                            _f.write(f"conclusion_candidate: turn_row={turn_row}\n")
                         if turn_row and turn_row[0]:
                             turn_id_val = str(turn_row[0])
                             # 创建 extraction_job
@@ -720,10 +722,14 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                 turn_id_val,
                             )
                     except Exception as exc2:
+                        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                            _f.write(f"conclusion_candidate: FAILED: {exc2}\n")
                         logger.warning(
                             "extract_insight: failed to sync conclusion_candidate: %s", exc2
                         )
                 except (SQLAlchemyError, TypeError, KeyError) as exc:
+                    with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                        _f.write(f"insight_candidate write FAILED: {exc}\n")
                     logger.warning("Failed to save insight candidate: %s", exc)
                     insight_candidate_id = None
                     insight_run_id = None
