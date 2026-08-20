@@ -145,8 +145,8 @@ export function ConclusionBar({ workspaceId, onFinalized }: Props): JSX.Element 
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ marginBottom: 2 }}>
-                  <Text strong style={{ fontSize: 11 }}>{item.title}</Text>
-                  <Text type="secondary" style={{ fontSize: 9, marginLeft: 4 }}>
+                  <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
+                  <Text type="secondary" style={{ fontSize: 11, marginLeft: 4 }}>
                     {item.source_info?.turn_number != null
                       ? `轮次 #${item.source_info.turn_number}`
                       : ''}
