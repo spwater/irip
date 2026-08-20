@@ -6,9 +6,9 @@
  * 右栏: 结论库
  */
 import { useEffect, useState, useCallback } from 'react';
-import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography, Modal } from 'antd';
-import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined } from '@ant-design/icons';
-import { apiGetWorkspace, apiArchiveWorkspace, apiDeleteWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
+import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography, Modal, Input } from 'antd';
+import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, EditOutlined } from '@ant-design/icons';
+import { apiGetWorkspace, apiArchiveWorkspace, apiDeleteWorkspace, apiUpdateWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
 import { http } from '@/api/client';
 import { EvidencePanel } from './EvidencePanel';
 import { WorkspaceTimeline } from './WorkspaceTimeline';
@@ -35,6 +35,9 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
   const [timelineKey, setTimelineKey] = useState(0);
   const [recommendationRefreshKey, setRecommendationRefreshKey] = useState(0);
   const [conclusions, setConclusions] = useState<ConclusionRef[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const fetchConclusions = useCallback(async () => {
     try {
@@ -46,6 +49,24 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       // silent
     }
   }, [workspaceId]);
+
+  const handleSaveName = useCallback(async () => {
+    if (!editNameValue.trim()) {
+      message.warning('名称不能为空');
+      return;
+    }
+    setSavingName(true);
+    try {
+      await apiUpdateWorkspace(workspaceId, { name: editNameValue.trim() });
+      setDetail((prev) => prev ? { ...prev, name: editNameValue.trim() } : prev);
+      message.success('已更新');
+      setEditingName(false);
+    } catch {
+      message.error('更新失败');
+    } finally {
+      setSavingName(false);
+    }
+  }, [editNameValue, workspaceId]);
 
   useEffect(() => {
     fetchConclusions();
@@ -124,7 +145,37 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         <Button icon={<ArrowLeftOutlined />} type="text" onClick={onBack}>
           返回列表
         </Button>
-        <span style={{ fontSize: 18, fontWeight: 600, marginLeft: 8 }}>{detail.name}</span>
+        {editingName ? (
+          <>
+            <Input
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              onPressEnter={handleSaveName}
+              style={{ width: 200, marginLeft: 8 }}
+              size="small"
+              autoFocus
+            />
+            <Button size="small" type="primary" loading={savingName} onClick={handleSaveName} style={{ marginLeft: 4 }}>
+              保存
+            </Button>
+            <Button size="small" onClick={() => { setEditingName(false); setEditNameValue(''); }} style={{ marginLeft: 4 }}>
+              取消
+            </Button>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 18, fontWeight: 600, marginLeft: 8 }}>{detail.name}</span>
+            {detail.status === 'draft' && (
+              <Button
+                size="small"
+                type="text"
+                icon={<EditOutlined />}
+                onClick={() => { setEditingName(true); setEditNameValue(detail.name); }}
+                style={{ marginLeft: 4, color: '#999' }}
+              />
+            )}
+          </>
+        )}
         <span style={{ marginLeft: 12 }}>
           <Tag color={detail.status === 'draft' ? 'blue' : 'default'}>
             {detail.status === 'draft' ? '活跃' : '已归档'}
