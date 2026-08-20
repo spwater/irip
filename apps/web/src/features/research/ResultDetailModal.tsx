@@ -152,12 +152,6 @@ export function ResultDetailModal({
                       ellipsis: true,
                     },
                     {
-                      title: '任务',
-                      dataIndex: 'task_name',
-                      key: 'task_name',
-                      ellipsis: true,
-                    },
-                    {
                       title: '设备',
                       dataIndex: 'equipment_name',
                       key: 'equipment_name',
