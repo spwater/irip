@@ -17,7 +17,7 @@ import { ConclusionBarPanel } from './ConclusionBarPanel';
 import { ResearchComposer } from './ResearchComposer';
 import { TurnDetailPanel } from './TurnDetailPanel';
 
-import type { ConclusionRef } from '@/api/researchTimeline';
+
 
 const { Text } = Typography;
 
@@ -34,21 +34,9 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
   const [timelineKey, setTimelineKey] = useState(0);
   const [recommendationRefreshKey, setRecommendationRefreshKey] = useState(0);
-  const [conclusions, setConclusions] = useState<ConclusionRef[]>([]);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
-
-  const fetchConclusions = useCallback(async () => {
-    try {
-      const res = await http.get<{ items: ConclusionRef[] }>(
-        `/research/workspaces/${workspaceId}/conclusions`,
-      );
-      setConclusions(res.data.items || []);
-    } catch {
-      // silent
-    }
-  }, [workspaceId]);
 
   const handleSaveName = useCallback(async () => {
     if (!editNameValue.trim()) {
@@ -68,9 +56,6 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
     }
   }, [editNameValue, workspaceId]);
 
-  useEffect(() => {
-    fetchConclusions();
-  }, [fetchConclusions, timelineKey]);
 
   const fetchDetail = useCallback(async () => {
     setLoading(true);
@@ -113,15 +98,6 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
       const axiosErr = err as { response?: { data?: { error?: { message?: string } } } };
       message.error(axiosErr?.response?.data?.error?.message || '删除失败');
     }
-  };
-
-  const handleToggleConclusion = (revisionId: string) => {
-    setSelectedRevisionIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(revisionId)) next.delete(revisionId);
-      else next.add(revisionId);
-      return next;
-    });
   };
 
   if (loading) {
@@ -305,7 +281,6 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
               <TurnDetailPanel
                 workspaceId={workspaceId}
                 turnId={selectedTurnId}
-                onConclusionSaved={fetchConclusions}
               />
             )}
           </Modal>
@@ -315,12 +290,6 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         <Col xs={24} lg={8}>
           <ConclusionBarPanel
             workspaceId={workspaceId}
-            conclusions={conclusions}
-            selectedRevisionIds={selectedRevisionIds}
-            onToggleConclusion={handleToggleConclusion}
-            maxSelection={20}
-            onConclusionsChanged={fetchConclusions}
-            hasSnapshot={hasSnapshot}
           />
         </Col>
       </Row>

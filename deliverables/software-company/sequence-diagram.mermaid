@@ -1,0 +1,66 @@
+sequenceDiagram
+    participant U as 用户
+    participant T as TurnDetailPanel
+    participant R as ReportBlockWrapper
+    participant Q as TanStack Query
+    participant API as research_timeline_router
+    participant S as ConclusionBarService
+    participant DB as PostgreSQL
+
+    U->>T: 打开轮次报告（Modal）
+    T->>T: ReactMarkdown 渲染 code/table 区块
+    T->>R: 每个区块包裹 ReportBlockWrapper(blockType, codeStr, turnInfo)
+    U->>R: 点击"推送到结论栏"按钮
+    R->>R: resolveChartRefOption(specStr, sampleData) [若 chart_ref]
+    R->>R: 构建 content_snapshot = {echarts option | structured | table | text}
+    R->>Q: useMutation.mutate({block_type, title, content_snapshot, source_info})
+    Q->>API: POST /workspaces/{ws}/turns/{turn}/conclusion-bar/items
+    API->>S: push_item(PushBarItemCommand)
+    S->>S: _require_actor()
+    S->>DB: INSERT INTO research_conclusion_bar_item
+    S-->>API: BarItemRef dict
+    API-->>Q: 201 {id, block_type, title, content_snapshot, ...}
+    Q->>Q: invalidateQueries(['conclusion-bar-items', ws])
+    Q-->>R: 成功 message.success("已推送")
+    R-->>U: 按钮变"已推送"状态
+
+    note over U,DB: ========== 生成最终结论 ==========
+
+    U->>U: 在结论栏勾选 N 个条目（checkbox）
+    U->>U: 点击"生成最终结论"
+    U->>Q: useMutation.mutate({item_ids, title, idempotency_key})
+    Q->>API: POST /workspaces/{ws}/conclusion-bar/finalize
+    API->>S: assemble_final_conclusion(command)
+    S->>DB: SELECT * FROM research_conclusion_bar_item WHERE id IN (item_ids)
+    S->>S: 遍历条目：_extract_structured(item) 归一化为 {metadata, points, series}
+    S->>S: _merge_structured(items) → 合并 + _tracing[]
+    S->>DB: INSERT research_conclusion(source_type='assembled') + research_conclusion_revision
+    S->>DB: 记录审计日志
+    S-->>API: {conclusion_id, statement, item_count}
+    API-->>Q: 201
+    Q->>Q: invalidateQueries(['conclusions', ws]) + ['conclusion-bar-items', ws]
+    Q-->>U: message.success("已生成最终结论")
+    U->>U: 切换到结论库 Tab，高亮新结论
+
+    note over U,DB: ========== 结论栏条目渲染 ==========
+
+    U->>T: WorkspaceDetail 右栏渲染 ConclusionBarPanel
+    T->>Q: useQuery(['conclusion-bar-items', ws])
+    Q->>API: GET /workspaces/{ws}/conclusion-bar/items
+    API->>S: list_items(workspace_id)
+    S->>DB: SELECT * WHERE workspace_id=ws ORDER BY created_at DESC
+    S-->>API: items[]
+    API-->>Q: {items}
+    Q-->>T: items[]
+    loop 每个条目
+        T->>T: BarItemRenderer(item)
+        alt block_type == echarts | chart_ref
+            T->>T: ChartBlock(optionStr=JSON.stringify(content_snapshot))
+        else block_type == structured
+            T->>T: StructuredConclusionDisplay(data=content_snapshot)
+        else block_type == table
+            T->>T: AntD Table(columns, rows)
+        else block_type == text
+            T->>T: Typography.Text
+        end
+    end

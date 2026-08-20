@@ -363,6 +363,11 @@ class OpenAICompatibleProvider:
                 msg["tool_call_id"] = m["tool_call_id"]
             messages.append(msg)
 
+        # DEBUG: 打印完整 messages（排查 data 代码块来源）
+        for i, msg in enumerate(messages):
+            content_preview = str(msg.get("content", ""))[:300]
+            print(f"[PAYLOAD msg {i}] role={msg.get('role')} len={len(str(msg.get('content','')))} preview={content_preview}", flush=True)
+
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,

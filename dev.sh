@@ -113,7 +113,7 @@ start_api() {
     fi
     
     log "启动 API（uvicorn :8000）..."
-    .venv/bin/uvicorn apps.api.main:app --reload --port 8000 --env-file .env > /tmp/irip-api.log 2>&1 &
+    .venv/bin/uvicorn apps.api.main:app --reload --host 0.0.0.0 --port 8000 --env-file .env > /tmp/irip-api.log 2>&1 &
     echo $! > "$PID_DIR/api.pid"
     sleep 3
     

@@ -246,33 +246,49 @@ class ConclusionBarService(ScopedSessionMixin):
             # 3. Normalise + merge
             assembled = self._merge_structured(items, command.title)
 
-            # 4. Persist as ResearchConclusion + Revision
+            # 4. 直接生成 ResearchResult（跳过 Conclusion 中间步骤）
             statement = json.dumps(assembled, ensure_ascii=False)
-            conclusion = ResearchConclusion(
+            content_hash = hashlib.sha256(statement.encode("utf-8")).hexdigest()
+            result_name = command.title or assembled.get("metadata", {}).get("title", "最终结论")
+
+            result = ResearchResult(
                 workspace_id=command.workspace_id,
-                source_turn_id=None,
-                source_type="assembled",
-                evidence_status="data_supported",
-                status="active",
-                created_by=actor_id,
+                owner_user_id=actor_id,
+                name=result_name,
+                status="published",
+                current_version=0,
+                current_acl_type="private",
+                current_explicit_user_ids=[],
                 lock_version=0,
             )
-            session.add(conclusion)
+            session.add(result)
             await session.flush()
 
-            revision = ResearchConclusionRevision(
-                conclusion_id=conclusion.id,
-                revision_number=1,
-                statement=statement,
-                editor=actor_id,
+            version = ResearchResultVersion(
+                result_id=result.id,
+                version_number=1,
+                title=result_name,
+                summary=statement,
+                tags=[],
+                release_notes="",
+                dataset_version_refs=[],
+                view_version_refs=[],
+                insight_version_refs=[],
+                evidence_snapshot_ids=[],
+                analysis_run_ids=[],
+                source_run_statuses={},
+                publisher=actor_id,
+                content_hash=content_hash,
+                published_permission_envelope={},
+                status="active",
             )
-            session.add(revision)
+            session.add(version)
             await session.flush()
 
             await session.execute(
-                sa.update(ResearchConclusion)
-                .where(ResearchConclusion.id == conclusion.id)
-                .values(current_revision_id=revision.id, updated_at=sa.func.now())
+                sa.update(ResearchResult)
+                .where(ResearchResult.id == result.id)
+                .values(current_version=1, updated_at=sa.func.now())
             )
 
             # 5. Audit
@@ -282,8 +298,8 @@ class ConclusionBarService(ScopedSessionMixin):
                     department_id=self._dept_id,
                     action="research.conclusion.assemble",
                     actor_user_id=actor_id,
-                    resource_type="research_conclusion",
-                    resource_id=conclusion.id,
+                    resource_type="research_result",
+                    resource_id=result.id,
                     payload={
                         "item_count": len(items),
                         "idempotency_key": command.idempotency_key,
@@ -292,7 +308,7 @@ class ConclusionBarService(ScopedSessionMixin):
             )
 
         return {
-            "conclusion_id": str(conclusion.id),
+            "result_id": str(result.id),
             "statement": statement,
             "item_count": len(items),
         }

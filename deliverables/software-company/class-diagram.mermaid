@@ -1,0 +1,126 @@
+classDiagram
+    class ResearchConclusionBarItem {
+        +UUID id
+        +UUID workspace_id
+        +UUID turn_id
+        +str block_type
+        +str title
+        +dict content_snapshot
+        +dict source_info
+        +UUID created_by
+        +datetime created_at
+        +datetime updated_at
+    }
+
+    class ResearchTurn {
+        +UUID id
+        +UUID workspace_id
+        +int turn_number
+        +str kind
+        +str status
+        +str question_text_snapshot
+    }
+
+    class ResearchConclusion {
+        +UUID id
+        +UUID workspace_id
+        +UUID current_revision_id
+        +UUID source_turn_id
+        +str source_type
+        +str evidence_status
+        +str status
+        +UUID created_by
+        +int lock_version
+    }
+
+    class ResearchConclusionRevision {
+        +UUID id
+        +UUID conclusion_id
+        +int revision_number
+        +str statement
+        +str scope
+        +list evidence_refs
+        +str limitations
+        +UUID editor
+    }
+
+    class ConclusionBarRepository {
+        +async insert_item(session, workspace_id, turn_id, item) dict
+        +async list_items(session, workspace_id) list~dict~
+        +async get_item(session, item_id) dict
+        +async delete_item(session, item_id) bool
+        +async get_items_by_ids(session, item_ids) list~dict~
+    }
+
+    class ConclusionBarService {
+        -async_sessionmaker _factory
+        -UUID _dept_id
+        -UUID _actor_id
+        -UUID _rls_dept_id
+        +_require_actor() UUID
+        +async push_item(command) dict
+        +async list_items(workspace_id) dict
+        +async remove_item(workspace_id, item_id) dict
+        +async assemble_final_conclusion(command) dict
+        -_extract_structured(item) dict
+        -_merge_structured(items) dict
+    }
+
+    class ConclusionService {
+        +async save_from_block(...) dict
+        +async list_conclusions(...) dict
+        +async create_manual(...) ConclusionRef
+        +async delete_conclusion(...) dict
+    }
+
+    class ScopedSessionMixin {
+        <<mixin>>
+        +session_factory
+        +_scoped_session() AsyncContextManager
+        +set_rls_override(dept_id)
+    }
+
+    class PushBarItemCommand {
+        +UUID workspace_id
+        +UUID turn_id
+        +str block_type
+        +str title
+        +dict content_snapshot
+        +dict source_info
+    }
+
+    class AssembleFinalConclusionCommand {
+        +UUID workspace_id
+        +list~UUID~ item_ids
+        +str title
+        +str idempotency_key
+    }
+
+    class BarItemRef {
+        +str id
+        +str workspace_id
+        +str turn_id
+        +str block_type
+        +str title
+        +dict content_snapshot
+        +dict source_info
+        +str created_at
+    }
+
+    class FinalConclusionRef {
+        +str conclusion_id
+        +str statement
+        +int item_count
+    }
+
+    ResearchConclusionBarItem --> ResearchTurn : turn_id FK
+    ResearchConclusionBarItem --> ResearchConclusion : 最终结论来源
+    ResearchConclusion --> ResearchConclusionRevision : current_revision_id 1..*
+    ConclusionBarRepository --> ResearchConclusionBarItem : 操作
+    ConclusionBarService --|> ScopedSessionMixin : 继承
+    ConclusionBarService --> ConclusionBarRepository : 依赖
+    ConclusionBarService --> ConclusionService : 创建最终结论
+    PushBarItemCommand --> ConclusionBarService : 输入
+    AssembleFinalConclusionCommand --> ConclusionBarService : 输入
+    BarItemRef --> ConclusionBarService : 输出
+    FinalConclusionRef --> ConclusionBarService : 输出
