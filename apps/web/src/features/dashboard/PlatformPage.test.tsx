@@ -13,9 +13,6 @@ vi.mock('@/features/assistant/AssistantPage', () => ({
 vi.mock('@/features/ai-tools/AIToolsPage', () => ({
   AIToolsPage: () => <div data-testid="ai-tools-page">AIToolsPage</div>,
 }));
-vi.mock('@/features/components/ComponentsPage', () => ({
-  ComponentsPage: () => <div data-testid="components-page">ComponentsPage</div>,
-}));
 vi.mock('@/features/platform/PersonalSettings', () => ({
   PersonalSettings: () => <div data-testid="personal-settings-page">PersonalSettings</div>,
 }));
@@ -100,19 +97,6 @@ describe('PlatformPage', () => {
     expect(screen.queryByTestId('tab-ai-tools')).not.toBeInTheDocument();
   });
 
-  it('switches to components tab', async () => {
-    useAuthStore.setState({
-      user: { id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [] },
-    });
-    renderPage();
-    await userEvent.click(screen.getByTestId('tab-components'));
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: '/platform',
-      search: { tab: 'components' },
-      replace: true,
-    });
-  });
-
   it('switches to personal-settings tab', async () => {
     useAuthStore.setState({
       user: { id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [] },
@@ -124,15 +108,6 @@ describe('PlatformPage', () => {
       search: { tab: 'personal-settings' },
       replace: true,
     });
-  });
-
-  it('renders ComponentsPage when tab=components', () => {
-    mockSearch = { tab: 'components' };
-    useAuthStore.setState({
-      user: { id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [] },
-    });
-    renderPage();
-    expect(screen.getByTestId('components-page')).toBeInTheDocument();
   });
 
   it('renders PersonalSettings when tab=personal-settings', () => {
