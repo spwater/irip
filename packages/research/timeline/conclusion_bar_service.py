@@ -542,7 +542,7 @@ class ConclusionBarService(ScopedSessionMixin):
                     fact_row = await session.execute(
                         sa.text(
                             "SELECT subject_id, task_name, equipment_name, "
-                            "run_operator, data_summary FROM fact "
+                            "run_operator FROM fact "
                             "WHERE id = :fid LIMIT 1"
                         ),
                         {"fid": fid},
@@ -556,7 +556,7 @@ class ConclusionBarService(ScopedSessionMixin):
                                 "task_name": fr[1] or "",
                                 "equipment_name": fr[2] or "",
                                 "operator": fr[3] or "",
-                                "data_summary": fr[4] or "",
+                                "data_summary": "",
                             }
                         )
                     else:
