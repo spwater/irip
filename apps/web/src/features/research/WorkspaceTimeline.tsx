@@ -166,23 +166,23 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
               {STATUS_LABELS[item.status] || item.status}
             </Tag>
           </div>
-          <Button
-            type="link"
-            size="small"
-            loading={analyzing === item.turn_id}
-            onClick={(e) => handleAnalyze(e, item.turn_id)}
-            style={{ position: "absolute", right: 8, top: 38, padding: 0, fontSize: 12, height: 16, lineHeight: "16px", transform: "translateX(-16px)" }}
-          >
-            {item.status === "question_draft" ? "开始分析" : "重新分析"}
-          </Button>
           <div style={{ marginTop: 4, fontSize: 12, color: "#999", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span>{"快照 v"}{item.snapshot_number}</span>
               {item.selected_conclusion_count > 0 && (
                 <span>{" · 引用 "}{item.selected_conclusion_count}{" 条结论"}</span>
               )}
               {item.has_result && <span>{" · 有结果"}</span>}
               {item.has_candidates && <span>{" · 有候选"}</span>}
+              <Button
+                type="link"
+                size="small"
+                loading={analyzing === item.turn_id}
+                onClick={(e) => handleAnalyze(e, item.turn_id)}
+                style={{ padding: 0, fontSize: 12, height: 16, lineHeight: "16px" }}
+              >
+                {item.status === "question_draft" ? "开始分析" : "重新分析"}
+              </Button>
             </div>
             <div onClick={(e) => e.stopPropagation()}>
               <Popconfirm
