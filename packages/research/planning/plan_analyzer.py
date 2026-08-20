@@ -123,10 +123,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
             analysis_system_prompt = get_prompt("data_analysis.system_prompt").replace(
                 "{sub_q_instruction}", ""
             )
-            analysis_context = (
-                f"研究问题: {research_question}\n"
-                f"分析建议:\n{advice_text}"
-            )
+            analysis_context = f"研究问题: {research_question}\n分析建议:\n{advice_text}"
 
             analysis_result = ""
             try:
@@ -472,20 +469,24 @@ class PlanAnalyzerMixin(PlanServiceBase):
             }
 
         # analyze_data 的 session 已 commit，在 session 外自动提取 Insight
+        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+            _f.write(
+                f"=== analyze_data done, calling extract_insight ws={workspace_id} plan={plan_id}\n"
+            )
         try:
             await self.extract_insight(
                 workspace_id=workspace_id,
                 plan_id=plan_id,
                 snapshot_id=snapshot_id,
+                turn_id=turn_id,
             )
+            with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                _f.write("=== extract_insight returned OK\n")
         except Exception as exc:
             import traceback
 
-            logger.error(
-                "Auto extract_insight failed: %s\n%s",
-                exc,
-                traceback.format_exc(),
-            )
+            with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                _f.write(f"=== extract_insight FAILED: {exc}\n{traceback.format_exc()}\n")
         return result_data
 
     async def extract_insight(
@@ -493,6 +494,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
         workspace_id: UUID,
         plan_id: UUID,
         snapshot_id: UUID,
+        turn_id: UUID | None = None,
     ) -> dict[str, Any]:
         """从已有分析结果提取 Insight 候选（Step 3，独立调用）。
 
@@ -547,10 +549,11 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             insight_candidate = None
             try:
-                print(
-                    f"[extract_insight] calling LLM, analysis_result_len={len(analysis_result)}",
-                    flush=True,
-                )
+                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                    _f.write(
+                        f"extract_insight: calling LLM, "
+                        f"analysis_result_len={len(analysis_result)}\n"
+                    )
                 response = await self._model_gateway.call(
                     task_type=TaskType.INSIGHT,
                     system_prompt=insight_system_prompt,
@@ -558,10 +561,11 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     research_context=insight_context,
                 )
                 answer = response.answer if hasattr(response, "answer") else str(response)
-                print(
-                    f"[extract_insight] LLM answer len={len(answer)}, first 200: {answer[:200]}",
-                    flush=True,
-                )
+                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                    _f.write(
+                        f"extract_insight: LLM answer len={len(answer)}, "
+                        f"first 300: {answer[:300]}\n"
+                    )
                 import json as _json
 
                 clean = answer.strip()
@@ -571,13 +575,16 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     clean = clean.rsplit("```", 1)[0]
                 clean = clean.strip()
                 insight_candidate = _json.loads(clean)
-                print(
-                    f"[extract_insight] parsed insight_candidate: {insight_candidate}", flush=True
-                )
+                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                    _f.write(
+                        "extract_insight: parsed OK, "
+                        f"conclusion={insight_candidate.get('conclusion', '')[:100]}\n"
+                    )
             except (json.JSONDecodeError, AttributeError, IndexError) as exc:
                 import traceback
 
-                print(f"[extract_insight] FAILED: {exc}\n{traceback.format_exc()}", flush=True)
+                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
+                    _f.write(f"extract_insight: FAILED: {exc}\n{traceback.format_exc()}\n")
                 logger.warning("Insight extraction failed: %s", exc)
 
             # 4. 写入候选记录
@@ -590,10 +597,24 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     from packages.common.ids import new_id
 
                     insight_candidate_id = new_id()
-                    # 复用最新 run（analyze_data 已创建），不新建 run
-                    runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
-                    if runs:
-                        run_id = runs[0].id
+                    # 按 turn_id 查 run（analyze_data 已创建），没有则用最新 run
+                    run_id = None
+                    if turn_id is not None:
+                        _run_row = await session.execute(
+                            sa.text(
+                                "SELECT id FROM research_analysis_run "
+                                "WHERE turn_id = :tid "
+                                "ORDER BY submitted_at DESC LIMIT 1"
+                            ),
+                            {"tid": str(turn_id)},
+                        )
+                        _r = _run_row.first()
+                        if _r:
+                            run_id = _r[0]
+                    if run_id is None:
+                        runs = await ResearchRepositoryTrusted.list_runs(session, workspace_id)
+                        if runs:
+                            run_id = runs[0].id
                     else:
                         # 纯 LLM 分析不走沙箱执行，直接创建简化 run 记录
                         from packages.common.ids import new_id as _new_id3
