@@ -176,7 +176,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
 
       <Row gutter={16}>
         {/* 左栏：AI推荐 → 数据快照 */}
-        <Col xs={24} lg={8}>
+        <Col xs={24} lg={6}>
           {/* AI 推荐问题 */}
           {hasSnapshot && (
             <RecommendationPanel
@@ -204,7 +204,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         </Col>
 
         {/* 中栏：研究时间线 */}
-        <Col xs={24} lg={8}>
+        <Col xs={24} lg={10}>
           {/* 提问区（位于时间线上方，新问题与已有问题按倒序排列） */}
           {hasSnapshot && (
             <div style={{ marginBottom: 16 }}>
