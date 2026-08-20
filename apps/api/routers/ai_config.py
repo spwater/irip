@@ -67,7 +67,7 @@ class AIConfigUpdateRequest(BaseModel):
     enabled: bool = Field(True, description="是否启用")
     meta_prompt: str | None = Field(None, description="提示词推荐的系统提示词，留空则用内置默认")
     model_thinking_enabled: bool = Field(False, description="数据提取模型思考模式开关")
-    assistant_thinking_enabled: bool = Field(False, description="AI助手模型思考模式开关")
+    assistant_thinking_enabled: bool = Field(True, description="AI助手模型思考模式开关")
     research_thinking_enabled: bool = Field(False, description="研发助手模型思考模式开关")
 
 
@@ -82,7 +82,7 @@ class AIConfigResponse(BaseModel):
     enabled: bool
     meta_prompt: str | None = None
     model_thinking_enabled: bool = False
-    assistant_thinking_enabled: bool = False
+    assistant_thinking_enabled: bool = True
     research_thinking_enabled: bool = False
     updated_at: str | None = None
 
