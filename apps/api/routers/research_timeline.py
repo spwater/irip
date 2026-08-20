@@ -824,7 +824,7 @@ async def finalize_conclusion(
     )
     result = await service.assemble_final_conclusion(command)
     return FinalizeResponse(
-        conclusion_id=result["conclusion_id"],
+        conclusion_id=result["result_id"],
         statement=result["statement"],
         item_count=result["item_count"],
     )
