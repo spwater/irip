@@ -218,6 +218,7 @@ data_analysis:
        - 仅对定性判断和简单算术（如百分比差异）可以自行计算
        - **describe_series 是内部计算工具，不是输出格式：严禁在正文中用 ```describe_series 代码块输出数据或把工具的原始返回粘进报告。**
        - 统计结果用自然语言或 Markdown 表格引用即可；需要展示某个数据序列的图形时，一律用 ```chart-ref 代码块引用该序列（见第 4 条），不要自己重写数据点。
+    8. **禁止输出 ```data 代码块。** 不要在报告末尾附加任何结构化 JSON 数据块。报告只需 Markdown 文字、表格和图表代码块（chart-ref / echarts / plotly）即可。
     {sub_q_instruction}
 
 
