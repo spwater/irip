@@ -706,6 +706,7 @@ class ConclusionBarService(ScopedSessionMixin):
                     },
                     {"role": "user", "content": prompt},
                 ),
+                tools=(),
             )
             response = await provider.complete(request)
             title = response.content.strip()
