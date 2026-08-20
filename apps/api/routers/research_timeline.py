@@ -576,6 +576,41 @@ async def revise_conclusion(
 # ---- Turn detail + plan endpoints ----
 
 
+@research_timeline_router.delete(
+    "/workspaces/{workspace_id}/turns/{turn_id}",
+)
+async def delete_turn(
+    workspace_id: UUID,
+    turn_id: UUID,
+    current_user: ResearchUserDep,
+) -> dict[str, Any]:
+    """Delete a research turn and its related data (CASCADE)."""
+
+    import os
+
+    from packages.common.database import build_session_factory
+    from packages.research.timeline.entities import ResearchTurn
+
+    db_url = os.environ.get(
+        "IRIP_DATABASE_URL",
+        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
+    )
+    factory = build_session_factory(db_url)
+    async with factory() as session:
+        turn = await session.get(ResearchTurn, turn_id)
+        if turn is None or turn.workspace_id != workspace_id:
+            from packages.common.errors import AppError
+
+            raise AppError(
+                code="not_found",
+                message="轮次不存在",
+                retryable=False,
+            )
+        await session.delete(turn)
+        await session.commit()
+    return {"ok": True}
+
+
 @research_timeline_router.get(
     "/workspaces/{workspace_id}/turns/{turn_id}",
 )

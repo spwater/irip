@@ -7,7 +7,8 @@
  */
 
 import { useState, useEffect, useRef } from "react";
-import { Button, Spin, Empty, Tag, Typography, message } from "antd";
+import { Button, Spin, Empty, Tag, Typography, Popconfirm, message } from "antd";
+import { DeleteOutlined } from "@ant-design/icons";
 import { useResearchTimeline } from "./useResearchTimeline";
 import { http } from "@/api/client";
 
@@ -83,6 +84,22 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
     }
   };
 
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const handleDelete = async (e: React.MouseEvent, turnId: string) => {
+    e.stopPropagation();
+    setDeleting(turnId);
+    try {
+      await http.delete(`/research/workspaces/${workspaceId}/turns/${turnId}`);
+      message.success("已删除");
+      refresh();
+      onTurnChanged?.();
+    } catch {
+      message.error("删除失败");
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   if (loading && items.length === 0) {
     return (
       <div style={{ textAlign: "center", padding: "2rem" }}>
@@ -142,12 +159,31 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
           data-testid="research-turn-card"
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <Text strong>
+            <Text strong style={{ flex: 1, minWidth: 0 }}>
               {"#"}{item.turn_number} {item.question_text}
             </Text>
-            <Tag color={STATUS_COLORS[item.status] || "default"}>
-              {STATUS_LABELS[item.status] || item.status}
-            </Tag>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+              <Tag color={STATUS_COLORS[item.status] || "default"}>
+                {STATUS_LABELS[item.status] || item.status}
+              </Tag>
+              <Popconfirm
+                title="确认删除此轮次？"
+                description="删除后不可恢复，关联的分析结果也会一并删除。"
+                onConfirm={(e) => { e?.stopPropagation(); handleDelete(e as unknown as React.MouseEvent, item.turn_id); }}
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DeleteOutlined />}
+                  loading={deleting === item.turn_id}
+                  danger
+                  style={{ padding: '0 4px' }}
+                />
+              </Popconfirm>
+            </div>
           </div>
           <Button
             type="link"
