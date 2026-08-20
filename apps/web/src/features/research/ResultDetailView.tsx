@@ -214,13 +214,6 @@ export function ResultDetailView({
                   {resultRef.status}
                 </Tag>
               </Descriptions.Item>
-              <Descriptions.Item label="来源轮次">
-                {Array.isArray(metadata.source_turns) && (metadata.source_turns as number[]).length > 0
-                  ? (metadata.source_turns as number[]).map((t) => (
-                      <Tag key={t} color="blue" style={{ margin: 2 }}>#{t}</Tag>
-                    ))
-                  : '-'}
-              </Descriptions.Item>
               <Descriptions.Item label="分析问题">
                 {Array.isArray(metadata.analysis_questions) && (metadata.analysis_questions as string[]).length > 0
                   ? (

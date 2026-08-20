@@ -61,12 +61,6 @@ export function ResultDetailModal({
   const points = (summary.points as Array<Record<string, unknown>> | undefined) ?? [];
   const seriesList = (summary.series as Array<Record<string, unknown>> | undefined) ?? [];
 
-  // 从 metadata 中提取溯源信息
-  const sourceTurns = useMemo(() => {
-    const turns = metadata.source_turns;
-    return Array.isArray(turns) ? (turns as number[]) : [];
-  }, [metadata]);
-
   const analysisQuestions = useMemo(() => {
     const questions = metadata.analysis_questions;
     return Array.isArray(questions) ? (questions as string[]) : [];
@@ -123,15 +117,6 @@ export function ResultDetailModal({
                   <Tag color={detail.status === 'published' ? 'green' : 'default'}>
                     {detail.status}
                   </Tag>
-                </Descriptions.Item>
-                <Descriptions.Item label="来源轮次">
-                  {sourceTurns.length > 0
-                    ? sourceTurns.map((t) => (
-                        <Tag key={t} color="blue" style={{ margin: 2 }}>
-                          #{t}
-                        </Tag>
-                      ))
-                    : '-'}
                 </Descriptions.Item>
                 <Descriptions.Item label="分析问题">
                   {analysisQuestions.length > 0 ? (
