@@ -18,13 +18,12 @@ export interface ObjectListTableProps {
   loading: boolean;
   deptMap: Map<string, string>;
   componentMap: Map<string, string>;
-  equipmentMap: Map<string, string>;
   onEdit: (record: IndustrialObject) => void;
   onToggleStatus: (record: IndustrialObject) => void;
 }
 
 export function ObjectListTable(props: ObjectListTableProps): JSX.Element {
-  const { treeData, loading, deptMap, componentMap, equipmentMap, onEdit, onToggleStatus } =
+  const { treeData, loading, deptMap, componentMap, onEdit, onToggleStatus } =
     props;
 
   const columns: ColumnsType<TreeRow> = [
@@ -96,18 +95,6 @@ export function ObjectListTable(props: ObjectListTableProps): JSX.Element {
         if (!compId) return <Text type="secondary">-</Text>;
         const comp = componentMap.get(compId);
         return comp ? <Tag color="purple" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{comp}</Tag> : <Text type="secondary">-</Text>;
-      },
-    },
-    {
-      title: '设备仪器',
-      dataIndex: 'equipment_id',
-      key: 'equipment_id',
-      width: 150,
-      render: (equipId: string | null, record: TreeRow) => {
-        if (isTypeRow(record)) return null;
-        if (!equipId) return <Text type="secondary">-</Text>;
-        const equip = equipmentMap.get(equipId);
-        return equip ? <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{equip}</Tag> : <Text type="secondary">-</Text>;
       },
     },
     {

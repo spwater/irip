@@ -18,7 +18,6 @@ export interface ObjectFormModalProps {
   allDeptOptions: { value: string; label: string }[];
   deptTreeData: unknown;
   componentOptions: { value: string; label: string }[];
-  equipmentOptions: { value: string; label: string }[];
   onCancel: () => void;
   onOk: () => void;
   onDelete: () => void;
@@ -37,7 +36,6 @@ export function ObjectFormModal(props: ObjectFormModalProps): JSX.Element {
     allDeptOptions,
     deptTreeData,
     componentOptions,
-    equipmentOptions,
     onCancel,
     onOk,
     onDelete,
@@ -159,20 +157,6 @@ export function ObjectFormModal(props: ObjectFormModalProps): JSX.Element {
               style={{ width: 40 }}
             />
           </Space.Compact>
-        </Form.Item>
-        <Form.Item
-          name="equipment_id"
-          label="设备仪器"
-          tooltip="选填。将该对象关联到具体的设备仪器，用于数据溯源时的设备归属。"
-        >
-          <Select
-            placeholder="选择设备仪器（可选）"
-            showSearch
-            optionFilterProp="label"
-            options={equipmentOptions}
-            allowClear
-            style={{ width: '100%' }}
-          />
         </Form.Item>
       </Form>
     </Modal>

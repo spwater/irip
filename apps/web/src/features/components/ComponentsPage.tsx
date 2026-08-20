@@ -37,6 +37,7 @@ import {
   apiDeleteComponent,
   apiGetComponent,
   apiListComponents,
+  apiListEquipment,
   apiPublishComponent,
   apiRestoreComponent,
   type ComponentSummary,
@@ -96,6 +97,15 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
   const ingestionToolOptions = (ingestionToolsData ?? []).map((t) => ({
     value: t.name,
     label: t.display_name,
+  }));
+
+  const { data: equipmentData } = useQuery({
+    queryKey: ['equipment'],
+    queryFn: () => apiListEquipment({ limit: 100 }),
+  });
+  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
+    value: e.id,
+    label: e.display_name || e.code,
   }));
 
   const { data: deptData } = useQuery({
@@ -231,14 +241,15 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
   const handlePublish = async (): Promise<void> => {
     try {
       if (advancedMode) {
-        const values = await form.validateFields(['manifest_yaml', 'department_id', 'visible_departments']);
+        const values = await form.validateFields(['manifest_yaml', 'department_id', 'visible_departments', 'equipment_id']);
         publishMutation.mutate({
           manifest_yaml: values.manifest_yaml as string,
           department_id: (values.department_id as string) ?? null,
           visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+          equipment_id: (values.equipment_id as string | undefined) ?? null,
         });
       } else {
-        const values = await form.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments']);
+        const values = await form.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments', 'equipment_id']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
@@ -249,6 +260,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           manifest_yaml: yaml,
           department_id: (values.department_id as string) ?? null,
           visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+          equipment_id: (values.equipment_id as string | undefined) ?? null,
         });
       }
     } catch {
@@ -278,6 +290,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
       tool_type: parsed.tool_type ?? 'llm_converter',
       department_id: compDetail.department_id ?? currentUser?.departmentId,
       visible_departments: compDetail.visible_departments ?? [],
+      equipment_id: compDetail.equipment_id ?? undefined,
     });
     setEditAdvancedMode(false);
     setEditModalOpen(true);
@@ -311,14 +324,15 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
   const handleEditPublish = async (): Promise<void> => {
     try {
       if (editAdvancedMode) {
-        const values = await editForm.validateFields(['manifest_yaml', 'department_id', 'visible_departments']);
+        const values = await editForm.validateFields(['manifest_yaml', 'department_id', 'visible_departments', 'equipment_id']);
         publishMutation.mutate({
           manifest_yaml: values.manifest_yaml as string,
           department_id: (values.department_id as string) ?? null,
           visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+          equipment_id: (values.equipment_id as string | undefined) ?? null,
         });
       } else {
-        const values = await editForm.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments']);
+        const values = await editForm.validateFields([...FORM_FIELD_NAMES, 'department_id', 'visible_departments', 'equipment_id']);
         const yaml = buildManifestYaml({
           display_name: values.display_name as string,
           description: values.description as string,
@@ -329,6 +343,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           manifest_yaml: yaml,
           department_id: (values.department_id as string) ?? null,
           visible_departments: (values.visible_departments as string[] | undefined) ?? null,
+          equipment_id: (values.equipment_id as string | undefined) ?? null,
         });
       }
     } catch {
@@ -558,6 +573,20 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
               maxTagCount={5}
             />
           </Form.Item>
+          <Form.Item
+            name="equipment_id"
+            label="设备仪器"
+            tooltip="选填。将该接口关联到具体的设备仪器。"
+          >
+            <Select
+              placeholder="选择设备仪器（可选）"
+              showSearch
+              optionFilterProp="label"
+              options={equipmentOptions}
+              allowClear
+              style={{ width: '100%' }}
+            />
+          </Form.Item>
           {advancedMode ? (
             <Form.Item
               name="manifest_yaml"
@@ -644,6 +673,20 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
               allowClear
               style={{ width: '100%' }}
               maxTagCount={5}
+            />
+          </Form.Item>
+          <Form.Item
+            name="equipment_id"
+            label="设备仪器"
+            tooltip="选填。将该接口关联到具体的设备仪器。"
+          >
+            <Select
+              placeholder="选择设备仪器（可选）"
+              showSearch
+              optionFilterProp="label"
+              options={equipmentOptions}
+              allowClear
+              style={{ width: '100%' }}
             />
           </Form.Item>
           {editAdvancedMode ? (

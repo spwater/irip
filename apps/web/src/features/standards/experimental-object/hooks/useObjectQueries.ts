@@ -13,7 +13,7 @@ import {
   type ObjectTypeDictItem,
 } from '@/api/standards-objects';
 import { apiGetDepartmentNameMap, apiListDepartments } from '@/api/departments';
-import { apiListComponents, apiListEquipment } from '@/api/equipment-flows';
+import { apiListComponents } from '@/api/equipment-flows';
 import { apiListIngestionTools } from '@/api/models-ai';
 import { buildDeptTree, type DeptTreeNode } from '@/shared/buildDeptTree';
 import type { IndustrialObject } from '@/api/types';
@@ -34,9 +34,6 @@ export interface UseObjectQueriesResult {
   // 数据接口
   componentOptions: { value: string; label: string }[];
   componentMap: Map<string, string>;
-  // 设备仪器
-  equipmentOptions: { value: string; label: string }[];
-  equipmentMap: Map<string, string>;
   // 解析工具
   ingestionToolOptions: { value: string; label: string }[];
 }
@@ -109,19 +106,6 @@ export function useObjectQueries(): UseObjectQueriesResult {
     (componentData?.items ?? []).map((c) => [c.id, c.display_name || c.name]),
   );
 
-  // ---- 设备仪器列表查询（用于下拉选择与列表展示）----
-  const { data: equipmentData } = useQuery({
-    queryKey: ['equipment'],
-    queryFn: () => apiListEquipment({ limit: 100 }),
-  });
-  const equipmentOptions = (equipmentData?.items ?? []).map((e) => ({
-    value: e.id,
-    label: e.display_name || e.code,
-  }));
-  const equipmentMap = new Map(
-    (equipmentData?.items ?? []).map((e) => [e.id, e.display_name || e.code]),
-  );
-
   // ---- 解析工具列表（用于新建接口表单）----
   const { data: ingestionToolsData } = useQuery({
     queryKey: ['ingestion-tools'],
@@ -144,8 +128,6 @@ export function useObjectQueries(): UseObjectQueriesResult {
     deptTreeData,
     componentOptions,
     componentMap,
-    equipmentOptions,
-    equipmentMap,
     ingestionToolOptions,
   };
 }
