@@ -519,6 +519,8 @@ class ConclusionBarService(ScopedSessionMixin):
                     if not fid:
                         continue
                     fm = manifest.get(fid, {}) if isinstance(manifest, dict) else {}
+                    if not isinstance(fm, dict):
+                        fm = {}
                     source_facts.append({
                         "fact_id": fid,
                         "name": fm.get("name", fm.get("task_name", fid[:8])),
