@@ -477,13 +477,6 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     except Exception as exc:
                         logger.warning("Failed to save chart block: %s", exc)
 
-            # 9. 从 analysis_result 中剥离 ```data 块（已存为 artifact，报告不需要）
-            analysis_result = _re2.sub(
-                r"```data\s*\n[\s\S]*?```",
-                "",
-                analysis_result,
-            ).rstrip()
-
             result_data = {
                 "analysis_result": analysis_result,
                 "data_context": full_data_text,
