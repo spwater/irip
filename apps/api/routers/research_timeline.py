@@ -815,11 +815,10 @@ async def finalize_conclusion(
     service: ConclusionBarServiceDep,
 ) -> FinalizeResponse:
     """Assemble checked bar items into a final conclusion."""
-    title = body.title or "最终结论"
     command = AssembleFinalConclusionCommand(
         workspace_id=workspace_id,
         item_ids=tuple(UUID(i) for i in body.item_ids),
-        title=title,
+        title=body.title or "",
         idempotency_key=body.idempotency_key,
     )
     result = await service.assemble_final_conclusion(command)
