@@ -366,7 +366,7 @@ class OpenAICompatibleProvider:
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": messages,
-            "max_tokens": 8192,
+            "max_tokens": 16384,
             "temperature": 0.0,
             "seed": 42,
         }
