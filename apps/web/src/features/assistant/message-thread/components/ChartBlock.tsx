@@ -132,6 +132,14 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
       chart.setOption(safeOption);
       chartInstanceRef.current = chart;
 
+      // Modal 里容器可能延迟展开，延迟 resize 确保图表可见
+      setTimeout(() => {
+        if (!cancelled && chartRef.current && chartInstanceRef.current) {
+          const realWidth = chartRef.current.clientWidth;
+          if (realWidth > 0) chartInstanceRef.current.resize();
+        }
+      }, 500);
+
       // L-03: ResizeObserver 监听容器尺寸变化
       if (chartRef.current && typeof ResizeObserver !== 'undefined') {
         resizeObserver = new ResizeObserver(() => {
