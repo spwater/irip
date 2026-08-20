@@ -321,6 +321,7 @@ class ConclusionRef:
     status: str
     revision_number: int
     statement: str
+    current_revision_id: UUID | None = None
 
 
 @dataclass(frozen=True)

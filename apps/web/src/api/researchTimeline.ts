@@ -87,6 +87,7 @@ export interface ConclusionRef {
   status: string;
   revision_number: number;
   statement: string;
+  current_revision_id?: string;
 }
 
 export interface RecommendationItem {

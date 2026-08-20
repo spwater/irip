@@ -177,7 +177,7 @@ export function ConclusionLibrary({
       </div>
 
       {conclusions.map((conclusion) => {
-        const isSelected = selectedRevisionIds.has(conclusion.conclusion_id);
+        const isSelected = selectedRevisionIds.has(conclusion.current_revision_id ?? '');
         const disabled = !isSelected && atMax;
         const badge = SOURCE_BADGE[conclusion.source_type] || {
           label: conclusion.source_type,
@@ -198,7 +198,7 @@ export function ConclusionLibrary({
             <div style={{ display: "flex", alignItems: "flex-start" }}>
               <Checkbox
                 checked={isSelected}
-                onChange={() => onToggle(conclusion.conclusion_id)}
+                onChange={() => onToggle(conclusion.current_revision_id ?? '')}
                 disabled={disabled}
                 style={{ marginRight: 8, marginTop: 2 }}
               />

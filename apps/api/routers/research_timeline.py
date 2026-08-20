@@ -235,6 +235,7 @@ class ConclusionRefResponse(BaseModel):
     status: str
     revision_number: int
     statement: str
+    current_revision_id: str
 
 
 # ---- Endpoints ----
@@ -491,6 +492,7 @@ async def create_manual_conclusion(
         status=ref.status,
         revision_number=ref.revision_number,
         statement=ref.statement,
+        current_revision_id=str(ref.current_revision_id) if ref.current_revision_id else "",
     )
 
 
@@ -523,6 +525,7 @@ async def revise_conclusion(
         status=ref.status,
         revision_number=ref.revision_number,
         statement=ref.statement,
+        current_revision_id=str(ref.current_revision_id) if ref.current_revision_id else "",
     )
 
 

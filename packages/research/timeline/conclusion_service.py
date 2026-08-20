@@ -607,6 +607,7 @@ class ConclusionService(ScopedSessionMixin):
                         "status": concl.status,
                         "revision_number": rev.revision_number if rev else 0,
                         "statement": rev.statement if rev else "",
+                        "current_revision_id": str(concl.current_revision_id) if concl.current_revision_id else "",
                     }
                 )
 
