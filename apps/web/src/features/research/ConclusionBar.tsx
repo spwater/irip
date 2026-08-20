@@ -38,15 +38,11 @@ export function ConclusionBar({ workspaceId, onFinalized }: Props): JSX.Element 
   });
 
   const removeMutation = useMutation({
-    mutationFn: (itemId: string) => apiRemoveBarItem(workspaceId, itemId),
+    mutationFn: (itemId: string) => apiRemoveBarItem(workspaceId, itemId).catch(() => {}),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['conclusion-bar-items', workspaceId],
       });
-      message.success('已移除');
-    },
-    onError: (err) => {
-      message.error(err instanceof Error ? err.message : '移除失败');
     },
   });
 
