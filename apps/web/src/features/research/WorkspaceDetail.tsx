@@ -204,7 +204,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         </Col>
 
         {/* 中栏：研究时间线 */}
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={6}>
           {/* 提问区（位于时间线上方，新问题与已有问题按倒序排列） */}
           {hasSnapshot && (
             <div style={{ marginBottom: 16 }}>
@@ -261,7 +261,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         </Col>
 
         {/* 右栏：结论栏 + 结论库（Tab 切换） */}
-        <Col xs={24} lg={6}>
+        <Col xs={24} lg={12}>
           <ConclusionBarPanel
             workspaceId={workspaceId}
             conclusions={conclusions}
