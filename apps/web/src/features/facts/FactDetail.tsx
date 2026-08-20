@@ -160,7 +160,7 @@ export function FactDetail(): JSX.Element {
               <Descriptions.Item label="测量设备">
                 {taskInfo?.equipment_name
                   ? <Tag color="cyan" style={{ margin: 0, padding: '2px 8px', borderRadius: 4 }}>{taskInfo.equipment_name}</Tag>
-                  : '-'}
+                  : ''}
               </Descriptions.Item>
               <Descriptions.Item label="项目名称">
                 {taskInfo?.project_name ?? '-'}
