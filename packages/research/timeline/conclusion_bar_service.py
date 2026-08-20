@@ -709,7 +709,7 @@ class ConclusionBarService(ScopedSessionMixin):
                 tools=(),
             )
             response = await provider.complete(request)
-            title = response.content.strip()
+            title = response.answer.strip()
             # 清理：去引号、去句号、限制长度
             title = title.rstrip("。.")
             title = title.strip("'")
