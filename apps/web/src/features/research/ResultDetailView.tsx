@@ -17,7 +17,6 @@ import {
   Tabs,
   Empty,
   message,
-  Tooltip,
   Input,
   Drawer,
   Popconfirm,
@@ -29,16 +28,10 @@ import {
   StarOutlined,
   HistoryOutlined,
   SafetyOutlined,
-  CopyOutlined,
-  DatabaseOutlined,
-  BarChartOutlined,
-  BulbOutlined,
-  NodeIndexOutlined,
 } from '@ant-design/icons';
 import type { ResultDetail, ResultVersionDetail } from '@/api/researchPublish';
 import {
   apiGetPublicationProvenance,
-  apiGetPublicationItem,
   apiUpdateResultMetadata,
   apiWithdrawResult,
   type ProvenanceInfo,
@@ -61,7 +54,7 @@ export type ResultDetailViewProps = {
   workspaceId?: string;
 };
 
-type VersionTab = 'metadata' | 'datasets' | 'views' | 'insights' | 'provenance';
+type VersionTab = 'metadata' | 'provenance';
 
 export function ResultDetailView({
   resultId,
@@ -80,8 +73,6 @@ export function ResultDetailView({
   );
   const [provenance, setProvenance] = useState<ProvenanceInfo | null>(null);
   const [loadingProvenance, setLoadingProvenance] = useState(false);
-  const [itemDetails, setItemDetails] = useState<Record<string, Record<string, unknown>>>({});
-  const [loadingItem, setLoadingItem] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(resultRef.name);
   const [savingName, setSavingName] = useState(false);
@@ -111,23 +102,6 @@ export function ResultDetailView({
   }, []);
 
   // 加载内部对象（dataset/view/insight）
-  const handleLoadItem = useCallback(
-    async (itemType: string, itemId: string) => {
-      const cacheKey = `${itemType}:${itemId}`;
-      if (itemDetails[cacheKey]) return;
-      setLoadingItem(cacheKey);
-      try {
-        const data = await apiGetPublicationItem(resultId, itemType, itemId);
-        setItemDetails((prev) => ({ ...prev, [cacheKey]: data }));
-      } catch {
-        message.error('加载对象详情失败');
-      } finally {
-        setLoadingItem(null);
-      }
-    },
-    [resultId, itemDetails],
-  );
-
   // 保存名称编辑
   const handleSaveName = useCallback(async () => {
     if (!editName.trim()) {
@@ -166,254 +140,31 @@ export function ResultDetailView({
     }
   }, [resultId]);
 
-  const datasetRefs = versionDetail?.dataset_version_refs ?? [];
-  const viewRefs = versionDetail?.view_version_refs ?? [];
-  const insightRefs = versionDetail?.insight_version_refs ?? [];
-
   const tabItems = [
     {
       key: 'metadata' as VersionTab,
-      label: (
-        <Space size={4}>
-          <span>版本信息</span>
-        </Space>
-      ),
-      children: versionDetail ? (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {versionDetail.summary && (() => {
-            const structured = tryParseStructured(versionDetail.summary);
-            if (structured) {
-              return <StructuredConclusionDisplay data={structured} />;
-            }
-            return (
-              <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>摘要</Text>
-                <Paragraph style={{ margin: '4px 0', fontSize: 13 }}>
-                  {versionDetail.summary}
-                </Paragraph>
-              </div>
-            );
-          })()}
-          {versionDetail.tags.length > 0 && (
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>标签</Text>
-              <div style={{ marginTop: 4 }}>
-                <Space size={4} wrap>
-                  {versionDetail.tags.map((tag) => (
-                    <Tag key={tag}>{tag}</Tag>
-                  ))}
-                </Space>
-              </div>
-            </div>
-          )}
-          {versionDetail.release_notes && (
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>发布说明</Text>
-              <Paragraph style={{ margin: '4px 0', fontSize: 13, whiteSpace: 'pre-wrap' }}>
-                {versionDetail.release_notes}
-              </Paragraph>
-            </div>
-          )}
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>内容哈希</Text>
-            <div style={{ marginTop: 2 }}>
-              <Space>
-                <Text code style={{ fontSize: 11 }}>
-                  {versionDetail.content_hash.substring(0, 32)}…
-                </Text>
-                <Tooltip title="复制哈希">
-                  <Button
-                    size="small"
-                    type="text"
-                    icon={<CopyOutlined />}
-                    onClick={() => {
-                      void navigator.clipboard.writeText(versionDetail.content_hash);
-                      message.success('已复制');
-                    }}
-                  />
-                </Tooltip>
-              </Space>
-            </div>
-          </div>
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>发布者</Text>
-            <div style={{ marginTop: 2 }}>
-              <Text style={{ fontSize: 12 }}>{versionDetail.publisher}</Text>
-            </div>
-          </div>
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>发布时间</Text>
-            <div style={{ marginTop: 2 }}>
-              <Text style={{ fontSize: 12 }}>
-                {versionDetail.published_at
-                  ? new Date(versionDetail.published_at).toLocaleString()
-                  : '—'}
-              </Text>
-            </div>
-          </div>
-        </Space>
-      ) : (
+      label: '数据预览',
+      children: versionDetail ? (() => {
+        const structured = versionDetail.summary
+          ? tryParseStructured(versionDetail.summary)
+          : null;
+        if (structured) {
+          return <StructuredConclusionDisplay data={structured} />;
+        }
+        return versionDetail.summary ? (
+          <Paragraph style={{ fontSize: 13 }}>
+            {versionDetail.summary}
+          </Paragraph>
+        ) : (
+          <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        );
+      })() : (
         <Empty description="暂无版本信息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
       ),
     },
     {
-      key: 'datasets' as VersionTab,
-      label: (
-        <Space size={4}>
-          <DatabaseOutlined />
-          <span>数据集 ({datasetRefs.length})</span>
-        </Space>
-      ),
-      children: datasetRefs.length === 0 ? (
-        <Empty description="无数据集" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ) : (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {datasetRefs.map((ref, idx) => {
-            const dsId = String(ref.dataset_id ?? '');
-            const vn = Number(ref.version_number ?? 0);
-            const cacheKey = `dataset:${dsId}`;
-            const itemData = itemDetails[cacheKey];
-            return (
-              <Card
-                key={`ds-${idx}`}
-                size="small"
-                style={{ marginBottom: 8 }}
-                title={
-                  <Space>
-                    <Tag color="blue">v{vn}</Tag>
-                    <Text style={{ fontSize: 13 }}>{dsId.substring(0, 8)}…</Text>
-                  </Space>
-                }
-              >
-                {loadingItem === cacheKey ? (
-                  <Spin size="small" />
-                ) : itemData ? (
-                  <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', margin: 0 }}>
-                    {JSON.stringify(itemData, null, 2)}
-                  </pre>
-                ) : (
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => handleLoadItem('dataset', dsId)}
-                  >
-                    加载详情
-                  </Button>
-                )}
-              </Card>
-            );
-          })}
-        </Space>
-      ),
-    },
-    {
-      key: 'views' as VersionTab,
-      label: (
-        <Space size={4}>
-          <BarChartOutlined />
-          <span>视图 ({viewRefs.length})</span>
-        </Space>
-      ),
-      children: viewRefs.length === 0 ? (
-        <Empty description="无视图" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ) : (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {viewRefs.map((ref, idx) => {
-            const vId = String(ref.view_id ?? '');
-            const vn = Number(ref.version_number ?? 0);
-            const cacheKey = `view:${vId}`;
-            const itemData = itemDetails[cacheKey];
-            return (
-              <Card
-                key={`vw-${idx}`}
-                size="small"
-                style={{ marginBottom: 8 }}
-                title={
-                  <Space>
-                    <Tag color="blue">v{vn}</Tag>
-                    <Text style={{ fontSize: 13 }}>{vId.substring(0, 8)}…</Text>
-                  </Space>
-                }
-              >
-                {loadingItem === cacheKey ? (
-                  <Spin size="small" />
-                ) : itemData ? (
-                  <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', margin: 0 }}>
-                    {JSON.stringify(itemData, null, 2)}
-                  </pre>
-                ) : (
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => handleLoadItem('view', vId)}
-                  >
-                    加载详情
-                  </Button>
-                )}
-              </Card>
-            );
-          })}
-        </Space>
-      ),
-    },
-    {
-      key: 'insights' as VersionTab,
-      label: (
-        <Space size={4}>
-          <BulbOutlined />
-          <span>Insights ({insightRefs.length})</span>
-        </Space>
-      ),
-      children: insightRefs.length === 0 ? (
-        <Empty description="无 Insight" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-      ) : (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {insightRefs.map((ref, idx) => {
-            const iId = String(ref.insight_id ?? '');
-            const vn = Number(ref.version_number ?? 0);
-            const cacheKey = `insight:${iId}`;
-            const itemData = itemDetails[cacheKey];
-            return (
-              <Card
-                key={`ins-${idx}`}
-                size="small"
-                style={{ marginBottom: 8 }}
-                title={
-                  <Space>
-                    <Tag color="blue">v{vn}</Tag>
-                    <Text style={{ fontSize: 13 }}>{iId.substring(0, 8)}…</Text>
-                  </Space>
-                }
-              >
-                {loadingItem === cacheKey ? (
-                  <Spin size="small" />
-                ) : itemData ? (
-                  <pre style={{ fontSize: 11, maxHeight: 200, overflow: 'auto', margin: 0 }}>
-                    {JSON.stringify(itemData, null, 2)}
-                  </pre>
-                ) : (
-                  <Button
-                    size="small"
-                    type="link"
-                    onClick={() => handleLoadItem('insight', iId)}
-                  >
-                    加载详情
-                  </Button>
-                )}
-              </Card>
-            );
-          })}
-        </Space>
-      ),
-    },
-    {
       key: 'provenance' as VersionTab,
-      label: (
-        <Space size={4}>
-          <NodeIndexOutlined />
-          <span>数据溯源</span>
-        </Space>
-      ),
+      label: '数据溯源',
       children: versionDetail ? (
         <ProvenanceTab
           fetchGraph={async (maxDepth: number) => {
