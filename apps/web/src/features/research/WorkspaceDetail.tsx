@@ -176,7 +176,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
 
       <Row gutter={16}>
         {/* 左栏：AI推荐 → 数据快照 */}
-        <Col xs={24} lg={6}>
+        <Col xs={24} lg={8}>
           {/* AI 推荐问题 */}
           {hasSnapshot && (
             <RecommendationPanel
@@ -261,7 +261,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         </Col>
 
         {/* 右栏：结论栏 + 结论库（Tab 切换） */}
-        <Col xs={24} lg={10}>
+        <Col xs={24} lg={8}>
           <ConclusionBarPanel
             workspaceId={workspaceId}
             conclusions={conclusions}
