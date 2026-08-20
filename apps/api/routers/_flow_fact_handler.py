@@ -210,6 +210,19 @@ async def persist_run_as_fact_handler(
     )
 
     file_stem = Path(source_filename).stem if source_filename else ""
+    if not file_stem:
+        # source_filename 为空时，从 header 中尝试提取文件名
+        for key in ("文件名", "filename", "file_name", "source_file", "原始文件名"):
+            val = header.get(key) if isinstance(header, dict) else None
+            if val and isinstance(val, str) and val.strip():
+                file_stem = Path(val).stem
+                break
+    if not file_stem:
+        # 仍无文件名时，用 source_artifact_id 后 8 位做区分后缀
+        _art_id_str = str(pdf_artifact_id or data_artifact_id or "")
+        if _art_id_str:
+            file_stem = _art_id_str[-8:]
+
     subject_id = (
         f"{snapshot.task_name or ''}-{file_stem}"
         if file_stem
