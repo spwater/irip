@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -28,7 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
-from packages.common.database import ScopedSessionMixin
+from packages.common.database import ScopedSessionMixin, build_session_factory
 from packages.common.errors import AppError
 from packages.research.entities import ResearchResult, ResearchResultVersion
 from packages.research.repository.result import ResultRepository
@@ -246,10 +247,13 @@ class ConclusionBarService(ScopedSessionMixin):
             # 3. Normalise + merge
             assembled = self._merge_structured(items, command.title)
 
+            # 3.5 LLM 概括标题
+            result_name = command.title or await self._summarize_title(assembled)
+            assembled.setdefault("metadata", {})["title"] = result_name
+
             # 4. 直接生成 ResearchResult（跳过 Conclusion 中间步骤）
             statement = json.dumps(assembled, ensure_ascii=False)
             content_hash = hashlib.sha256(statement.encode("utf-8")).hexdigest()
-            result_name = command.title or assembled.get("metadata", {}).get("title", "最终结论")
 
             result = ResearchResult(
                 workspace_id=command.workspace_id,
@@ -537,12 +541,14 @@ class ConclusionBarService(ScopedSessionMixin):
                     fm = manifest.get(fid, {}) if isinstance(manifest, dict) else {}
                     if not isinstance(fm, dict):
                         fm = {}
-                    source_facts.append({
-                        "fact_id": fid,
-                        "name": fm.get("name", fm.get("task_name", fid[:8])),
-                        "task_name": fm.get("task_name", ""),
-                        "equipment_name": fm.get("equipment_name", ""),
-                    })
+                    source_facts.append(
+                        {
+                            "fact_id": fid,
+                            "name": fm.get("name", fm.get("task_name", fid[:8])),
+                            "task_name": fm.get("task_name", ""),
+                            "equipment_name": fm.get("equipment_name", ""),
+                        }
+                    )
 
             return {
                 "id": str(result.id),
@@ -568,6 +574,112 @@ class ConclusionBarService(ScopedSessionMixin):
     # ============================================================
     # Internal helpers
     # ============================================================
+
+    async def _summarize_title(self, assembled: dict[str, Any]) -> str:
+        """用 LLM 根据结构化数据概括一个简短标题。
+
+        Args:
+            assembled: 组装后的 {metadata, points, series, _tracing} dict。
+
+        Returns:
+            简短标题字符串（≤ 30 字）。LLM 调用失败时回退到 metadata.title 或 "最终结论"。
+        """
+        fallback = assembled.get("metadata", {}).get("title", "最终结论")
+        if not isinstance(fallback, str):
+            fallback = "最终结论"
+
+        # 提取关键信息供 LLM 概括
+        meta = assembled.get("metadata", {})
+        questions = meta.get("analysis_questions", [])
+        summary = meta.get("summary", "")
+        tracing = assembled.get("_tracing", [])
+        titles = [t.get("title", "") for t in tracing if isinstance(t, dict)]
+
+        # 构建简短 prompt
+        context_parts = []
+        if questions:
+            context_parts.append(f"分析问题: {'; '.join(questions[:3])}")
+        if summary:
+            context_parts.append(f"摘要: {summary}")
+        if titles:
+            context_parts.append(f"区块标题: {'; '.join(titles[:5])}")
+        if not context_parts:
+            return fallback
+
+        prompt = (
+            "请根据以下研究分析内容，概括一个简短的结论标题（不超过20个汉字，"
+            "不要加引号、不要加句号，直接输出标题文本）：\n\n" + "\n".join(context_parts)
+        )
+
+        try:
+            ai_config = await self._load_ai_config()
+            if not ai_config:
+                return fallback
+
+            from packages.ai.openai_compatible import OpenAICompatibleProvider
+            from packages.ai.providers import AIRequest
+
+            model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
+            provider = OpenAICompatibleProvider(
+                api_key=ai_config["api_key"],
+                base_url=ai_config["base_url"],
+                model=model_name,
+                thinking_enabled=False,
+            )
+            request = AIRequest(
+                messages=(
+                    {
+                        "role": "system",
+                        "content": "你是一个标题概括助手，根据研究内容生成简短标题。",
+                    },
+                    {"role": "user", "content": prompt},
+                ),
+            )
+            response = await provider.complete(request)
+            title = response.content.strip()
+            # 清理：去引号、去句号、限制长度
+            title = title.rstrip("。.")
+            title = title.strip("'")
+            title = title.strip('"')
+            title = title.strip("「")
+            title = title.strip("」")
+            if len(title) > 30:
+                title = title[:30]
+            return title or fallback
+        except Exception:
+            logger.warning("LLM summarize title failed, using fallback")
+            return fallback
+
+    async def _load_ai_config(self) -> dict[str, Any] | None:
+        """Load AI config from database."""
+        db_url = os.environ.get(
+            "IRIP_DATABASE_URL",
+            "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
+        )
+        factory = build_session_factory(db_url)
+        async with factory() as session:
+            result = await session.execute(
+                sa.text(
+                    "SELECT base_url, api_key, model_name, "
+                    "research_model_name, research_thinking_enabled "
+                    "FROM ai_config WHERE enabled = true "
+                    "ORDER BY updated_at DESC LIMIT 1"
+                )
+            )
+            row = result.first()
+            if row is None:
+                return None
+            from packages.common.crypto import EnvelopeCrypto
+
+            crypto = EnvelopeCrypto.from_env()
+            decrypted_key = crypto.decrypt(row[1])
+            return {
+                "base_url": row[0],
+                "api_key": decrypted_key,
+                "model_name": row[2],
+                "research_model_name": row[3],
+                "research_thinking_enabled": row[4],
+            }
 
     @staticmethod
     def _to_ref(item: ResearchConclusionBarItem) -> BarItemRef:
