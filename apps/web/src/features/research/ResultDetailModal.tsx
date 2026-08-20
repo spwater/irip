@@ -150,12 +150,14 @@ export function ResultDetailModal({
                       dataIndex: 'name',
                       key: 'name',
                       ellipsis: true,
+                      width: '40%',
                     },
                     {
                       title: '测量设备',
                       dataIndex: 'equipment_name',
                       key: 'equipment_name',
                       ellipsis: true,
+                      width: '35%',
                       render: (v: string) => v || '-',
                     },
                     {
@@ -163,6 +165,7 @@ export function ResultDetailModal({
                       dataIndex: 'operator',
                       key: 'operator',
                       ellipsis: true,
+                      width: 80,
                       render: (v: string) => v || '-',
                     },
                   ]}
