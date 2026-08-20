@@ -15,7 +15,7 @@ import type { ConclusionRef } from "../../api/researchTimeline";
 const { Text } = Typography;
 
 /** Try to parse statement as JSON (structured data). Return null if not JSON. */
-function tryParseStructured(statement: string): Record<string, unknown> | null {
+export function tryParseStructured(statement: string): Record<string, unknown> | null {
   const trimmed = statement.trim();
   if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return null;
   try {

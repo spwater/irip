@@ -48,6 +48,7 @@ import { ResultVersionHistory } from './ResultVersionHistory';
 import { AclRevisionList } from './AclRevisionList';
 import { PermissionEnvelopeView } from './PermissionEnvelopeView';
 import { ProvenanceTab } from './ProvenanceTab';
+import { tryParseStructured, StructuredConclusionDisplay } from './ConclusionLibrary';
 
 const { Text, Paragraph } = Typography;
 
@@ -179,14 +180,20 @@ export function ResultDetailView({
       ),
       children: versionDetail ? (
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          {versionDetail.summary && (
-            <div>
-              <Text type="secondary" style={{ fontSize: 12 }}>摘要</Text>
-              <Paragraph style={{ margin: '4px 0', fontSize: 13 }}>
-                {versionDetail.summary}
-              </Paragraph>
-            </div>
-          )}
+          {versionDetail.summary && (() => {
+            const structured = tryParseStructured(versionDetail.summary);
+            if (structured) {
+              return <StructuredConclusionDisplay data={structured} />;
+            }
+            return (
+              <div>
+                <Text type="secondary" style={{ fontSize: 12 }}>摘要</Text>
+                <Paragraph style={{ margin: '4px 0', fontSize: 13 }}>
+                  {versionDetail.summary}
+                </Paragraph>
+              </div>
+            );
+          })()}
           {versionDetail.tags.length > 0 && (
             <div>
               <Text type="secondary" style={{ fontSize: 12 }}>标签</Text>
