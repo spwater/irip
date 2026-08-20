@@ -95,6 +95,10 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
 
     // Enhance option with safe defaults
     const safeOption = { ...parsed };
+    // 修正 title 为字符串的情况（ECharts 要求 { text: "..." } 格式）
+    if (typeof safeOption.title === 'string') {
+      safeOption.title = { text: safeOption.title };
+    }
     if (!safeOption.grid) safeOption.grid = {};
     safeOption.grid.containLabel = true;
     if (safeOption.xAxis && !Array.isArray(safeOption.xAxis)) {
