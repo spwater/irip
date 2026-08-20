@@ -31,11 +31,14 @@ from pydantic import BaseModel, Field
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from packages.research.timeline.analysis_service import AnalysisService
+from packages.research.timeline.conclusion_bar_service import ConclusionBarService
 from packages.research.timeline.conclusion_service import ConclusionService
 from packages.research.timeline.contracts import (
+    AssembleFinalConclusionCommand,
     CreateManualConclusionCommand,
     CreateSynthesisTurnCommand,
     CreateTurnCommand,
+    PushBarItemCommand,
     ReviseConclusionCommand,
 )
 from packages.research.timeline.recommendation_service import RecommendationService
@@ -61,6 +64,10 @@ def get_conclusion_service() -> ConclusionService:
     raise NotImplementedError("overridden by composition")
 
 
+def get_conclusion_bar_service() -> ConclusionBarService:
+    raise NotImplementedError("overridden by composition")
+
+
 def get_recommendation_service() -> RecommendationService:
     raise NotImplementedError("overridden by composition")
 
@@ -72,6 +79,7 @@ def get_analysis_service() -> AnalysisService:
 TimelineQueryDep = Annotated[TimelineQueryService, Depends(get_timeline_query_service)]
 TurnServiceDep = Annotated[TurnService, Depends(get_turn_service)]
 ConclusionServiceDep = Annotated[ConclusionService, Depends(get_conclusion_service)]
+ConclusionBarServiceDep = Annotated[ConclusionBarService, Depends(get_conclusion_bar_service)]
 RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommendation_service)]
 AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 
@@ -125,6 +133,44 @@ class ReviseConclusionRequest(BaseModel):
 
 class ConclusionReviewCompleteRequest(BaseModel):
     pass
+
+
+# ---- Conclusion bar request models ----
+
+
+class PushBarItemRequest(BaseModel):
+    block_type: str = Field(..., min_length=1, max_length=32)
+    title: str = Field(..., min_length=1, max_length=500)
+    content_snapshot: dict[str, Any]
+    block_index: int = Field(..., ge=0)
+    source_info: dict[str, Any] = Field(default_factory=dict)
+
+
+class FinalizeRequest(BaseModel):
+    item_ids: list[str] = Field(..., min_length=1, max_length=20)
+    title: str | None = None
+    idempotency_key: str = Field(..., min_length=1, max_length=128)
+
+
+class BarItemResponse(BaseModel):
+    id: str
+    workspace_id: str
+    turn_id: str
+    block_type: str
+    title: str
+    content_snapshot: dict[str, Any]
+    source_info: dict[str, Any]
+    created_at: str
+
+
+class BarItemListResponse(BaseModel):
+    items: list[BarItemResponse]
+
+
+class FinalizeResponse(BaseModel):
+    conclusion_id: str
+    statement: str
+    item_count: int
 
 
 # ---- Response models ----
@@ -642,3 +688,96 @@ async def run_analysis(
         except Exception:
             pass
         raise
+
+
+# ---- Conclusion bar endpoints ----
+
+
+@research_timeline_router.get(
+    "/workspaces/{workspace_id}/conclusion-bar/items",
+    response_model=BarItemListResponse,
+)
+async def list_conclusion_bar_items(
+    workspace_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> BarItemListResponse:
+    """List conclusion-bar items for a workspace (newest first)."""
+    data = await service.list_items(workspace_id)
+    return BarItemListResponse(items=[BarItemResponse(**item) for item in data["items"]])
+
+
+@research_timeline_router.post(
+    "/workspaces/{workspace_id}/turns/{turn_id}/conclusion-bar/items",
+    response_model=BarItemResponse,
+    status_code=201,
+)
+async def push_conclusion_bar_item(
+    workspace_id: UUID,
+    turn_id: UUID,
+    body: PushBarItemRequest,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> BarItemResponse:
+    """Push a report block snapshot to the conclusion bar."""
+    source_info = dict(body.source_info)
+    source_info.setdefault("block_index", body.block_index)
+    command = PushBarItemCommand(
+        workspace_id=workspace_id,
+        turn_id=turn_id,
+        block_type=body.block_type,
+        title=body.title,
+        content_snapshot=body.content_snapshot,
+        source_info=source_info,
+    )
+    ref = await service.push_item(command)
+    return BarItemResponse(
+        id=ref.id,
+        workspace_id=ref.workspace_id,
+        turn_id=ref.turn_id,
+        block_type=ref.block_type,
+        title=ref.title,
+        content_snapshot=ref.content_snapshot,
+        source_info=ref.source_info,
+        created_at=ref.created_at,
+    )
+
+
+@research_timeline_router.delete(
+    "/workspaces/{workspace_id}/conclusion-bar/items/{item_id}",
+)
+async def remove_conclusion_bar_item(
+    workspace_id: UUID,
+    item_id: UUID,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> dict[str, Any]:
+    """Remove a bar item from the conclusion bar."""
+    return await service.remove_item(workspace_id, item_id)
+
+
+@research_timeline_router.post(
+    "/workspaces/{workspace_id}/conclusion-bar/finalize",
+    response_model=FinalizeResponse,
+    status_code=201,
+)
+async def finalize_conclusion(
+    workspace_id: UUID,
+    body: FinalizeRequest,
+    current_user: ResearchUserDep,
+    service: ConclusionBarServiceDep,
+) -> FinalizeResponse:
+    """Assemble checked bar items into a final conclusion."""
+    title = body.title or "最终结论"
+    command = AssembleFinalConclusionCommand(
+        workspace_id=workspace_id,
+        item_ids=tuple(UUID(i) for i in body.item_ids),
+        title=title,
+        idempotency_key=body.idempotency_key,
+    )
+    result = await service.assemble_final_conclusion(command)
+    return FinalizeResponse(
+        conclusion_id=result["conclusion_id"],
+        statement=result["statement"],
+        item_count=result["item_count"],
+    )

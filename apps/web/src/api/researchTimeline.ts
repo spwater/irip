@@ -38,7 +38,7 @@ export type QuestionOrigin =
 export type ExtractionStatus = "queued" | "running" | "succeeded" | "failed" | "task_lost";
 
 export type CandidateStatus = "pending" | "saved" | "rejected";
-export type SourceType = "ai_original" | "ai_edited" | "manual";
+export type SourceType = "ai_original" | "ai_edited" | "manual" | "assembled";
 export type EvidenceStatus = "data_supported" | "manual_unverified";
 
 export interface TimelineItem {

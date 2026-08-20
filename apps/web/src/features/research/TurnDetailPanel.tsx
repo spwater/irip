@@ -6,7 +6,7 @@
  * when the turn is created.
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef, type ReactNode, type ReactElement } from 'react';
 import { Tag, Typography, Spin, message, Empty, Button, Collapse, Table } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +15,8 @@ import { ChartRefBlock } from '@/features/assistant/ChartRefBlock';
 import { ChartBlock } from '@/features/assistant/message-thread/components/ChartBlock';
 import { http } from '@/api/client';
 import type { TurnDetail } from '@/api/researchTimeline';
+import { ReportBlockWrapper, detectBlockType } from './ReportBlockWrapper';
+import { buildTableSnapshot, type BlockType } from './blockUtils';
 
 const { Text, Paragraph } = Typography;
 
@@ -41,6 +43,7 @@ const STATUS_LABELS: Record<string, string> = {
 export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Props) {
   const [detail, setDetail] = useState<TurnDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const blockIndexRef = useRef(0);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -85,6 +88,80 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
   const { turn, result, candidates, access_restricted } = detail;
   const statusLabel = STATUS_LABELS[turn.status] || turn.status;
   const isActive = ['queued', 'running', 'planning'].includes(turn.status);
+
+  // Reset block index each render; blocks re-number in document order
+  blockIndexRef.current = 0;
+  const turnInfo = {
+    workspaceId,
+    turnId,
+    turnNumber: turn.turn_number,
+    snapshotNumber: null,
+    questionText: turn.question_text,
+  };
+
+  /** Render the inner block content for a recognised code-block language. */
+  const renderInnerBlock = (lang: string, codeStr: string): ReactNode => {
+    if (lang === 'chart-ref' || lang === 'chart') {
+      return (
+        <ChartRefBlock specStr={codeStr} sampleData={detail.fact_samples} />
+      );
+    }
+    if (lang === 'echarts') {
+      let echartsStr = codeStr
+        .replace(/"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[\s\S]*?\}\s*(?=,\s*")/g, '"formatter": "{b}: {c}"')
+        .replace(/"formatter"\s*:\s*\([^)]*\)\s*=>\s*\{[\s\S]*?\}\s*(?=,\s*")/g, '"formatter": "{b}: {c}"');
+      if (echartsStr.includes('function')) {
+        echartsStr = echartsStr.replace(/"formatter"\s*:\s*function[\s\S]*?\}\s*,/g, '"formatter": "{b}: {c}",');
+      }
+      return <ChartBlock optionStr={echartsStr} />;
+    }
+    if (lang === 'describe_series' || lang === 'describe-series' || lang === 'describeSeries') {
+      try {
+        const parsed = JSON.parse(codeStr);
+        const rawData = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (rawData && Array.isArray(rawData.data)) {
+          const name = typeof rawData.name === 'string' ? rawData.name : '数据序列';
+          const data = rawData.data.map((v: unknown) => (typeof v === 'number' ? v : Number(v)));
+          const option = {
+            title: { text: name, left: 'center' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: data.map((_: number, i: number) => i + 1), name: '序号' },
+            yAxis: { type: 'value' },
+            series: [{ name, type: 'line', data, smooth: true }],
+          };
+          return <ChartBlock optionStr={JSON.stringify(option)} />;
+        }
+      } catch {
+        // fall through to default code rendering
+      }
+      return <code>{codeStr}</code>;
+    }
+    if (lang === 'data' || lang === 'json') {
+      try {
+        const parsed = JSON.parse(codeStr);
+        return (
+          <StructuredDataBlock
+            data={parsed}
+            workspaceId={workspaceId}
+            turnId={turnId}
+            onSaved={onConclusionSaved}
+          />
+        );
+      } catch {
+        return (
+          <details style={{ margin: '8px 0' }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8c8c8c' }}>
+              {'结构化数据（点击展开）'}
+            </summary>
+            <pre style={{ fontSize: 10, maxHeight: 300, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+              <code>{codeStr}</code>
+            </pre>
+          </details>
+        );
+      }
+    }
+    return <code>{codeStr}</code>;
+  };
 
   return (
     <div style={{ padding: '0 4px' }}>
@@ -176,57 +253,50 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                 code({ className, children }) {
                   const lang = className?.replace('language-', '') || '';
                   const codeStr = String(children || '').replace(/\n$/, '');
-                  if (lang === 'chart-ref' || lang === 'chart') {
-                    return <ChartRefBlock key={`chartref-${codeStr.slice(0, 20)}`} specStr={codeStr} sampleData={detail.fact_samples} />;
-                  }
-                  if (lang === 'echarts') {
-                    let echartsStr = codeStr
-                      .replace(/"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[\s\S]*?\}\s*(?=,\s*")/g, '"formatter": "{b}: {c}"')
-                      .replace(/"formatter"\s*:\s*\([^)]*\)\s*=>\s*\{[\s\S]*?\}\s*(?=,\s*")/g, '"formatter": "{b}: {c}"');
-                    if (echartsStr.includes('function')) {
-                      echartsStr = echartsStr.replace(/"formatter"\s*:\s*function[\s\S]*?\}\s*,/g, '"formatter": "{b}: {c}",');
-                    }
-                    return <ChartBlock key={`echarts-${codeStr.slice(0, 20)}`} optionStr={echartsStr} />;
-                  }
-                  if (lang === 'describe_series' || lang === 'describe-series' || lang === 'describeSeries') {
-                    try {
-                      const parsed = JSON.parse(codeStr);
-                      const rawData = Array.isArray(parsed) ? parsed[0] : parsed;
-                      if (rawData && Array.isArray(rawData.data)) {
-                        const name = typeof rawData.name === 'string' ? rawData.name : '数据序列';
-                        const data = rawData.data.map((v: unknown) => (typeof v === 'number' ? v : Number(v)));
-                        const option = {
-                          title: { text: name, left: 'center' },
-                          tooltip: { trigger: 'axis' },
-                          xAxis: { type: 'category', data: data.map((_: number, i: number) => i + 1), name: '序号' },
-                          yAxis: { type: 'value' },
-                          series: [{ name, type: 'line', data, smooth: true }],
-                        };
-                        return <ChartBlock key={`describe-${codeStr.slice(0, 20)}`} optionStr={JSON.stringify(option)} />;
-                      }
-                    } catch {
-                      // fall through to default code rendering
-                    }
+                  const isBlock =
+                    lang === 'chart-ref' ||
+                    lang === 'chart' ||
+                    lang === 'echarts' ||
+                    lang === 'describe_series' ||
+                    lang === 'describe-series' ||
+                    lang === 'describeSeries' ||
+                    lang === 'data' ||
+                    lang === 'json';
+                  if (!isBlock) {
                     return <code className={className}>{children}</code>;
                   }
-                  if (lang === 'data' || lang === 'json') {
-                    try {
-                      const parsed = JSON.parse(codeStr);
-                      return <StructuredDataBlock data={parsed} workspaceId={workspaceId} turnId={turnId} onSaved={onConclusionSaved} />;
-                    } catch {
-                      return (
-                        <details style={{ margin: '8px 0' }}>
-                          <summary style={{ cursor: 'pointer', fontSize: 12, color: '#8c8c8c' }}>
-                            {'结构化数据（点击展开）'}
-                          </summary>
-                          <pre style={{ fontSize: 10, maxHeight: 300, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
-                            <code>{children}</code>
-                          </pre>
-                        </details>
-                      );
-                    }
-                  }
-                  return <code className={className}>{children}</code>;
+                  const blockType = detectBlockType(lang) as BlockType;
+                  const blockIndex = blockIndexRef.current++;
+                  return (
+                    <ReportBlockWrapper
+                      key={`block-${blockIndex}`}
+                      blockType={blockType}
+                      codeStr={codeStr}
+                      blockIndex={blockIndex}
+                      turnInfo={turnInfo}
+                      sampleData={detail.fact_samples}
+                      lang={lang}
+                    >
+                      {renderInnerBlock(lang, codeStr)}
+                    </ReportBlockWrapper>
+                  );
+                },
+                table({ children }) {
+                  const blockIndex = blockIndexRef.current++;
+                  const { columns, rows } = extractTableFromChildren(children);
+                  return (
+                    <ReportBlockWrapper
+                      key={`block-${blockIndex}`}
+                      blockType="table"
+                      codeStr=""
+                      blockIndex={blockIndex}
+                      turnInfo={turnInfo}
+                      snapshotOverride={buildTableSnapshot(columns, rows)}
+                      title="数据表格"
+                    >
+                      <table>{children}</table>
+                    </ReportBlockWrapper>
+                  );
                 },
               }}
             >
@@ -377,4 +447,75 @@ function StructuredDataBlock({ data, workspaceId, turnId, onSaved }: { data: Rec
       <Collapse size="small" items={items} />
     </div>
   );
+}
+
+// ============================================================
+// Markdown table → {columns, rows} extraction (for conclusion-bar push)
+// ============================================================
+
+/** Recursively extract plain text from a React node tree. */
+function reactNodeToText(node: ReactNode): string {
+  if (node == null || node === false || node === true) return '';
+  if (typeof node === 'string') return node;
+  if (typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(reactNodeToText).join('');
+  if (typeof node === 'object' && 'props' in (node as object)) {
+    const el = node as ReactElement<{ children?: ReactNode }>;
+    return reactNodeToText(el.props.children);
+  }
+  return '';
+}
+
+/**
+ * Extract {columns, rows} from a ReactMarkdown `table` element's children.
+ * Walks thead > tr > th for columns and tbody > tr > td for rows.
+ */
+function extractTableFromChildren(
+  tableChildren: ReactNode,
+): { columns: string[]; rows: unknown[][] } {
+  const columns: string[] = [];
+  const rows: unknown[][] = [];
+
+  const visit = (node: ReactNode): void => {
+    if (node == null || node === false || node === true) return;
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+    if (typeof node === 'object' && 'props' in (node as object)) {
+      const el = node as ReactElement<{ children?: ReactNode }>;
+      const type = el.type;
+      if (type === 'thead' || type === 'tbody') {
+        visit(el.props.children);
+        return;
+      }
+      if (type === 'tr') {
+        const rawCells = el.props.children;
+        const cells = Array.isArray(rawCells) ? rawCells : [rawCells];
+        const values: string[] = [];
+        let isHeader = false;
+        for (const c of cells) {
+          if (
+            c != null &&
+            typeof c === 'object' &&
+            'props' in (c as object) &&
+            (c as ReactElement).type === 'th'
+          ) {
+            isHeader = true;
+          }
+          values.push(reactNodeToText(c));
+        }
+        if (isHeader) {
+          columns.push(...values);
+        } else {
+          rows.push(values);
+        }
+        return;
+      }
+      visit(el.props.children);
+    }
+  };
+
+  visit(tableChildren);
+  return { columns, rows };
 }

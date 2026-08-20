@@ -19,6 +19,7 @@ from apps.api.dependencies.auth import CurrentUser, get_current_user
 from apps.api.routers.research import get_snapshot_service, get_workspace_service
 
 if TYPE_CHECKING:
+    from packages.research.timeline.conclusion_bar_service import ConclusionBarService
     from packages.research.timeline.conclusion_service import ConclusionService
     from packages.research.timeline.turn_service import TurnService
 
@@ -104,6 +105,7 @@ def register(ctx: CompositionContext) -> None:
     # ---- Timeline services (Task 11) ----
     from apps.api.routers.research_timeline import (
         get_analysis_service,
+        get_conclusion_bar_service,
         get_conclusion_service,
         get_recommendation_service,
         get_timeline_query_service,
@@ -141,3 +143,13 @@ def register(ctx: CompositionContext) -> None:
 
     ctx.app.dependency_overrides[get_turn_service] = _get_turn_service_dep
     ctx.app.dependency_overrides[get_conclusion_service] = _get_conclusion_service_dep
+
+    async def _get_conclusion_bar_service_dep(
+        current_user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> "ConclusionBarService":
+        from packages.research.timeline.conclusion_bar_service import ConclusionBarService
+
+        dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
+        return ConclusionBarService(ctx.session_factory, dept_id, current_user.user_id)
+
+    ctx.app.dependency_overrides[get_conclusion_bar_service] = _get_conclusion_bar_service_dep

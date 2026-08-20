@@ -26,7 +26,7 @@ function tryParseStructured(statement: string): Record<string, unknown> | null {
 }
 
 /** Render structured data (metadata/points/series) as collapsible tables — same as TurnDetailPanel. */
-function StructuredConclusionDisplay({ data }: { data: Record<string, unknown> }) {
+export function StructuredConclusionDisplay({ data }: { data: Record<string, unknown> }) {
   const metadata = data.metadata as Record<string, unknown> | undefined;
   const points = data.points as Array<Record<string, unknown>> | undefined;
   const series = data.series as Array<Record<string, unknown>> | undefined;
@@ -128,6 +128,7 @@ const SOURCE_BADGE: Record<string, { label: string; color: string }> = {
   ai_original: { label: "AI", color: "blue" },
   ai_edited: { label: "AI（修改）", color: "cyan" },
   manual: { label: "人工", color: "orange" },
+  assembled: { label: "组装", color: "purple" },
 };
 
 export function ConclusionLibrary({

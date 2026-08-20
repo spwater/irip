@@ -13,8 +13,7 @@ import { http } from '@/api/client';
 import { EvidencePanel } from './EvidencePanel';
 import { WorkspaceTimeline } from './WorkspaceTimeline';
 import { RecommendationPanel } from './RecommendationPanel';
-import { ConclusionLibrary } from './ConclusionLibrary';
-import { SynthesisComposer } from './SynthesisComposer';
+import { ConclusionBarPanel } from './ConclusionBarPanel';
 import { ResearchComposer } from './ResearchComposer';
 import { TurnDetailPanel } from './TurnDetailPanel';
 
@@ -261,42 +260,22 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
           </Modal>
         </Col>
 
-        {/* 右栏：结论库 */}
+        {/* 右栏：结论栏 + 结论库（Tab 切换） */}
         <Col xs={24} lg={6}>
-          <Text strong style={{ fontSize: 15, marginBottom: 8, display: 'block' }}>
-            {'结论库'}
-          </Text>
-          <ConclusionLibrary
+          <ConclusionBarPanel
+            workspaceId={workspaceId}
             conclusions={conclusions}
             selectedRevisionIds={selectedRevisionIds}
-            onToggle={handleToggleConclusion}
+            onToggleConclusion={handleToggleConclusion}
             maxSelection={20}
-            workspaceId={workspaceId}
-            onDeleted={fetchConclusions}
+            onConclusionsChanged={fetchConclusions}
+            hasSnapshot={hasSnapshot}
+            snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
+            onSynthesisCreated={() => {
+              setSelectedRevisionIds(new Set());
+              setTimelineKey((k) => k + 1);
+            }}
           />
-
-          {/* 综合所选入口 */}
-          {hasSnapshot && selectedRevisionIds.size >= 2 && (
-            <div style={{ marginTop: 16 }}>
-              <SynthesisComposer
-                workspaceId={workspaceId}
-                snapshotId={detail.snapshots?.[0]?.snapshot_id ?? ''}
-                selectedRevisionIds={Array.from(selectedRevisionIds)}
-                onCreated={() => {
-                  setSelectedRevisionIds(new Set());
-                  setTimelineKey((k) => k + 1);
-                }}
-              />
-            </div>
-          )}
-
-          {hasSnapshot && (
-            <div style={{ marginTop: 16, padding: 12, background: 'var(--ocean-surface-structural)', borderRadius: 6 }}>
-              <Text type="secondary" style={{ fontSize: 13 }}>
-                {'选择历史结论后可"用于下一轮"或"综合所选"。'}
-              </Text>
-            </div>
-          )}
         </Col>
       </Row>
     </div>

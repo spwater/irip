@@ -204,6 +204,63 @@ class ReviseConclusionCommand:
             raise ValueError("statement must not be empty")
 
 
+MAX_BAR_ITEM_IDS = 20
+VALID_BAR_BLOCK_TYPES = ("echarts", "chart_ref", "structured", "table", "text")
+
+
+@dataclass(frozen=True)
+class PushBarItemCommand:
+    """Command to push a report block snapshot to the conclusion bar.
+
+    ``content_snapshot`` is locked at push time (full ECharts option for
+    chart blocks, parsed JSON for structured, ``{columns, rows}`` for table,
+    raw text for text).  ``source_info`` carries provenance:
+    ``{turn_number, snapshot_number, question_text, block_index}``.
+    """
+
+    workspace_id: UUID
+    turn_id: UUID
+    block_type: str
+    title: str
+    content_snapshot: dict[str, Any]
+    source_info: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.block_type not in VALID_BAR_BLOCK_TYPES:
+            raise ValueError(
+                f"block_type must be one of {VALID_BAR_BLOCK_TYPES}, got {self.block_type!r}"
+            )
+        if not self.title.strip():
+            raise ValueError("title must not be empty")
+        if not isinstance(self.content_snapshot, dict):
+            raise ValueError("content_snapshot must be a dict")
+        if not isinstance(self.source_info, dict):
+            raise ValueError("source_info must be a dict")
+
+
+@dataclass(frozen=True)
+class AssembleFinalConclusionCommand:
+    """Command to assemble checked bar items into a final conclusion.
+
+    ``item_ids`` must have 1-20 unique IDs.  ``idempotency_key`` must be
+    1-128 chars.
+    """
+
+    workspace_id: UUID
+    item_ids: tuple[UUID, ...]
+    title: str
+    idempotency_key: str
+
+    def __post_init__(self) -> None:
+        count = len(self.item_ids)
+        if count < 1 or count > MAX_BAR_ITEM_IDS:
+            raise ValueError(f"item_ids must have 1-{MAX_BAR_ITEM_IDS} items, got {count}")
+        if len(set(self.item_ids)) != count:
+            raise ValueError("item_ids must be unique")
+        if not self.idempotency_key or len(self.idempotency_key) > 128:
+            raise ValueError("idempotency_key must be 1-128 characters")
+
+
 # ============================================================
 # Refs (frozen dataclasses for inter-service passing)
 # ============================================================
@@ -264,6 +321,36 @@ class ConclusionRef:
     status: str
     revision_number: int
     statement: str
+
+
+@dataclass(frozen=True)
+class BarItemRef:
+    """Reference to a conclusion-bar item.
+
+    All ID/datetime fields are stringified for API serialisation.
+    """
+
+    id: str
+    workspace_id: str
+    turn_id: str
+    block_type: str
+    title: str
+    content_snapshot: dict[str, Any]
+    source_info: dict[str, Any]
+    created_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise to a plain dict for JSON API responses."""
+        return {
+            "id": self.id,
+            "workspace_id": self.workspace_id,
+            "turn_id": self.turn_id,
+            "block_type": self.block_type,
+            "title": self.title,
+            "content_snapshot": self.content_snapshot,
+            "source_info": self.source_info,
+            "created_at": self.created_at,
+        }
 
 
 # ============================================================

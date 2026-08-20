@@ -369,3 +369,42 @@ class ResearchConclusionRevision(Base):
         return (
             f"ResearchConclusionRevision(id={self.id!r}, revision_number={self.revision_number!r})"
         )
+
+
+class ResearchConclusionBarItem(Base):
+    """A pushed report block aggregated under a workspace's conclusion bar.
+
+    Each item is a data snapshot of a report block (echarts option, structured
+    data, table, text) pushed by the user from a turn's analysis report.  The
+    snapshot is locked at push time so it never depends on fact_samples again.
+    Workspace is the aggregation dimension; ``turn_id`` is kept for provenance.
+    """
+
+    __tablename__ = "research_conclusion_bar_item"
+
+    id: Mapped[UUID] = mapped_column(GUID, primary_key=True, default=new_id)
+    workspace_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("research_workspace.id", ondelete="CASCADE"), nullable=False
+    )
+    turn_id: Mapped[UUID] = mapped_column(
+        GUID, sa.ForeignKey("research_turn.id", ondelete="CASCADE"), nullable=False
+    )
+    block_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    title: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    content_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    source_info: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
+    )
+    created_by: Mapped[UUID] = mapped_column(GUID, sa.ForeignKey("app_user.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        UTCDateTime, server_default=sa.func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"ResearchConclusionBarItem(id={self.id!r}, block_type={self.block_type!r}, "
+            f"title={self.title!r})"
+        )
