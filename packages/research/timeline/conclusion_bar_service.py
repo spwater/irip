@@ -593,9 +593,7 @@ class ConclusionBarService(ScopedSessionMixin):
                 else None,
             }
 
-    async def withdraw_result(
-        self, workspace_id: UUID, result_id: UUID
-    ) -> None:
+    async def withdraw_result(self, workspace_id: UUID, result_id: UUID) -> None:
         """Withdraw a published result (status -> withdrawn)."""
         async with self._scoped_session() as session:
             result = await ResultRepository.get_result(session, result_id)
@@ -609,9 +607,7 @@ class ConclusionBarService(ScopedSessionMixin):
             result.status = "withdrawn"
             await session.commit()
 
-    async def republish_result(
-        self, workspace_id: UUID, result_id: UUID
-    ) -> None:
+    async def republish_result(self, workspace_id: UUID, result_id: UUID) -> None:
         """Re-publish a withdrawn result (status -> published)."""
         async with self._scoped_session() as session:
             result = await ResultRepository.get_result(session, result_id)
@@ -625,9 +621,7 @@ class ConclusionBarService(ScopedSessionMixin):
             result.status = "published"
             await session.commit()
 
-    async def delete_result(
-        self, workspace_id: UUID, result_id: UUID
-    ) -> None:
+    async def delete_result(self, workspace_id: UUID, result_id: UUID) -> None:
         """Delete a result permanently."""
         async with self._scoped_session() as session:
             result = await ResultRepository.get_result(session, result_id)
@@ -691,7 +685,9 @@ class ConclusionBarService(ScopedSessionMixin):
             from packages.ai.providers import AIRequest
 
             model_name = ai_config.get("model_name") or ai_config.get("research_model_name", "")
-            logger.info("_summarize_title: calling LLM model=%s, prompt_len=%d", model_name, len(prompt))
+            logger.info(
+                "_summarize_title: calling LLM model=%s, prompt_len=%d", model_name, len(prompt)
+            )
             provider = OpenAICompatibleProvider(
                 api_key=ai_config["api_key"],
                 base_url=ai_config["base_url"],
@@ -827,13 +823,13 @@ class ConclusionBarService(ScopedSessionMixin):
             return result
 
         if block_type == "table":
-            columns = snapshot.get("columns")
-            rows = snapshot.get("rows")
+            tbl_columns: list[Any] = list(snapshot.get("columns") or [])
+            tbl_rows: list[Any] = list(snapshot.get("rows") or [])
             result["series"].append(
                 {
                     "name": item.title,
-                    "columns": list(columns) if isinstance(columns, list) else [],
-                    "rows": list(rows) if isinstance(rows, list) else [],
+                    "columns": tbl_columns,
+                    "rows": tbl_rows,
                 }
             )
             return result

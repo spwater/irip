@@ -98,7 +98,7 @@ class TestBuildPayload:
         payload = provider._build_payload(_make_request())
 
         assert payload["model"] == "gpt-4o"
-        assert payload["max_tokens"] == 8192
+        assert payload["max_tokens"] == 50000
         assert payload["temperature"] == 0.0
         assert payload["seed"] == 42
         assert payload["messages"][0]["role"] == "system"

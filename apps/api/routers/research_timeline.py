@@ -750,8 +750,7 @@ async def run_analysis(
         import logging
         import os
 
-        from packages.common.session import build_session_factory
-
+        from packages.common.database import build_session_factory
         from packages.research.timeline.entities import ResearchTurn
 
         logger = logging.getLogger("irip.research")

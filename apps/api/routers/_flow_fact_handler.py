@@ -219,14 +219,16 @@ async def persist_run_as_fact_handler(
                 break
     if not file_stem:
         # 仍无文件名时，从 artifact 表查原始文件名
-        _art_id = pdf_artifact_id or data_artifact_id
-        if _art_id:
+        artifact_id_for_filename: UUID | None = pdf_artifact_id or data_artifact_id
+        if artifact_id_for_filename:
             try:
                 from packages.common.artifacts import Artifact as ArtifactEntity
 
                 async with service.session_factory() as _sess:
                     _art = await _sess.scalar(
-                        sa.select(ArtifactEntity).where(ArtifactEntity.id == _art_id)
+                        sa.select(ArtifactEntity).where(
+                            ArtifactEntity.id == artifact_id_for_filename
+                        )
                     )
                     if _art and _art.filename:
                         file_stem = Path(_art.filename).stem
