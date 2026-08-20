@@ -14,11 +14,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Col,
   Drawer,
   Form,
   Input,
   Modal,
   Popconfirm,
+  Row,
   Select,
   Space,
   Switch,
@@ -553,9 +555,29 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           </Space>
         </div>
         <Form form={form} layout="vertical">
-          <Form.Item name="department_id" label="归属部门">
-            <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="department_id" label="归属部门">
+                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="equipment_id"
+                label="设备仪器"
+                tooltip="选填。将该接口关联到具体的设备仪器。"
+              >
+                <Select
+                  placeholder="选择设备仪器（可选）"
+                  showSearch
+                  optionFilterProp="label"
+                  options={equipmentOptions}
+                  allowClear
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item
             name="visible_departments"
             label="可见单位"
@@ -571,20 +593,6 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
               allowClear
               style={{ width: '100%' }}
               maxTagCount={5}
-            />
-          </Form.Item>
-          <Form.Item
-            name="equipment_id"
-            label="设备仪器"
-            tooltip="选填。将该接口关联到具体的设备仪器。"
-          >
-            <Select
-              placeholder="选择设备仪器（可选）"
-              showSearch
-              optionFilterProp="label"
-              options={equipmentOptions}
-              allowClear
-              style={{ width: '100%' }}
             />
           </Form.Item>
           {advancedMode ? (
@@ -655,9 +663,29 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           </Space>
         </div>
         <Form form={editForm} layout="vertical">
-          <Form.Item name="department_id" label="归属部门">
-            <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="department_id" label="归属部门">
+                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="equipment_id"
+                label="设备仪器"
+                tooltip="选填。将该接口关联到具体的设备仪器。"
+              >
+                <Select
+                  placeholder="选择设备仪器（可选）"
+                  showSearch
+                  optionFilterProp="label"
+                  options={equipmentOptions}
+                  allowClear
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
           <Form.Item
             name="visible_departments"
             label="可见单位"
@@ -673,20 +701,6 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
               allowClear
               style={{ width: '100%' }}
               maxTagCount={5}
-            />
-          </Form.Item>
-          <Form.Item
-            name="equipment_id"
-            label="设备仪器"
-            tooltip="选填。将该接口关联到具体的设备仪器。"
-          >
-            <Select
-              placeholder="选择设备仪器（可选）"
-              showSearch
-              optionFilterProp="label"
-              options={equipmentOptions}
-              allowClear
-              style={{ width: '100%' }}
             />
           </Form.Item>
           {editAdvancedMode ? (
