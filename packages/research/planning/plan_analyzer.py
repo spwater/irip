@@ -477,6 +477,13 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     except Exception as exc:
                         logger.warning("Failed to save chart block: %s", exc)
 
+            # 9. 从 analysis_result 中剥离 ```data 块（已存为 artifact，报告不需要）
+            analysis_result = _re2.sub(
+                r"```data\s*\n[\s\S]*?```",
+                "",
+                analysis_result,
+            ).rstrip()
+
             result_data = {
                 "analysis_result": analysis_result,
                 "data_context": full_data_text,
@@ -491,7 +498,12 @@ class PlanAnalyzerMixin(PlanServiceBase):
             )
         except Exception as exc:
             import traceback
-            logger.error("Auto extract_insight after analyze_data failed: %s\n%s", exc, traceback.format_exc())
+
+            logger.error(
+                "Auto extract_insight failed: %s\n%s",
+                exc,
+                traceback.format_exc(),
+            )
         return result_data
 
     async def extract_insight(
@@ -559,7 +571,10 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             insight_candidate = None
             try:
-                print(f"[extract_insight] calling LLM, analysis_result_len={len(analysis_result)}", flush=True)
+                print(
+                    f"[extract_insight] calling LLM, analysis_result_len={len(analysis_result)}",
+                    flush=True,
+                )
                 response = await self._model_gateway.call(
                     task_type=TaskType.INSIGHT,
                     system_prompt=insight_system_prompt,
@@ -567,7 +582,10 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     research_context=insight_context,
                 )
                 answer = response.answer if hasattr(response, "answer") else str(response)
-                print(f"[extract_insight] LLM answer len={len(answer)}, first 200: {answer[:200]}", flush=True)
+                print(
+                    f"[extract_insight] LLM answer len={len(answer)}, first 200: {answer[:200]}",
+                    flush=True,
+                )
                 import json as _json
 
                 clean = answer.strip()
@@ -577,9 +595,12 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     clean = clean.rsplit("```", 1)[0]
                 clean = clean.strip()
                 insight_candidate = _json.loads(clean)
-                print(f"[extract_insight] parsed insight_candidate: {insight_candidate}", flush=True)
+                print(
+                    f"[extract_insight] parsed insight_candidate: {insight_candidate}", flush=True
+                )
             except (json.JSONDecodeError, AttributeError, IndexError) as exc:
                 import traceback
+
                 print(f"[extract_insight] FAILED: {exc}\n{traceback.format_exc()}", flush=True)
                 logger.warning("Insight extraction failed: %s", exc)
 
@@ -653,9 +674,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     try:
                         # 从 run 获取 turn_id
                         run_row = await session.execute(
-                            sa.text(
-                                "SELECT turn_id FROM research_analysis_run WHERE id = :rid"
-                            ),
+                            sa.text("SELECT turn_id FROM research_analysis_run WHERE id = :rid"),
                             {"rid": str(run_id)},
                         )
                         turn_row = run_row.first()
