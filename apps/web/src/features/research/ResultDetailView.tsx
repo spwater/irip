@@ -68,12 +68,13 @@ export function ResultDetailView({
   const [sourceFacts, setSourceFacts] = useState<SourceFact[]>([]);
 
   useEffect(() => {
-    if (workspaceId) {
-      apiGetResultDetail(workspaceId, resultId).then((d) => {
+    const wsId = workspaceId || resultRef.workspace_id;
+    if (wsId) {
+      apiGetResultDetail(wsId, resultId).then((d) => {
         setSourceFacts(d.source_facts ?? []);
       }).catch(() => {});
     }
-  }, [workspaceId, resultId]);
+  }, [workspaceId, resultId, resultRef.workspace_id]);
 
   // 保存名称编辑
   const handleSaveName = useCallback(async () => {

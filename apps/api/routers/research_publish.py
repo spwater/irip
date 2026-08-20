@@ -183,6 +183,7 @@ def _result_ref_to_dict(ref: Any) -> dict[str, Any]:
         "status": ref.status,
         "current_version": ref.current_version,
         "current_acl_type": ref.current_acl_type,
+        "workspace_id": str(ref.workspace_id) if hasattr(ref, "workspace_id") else "",
     }
 
 

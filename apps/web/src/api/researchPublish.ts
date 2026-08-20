@@ -39,6 +39,7 @@ export type ResultRef = {
   status: string;
   current_version: number;
   current_acl_type: string;
+  workspace_id?: string;
 };
 
 export type ResultVersionRef = {
