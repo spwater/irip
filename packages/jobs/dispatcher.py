@@ -187,9 +187,9 @@ class OutboxDispatcherService:
 
             # Default routing via job kind
             default_queue: str = "irip-normal"
-            payload: dict[str, Any] | None = event.payload
-            if payload and "kind" in payload:
-                kind: str = str(payload["kind"])
+            default_payload: dict[str, Any] | None = event.payload
+            if default_payload and "kind" in default_payload:
+                kind: str = str(default_payload["kind"])
                 from packages.common.job_policy import JobKindPolicy
 
                 policy = JobKindPolicy.get_policy(kind)

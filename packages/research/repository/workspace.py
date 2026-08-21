@@ -62,7 +62,7 @@ class WorkspaceRepository:
     async def get_workspace(
         session: AsyncSession,
         workspace_id: UUID,
-        owner_user_id: UUID,
+        owner_user_id: UUID | None,
     ) -> ResearchWorkspace | None:
         """获取工作空间并校验所有者归属。
 

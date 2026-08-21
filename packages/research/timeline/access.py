@@ -30,7 +30,7 @@ from packages.research.timeline.entities import ResearchTurn
 async def require_owned_workspace(
     session: AsyncSession,
     workspace_id: UUID,
-    actor_id: UUID,
+    actor_id: UUID | None,
 ) -> ResearchWorkspace:
     """验证工作空间所有权，返回工作空间实体。
 
@@ -67,7 +67,7 @@ async def require_owned_turn(
     session: AsyncSession,
     workspace_id: UUID,
     turn_id: UUID,
-    actor_id: UUID,
+    actor_id: UUID | None,
 ) -> ResearchTurn:
     """验证工作空间所有权和 Turn 归属，返回 Turn 实体。
 

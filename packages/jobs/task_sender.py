@@ -32,6 +32,8 @@ class TaskSender(Protocol):
         name: str,
         args: list[Any],
         queue: str,
+        *,
+        kwargs: dict[str, Any] | None = None,
     ) -> object:
         """发送任务到指定队列。
 

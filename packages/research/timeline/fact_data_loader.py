@@ -41,7 +41,7 @@ class FactDataLoader:
         self._dept_id = department_id
         self._actor_id = actor_id
 
-    def _build_fact_provider(self):
+    def _build_fact_provider(self) -> Any:
         """Build CoreFactProviderImpl using the injected session factory."""
         try:
             from apps.api.main import _build_s3_repo

@@ -714,7 +714,9 @@ class RestoreService:
                 raise RuntimeError(
                     "age binary not found; install age to decrypt backup"
                 )
-            identity: str = self._config.age_identity or os.getenv(AGE_IDENTITY_ENV, "")
+            identity: str | None = self._config.age_identity or os.getenv(
+                AGE_IDENTITY_ENV, ""
+            )
             cmd: list[str] = ["age", "-d"]
             if identity:
                 cmd.extend(["-i", identity])
