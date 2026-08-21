@@ -288,7 +288,7 @@ services:
     profiles: ["dangerous-ops"]
     build:
       context: .
-      dockerfile: deployments/compose/api.Dockerfile
+      dockerfile: deployments/compose/ops.Dockerfile
     <<: *security-base
     logging: *logging-base
     networks:
@@ -325,7 +325,7 @@ services:
     profiles: ["dangerous-ops"]
     build:
       context: .
-      dockerfile: deployments/compose/api.Dockerfile
+      dockerfile: deployments/compose/ops.Dockerfile
     <<: *security-base
     logging: *logging-base
     networks:
