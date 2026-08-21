@@ -87,7 +87,7 @@ class TimelineQueryService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             await require_owned_workspace(session, workspace_id, self._actor_id)
-            # Phase 1: keyset query for turns
+            # Phase 1: keyset query for turns (1 query)
             turns, next_cursor = await TimelineRepository.list_turns(
                 session,
                 workspace_id=workspace_id,
@@ -95,39 +95,58 @@ class TimelineQueryService(ScopedSessionMixin):
                 page_size=page_size,
             )
 
-            # Phase 2: batch-load card metadata
+            if not turns:
+                return TimelinePage(
+                    items=[], next_cursor=None, active_run_status=None
+                )
+
+            turn_ids = [t.id for t in turns]
+
+            # Phase 2: batch-load card metadata (4 queries, not 4*N)
+            # 2a: context counts grouped by turn_id
+            ctx_rows = await session.execute(
+                sa.select(
+                    ResearchTurnContext.turn_id,
+                    sa.func.count().label("cnt"),
+                )
+                .where(ResearchTurnContext.turn_id.in_(turn_ids))
+                .group_by(ResearchTurnContext.turn_id)
+            )
+            ctx_counts: dict[UUID, int] = {
+                row[0]: row[1] for row in ctx_rows
+            }
+
+            # 2b: result existence (turn_ids with at least one result)
+            result_rows = await session.execute(
+                sa.select(ResearchTurnResult.turn_id)
+                .where(ResearchTurnResult.turn_id.in_(turn_ids))
+                .distinct()
+            )
+            has_result_set: set[UUID] = {row[0] for row in result_rows}
+
+            # 2c: candidate existence
+            cand_rows = await session.execute(
+                sa.select(ResearchConclusionCandidate.turn_id)
+                .where(ResearchConclusionCandidate.turn_id.in_(turn_ids))
+                .distinct()
+            )
+            has_candidates_set: set[UUID] = {row[0] for row in cand_rows}
+
+            # 2d: snapshot numbers
+            from packages.research.entities import ResearchEvidenceSnapshot
+
+            snapshot_ids = [t.evidence_snapshot_id for t in turns]
+            snap_rows = await session.execute(
+                sa.select(
+                    ResearchEvidenceSnapshot.id,
+                    ResearchEvidenceSnapshot.snapshot_number,
+                ).where(ResearchEvidenceSnapshot.id.in_(snapshot_ids))
+            )
+            snap_map: dict[UUID, int] = {row[0]: row[1] for row in snap_rows}
+
+            # Build cards (pure Python, no DB queries)
             cards: list[TimelineTurnCard] = []
             for turn in turns:
-                # Count context rows
-                context_count = await session.execute(
-                    sa.select(sa.func.count())
-                    .select_from(ResearchTurnContext)
-                    .where(ResearchTurnContext.turn_id == turn.id)
-                )
-                ctx_count = context_count.scalar_one()
-
-                # Check for result
-                has_result = await session.execute(
-                    sa.select(ResearchTurnResult.id)
-                    .where(ResearchTurnResult.turn_id == turn.id)
-                    .limit(1)
-                )
-                result_exists = has_result.first() is not None
-
-                # Check for candidates
-                has_candidates = await session.execute(
-                    sa.select(ResearchConclusionCandidate.id)
-                    .where(ResearchConclusionCandidate.turn_id == turn.id)
-                    .limit(1)
-                )
-                candidates_exist = has_candidates.first() is not None
-
-                # Get snapshot number
-                from packages.research.entities import ResearchEvidenceSnapshot
-
-                snapshot = await session.get(ResearchEvidenceSnapshot, turn.evidence_snapshot_id)
-                snapshot_number = snapshot.snapshot_number if snapshot else 0
-
                 cards.append(
                     TimelineTurnCard(
                         turn_id=turn.id,
@@ -136,11 +155,13 @@ class TimelineQueryService(ScopedSessionMixin):
                         status=turn.status,
                         question_text=turn.question_text_snapshot,
                         question_origin=turn.question_origin,
-                        snapshot_number=snapshot_number,
-                        selected_conclusion_count=ctx_count,
+                        snapshot_number=snap_map.get(
+                            turn.evidence_snapshot_id, 0
+                        ),
+                        selected_conclusion_count=ctx_counts.get(turn.id, 0),
                         created_at=turn.created_at,
-                        has_result=result_exists,
-                        has_candidates=candidates_exist,
+                        has_result=turn.id in has_result_set,
+                        has_candidates=turn.id in has_candidates_set,
                     )
                 )
 
