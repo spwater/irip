@@ -18,7 +18,7 @@ from apps.api.dependencies.authorization import require_permission
 from apps.api.routers.research_timeline import (
     research_timeline_router,
 )
-from packages.research.timeline.conclusion_bar_service import ConclusionBarService
+from apps.api.routers.timeline_dependencies import ConclusionBarServiceDep
 from packages.research.timeline.contracts import (
     AssembleFinalConclusionCommand,
     PushBarItemCommand,
@@ -27,17 +27,6 @@ from packages.research.timeline.contracts import (
 logger = logging.getLogger(__name__)
 
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
-
-
-def get_conclusion_bar_service() -> ConclusionBarService:
-    raise NotImplementedError("overridden by composition")
-
-
-ConclusionBarServiceDep = Annotated[
-    ConclusionBarService, Depends(get_conclusion_bar_service)
-]
-
-logger = logging.getLogger(__name__)
 
 
 # ---- Bar item request/response models ----

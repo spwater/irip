@@ -18,42 +18,16 @@ from apps.api.dependencies.authorization import require_permission
 from apps.api.routers.research_timeline import (
     research_timeline_router,
 )
-from packages.research.timeline.analysis_service import AnalysisService
-from packages.research.timeline.conclusion_service import ConclusionService
-from packages.research.timeline.timeline_query_service import (
-    TimelineQueryService,
+from apps.api.routers.timeline_dependencies import (
+    AnalysisServiceDep,
+    ConclusionServiceDep,
+    TimelineQueryDep,
+    TurnServiceDep,
 )
-from packages.research.timeline.turn_service import TurnService
 
 logger = logging.getLogger(__name__)
 
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
-
-
-def get_turn_service() -> TurnService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_timeline_query_service() -> TimelineQueryService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_conclusion_service() -> ConclusionService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_analysis_service() -> AnalysisService:
-    raise NotImplementedError("overridden by composition")
-
-
-TurnServiceDep = Annotated[TurnService, Depends(get_turn_service)]
-TimelineQueryDep = Annotated[
-    TimelineQueryService, Depends(get_timeline_query_service)
-]
-ConclusionServiceDep = Annotated[
-    ConclusionService, Depends(get_conclusion_service)
-]
-AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 
 
 # ---- Turn detail + plan + conclusion + analysis endpoints ----

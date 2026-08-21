@@ -29,56 +29,22 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from packages.research.timeline.analysis_service import AnalysisService
-from packages.research.timeline.conclusion_bar_service import ConclusionBarService
-from packages.research.timeline.conclusion_service import ConclusionService
+from apps.api.routers.timeline_dependencies import (
+    ConclusionServiceDep,
+    RecommendationServiceDep,
+    TimelineQueryDep,
+    TurnServiceDep,
+)
 from packages.research.timeline.contracts import (
     CreateManualConclusionCommand,
     CreateSynthesisTurnCommand,
     CreateTurnCommand,
     ReviseConclusionCommand,
 )
-from packages.research.timeline.recommendation_service import RecommendationService
-from packages.research.timeline.timeline_query_service import TimelineQueryService
-from packages.research.timeline.turn_service import TurnService
 
 logger = logging.getLogger(__name__)
 
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
-
-# ---- DI placeholders (overridden by composition/research.py) ----
-
-
-def get_timeline_query_service() -> TimelineQueryService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_turn_service() -> TurnService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_conclusion_service() -> ConclusionService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_conclusion_bar_service() -> ConclusionBarService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_recommendation_service() -> RecommendationService:
-    raise NotImplementedError("overridden by composition")
-
-
-def get_analysis_service() -> AnalysisService:
-    raise NotImplementedError("overridden by composition")
-
-
-TimelineQueryDep = Annotated[TimelineQueryService, Depends(get_timeline_query_service)]
-TurnServiceDep = Annotated[TurnService, Depends(get_turn_service)]
-ConclusionServiceDep = Annotated[ConclusionService, Depends(get_conclusion_service)]
-ConclusionBarServiceDep = Annotated[ConclusionBarService, Depends(get_conclusion_bar_service)]
-RecommendationServiceDep = Annotated[RecommendationService, Depends(get_recommendation_service)]
-AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 
 
 # ---- Router ----

@@ -64,16 +64,32 @@ async def _load_ai_config(
     soft_time_limit=120,
     time_limit=180,
 )
-def generate_recommendations(self: Any, batch_id: str) -> dict[str, Any]:
+def generate_recommendations(
+    self: Any,
+    batch_id: str,
+    *,
+    actor_id: str = "",
+    department_id: str = "",
+    workspace_id: str = "",
+) -> dict[str, Any]:
     """Generate recommendation questions for a batch.
+
+    Uses the principal kwargs (actor_id, department_id, workspace_id)
+    passed by the Outbox dispatcher for identity-aware execution.
 
     Args:
         batch_id: Recommendation batch ID as string.
+        actor_id: Actor user ID (from Outbox principal).
+        department_id: Department ID (from Outbox principal).
+        workspace_id: Workspace ID (from Outbox principal).
 
     Returns:
         Dict with batch_id, status, and item_count.
     """
     import asyncio
+
+    actor_uuid: UUID | None = UUID(actor_id) if actor_id else None
+    dept_uuid: UUID | None = UUID(department_id) if department_id else None
 
     async def _run() -> dict[str, Any]:
         from packages.research.timeline.recommendation_service import (
@@ -86,27 +102,36 @@ def generate_recommendations(self: Any, batch_id: str) -> dict[str, Any]:
         factory = _get_session_factory()
         gateway = await build_gateway_from_config()
 
-        # Resolve actor/dept from batch workspace owner
-        import sqlalchemy as sa
+        # Prefer the principal kwargs from the Outbox dispatcher; fall back to
+        # resolving the batch workspace owner for direct invocations that do
+        # not carry a validated principal.
+        resolved_actor = actor_uuid
+        resolved_dept = dept_uuid
+        if resolved_actor is None or resolved_dept is None:
+            import sqlalchemy as sa
 
-        async with factory() as session:
-            row = await session.execute(
-                sa.text(
-                    "SELECT w.owner_user_id, w.department_id "
-                    "FROM research_recommendation_batch b "
-                    "JOIN research_workspace w ON w.id = b.workspace_id "
-                    "WHERE b.id = :bid"
-                ),
-                {"bid": batch_id},
-            )
-            owner_row = row.first()
-            if owner_row is None:
-                return {"batch_id": batch_id, "status": "not_found", "item_count": 0}
+            async with factory() as session:
+                row = await session.execute(
+                    sa.text(
+                        "SELECT w.owner_user_id, w.department_id "
+                        "FROM research_recommendation_batch b "
+                        "JOIN research_workspace w ON w.id = b.workspace_id "
+                        "WHERE b.id = :bid"
+                    ),
+                    {"bid": batch_id},
+                )
+                owner_row = row.first()
+                if owner_row is None:
+                    return {"batch_id": batch_id, "status": "not_found", "item_count": 0}
+                if resolved_actor is None:
+                    resolved_actor = owner_row[0]
+                if resolved_dept is None:
+                    resolved_dept = owner_row[1]
 
         service = RecommendationService(
             session_factory=factory,
-            department_id=owner_row[1],
-            actor_id=owner_row[0],
+            department_id=resolved_dept,
+            actor_id=resolved_actor,
             model_gateway=gateway,
         )
         ref = await service.execute_batch(UUID(batch_id))

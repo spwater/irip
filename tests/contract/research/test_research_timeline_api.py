@@ -95,11 +95,12 @@ class TestAnalysisFeatureGuard:
         from fastapi.responses import JSONResponse
         from fastapi.testclient import TestClient
 
+        # Import the turns sub-router so /analyze attaches to the shared
+        # research_timeline_router (mirrors apps/api/main.py wiring).
+        import apps.api.routers.research_timeline_turns  # noqa: F401
         from apps.api.dependencies.auth import CurrentUser, get_current_user
-        from apps.api.routers.research_timeline import (
-            get_analysis_service,
-            research_timeline_router,
-        )
+        from apps.api.routers.research_timeline import research_timeline_router
+        from apps.api.routers.timeline_dependencies import get_analysis_service
         from packages.common import feature_flags
         from packages.common.error_codes import ErrorCode
         from packages.common.errors import AppError

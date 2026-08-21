@@ -103,15 +103,13 @@ def register(ctx: CompositionContext) -> None:
     ctx.app.dependency_overrides[get_snapshot_service] = _get_snapshot_service_dep
 
     # ---- Timeline services (Task 11) ----
-    from apps.api.routers.research_timeline import (
-        get_recommendation_service,
-    )
-    from apps.api.routers.research_timeline_bar import (
-        get_conclusion_bar_service,
-    )
-    from apps.api.routers.research_timeline_turns import (
+    # All six placeholder functions come from the single shared module so the
+    # dependency_overrides below match the objects every router injects.
+    from apps.api.routers.timeline_dependencies import (
         get_analysis_service,
+        get_conclusion_bar_service,
         get_conclusion_service,
+        get_recommendation_service,
         get_timeline_query_service,
         get_turn_service,
     )
