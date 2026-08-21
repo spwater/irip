@@ -350,18 +350,99 @@ def extract_candidates(
 
 @shared_task(name="research.timeline.reconcile")
 def reconcile_timeline() -> dict[str, Any]:
-    """Reconciler: fix stale queued/running research tasks.
+    """Reconciler: detect and requeue stale research tasks.
 
-    Runs every 30 seconds via Celery Beat.
+    Checks for stale queued/running Runs and Extraction Jobs,
+    requeues them via Outbox. Uses FOR UPDATE SKIP LOCKED for safety.
     """
     import asyncio
+
+    import sqlalchemy as sa
 
     logger.info("running timeline reconciler")
 
     async def _run() -> dict[str, Any]:
-        return {
-            "requeued": 0,
-            "marked_lost": 0,
-        }
+        from datetime import UTC, datetime, timedelta
+
+        from packages.research.execution.entities_trusted import (
+            ResearchAnalysisRun,
+        )
+        from packages.research.timeline.entities import (
+            CandidateExtractionJob,
+        )
+
+        factory = _get_session_factory()
+        requeued = 0
+        marked_lost = 0
+        stale_threshold = datetime.now(UTC) - timedelta(minutes=10)
+
+        async with factory() as session:
+            # Find stale Runs (queued/running for >10 min)
+            stale_runs = await session.execute(
+                sa.select(ResearchAnalysisRun)
+                .where(
+                    ResearchAnalysisRun.status.in_(["queued", "running"]),
+                    ResearchAnalysisRun.submitted_at < stale_threshold,
+                )
+                .limit(100)
+                .with_for_update(skip_locked=True)
+            )
+            for run in stale_runs.scalars():
+                if run.status == "queued":
+                    # Re-enqueue via Outbox
+                    from packages.jobs.outbox import OutboxDispatcher
+
+                    await OutboxDispatcher.enqueue(
+                        session,
+                        aggregate_type="research_analysis_run",
+                        aggregate_id=run.id,
+                        event_type="research.run.requested",
+                        payload={
+                            "actor_id": str(run.created_by) if run.created_by else "",
+                            "department_id": "",
+                            "workspace_id": str(run.workspace_id),
+                        },
+                    )
+                    requeued += 1
+                elif run.status == "running":
+                    run.status = "failed"
+                    run.error_summary = "Reconciler: stale run marked as failed"
+                    marked_lost += 1
+
+            # Find stale Extraction Jobs
+            stale_extractions = await session.execute(
+                sa.select(CandidateExtractionJob)
+                .where(
+                    CandidateExtractionJob.status.in_(["queued", "running"]),
+                    CandidateExtractionJob.created_at < stale_threshold,
+                )
+                .limit(100)
+                .with_for_update(skip_locked=True)
+            )
+            for job in stale_extractions.scalars():
+                if job.status == "queued":
+                    from packages.jobs.outbox import OutboxDispatcher
+
+                    await OutboxDispatcher.enqueue(
+                        session,
+                        aggregate_type="research_candidate_extraction",
+                        aggregate_id=job.id,
+                        event_type="research.candidate_extraction.requested",
+                        payload={
+                            "actor_id": "",
+                            "department_id": "",
+                            "workspace_id": str(
+                                job.workspace_id
+                            ) if hasattr(job, "workspace_id") else "",
+                        },
+                    )
+                    requeued += 1
+                elif job.status == "running":
+                    job.status = "failed"
+                    marked_lost += 1
+
+            await session.commit()
+
+        return {"requeued": requeued, "marked_lost": marked_lost}
 
     return asyncio.run(_run())
