@@ -686,7 +686,9 @@ jobs:
         ports:
           - 6379:6379
     env:
-      IRIP_DATABASE_URL: postgresql+psycopg://irip:test-password@localhost:5432/irip
+      # Runtime: irip_app (non-superuser, RLS-enforced) — RLS policies apply
+      IRIP_DATABASE_URL: postgresql+psycopg://irip_app:test-password@localhost:5432/irip
+      # Migrations: irip (superuser / migration role) — owns schema objects
       IRIP_ALEMBIC_DATABASE_URL: postgresql+psycopg://irip:test-password@localhost:5432/irip
       IRIP_REDIS_URL: redis://localhost:6379/0
       IRIP_JWT_SECRET: ci-test-secret-2026
@@ -698,7 +700,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
-      - run: alembic upgrade head
+      # Bootstrap irip_app role (NOSUPERUSER NOBYPASSRLS) then run migrations as irip
+      - name: Bootstrap limited database role & migrate
+        run: bash scripts/ci/bootstrap_limited_database_role.sh "postgresql://irip:test-password@localhost:5432/irip" "test-password"
       - name: Seed test data
         run: python scripts/seed_users.py
       - name: Start API in background

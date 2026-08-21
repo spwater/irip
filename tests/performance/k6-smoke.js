@@ -55,7 +55,8 @@ export const options = {
     'list_api_duration': ['p(95)<500'],     // 列表 API p95 ≤ 500ms
     'detail_api_duration': ['p(95)<300'],   // 详情 API p95 ≤ 300ms
     'api_timeouts': ['count==0'],           // 无 API 超时
-    'http_req_duration': ['p(99)<2000'],    // 99% 请求 < 2s
+    'http_req_failed': ['rate<0.01'],       // 内置 HTTP 错误率 < 1%
+    'http_req_duration': ['p(95)<1000'],     // 95% 请求 < 1s
   },
   noConnectionRefuse: true,
   userAgent: 'k6-irip-smoke/1.0',
