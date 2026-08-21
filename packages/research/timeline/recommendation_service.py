@@ -19,6 +19,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.common.database import ScopedSessionMixin
 from packages.research.timeline.contracts import (
     RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
     RECOMMENDATION_PROMPT_VERSION,
@@ -33,21 +34,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger("research.recommendation")
 
 
-class RecommendationService:
+class RecommendationService(ScopedSessionMixin):
     """Recommendation batch creation, execution and retry.
 
     This service is instantiated by the composition root with a
-    session_factory and optional ModelGateway.  The enqueue methods
-    run within the caller's transaction; the execute/retry methods
-    manage their own sessions.
+    session_factory, department_id, actor_id and optional ModelGateway.
     """
 
     def __init__(
         self,
         session_factory: Any,
+        department_id: UUID,
+        actor_id: UUID | None = None,
         model_gateway: Any | None = None,
     ) -> None:
         self._factory = session_factory
+        self._dept_id = department_id
+        self._actor_id = actor_id
+        self._rls_dept_id: UUID | None = None
         self._gateway = model_gateway
 
     @staticmethod

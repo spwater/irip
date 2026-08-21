@@ -16,7 +16,9 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
+from packages.research.timeline.access import require_owned_workspace
 from packages.research.timeline.contracts import (
     ConclusionRef,
     FixedConclusionInput,
@@ -43,17 +45,23 @@ from packages.research.timeline.repository import (
 logger = logging.getLogger("research.timeline_query")
 
 
-class TimelineQueryService:
+class TimelineQueryService(ScopedSessionMixin):
     """Read-only service for timeline pages and turn details.
 
-    Depends on session_factory only — no writes.
+    Depends on session_factory, department_id, actor_id — identity-aware
+    to enforce workspace ownership via RLS.
     """
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
+        department_id: UUID,
+        actor_id: UUID | None = None,
     ) -> None:
         self._factory = session_factory
+        self._dept_id = department_id
+        self._actor_id = actor_id
+        self._rls_dept_id: UUID | None = None
 
     async def list_timeline(
         self,
@@ -77,7 +85,8 @@ class TimelineQueryService:
         """
         page_size = validate_page_size(page_size)
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
+            await require_owned_workspace(session, workspace_id, self._actor_id)
             # Phase 1: keyset query for turns
             turns, next_cursor = await TimelineRepository.list_turns(
                 session,
@@ -164,7 +173,8 @@ class TimelineQueryService:
         Raises:
             AppError: not_found if turn doesn't exist or doesn't belong to workspace.
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
+            await require_owned_workspace(session, workspace_id, self._actor_id)
             turn = await TimelineRepository.get_turn(session, turn_id)
             if turn is None or turn.workspace_id != workspace_id:
                 raise AppError(
@@ -325,7 +335,8 @@ class TimelineQueryService:
         Raises:
             AppError: not_found if turn doesn't exist or doesn't belong to workspace.
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
+            await require_owned_workspace(session, workspace_id, self._actor_id)
             turn = await TimelineRepository.get_turn(session, turn_id)
             if turn is None or turn.workspace_id != workspace_id:
                 raise AppError(
