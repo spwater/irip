@@ -418,6 +418,24 @@ class TurnService(ScopedSessionMixin):
                 status="planning",
             )
 
+    async def delete_turn(self, workspace_id: UUID, turn_id: UUID) -> None:
+        """Delete a research turn and its related data (CASCADE).
+
+        Args:
+            workspace_id: Workspace ID (ownership check).
+            turn_id: Turn ID to delete.
+
+        Raises:
+            AppError: not_found if turn doesn't exist or doesn't belong to workspace.
+        """
+        from packages.research.timeline.access import require_owned_turn
+
+        async with self._scoped_session() as session:
+            turn = await require_owned_turn(
+                session, workspace_id, turn_id, self._actor_id
+            )
+            await session.delete(turn)
+
     @staticmethod
     def _derive_origin(
         recommendation_item_id: UUID | None,

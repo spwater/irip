@@ -354,63 +354,16 @@ async def retry_recommendation(
     workspace_id: UUID,
     batch_id: UUID,
     current_user: ResearchUserDep,
+    service: RecommendationServiceDep,
 ) -> BatchRefResponse:
     """Retry a failed recommendation batch."""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import ResearchRecommendationBatch
-    from packages.research.timeline.state_machine import (
-        RecommendationBatchStateMachine,
+    ref = await service.retry_batch(batch_id)
+    return BatchRefResponse(
+        batch_id=str(ref.batch_id),
+        workspace_id=str(workspace_id),
+        status=ref.status,
+        item_count=0,
     )
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        result = await session.execute(
-            sa.select(ResearchRecommendationBatch).where(
-                ResearchRecommendationBatch.id == batch_id,
-                ResearchRecommendationBatch.workspace_id == workspace_id,
-            )
-        )
-        batch = result.scalar_one_or_none()
-        if batch is None:
-            from packages.common.errors import AppError
-
-            raise AppError(
-                code="not_found",
-                message="Recommendation batch not found",
-                retryable=False,
-            )
-
-        # Transition to queued for retry
-        batch.status = RecommendationBatchStateMachine.transition(batch.status, "retry")
-        await session.commit()
-
-        # Create outbox event
-        from packages.jobs.outbox import OutboxDispatcher
-
-        async with factory() as session2:
-            await OutboxDispatcher.enqueue(
-                session2,
-                aggregate_type="research_recommendation_batch",
-                aggregate_id=batch.id,
-                event_type="research.recommendation.requested",
-                payload={"batch_id": str(batch.id), "mode": batch.mode},
-            )
-            await session2.commit()
-
-        return BatchRefResponse(
-            batch_id=str(batch.id),
-            workspace_id=str(batch.workspace_id),
-            status=batch.status,
-            item_count=0,
-        )
 
 
 @research_timeline_router.post(
@@ -583,31 +536,10 @@ async def delete_turn(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
+    service: TurnServiceDep,
 ) -> dict[str, Any]:
     """Delete a research turn and its related data (CASCADE)."""
-
-    import os
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import ResearchTurn
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        turn = await session.get(ResearchTurn, turn_id)
-        if turn is None or turn.workspace_id != workspace_id:
-            from packages.common.errors import AppError
-
-            raise AppError(
-                code="not_found",
-                message="轮次不存在",
-                retryable=False,
-            )
-        await session.delete(turn)
-        await session.commit()
+    await service.delete_turn(workspace_id, turn_id)
     return {"ok": True}
 
 
@@ -631,30 +563,11 @@ async def start_planning(
     workspace_id: UUID,
     turn_id: UUID,
     current_user: ResearchUserDep,
+    service: TurnServiceDep,
 ) -> dict[str, Any]:
     """Start generating an analysis plan for a turn."""
-    import os
-
-    from packages.common.database import build_session_factory
-    from packages.research.timeline.entities import ResearchTurn
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        turn = await session.get(ResearchTurn, turn_id)
-        if turn is None or turn.workspace_id != workspace_id:
-            from packages.common.errors import AppError
-
-            raise AppError(code="not_found", message="Turn not found", retryable=False)
-
-        if turn.status == "question_draft":
-            turn.status = "running"
-            await session.commit()
-
-        return {"turn_id": str(turn.id), "status": turn.status}
+    ref = await service.start_planning(turn_id)
+    return {"turn_id": str(ref.turn_id), "status": ref.status}
 
 
 @research_timeline_router.post("/extract-text")
@@ -754,32 +667,7 @@ async def run_analysis(
     )
 
     require_feature_enabled(RESEARCH_ANALYSIS_ENABLED, "research_analysis")
-    try:
-        return await service.run_analysis(workspace_id, turn_id)
-    except Exception:
-        # 兜底：确保任何未捕获异常都回滚 turn 状态为 run_failed
-        import logging
-        import os
-
-        from packages.common.database import build_session_factory
-        from packages.research.timeline.entities import ResearchTurn
-
-        logger = logging.getLogger("irip.research")
-        logger.exception("run_analysis failed, resetting turn %s to run_failed", turn_id)
-        try:
-            db_url = os.environ.get(
-                "IRIP_DATABASE_URL",
-                "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-            )
-            factory = build_session_factory(db_url)
-            async with factory() as session:
-                t = await session.get(ResearchTurn, turn_id)
-                if t and t.status not in ("succeeded", "run_failed"):
-                    t.status = "run_failed"
-                    await session.commit()
-        except Exception:
-            pass
-        raise
+    return await service.run_analysis(workspace_id, turn_id)
 
 
 # ---- Conclusion bar endpoints ----
