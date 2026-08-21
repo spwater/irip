@@ -115,7 +115,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]"
       # F-17: unit job 不跑需要 DB 的 integration 测试
-      - run: python -m pytest tests/unit -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=30
+      - run: python -m pytest tests/unit -v -m "not integration" --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=50
 
   # F-17: Contract tests -- 独立 job
   test-contract:
@@ -188,7 +188,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
       # H-10: 按目录独立执行，不加 marker 过滤
-      - run: python -m pytest tests/integration/ -v --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=20 --junit-xml=integration-results.xml
+      - run: python -m pytest tests/integration/ -v --cov=packages --cov=apps --cov-report=term-missing --cov-fail-under=50 --junit-xml=integration-results.xml
       # B-3: Upload JUnit XML for acceptance report generation
       - name: Upload test results
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
