@@ -382,6 +382,9 @@ def create_app() -> FastAPI:
         app.include_router(research_lineage_router)
         app.include_router(research_timeline_router)
 
+        # Import bar routes to register them on the shared research_timeline_router
+        import apps.api.routers.research_timeline_bar  # noqa: F401
+
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)
     async def handle_app_error(request: Request, exc: AppError) -> JSONResponse:

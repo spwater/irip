@@ -238,7 +238,7 @@ async def upload_file(
     data: bytes = spool.read()
     spool.close()
     size: int = total_size
-    file_hash: str = sha256.hexdigest()
+    sha256.hexdigest()
 
     filename: str = file.filename or "unnamed"
     content_type: str | None = file.content_type

@@ -595,5 +595,4 @@ async def run_analysis(
 
 
 # ---- Conclusion bar & results routes moved to research_timeline_bar.py ----
-# Import to register routes on the shared research_timeline_router:
-from apps.api.routers.research_timeline_bar import *  # noqa: F403, E402
+# Routes are registered on import via apps/api/main.py
