@@ -94,12 +94,25 @@ class TimelineRunFinalizer(ScopedSessionMixin):
             if turn and turn.status not in ("succeeded", "run_failed"):
                 turn.status = "succeeded"
 
-            # 4. Enqueue Candidate Extraction via Outbox
-            extraction_id = uuid.uuid4()
+            # 4. Persist CandidateExtractionJob + enqueue via Outbox (same transaction).
+            #    The Outbox aggregate_id MUST reference a persisted extraction job,
+            #    otherwise the worker has nothing to claim when it consumes the event.
+            from packages.research.timeline.repository import TimelineRepository
+
+            extraction_job = await TimelineRepository.get_extraction_by_run(
+                session, run_id
+            )
+            if extraction_job is None:
+                extraction_job = await TimelineRepository.insert_extraction_job(
+                    session,
+                    workspace_id=workspace_id,
+                    turn_id=turn_id,
+                    run_id=run_id,
+                )
             await OutboxDispatcher.enqueue(
                 session,
                 aggregate_type="research_candidate_extraction",
-                aggregate_id=extraction_id,
+                aggregate_id=extraction_job.id,
                 event_type="research.candidate_extraction.requested",
                 payload={
                     "actor_id": str(self._actor_id) if self._actor_id else "",

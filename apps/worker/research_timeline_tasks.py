@@ -26,6 +26,27 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     return build_session_factory(db_url)
 
 
+def _scoped_session(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    actor_id: UUID | None,
+    department_id: UUID | None,
+) -> Any:
+    """Build a GUC-scoped session for RLS-protected research tables.
+
+    The research tables (research_workspace / research_turn /
+    research_analysis_run / research_candidate_extraction_job …) are all
+    ``FORCE ROW LEVEL SECURITY``; a bare session leaves ``app.current_user_id``
+    and ``app.current_department_id`` as empty strings (fail-closed). This
+    helper delegates to ``packages.common.database.scoped_session`` so every
+    worker DB access carries the actor/department identity resolved from the
+    Outbox principal, and commits the transaction on normal exit.
+    """
+    from packages.common.database import scoped_session
+
+    return scoped_session(factory, department_id, actor_id)
+
+
 async def _load_ai_config(
     factory: async_sessionmaker[AsyncSession],
 ) -> dict[str, Any] | None:
@@ -110,7 +131,11 @@ def generate_recommendations(
         if resolved_actor is None or resolved_dept is None:
             import sqlalchemy as sa
 
-            async with factory() as session:
+            async with _scoped_session(
+                factory,
+                actor_id=resolved_actor,
+                department_id=resolved_dept,
+            ) as session:
                 row = await session.execute(
                     sa.text(
                         "SELECT w.owner_user_id, w.department_id "
@@ -178,12 +203,14 @@ def generate_plan(
         from packages.research.timeline.entities import ResearchTurn
 
         factory = _get_session_factory()
-        UUID(department_id) if department_id else None
-        UUID(actor_id) if actor_id else None
+        dept_uuid = UUID(department_id) if department_id else None
+        actor_uuid = UUID(actor_id) if actor_id else None
         ws_uuid = UUID(workspace_id) if workspace_id else None
         turn_uuid = UUID(turn_id)
 
-        async with factory() as session:
+        async with _scoped_session(
+            factory, actor_id=actor_uuid, department_id=dept_uuid
+        ) as session:
             turn = await session.get(ResearchTurn, turn_uuid)
             if turn is None:
                 return {"turn_id": turn_id, "status": "not_found", "plan_id": ""}
@@ -193,7 +220,6 @@ def generate_plan(
             # Transition planning -> plan_review on success
             if turn.status == "planning":
                 turn.status = "plan_review"
-                await session.commit()
 
             return {
                 "turn_id": turn_id,
@@ -250,7 +276,6 @@ def execute_analysis_run(
         factory = _get_session_factory()
         dept_uuid = UUID(department_id) if department_id else None
         actor_uuid = UUID(actor_id) if actor_id else None
-        UUID(workspace_id) if workspace_id else None
         run_uuid = UUID(run_id)
 
         finalizer = TimelineRunFinalizer(
@@ -259,11 +284,41 @@ def execute_analysis_run(
             actor_id=actor_uuid,
         )
 
-        # 1. Load run + turn + plan
-        async with factory() as session:
-            run = await session.get(ResearchAnalysisRun, run_uuid)
+        # 1. Atomically claim the run (CAS: queued -> running) and load its
+        #    turn/plan context.  The WHERE status='queued' guard ensures only
+        #    one worker proceeds, preventing duplicate AI calls on redelivery.
+        import sqlalchemy as sa
+
+        async with _scoped_session(
+            factory, actor_id=actor_uuid, department_id=dept_uuid
+        ) as session:
+            claimed = await session.execute(
+                sa.update(ResearchAnalysisRun)
+                .where(
+                    ResearchAnalysisRun.id == run_uuid,
+                    ResearchAnalysisRun.status == "queued",
+                )
+                .values(status="running", started_at=sa.func.now())
+                .returning(ResearchAnalysisRun)
+            )
+            run = claimed.scalar_one_or_none()
             if run is None:
-                return {"run_id": run_id, "turn_id": "", "status": "not_found"}
+                existing = await session.get(ResearchAnalysisRun, run_uuid)
+                if existing is None:
+                    return {"run_id": run_id, "turn_id": "", "status": "not_found"}
+                if existing.status == "succeeded":
+                    return {
+                        "run_id": run_id,
+                        "turn_id": str(existing.turn_id or ""),
+                        "status": "succeeded",
+                    }
+                # Already claimed (running) or terminal (failed/cancelled):
+                # never re-enter, avoiding duplicate AI invocation/charging.
+                return {
+                    "run_id": run_id,
+                    "turn_id": str(existing.turn_id or ""),
+                    "status": existing.status,
+                }
             turn_id = run.turn_id
             actual_ws_id = run.workspace_id
             plan_version_id = run.plan_version_id
@@ -405,50 +460,65 @@ def extract_candidates(
     async def _run() -> dict[str, Any]:
         import sqlalchemy as sa
 
+        from packages.common.errors import AppError
         from packages.research.execution.entities_trusted import (
             ResearchAnalysisPlanVersion,
         )
-        from packages.research.timeline.entities import (
-            CandidateExtractionJob,
-            ResearchTurn,
-        )
+        from packages.research.timeline.entities import ResearchTurn
+        from packages.research.timeline.repository import TimelineRepository
 
         factory = _get_session_factory()
         dept_uuid = UUID(department_id) if department_id else None
         actor_uuid = UUID(actor_id) if actor_id else None
         extraction_uuid = UUID(extraction_id)
 
-        async with factory() as session:
-            job = await session.get(CandidateExtractionJob, extraction_uuid)
-            if job is None:
+        # 1. Atomically claim the job via real CAS (UPDATE ... WHERE status='queued').
+        #    Guarantees a single worker owns the extraction, preventing duplicate
+        #    AI calls (and double billing) on concurrent redelivery.
+        async with _scoped_session(
+            factory, actor_id=actor_uuid, department_id=dept_uuid
+        ) as session:
+            try:
+                job = await TimelineRepository.update_extraction_status(
+                    session,
+                    extraction_uuid,
+                    expected_status="queued",
+                    new_status="running",
+                )
+            except AppError:
+                existing = await TimelineRepository.get_extraction_job(
+                    session, extraction_uuid
+                )
+                if existing is None:
+                    return {
+                        "extraction_id": extraction_id,
+                        "status": "not_found",
+                        "candidate_count": 0,
+                    }
+                if existing.status == "succeeded":
+                    logger.info("Extraction %s already done, skip", extraction_id)
+                    return {
+                        "extraction_id": extraction_id,
+                        "status": "succeeded",
+                        "candidate_count": 0,
+                    }
+                # Already claimed (running) or terminal (failed/cancelled):
+                # never re-enter to avoid duplicate AI invocation/charging.
                 return {
                     "extraction_id": extraction_id,
-                    "status": "not_found",
+                    "status": existing.status,
                     "candidate_count": 0,
                 }
-
-            # CAS: queued -> running
-            if job.status == "succeeded":
-                logger.info("Extraction %s already done, skip", extraction_id)
-                return {
-                    "extraction_id": extraction_id,
-                    "status": "succeeded",
-                    "candidate_count": 0,
-                }
-            if job.status not in ("queued", "running"):
-                return {
-                    "extraction_id": extraction_id,
-                    "status": job.status,
-                    "candidate_count": 0,
-                }
-            job.status = "running"
-            await session.commit()
 
             # Load turn to get workspace_id, snapshot_id, plan_version_id
             turn = await session.get(ResearchTurn, job.turn_id)
             if turn is None:
-                job.status = "failed"
-                await session.commit()
+                await TimelineRepository.update_extraction_status(
+                    session,
+                    extraction_uuid,
+                    expected_status="running",
+                    new_status="failed",
+                )
                 return {
                     "extraction_id": extraction_id,
                     "status": "failed",
@@ -467,8 +537,12 @@ def extract_candidates(
             )
             plan = plan_result.scalar_one_or_none()
             if plan is None:
-                job.status = "failed"
-                await session.commit()
+                await TimelineRepository.update_extraction_status(
+                    session,
+                    extraction_uuid,
+                    expected_status="running",
+                    new_status="failed",
+                )
                 return {
                     "extraction_id": extraction_id,
                     "status": "failed",
@@ -480,11 +554,18 @@ def extract_candidates(
         # Load AI config and build PlanService
         ai_config = await _load_ai_config(factory)
         if not ai_config:
-            async with factory() as session:
-                job = await session.get(CandidateExtractionJob, extraction_uuid)
-                if job:
-                    job.status = "failed"
-                    await session.commit()
+            async with _scoped_session(
+                factory, actor_id=actor_uuid, department_id=dept_uuid
+            ) as session:
+                try:
+                    await TimelineRepository.update_extraction_status(
+                        session,
+                        extraction_uuid,
+                        expected_status="running",
+                        new_status="failed",
+                    )
+                except AppError:
+                    pass
             return {
                 "extraction_id": extraction_id,
                 "status": "failed",
@@ -556,11 +637,18 @@ def extract_candidates(
             candidate_id = result.get("insight_candidate_id")
             candidates_created = 1 if candidate_id else 0
 
-            async with factory() as session:
-                job = await session.get(CandidateExtractionJob, extraction_uuid)
-                if job:
-                    job.status = "succeeded"
-                    await session.commit()
+            async with _scoped_session(
+                factory, actor_id=actor_uuid, department_id=dept_uuid
+            ) as session:
+                try:
+                    await TimelineRepository.update_extraction_status(
+                        session,
+                        extraction_uuid,
+                        expected_status="running",
+                        new_status="succeeded",
+                    )
+                except AppError:
+                    pass
 
             return {
                 "extraction_id": extraction_id,
@@ -569,11 +657,18 @@ def extract_candidates(
             }
         except Exception as exc:
             logger.exception("Extraction %s failed: %s", extraction_id, exc)
-            async with factory() as session:
-                job = await session.get(CandidateExtractionJob, extraction_uuid)
-                if job:
-                    job.status = "failed"
-                    await session.commit()
+            async with _scoped_session(
+                factory, actor_id=actor_uuid, department_id=dept_uuid
+            ) as session:
+                try:
+                    await TimelineRepository.update_extraction_status(
+                        session,
+                        extraction_uuid,
+                        expected_status="running",
+                        new_status="failed",
+                    )
+                except AppError:
+                    pass
             return {
                 "extraction_id": extraction_id,
                 "status": "failed",
@@ -612,7 +707,16 @@ def reconcile_timeline() -> dict[str, Any]:
         marked_lost = 0
         stale_threshold = datetime.now(UTC) - timedelta(minutes=10)
 
-        async with factory() as session:
+        # RLS context: reconciler is a Beat task with no user session, so it
+        # uses the system sentinel GUC to see rows across departments. Without
+        # this the research-table queries fail-closed and return no rows.
+        from apps.worker.tasks import get_system_guc
+
+        sys_dept, sys_user = get_system_guc()
+
+        async with _scoped_session(
+            factory, actor_id=sys_user, department_id=sys_dept
+        ) as session:
             # Find stale Runs (queued/running for >10 min)
             stale_runs = await session.execute(
                 sa.select(ResearchAnalysisRun)
@@ -676,8 +780,6 @@ def reconcile_timeline() -> dict[str, Any]:
                 elif job.status == "running":
                     job.status = "failed"
                     marked_lost += 1
-
-            await session.commit()
 
         return {"requeued": requeued, "marked_lost": marked_lost}
 
