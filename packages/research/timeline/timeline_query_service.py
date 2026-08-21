@@ -208,30 +208,47 @@ class TimelineQueryService(ScopedSessionMixin):
             # Load context
             context_rows = await TimelineRepository.list_turn_context(session, turn_id)
 
-            # Load selected conclusions
+            # Batch-load revisions for all context rows
+            revision_ids = [c.conclusion_revision_id for c in context_rows]
             selected_conclusions: list[FixedConclusionInput] = []
-            for ctx_row in context_rows:
-                revision = await session.get(
-                    ResearchConclusionRevision, ctx_row.conclusion_revision_id
+            if revision_ids:
+                rev_rows = await session.execute(
+                    sa.select(ResearchConclusionRevision)
+                    .where(ResearchConclusionRevision.id.in_(revision_ids))
                 )
-                if revision is None:
-                    continue
-                conclusion = await session.get(ResearchConclusion, revision.conclusion_id)
-                if conclusion is None:
-                    continue
-                selected_conclusions.append(
-                    FixedConclusionInput(
-                        revision_id=revision.id,
-                        statement=revision.statement,
-                        scope=revision.scope,
-                        limitations=revision.limitations,
-                        source_type=conclusion.source_type,
-                        evidence_status=conclusion.evidence_status,
-                        source_turn_id=conclusion.source_turn_id,
-                        source_run_id=conclusion.source_run_id,
-                        source_snapshot_id=None,
+                revisions_map = {r.id: r for r in rev_rows.scalars()}
+
+                # Batch-load conclusions for all revisions
+                conclusion_ids = [r.conclusion_id for r in revisions_map.values()]
+                if conclusion_ids:
+                    concl_rows = await session.execute(
+                        sa.select(ResearchConclusion)
+                        .where(ResearchConclusion.id.in_(conclusion_ids))
                     )
-                )
+                    conclusions_map = {c.id: c for c in concl_rows.scalars()}
+                else:
+                    conclusions_map = {}
+
+                for ctx_row in context_rows:
+                    revision = revisions_map.get(ctx_row.conclusion_revision_id)
+                    if revision is None:
+                        continue
+                    conclusion = conclusions_map.get(revision.conclusion_id)
+                    if conclusion is None:
+                        continue
+                    selected_conclusions.append(
+                        FixedConclusionInput(
+                            revision_id=revision.id,
+                            statement=revision.statement,
+                            scope=revision.scope,
+                            limitations=revision.limitations,
+                            source_type=conclusion.source_type,
+                            evidence_status=conclusion.evidence_status,
+                            source_turn_id=conclusion.source_turn_id,
+                            source_run_id=conclusion.source_run_id,
+                            source_snapshot_id=None,
+                        )
+                    )
 
             # Load result
             result_row = await TimelineRepository.get_turn_result(session, turn_id)
@@ -276,30 +293,62 @@ class TimelineQueryService(ScopedSessionMixin):
                     }
                 )
 
-            # Load saved conclusions for this turn
+            # Load saved conclusions for this turn (batch latest revisions)
             saved_result = await session.execute(
-                sa.select(ResearchConclusion).where(ResearchConclusion.source_turn_id == turn_id)
+                sa.select(ResearchConclusion).where(
+                    ResearchConclusion.source_turn_id == turn_id
+                )
             )
             saved_conclusions: list[ConclusionRef] = []
-            for concl in saved_result.scalars():
-                rev_result = await session.execute(
-                    sa.select(ResearchConclusionRevision)
-                    .where(ResearchConclusionRevision.conclusion_id == concl.id)
-                    .order_by(ResearchConclusionRevision.revision_number.desc())
-                    .limit(1)
+            saved_concl_list = list(saved_result.scalars())
+            if saved_concl_list:
+                # Batch-load latest revisions for all saved conclusions
+                saved_concl_ids = [c.id for c in saved_concl_list]
+                # Use a subquery to get max revision_number per conclusion_id
+                rev_subq = (
+                    sa.select(
+                        ResearchConclusionRevision.conclusion_id,
+                        sa.func.max(
+                            ResearchConclusionRevision.revision_number
+                        ).label("max_rev"),
+                    )
+                    .where(
+                        ResearchConclusionRevision.conclusion_id.in_(
+                            saved_concl_ids
+                        )
+                    )
+                    .group_by(ResearchConclusionRevision.conclusion_id)
+                    .subquery()
                 )
-                rev = rev_result.scalar_one_or_none()
-                saved_conclusions.append(
-                    ConclusionRef(
-                        conclusion_id=concl.id,
-                        workspace_id=concl.workspace_id,
-                        source_type=concl.source_type,
-                        evidence_status=concl.evidence_status,
-                        status=concl.status,
-                        revision_number=rev.revision_number if rev else 0,
-                        statement=rev.statement if rev else "",
+                rev_rows = await session.execute(
+                    sa.select(ResearchConclusionRevision)
+                    .join(
+                        rev_subq,
+                        (
+                            ResearchConclusionRevision.conclusion_id
+                            == rev_subq.c.conclusion_id
+                        )
+                        & (
+                            ResearchConclusionRevision.revision_number
+                            == rev_subq.c.max_rev
+                        ),
                     )
                 )
+                rev_map = {r.conclusion_id: r for r in rev_rows.scalars()}
+
+                for concl in saved_concl_list:
+                    rev = rev_map.get(concl.id)
+                    saved_conclusions.append(
+                        ConclusionRef(
+                            conclusion_id=concl.id,
+                            workspace_id=concl.workspace_id,
+                            source_type=concl.source_type,
+                            evidence_status=concl.evidence_status,
+                            status=concl.status,
+                            revision_number=rev.revision_number if rev else 0,
+                            statement=rev.statement if rev else "",
+                        )
+                    )
 
             turn_ref = TurnRef(
                 turn_id=turn.id,
