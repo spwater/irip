@@ -31,12 +31,27 @@ RUN --mount=type=cache,target=/build/node_modules/.vite \
 # ---- Stage 2: Serve ----
 FROM docker.m.daocloud.io/nginx:alpine
 
-# 复制 nginx 配置
-COPY deployments/compose/nginx.conf /etc/nginx/conf.d/default.conf
+# 移除 nginx 默认配置，避免冲突
+RUN rm -f /etc/nginx/conf.d/default.conf
+
+# 复制两份 nginx 配置到 templates 目录（不在 conf.d 下，避免被自动加载）
+# - nginx-tls.conf: 生产环境（80 重定向 + 443 TLS）
+# - nginx-http.conf: 开发环境（仅 80，无 TLS）
+COPY deployments/compose/nginx.conf /etc/nginx/templates/nginx-tls.conf
+COPY deployments/compose/nginx-http.conf /etc/nginx/templates/nginx-http.conf
+
+# 修改主 nginx.conf，从 /tmp（tmpfs，运行时可写）加载配置
+# web 容器以 read_only 模式运行，/etc/nginx/conf.d 不可写，/tmp 是 tmpfs
+RUN sed -i 's|include /etc/nginx/conf.d/\*.conf;|include /tmp/*.conf;|' /etc/nginx/nginx.conf
 
 # 复制构建产物
 COPY --from=builder /build/dist /usr/share/nginx/html
 
-EXPOSE 80
+# 通过 NGINX_CONF 环境变量选择配置文件
+# 开发环境设为 nginx-http.conf，生产环境设为 nginx-tls.conf
+ENV NGINX_CONF=nginx-http.conf
 
-CMD ["nginx", "-g", "daemon off;"]
+EXPOSE 80 443
+
+# 运行时将选中的配置复制到 /tmp/default.conf（tmpfs 可写），然后启动 nginx
+CMD ["sh", "-c", "cp /etc/nginx/templates/${NGINX_CONF} /tmp/default.conf && nginx -g 'daemon off;'"]

@@ -34,3 +34,5 @@ services:
   web:
     ports:
       - "8080:80"
+    environment:
+      NGINX_CONF: "nginx-http.conf"

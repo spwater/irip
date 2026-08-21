@@ -60,6 +60,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      NGINX_CONF: "nginx-tls.conf"
+    secrets:
+      - source: tls_fullchain
+      - source: tls_private_key
 
   postgres:
     secrets:
@@ -104,3 +109,7 @@ secrets:
     file: ./secrets/minio_secret_key
   irip_bootstrap_admin_password:
     file: ./secrets/bootstrap_admin_password
+  tls_fullchain:
+    file: ./secrets/tls_fullchain
+  tls_private_key:
+    file: ./secrets/tls_private_key
