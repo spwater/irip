@@ -648,6 +648,7 @@ async def save_as_conclusion(
 
 @research_timeline_router.post(
     "/workspaces/{workspace_id}/turns/{turn_id}/analyze",
+    status_code=202,
 )
 async def run_analysis(
     workspace_id: UUID,
@@ -655,11 +656,15 @@ async def run_analysis(
     current_user: ResearchUserDep,
     service: AnalysisServiceDep,
 ) -> dict[str, Any]:
-    """Run analysis using PlanService flow: generate plan -> confirm -> analyze_data.
+    """Submit an analysis run for async execution via Outbox.
 
-    P0 数据隔离守卫：RESEARCH_ANALYSIS_ENABLED 默认关闭（fail-closed），
-    关闭时直接返回 503 feature_disabled，不执行任何分析流程。
-    只读历史页面（timeline / turn detail）不受影响。
+    Returns 202 with run_id, turn_id, status=queued.  The actual
+    analysis is executed asynchronously by the Worker through the
+    ``research.run.requested`` Outbox event.
+
+    P0 data isolation guard: RESEARCH_ANALYSIS_ENABLED defaults to
+    fail-closed (503 feature_disabled when disabled).  Read-only
+    history pages (timeline / turn detail) are unaffected.
     """
     from packages.common.feature_flags import (
         RESEARCH_ANALYSIS_ENABLED,
@@ -667,7 +672,7 @@ async def run_analysis(
     )
 
     require_feature_enabled(RESEARCH_ANALYSIS_ENABLED, "research_analysis")
-    return await service.run_analysis(workspace_id, turn_id)
+    return await service.submit_run(workspace_id, turn_id)
 
 
 # ---- Conclusion bar endpoints ----
