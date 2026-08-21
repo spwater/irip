@@ -32,6 +32,7 @@ class LineageEdgeRepository:
         target_namespace: str,
         target_id: UUID,
         edge_type: str,
+        workspace_id: UUID,
         source_version: int | None = None,
         target_version: int | None = None,
     ) -> ResearchLineageEdge:
@@ -44,6 +45,7 @@ class LineageEdgeRepository:
             target_namespace: 目标命名空间。
             target_id: 目标对象 UUID。
             edge_type: 边类型。
+            workspace_id: 所属工作空间 ID（NOT NULL，用于 RLS 所有权隔离）。
             source_version: 源版本号（可选）。
             target_version: 目标版本号（可选）。
 
@@ -59,6 +61,7 @@ class LineageEdgeRepository:
             target_id=target_id,
             target_version=target_version,
             edge_type=edge_type,
+            workspace_id=workspace_id,
         )
         session.add(edge)
         await session.flush()

@@ -836,6 +836,9 @@ class ResearchLineageEdge(Base):
     仅追加：创建后不允许 UPDATE / DELETE。
     为阶段 5 ResearchLineageAdapter 提供数据源。
 
+    0088 迁移新增 workspace_id 列（NOT NULL, FK→research_workspace CASCADE），
+    用于 RLS 所有权隔离。所有新边必须在创建时提供 workspace_id。
+
     Attributes:
         id: 边 UUID（PK）。
         source_namespace: 源命名空间（如 research:workspace / research:dataset_version）。
@@ -845,6 +848,8 @@ class ResearchLineageEdge(Base):
         target_id: 目标对象 UUID。
         target_version: 目标版本号（可空）。
         edge_type: 边类型（workspace_to_result / dataset_to_result 等）。
+        workspace_id: 所属工作空间 ID（FK→research_workspace CASCADE，NOT NULL）。
+            用于 RLS 所有权隔离（0088 迁移）。
         created_at: 创建时间。
     """
 
@@ -858,6 +863,11 @@ class ResearchLineageEdge(Base):
     target_id: Mapped[UUID] = mapped_column(GUID, nullable=False)
     target_version: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     edge_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    workspace_id: Mapped[UUID] = mapped_column(
+        GUID,
+        sa.ForeignKey("research_workspace.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime, server_default=sa.func.now(), nullable=False
     )

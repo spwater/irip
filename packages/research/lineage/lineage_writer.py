@@ -17,6 +17,7 @@ import logging
 from typing import Any
 from uuid import UUID
 
+import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.research.dtos import LineageEdgeRef
@@ -43,6 +44,76 @@ class LineageWriterService:
         """
         self._factory = session_factory
 
+    # ------------------------------------------------------------------
+    # Workspace resolution helper (0088 RLS)
+    # ------------------------------------------------------------------
+
+    #: Namespaces that can be resolved directly (table has workspace_id).
+    _DIRECT_NS: dict[str, str] = {
+        "research:evidence_snapshot": "research_evidence_snapshot",
+        "research:analysis_run": "research_analysis_run",
+        "research:derived_dataset": "research_derived_dataset",
+        "research:view": "research_view",
+        "research:insight": "research_insight",
+        "research:knowledge_reference": "research_knowledge_reference",
+    }
+
+    #: Namespaces resolved indirectly through a parent table.
+    _INDIRECT_NS: dict[str, tuple[str, str, str]] = {
+        "research:analysis_step": ("research_analysis_step", "research_analysis_run", "run_id"),
+        "research:derived_dataset_version": (
+            "research_derived_dataset_version",
+            "research_derived_dataset",
+            "dataset_id",
+        ),
+        "research:dataset_version": (
+            "research_derived_dataset_version",
+            "research_derived_dataset",
+            "dataset_id",
+        ),
+        "research:view_version": ("research_view_version", "research_view", "view_id"),
+        "research:insight_version": ("research_insight_version", "research_insight", "insight_id"),
+        "research:result_version": ("research_result_version", "research_result", "result_id"),
+    }
+
+    @staticmethod
+    async def _resolve_workspace_id(
+        session: AsyncSession,
+        namespace: str,
+        object_id: UUID,
+    ) -> UUID | None:
+        """Resolve workspace_id from a research object namespace and ID.
+
+        Returns None for external namespaces (e.g. core:fact) or when the
+        object cannot be found (RLS may filter it out if GUCs are not set).
+        """
+        if namespace == "research:workspace":
+            return object_id
+
+        if namespace in LineageWriterService._DIRECT_NS:
+            table = LineageWriterService._DIRECT_NS[namespace]
+            res = await session.execute(
+                sa.text(f"SELECT workspace_id FROM {table} WHERE id = :oid").bindparams(
+                    oid=object_id
+                ),
+            )
+            row = res.first()
+            return row[0] if row else None
+
+        if namespace in LineageWriterService._INDIRECT_NS:
+            table, parent, fk = LineageWriterService._INDIRECT_NS[namespace]
+            res = await session.execute(
+                sa.text(
+                    f"SELECT p.workspace_id FROM {table} t "
+                    f"JOIN {parent} p ON p.id = t.{fk} "
+                    f"WHERE t.id = :oid"
+                ).bindparams(oid=object_id),
+            )
+            row = res.first()
+            return row[0] if row else None
+
+        return None
+
     async def on_snapshot_frozen(
         self,
         snapshot_id: UUID,
@@ -64,6 +135,17 @@ class LineageWriterService:
         try:
             async with self._factory() as session:
                 async with session.begin():
+                    ws_id = await self._resolve_workspace_id(
+                        session, "research:evidence_snapshot", snapshot_id
+                    )
+                    if ws_id is None:
+                        logger.warning(
+                            "on_snapshot_frozen: cannot resolve workspace_id "
+                            "for snapshot %s, skipping edges",
+                            snapshot_id,
+                        )
+                        return
+
                     for ref in source_refs:
                         ns = ref.get("namespace", "")
                         ref_id_str = ref.get("id", "")
@@ -90,6 +172,7 @@ class LineageWriterService:
                             target_namespace="research:evidence_snapshot",
                             target_id=snapshot_id,
                             edge_type=edge_type,
+                            workspace_id=ws_id,
                         )
         except Exception as exc:
             logger.warning("on_snapshot_frozen hook failed: %s", exc)
@@ -112,6 +195,17 @@ class LineageWriterService:
         try:
             async with self._factory() as session:
                 async with session.begin():
+                    ws_id = await self._resolve_workspace_id(
+                        session, "research:analysis_run", run_id
+                    )
+                    if ws_id is None:
+                        logger.warning(
+                            "on_run_started: cannot resolve workspace_id "
+                            "for run %s, skipping edges",
+                            run_id,
+                        )
+                        return
+
                     for snapshot_id in snapshot_ids:
                         await ResearchRepository.insert_lineage_edge(
                             session,
@@ -120,6 +214,7 @@ class LineageWriterService:
                             target_namespace="research:analysis_run",
                             target_id=run_id,
                             edge_type="snapshot_to_run",
+                            workspace_id=ws_id,
                         )
         except Exception as exc:
             logger.warning("on_run_started hook failed: %s", exc)
@@ -141,6 +236,17 @@ class LineageWriterService:
         try:
             async with self._factory() as session:
                 async with session.begin():
+                    ws_id = await self._resolve_workspace_id(
+                        session, "research:analysis_run", run_id
+                    )
+                    if ws_id is None:
+                        logger.warning(
+                            "on_step_completed: cannot resolve workspace_id "
+                            "for run %s, skipping edge",
+                            run_id,
+                        )
+                        return
+
                     await ResearchRepository.insert_lineage_edge(
                         session,
                         source_namespace="research:analysis_run",
@@ -148,6 +254,7 @@ class LineageWriterService:
                         target_namespace="research:analysis_step",
                         target_id=step_id,
                         edge_type="run_to_step",
+                        workspace_id=ws_id,
                     )
         except Exception as exc:
             logger.warning("on_step_completed hook failed: %s", exc)
@@ -180,6 +287,17 @@ class LineageWriterService:
         try:
             async with self._factory() as session:
                 async with session.begin():
+                    ws_id = await self._resolve_workspace_id(
+                        session, "research:analysis_run", run_id
+                    )
+                    if ws_id is None:
+                        logger.warning(
+                            "on_product_confirmed: cannot resolve workspace_id "
+                            "for run %s, skipping edge",
+                            run_id,
+                        )
+                        return
+
                     await ResearchRepository.insert_lineage_edge(
                         session,
                         source_namespace="research:analysis_run",
@@ -187,6 +305,7 @@ class LineageWriterService:
                         target_namespace=product_namespace,
                         target_id=product_id,
                         edge_type=edge_type,
+                        workspace_id=ws_id,
                     )
         except Exception as exc:
             logger.warning("on_product_confirmed hook failed: %s", exc)
@@ -210,6 +329,17 @@ class LineageWriterService:
         try:
             async with self._factory() as session:
                 async with session.begin():
+                    ws_id = await self._resolve_workspace_id(
+                        session, "research:knowledge_reference", reference_id
+                    )
+                    if ws_id is None:
+                        logger.warning(
+                            "on_knowledge_referenced: cannot resolve workspace_id "
+                            "for reference %s, skipping edge",
+                            reference_id,
+                        )
+                        return
+
                     await ResearchRepository.insert_lineage_edge(
                         session,
                         source_namespace="research:knowledge_reference",
@@ -217,6 +347,7 @@ class LineageWriterService:
                         target_namespace="research:insight",
                         target_id=insight_id,
                         edge_type="knowledge_ref_to_insight",
+                        workspace_id=ws_id,
                     )
         except Exception as exc:
             logger.warning("on_knowledge_referenced hook failed: %s", exc)
@@ -228,6 +359,7 @@ class LineageWriterService:
         target_namespace: str,
         target_id: UUID,
         edge_type: str,
+        workspace_id: UUID,
         source_version: int | None = None,
         target_version: int | None = None,
     ) -> None:
@@ -239,6 +371,7 @@ class LineageWriterService:
             target_namespace: 目标命名空间。
             target_id: 目标对象 UUID。
             edge_type: 边类型。
+            workspace_id: 所属工作空间 ID（NOT NULL，用于 RLS 所有权隔离）。
             source_version: 源版本号（可选）。
             target_version: 目标版本号（可选）。
         """
@@ -251,6 +384,7 @@ class LineageWriterService:
                     target_namespace=target_namespace,
                     target_id=target_id,
                     edge_type=edge_type,
+                    workspace_id=workspace_id,
                     source_version=source_version,
                     target_version=target_version,
                 )

@@ -68,6 +68,7 @@ class LineageEdgeService:
             target_namespace="research:result_version",
             target_id=result_id,
             edge_type="workspace_to_result",
+            workspace_id=workspace_id,
             target_version=version_number,
         )
 
@@ -83,6 +84,7 @@ class LineageEdgeService:
                     target_namespace="research:result_version",
                     target_id=result_id,
                     edge_type="dataset_to_result",
+                    workspace_id=workspace_id,
                     source_version=dataset_version,
                     target_version=version_number,
                 )
@@ -99,6 +101,7 @@ class LineageEdgeService:
                     target_namespace="research:result_version",
                     target_id=result_id,
                     edge_type="view_to_result",
+                    workspace_id=workspace_id,
                     source_version=view_version,
                     target_version=version_number,
                 )
@@ -115,6 +118,7 @@ class LineageEdgeService:
                     target_namespace="research:result_version",
                     target_id=result_id,
                     edge_type="insight_to_result",
+                    workspace_id=workspace_id,
                     source_version=insight_version,
                     target_version=version_number,
                 )
@@ -127,6 +131,7 @@ class LineageEdgeService:
         target_namespace: str,
         target_id: UUID,
         edge_type: str,
+        workspace_id: UUID,
         source_version: int | None = None,
         target_version: int | None = None,
     ) -> None:
@@ -141,6 +146,7 @@ class LineageEdgeService:
             target_namespace: 目标命名空间。
             target_id: 目标对象 UUID。
             edge_type: 边类型。
+            workspace_id: 所属工作空间 ID（NOT NULL，用于 RLS 所有权隔离）。
             source_version: 源版本号（可选）。
             target_version: 目标版本号（可选）。
         """
@@ -151,6 +157,7 @@ class LineageEdgeService:
             target_namespace=target_namespace,
             target_id=target_id,
             edge_type=edge_type,
+            workspace_id=workspace_id,
             source_version=source_version,
             target_version=target_version,
         )
