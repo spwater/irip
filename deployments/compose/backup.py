@@ -12,7 +12,10 @@ SHA-256 校验和，打包为 tar 归档（可选 age 加密），输出 ``Backu
   6. 计算 ``database.dump`` SHA-256 + 对象聚合 SHA-256 → ``BackupManifest``；
   7. 打包为 ``backup.tar``；
   8. 若设置了 ``IRIP_BACKUP_AGE_RECIPIENT``，用 age 加密 → ``backup.tar.age``；
-  9. 写入 ``manifest.json``。
+     生产环境（``IRIP_ENV=production``）未配置 age recipient 时立即失败（fail-closed），
+     明文始终在 0700 临时目录创建，加密到最终目录后安全删除；
+  9. 写入 ``manifest.json``（含 SHA-256 校验和、应用版本、迁移头、数据库系统标识、
+     WAL 范围、MinIO 对象数、创建时间戳，每个 artifact 含 sha256 + size_bytes）。
 
 用法（Docker Compose）：
   docker compose run --rm backup
@@ -33,7 +36,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -59,6 +62,15 @@ IRIP_APPLICATION_VERSION: str = os.getenv("IRIP_APPLICATION_VERSION", "0.8.0")
 
 #: age 加密 recipient 环境变量名。
 AGE_RECIPIENT_ENV: str = "IRIP_BACKUP_AGE_RECIPIENT"
+
+#: age 加密 recipient 文件路径环境变量名（recipient 公钥存于文件）。
+AGE_RECIPIENT_FILE_ENV: str = "IRIP_BACKUP_AGE_RECIPIENT_FILE"
+
+#: 运行环境变量名（production 时强制加密备份）。
+IRIP_ENV_NAME: str = "IRIP_ENV"
+
+#: 生产环境标识。
+PRODUCTION_ENV_VALUE: str = "production"
 
 #: tar 归档文件名。
 BACKUP_TAR_FILENAME: str = "backup.tar"
@@ -126,6 +138,14 @@ def _build_pg_env() -> dict[str, str]:
     return env
 
 
+class ConfigurationError(Exception):
+    """备份配置错误。
+
+    当生产环境缺少必要的安全配置（如 age 加密 recipient）时抛出。
+    属于「fail-closed」策略：生产备份未配置加密时立即终止，绝不产出明文备份。
+    """
+
+
 @dataclass(frozen=True)
 class BackupConfig:
     """备份配置（不可变值对象）。
@@ -188,21 +208,62 @@ class BackupService:
             region=config.minio_region,
         )
 
+    @classmethod
+    def from_environment(cls, output_dir: Path | None = None) -> "BackupService":
+        """从环境变量构建 BackupService（生产环境强制 age 加密）。
+
+        生产环境（``IRIP_ENV=production``）下，必须配置 age 加密 recipient：
+        ``IRIP_BACKUP_AGE_RECIPIENT``（公钥字符串）或
+        ``IRIP_BACKUP_AGE_RECIPIENT_FILE``（公钥文件路径）。
+        缺失时立即抛出 ``ConfigurationError``，绝不产出明文备份（fail-closed）。
+
+        Args:
+            output_dir: 输出目录（默认从环境变量读取）。
+
+        Returns:
+            BackupService: 根据环境变量构建的备份服务实例。
+
+        Raises:
+            ConfigurationError: 生产环境缺少 age recipient 配置时。
+        """
+        irip_env: str = os.getenv(IRIP_ENV_NAME, "")
+        if irip_env == PRODUCTION_ENV_VALUE:
+            age_recipient: str = os.getenv(AGE_RECIPIENT_ENV, "")
+            age_recipient_file: str = os.getenv(AGE_RECIPIENT_FILE_ENV, "")
+            if not age_recipient and not age_recipient_file:
+                raise ConfigurationError(
+                    "Production backups require age encryption. "
+                    "Set IRIP_BACKUP_AGE_RECIPIENT (recipient public key) "
+                    "or IRIP_BACKUP_AGE_RECIPIENT_FILE (path to recipient file)."
+                )
+            if age_recipient_file and not age_recipient:
+                recipient_path: Path = Path(age_recipient_file)
+                if not recipient_path.exists():
+                    raise ConfigurationError(
+                        f"IRIP_BACKUP_AGE_RECIPIENT_FILE not found: {recipient_path}"
+                    )
+        config: BackupConfig = build_backup_config_from_env(output_dir)
+        return cls(config)
+
     async def backup(self, output_dir: Path | None = None) -> BackupManifest:
-        """执行联合备份流程（PITR v2）。
+        """执行联合备份流程（PITR v2，生产环境强制加密）。
 
         联合备份流程（docs/arch-db-backup-pitr-upgrade.md §1.5）：
         1. 生成联合时间戳 backup_timestamp（UTC ISO 8601 毫秒精度）
         2. 查询 wal_start_lsn = pg_current_wal_lsn()
-        3. PG basebackup: pg_basebackup -Ft -z -X stream -c fast → {backup_id}/pg_basebackup/
+        3. PG basebackup: pg_basebackup -Ft -z -X stream -c fast → pg_basebackup/
         4. 查询 wal_end_lsn = pg_current_wal_lsn()
-        5. MinIO mirror: mc mirror --overwrite → {backup_id}/minio_mirror/
+        5. MinIO mirror: mc mirror --overwrite → minio_mirror/
         6. 计算 SHA-256（base.tar.gz + pg_wal.tar.gz + minio_mirror 聚合）
-        7. 查询 migration_version
+        7. 查询 migration_version + database system identifier
         8. 生成 BackupManifest v2
-        9. 写入 {backup_id}/manifest.json
+        9. 加密落地：明文在 0700 临时目录创建，加密到最终目录后安全删除明文
 
-        v2 不再打包 tar.age，各组件独立存储（pg_basebackup/ + minio_mirror/）。
+        安全约束（fail-closed）：
+        - 明文 payload 始终在 0700 权限的临时 staging 目录中创建；
+        - 配置了 age recipient 时，将 staging 打包为 tar 并加密到最终目录，
+          随后安全删除 staging（覆写 + 删除）；
+        - 未配置 age recipient（非生产环境）时，staging 原子移动到最终目录。
 
         Args:
             output_dir: 输出目录（默认使用配置中的 output_dir）。
@@ -214,59 +275,204 @@ class BackupService:
         target_base.mkdir(parents=True, exist_ok=True)
 
         backup_id: str = str(new_id())
-        target_dir: Path = target_base / backup_id
-        target_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Backup %s: starting PITR backup (output=%s)", backup_id, target_dir)
+        final_dir: Path = target_base / backup_id
+        logger.info("Backup %s: starting PITR backup (output=%s)", backup_id, final_dir)
 
         # 1. 生成联合时间戳
         backup_timestamp: str = datetime.now(UTC).isoformat(timespec="milliseconds")
         logger.info("Backup %s: backup_timestamp=%s", backup_id, backup_timestamp)
 
-        # 2. 创建子目录
-        pg_basebackup_dir: Path = target_dir / PG_BASEBACKUP_DIRNAME
-        pg_basebackup_dir.mkdir(parents=True, exist_ok=True)
-        minio_mirror_dir: Path = target_dir / MINIO_MIRROR_DIRNAME
-        minio_mirror_dir.mkdir(parents=True, exist_ok=True)
+        # 2. 明文 staging 目录（0700 权限，防止其他用户读取）
+        staging_dir: Path = Path(tempfile.mkdtemp(prefix=f"irip-backup-{backup_id}-"))
+        self._chmod_0700(staging_dir)
 
-        # 3. PG basebackup + WAL LSN 记录
-        wal_start_lsn, wal_end_lsn = self._basebackup(pg_basebackup_dir)
-        logger.info(
-            "Backup %s: pg_basebackup done (wal_start=%s, wal_end=%s)",
-            backup_id, wal_start_lsn, wal_end_lsn,
+        try:
+            # 3. 创建子目录
+            pg_basebackup_dir: Path = staging_dir / PG_BASEBACKUP_DIRNAME
+            pg_basebackup_dir.mkdir(parents=True, exist_ok=True)
+            minio_mirror_dir: Path = staging_dir / MINIO_MIRROR_DIRNAME
+            minio_mirror_dir.mkdir(parents=True, exist_ok=True)
+
+            # 4. PG basebackup + WAL LSN 记录
+            wal_start_lsn, wal_end_lsn = self._basebackup(pg_basebackup_dir)
+            logger.info(
+                "Backup %s: pg_basebackup done (wal_start=%s, wal_end=%s)",
+                backup_id, wal_start_lsn, wal_end_lsn,
+            )
+
+            # 5. MinIO mirror（紧接 PG basebackup 完成）
+            object_count: int = self._mc_mirror_minio(minio_mirror_dir)
+            logger.info("Backup %s: mc mirror done (objects=%d)", backup_id, object_count)
+
+            # 6. 查询 migration_version + database system identifier
+            migration_version: str = await self._query_migration_version()
+            db_system_identifier: str = await self._query_database_system_identifier()
+            logger.info(
+                "Backup %s: migration_version=%s, object_count=%d, db_system_id=%s",
+                backup_id, migration_version, object_count, db_system_identifier,
+            )
+
+            # 7. 生成 manifest v2
+            manifest: BackupManifest = compute_manifest_v2(
+                pg_basebackup_dir=pg_basebackup_dir,
+                minio_mirror_dir=minio_mirror_dir,
+                application_version=self._config.application_version,
+                migration_version=migration_version,
+                backup_id=backup_id,
+                backup_timestamp=backup_timestamp,
+                wal_start_lsn=wal_start_lsn,
+                wal_end_lsn=wal_end_lsn,
+                db_system_identifier=db_system_identifier,
+            )
+
+            # 8. 加密落地 / 原子移动
+            if self._config.age_recipient:
+                manifest = self._encrypt_to_final(staging_dir, final_dir, manifest)
+            else:
+                self._move_staging_to_final(staging_dir, final_dir)
+            save_manifest(manifest, final_dir)
+            logger.info("Backup %s: manifest v2 written", backup_id)
+
+            logger.info(
+                "Backup %s: complete (base_sha256=%s..., mirror_objects=%d, encrypted=%s)",
+                backup_id, manifest.database_sha256[:12], manifest.object_count,
+                manifest.encrypted,
+            )
+            return manifest
+        except Exception:
+            # fail-closed: 任意失败都安全删除明文 staging
+            self._secure_delete_dir(staging_dir)
+            raise
+
+    def _encrypt_to_final(
+        self, staging_dir: Path, final_dir: Path, manifest: BackupManifest
+    ) -> BackupManifest:
+        """将明文 staging 目录加密落地到最终目录，并安全删除明文。
+
+        流程（生产加密路径）：
+        1. 在 0700 临时目录中创建 tar 归档（明文 tar）；
+        2. 用 age 加密 tar 到 ``final_dir/backup.tar.age``；
+        3. 安全删除明文 tar 与临时目录（覆写 + 删除）；
+        4. 安全删除明文 staging 目录；
+        5. 返回 ``encrypted=True`` 的 manifest。
+
+        Args:
+            staging_dir: 明文 staging 目录（0700）。
+            final_dir: 最终输出目录。
+            manifest: 待标记加密状态的 manifest。
+
+        Returns:
+            BackupManifest: ``encrypted=True`` 的 manifest。
+
+        Raises:
+            RuntimeError: age 加密失败时。
+        """
+        final_dir.mkdir(parents=True, exist_ok=True)
+        tar_staging: Path = Path(tempfile.mkdtemp(prefix=f"irip-tar-{manifest.backup_id}-"))
+        self._chmod_0700(tar_staging)
+        tar_path: Path = tar_staging / BACKUP_TAR_FILENAME
+        try:
+            self._create_tar(staging_dir, tar_path)
+            encrypted_path: Path = final_dir / BACKUP_TAR_AGE_FILENAME
+            self._encrypt_tar(tar_path, encrypted_path, self._config.age_recipient or "")
+            encrypted_manifest: BackupManifest = replace(manifest, encrypted=True)
+            return encrypted_manifest
+        finally:
+            # 安全删除明文 tar 与临时目录
+            self._secure_delete(tar_path)
+            self._secure_delete_dir(tar_staging)
+            # 明文 staging 加密成功后才删除；删除失败仅告警不阻断
+            self._secure_delete_dir(staging_dir)
+
+    def _move_staging_to_final(self, staging_dir: Path, final_dir: Path) -> None:
+        """将 staging 目录原子移动到最终目录（非加密路径）。
+
+        Args:
+            staging_dir: 明文 staging 目录。
+            final_dir: 最终输出目录（必须不存在，由本方法创建）。
+        """
+        if final_dir.exists():
+            # 残留目录则先清理，避免 move 将 staging 嵌入其中
+            shutil.rmtree(final_dir, ignore_errors=True)
+        shutil.move(str(staging_dir), str(final_dir))
+
+    @staticmethod
+    def _chmod_0700(directory: Path) -> None:
+        """将目录权限设为 0700（仅属主可读写执行）。
+
+        Args:
+            directory: 目标目录。
+        """
+        try:
+            os.chmod(directory, 0o700)
+        except OSError as exc:
+            logger.warning("Failed to chmod 0700 on %s: %s", directory, exc)
+
+    @staticmethod
+    def _secure_delete(path: Path) -> None:
+        """安全删除单个文件（覆写零字节后 unlink）。
+
+        Args:
+            path: 待删除的文件路径。
+        """
+        if not path.exists():
+            return
+        try:
+            size: int = path.stat().st_size
+            with path.open("r+b") as f:
+                f.write(b"\x00" * size)
+                f.flush()
+                os.fsync(f.fileno())
+        except OSError as exc:
+            logger.warning("Secure overwrite failed for %s: %s", path, exc)
+        try:
+            path.unlink()
+        except OSError as exc:
+            logger.warning("Unlink failed for %s: %s", path, exc)
+
+    @classmethod
+    def _secure_delete_dir(cls, directory: Path) -> None:
+        """安全删除目录及其全部内容（逐文件覆写后递归删除）。
+
+        Args:
+            directory: 待删除的目录路径。
+        """
+        if not directory.exists():
+            return
+        for path in sorted(directory.rglob("*"), reverse=True):
+            if path.is_file():
+                cls._secure_delete(path)
+        shutil.rmtree(directory, ignore_errors=True)
+
+    async def _query_database_system_identifier(self) -> str:
+        """查询 PostgreSQL 数据库系统标识（``pg_control_system().system_identifier``）。
+
+        系统标识在数据库集群生命周期内不变，可用于恢复时校验源集群一致性。
+
+        Returns:
+            str: 数据库系统标识（如 ``"7289567420147789777"``）。查询失败时返回空字符串。
+        """
+        sync_url: str = _to_sync_url(self._config.db_url)
+        from sqlalchemy import create_engine, text
+
+        engine = create_engine(
+            sync_url,
+            pool_pre_ping=True,
+            connect_args={"connect_timeout": 2},
         )
-
-        # 4. MinIO mirror（紧接 PG basebackup 完成）
-        object_count: int = self._mc_mirror_minio(minio_mirror_dir)
-        logger.info("Backup %s: mc mirror done (objects=%d)", backup_id, object_count)
-
-        # 5. 查询 migration_version
-        migration_version: str = await self._query_migration_version()
-        logger.info(
-            "Backup %s: migration_version=%s, object_count=%d",
-            backup_id, migration_version, object_count,
-        )
-
-        # 6. 生成 manifest v2
-        manifest: BackupManifest = compute_manifest_v2(
-            pg_basebackup_dir=pg_basebackup_dir,
-            minio_mirror_dir=minio_mirror_dir,
-            application_version=self._config.application_version,
-            migration_version=migration_version,
-            backup_id=backup_id,
-            backup_timestamp=backup_timestamp,
-            wal_start_lsn=wal_start_lsn,
-            wal_end_lsn=wal_end_lsn,
-        )
-
-        # 7. 写入 manifest.json
-        save_manifest(manifest, target_dir)
-        logger.info("Backup %s: manifest v2 written", backup_id)
-
-        logger.info(
-            "Backup %s: complete (base_sha256=%s..., mirror_objects=%d)",
-            backup_id, manifest.database_sha256[:12], manifest.object_count,
-        )
-        return manifest
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT system_identifier FROM pg_control_system()")
+                )
+                row = result.fetchone()
+                if row is not None:
+                    return str(row[0])
+        except Exception as exc:
+            logger.warning("Failed to query database system identifier: %s", exc)
+        finally:
+            engine.dispose()
+        return ""
 
     def _basebackup(self, target_dir: Path) -> tuple[str, str]:
         """使用 pg_basebackup 执行物理基础备份。
@@ -707,6 +913,16 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
         ) / "irip-backup"
 
     age_recipient: str | None = os.getenv(AGE_RECIPIENT_ENV) or None
+    if not age_recipient:
+        # 回退到 recipient 文件（IRIP_BACKUP_AGE_RECIPIENT_FILE）
+        age_recipient_file: str = os.getenv(AGE_RECIPIENT_FILE_ENV, "")
+        if age_recipient_file:
+            recipient_path: Path = Path(age_recipient_file)
+            if not recipient_path.exists():
+                raise ConfigurationError(
+                    f"IRIP_BACKUP_AGE_RECIPIENT_FILE not found: {recipient_path}"
+                )
+            age_recipient = recipient_path.read_text(encoding="utf-8").strip() or None
 
     # PITR + mc mirror 配置
     minio_mc_alias: str = os.getenv("IRIP_MINIO_MC_ALIAS", "irip")
@@ -730,16 +946,21 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
 
 
 async def run_backup(output_dir: Path | None = None) -> BackupManifest:
-    """执行备份（便捷入口）。
+    """执行备份（便捷入口，生产环境强制 age 加密）。
+
+    通过 ``BackupService.from_environment`` 构建服务，生产环境
+    （``IRIP_ENV=production``）缺少 age recipient 时立即抛出 ``ConfigurationError``。
 
     Args:
         output_dir: 输出目录。
 
     Returns:
         BackupManifest: 备份清单。
+
+    Raises:
+        ConfigurationError: 生产环境未配置 age recipient 时。
     """
-    config: BackupConfig = build_backup_config_from_env(output_dir)
-    service: BackupService = BackupService(config)
+    service: BackupService = BackupService.from_environment(output_dir)
     return await service.backup(output_dir)
 
 

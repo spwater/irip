@@ -184,11 +184,13 @@ def compute_objects_metadata(objects_dir: Path) -> list[dict[str, Any]]:
         if path.name == OBJECTS_METADATA_FILENAME:
             continue
         rel_key: str = str(path.relative_to(objects_dir))
+        size_bytes: int = path.stat().st_size
         metadata.append(
             {
                 "key": rel_key,
                 "sha256": _sha256_file(path),
-                "size": path.stat().st_size,
+                "size": size_bytes,
+                "size_bytes": size_bytes,
             }
         )
     return metadata
@@ -273,16 +275,35 @@ def _aggregate_sha256_dir(directory: Path) -> tuple[str, int]:
             if not path.is_file():
                 continue
             rel_key: str = str(path.relative_to(directory))
+            file_size_bytes: int = path.stat().st_size
             metadata.append(
                 {
                     "key": rel_key,
                     "sha256": _sha256_file(path),
-                    "size": path.stat().st_size,
+                    "size": file_size_bytes,
+                    "size_bytes": file_size_bytes,
                 }
             )
     metadata_json: str = json.dumps(metadata, sort_keys=True, ensure_ascii=False)
     aggregate_sha: str = sha256_bytes(metadata_json.encode("utf-8"))
     return aggregate_sha, len(metadata)
+
+
+def _dir_total_size_bytes(directory: Path) -> int:
+    """计算目录下全部文件的总字节数。
+
+    Args:
+        directory: 目录路径。
+
+    Returns:
+        int: 全部文件大小之和（字节）；目录不存在时返回 0。
+    """
+    total: int = 0
+    if directory.exists():
+        for path in directory.rglob("*"):
+            if path.is_file():
+                total += path.stat().st_size
+    return total
 
 
 def compute_manifest_v2(
@@ -294,18 +315,24 @@ def compute_manifest_v2(
     backup_timestamp: str = "",
     wal_start_lsn: str = "",
     wal_end_lsn: str = "",
+    db_system_identifier: str = "",
 ) -> BackupManifest:
     """计算 PITR 备份的 BackupManifest v2。
 
     v2 manifest 的 extra dict 存储 PITR 元数据：
     - backup_timestamp: 联合时间戳
     - backup_method: 'pitr'
-    - pg_basebackup_sha256: base.tar.gz 的 SHA-256
-    - pg_wal_sha256: pg_wal.tar.gz 的 SHA-256
-    - minio_mirror_sha256: minio_mirror/ 目录的聚合 SHA-256
+    - db_system_identifier: PostgreSQL 集群系统标识（pg_control_system）
+    - pg_basebackup_sha256 / pg_basebackup_size_bytes: base.tar.gz 的 SHA-256 与字节数
+    - pg_wal_sha256 / pg_wal_size_bytes: pg_wal.tar.gz 的 SHA-256 与字节数
+    - minio_mirror_sha256 / minio_mirror_size_bytes: minio_mirror/ 聚合 SHA-256 与总字节数
     - minio_mirror_object_count: minio_mirror/ 对象数
     - wal_start_lsn: 备份开始 WAL LSN
     - wal_end_lsn: 备份结束 WAL LSN
+
+    每个 artifact 均携带 ``sha256`` 与 ``size_bytes``，便于恢复前完整性 +
+    容量校验。``created_at`` 记录备份创建时间戳，``application_version`` /
+    ``migration_version`` 记录应用版本与迁移头。
 
     v2 复用 v1 的 database_sha256 / object_count / objects_sha256 字段以保持
     dataclass 兼容性：
@@ -317,11 +344,12 @@ def compute_manifest_v2(
         pg_basebackup_dir: pg_basebackup 产出目录（含 base.tar.gz + pg_wal.tar.gz）。
         minio_mirror_dir: mc mirror 产出目录。
         application_version: IRIP 应用版本。
-        migration_version: Alembic 迁移版本。
+        migration_version: Alembic 迁移版本（迁移头）。
         backup_id: 备份唯一标识。
         backup_timestamp: 联合时间戳（UTC ISO 8601）。
         wal_start_lsn: 备份开始时的 WAL LSN。
         wal_end_lsn: 备份结束时的 WAL LSN。
+        db_system_identifier: PostgreSQL 数据库系统标识（集群唯一）。
 
     Returns:
         BackupManifest: format_version=2 的备份清单。
@@ -330,19 +358,26 @@ def compute_manifest_v2(
     pg_wal_tar_path: Path = pg_basebackup_dir / PG_WAL_TAR_GZ_FILENAME
 
     base_sha: str = _sha256_file(base_tar_path) if base_tar_path.exists() else ""
+    base_size: int = base_tar_path.stat().st_size if base_tar_path.exists() else 0
     wal_sha: str = _sha256_file(pg_wal_tar_path) if pg_wal_tar_path.exists() else ""
+    wal_size: int = pg_wal_tar_path.stat().st_size if pg_wal_tar_path.exists() else 0
 
     mirror_sha: str
     mirror_count: int
     mirror_sha, mirror_count = _aggregate_sha256_dir(minio_mirror_dir)
+    mirror_size_bytes: int = _dir_total_size_bytes(minio_mirror_dir)
 
     extra: dict[str, Any] = {
         "backup_timestamp": backup_timestamp,
         "backup_method": "pitr",
+        "db_system_identifier": db_system_identifier,
         "pg_basebackup_sha256": base_sha,
+        "pg_basebackup_size_bytes": base_size,
         "pg_wal_sha256": wal_sha,
+        "pg_wal_size_bytes": wal_size,
         "minio_mirror_sha256": mirror_sha,
         "minio_mirror_object_count": mirror_count,
+        "minio_mirror_size_bytes": mirror_size_bytes,
         "wal_start_lsn": wal_start_lsn,
         "wal_end_lsn": wal_end_lsn,
     }
