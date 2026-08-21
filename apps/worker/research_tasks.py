@@ -147,12 +147,22 @@ def _build_orchestrator() -> Any:
     return orchestrator
 
 
-@celery_app.task(name="research.run.execute", bind=True, soft_time_limit=1500, time_limit=1800)
+@celery_app.task(
+    name="research.run.execute_legacy",
+    bind=True,
+    soft_time_limit=1500,
+    time_limit=1800,
+)
 def execute_analysis_run(self: object, run_id: str) -> str:
-    """Celery 任务：执行分析 Run。
+    """Celery 任务（legacy）：执行分析 Run。
 
-    由 AnalysisRunService.submit_run 通过 send_task 触发。
+    由旧的 AnalysisRunService.submit_run / promote_queued_runs 通过 send_task 触发。
     在 Worker 进程中调用 ResearchOrchestrator.execute_run 执行 DAG 步骤。
+
+    命名注意：timeline 的新版任务已占用 ``research.run.execute``（收 principal），
+    为避免 Celery 同名任务 import 顺序依赖（include 里 research_timeline_tasks 后加载
+    会覆盖本注册），此处改名 ``research.run.execute_legacy``，保留旧 DAG 引擎以兼容
+    存量排队 Run。
 
     执行前检查部门并发上限，超限时抛异常触发重试。
 
@@ -325,7 +335,7 @@ def promote_queued_runs() -> int:
                     )
                     continue
             celery_app.send_task(
-                "research.run.execute",
+                "research.run.execute_legacy",
                 kwargs={"run_id": run_id_str},
                 queue="irip-research",
             )

@@ -102,9 +102,10 @@ class AnalysisRunService(ScopedSessionMixin):
         2. 校验无活跃 Run（get_active_run_for_workspace 返回 None）；
         3. 获取 run_number（递增）；
         4. insert_run(status='queued', turn_id, attempt_number)；
-        5. scheduler.acquire_slot(user_id, run_id)：
-           - 有槽位 → update_run_status('running') + send_task("research.run.execute")
-           - 无槽位 → 保持 queued + update_run_queue_position
+        5. 同事务 enqueue research.run.requested Outbox 事件（携带
+           actor_id/department_id/workspace_id principal，Run 保持 queued），
+           由 Outbox Dispatcher 投递到 research.run.execute（Worker 侧以
+           CAS queued→running 认领后执行）；
         6. 审计。
 
         Args:
@@ -115,7 +116,7 @@ class AnalysisRunService(ScopedSessionMixin):
             idempotency_key: 幂等键（可选）。
 
         Returns:
-            RunRef: Run 引用（status=running 或 queued）。
+            RunRef: Run 引用（status=queued）。
 
         Raises:
             AppError: code="not_found"，当计划不存在或未确认时。
@@ -187,22 +188,24 @@ class AnalysisRunService(ScopedSessionMixin):
                 attempt_number=attempt_number,
             )
 
-            # 5. 调度
-            acquired, position = await self._scheduler.acquire_slot(str(actor_id), str(run.id))
+            # 5. Enqueue async execution via Outbox（同事务，携带 principal，Run 保持 queued）。
+            #    由 Dispatcher 投递 research.run.requested → research.run.execute，
+            #    Worker 侧以 CAS（queued→running）认领后执行。废弃原「直发
+            #    send_task + 提前置 running」的写法：那会丢 principal、且 running 与
+            #    Worker 的 CAS `WHERE status='queued'` 冲突导致静默不执行。
+            from packages.jobs.outbox import OutboxDispatcher
 
-            if acquired:
-                # 有槽位：立即开始执行
-                await ResearchRepositoryTrusted.update_run_status(
-                    session,
-                    run.id,
-                    "running",
-                    started_at=datetime.now(UTC),
-                )
-                # 发送 Celery 任务（在事务提交后发送）
-                # 注意：send_task 在事务外调用，避免事务回滚后任务已发出
-            else:
-                # 无槽位：排队等待
-                await ResearchRepositoryTrusted.update_run_queue_position(session, run.id, position)
+            await OutboxDispatcher.enqueue(
+                session,
+                aggregate_type="research_analysis_run",
+                aggregate_id=run.id,
+                event_type="research.run.requested",
+                payload={
+                    "actor_id": str(actor_id),
+                    "department_id": str(self._dept_id),
+                    "workspace_id": str(workspace_id),
+                },
+            )
 
             # 6. 审计
             await AuditRecorder.record(
@@ -217,31 +220,18 @@ class AnalysisRunService(ScopedSessionMixin):
                         "workspace_id": str(workspace_id),
                         "run_number": run_number,
                         "plan_version_id": str(plan_version_id),
-                        "status": "running" if acquired else "queued",
-                        "queue_position": position if not acquired else None,
+                        "status": "queued",
+                        "queue_position": None,
                     },
                 ),
             )
-
-            # 发送 Celery 任务（事务提交后由 session_scope 自动提交）
-            if acquired:
-                try:
-                    from apps.worker.celery_app import celery_app
-
-                    celery_app.send_task(
-                        "research.run.execute",
-                        kwargs={"run_id": str(run.id)},
-                        queue="irip-research",
-                    )
-                except Exception as exc:
-                    logger.error("Failed to send Celery task: %s", exc)
 
             return RunRef(
                 run_id=run.id,
                 workspace_id=workspace_id,
                 run_number=run_number,
-                status="running" if acquired else "queued",
-                queue_position=position if not acquired else None,
+                status="queued",
+                queue_position=None,
             )
 
     async def cancel_run(self, run_id: UUID) -> None:
