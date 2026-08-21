@@ -429,7 +429,9 @@ class TimelineQueryService(ScopedSessionMixin):
             # Load fact_samples (structured) + fact_context (text, for backward compat)
             from packages.research.timeline.fact_data_loader import FactDataLoader
 
-            fact_loader = FactDataLoader(self._factory)
+            fact_loader = FactDataLoader(
+                self._factory, self._dept_id, self._actor_id
+            )
             fact_samples = await fact_loader.load_fact_samples(session, workspace_id)
 
             return {

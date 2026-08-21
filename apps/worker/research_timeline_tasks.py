@@ -45,12 +45,39 @@ def generate_recommendations(self: Any, batch_id: str) -> dict[str, Any]:
     import asyncio
 
     async def _run() -> dict[str, Any]:
-        from packages.research.timeline.recommendation_service import RecommendationService
-        from packages.research.timeline.simple_gateway import build_gateway_from_config
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+        from packages.research.timeline.simple_gateway import (
+            build_gateway_from_config,
+        )
 
         factory = _get_session_factory()
         gateway = await build_gateway_from_config()
-        service = RecommendationService(session_factory=factory, model_gateway=gateway)
+
+        # Resolve actor/dept from batch workspace owner
+        import sqlalchemy as sa
+
+        async with factory() as session:
+            row = await session.execute(
+                sa.text(
+                    "SELECT w.owner_user_id, w.department_id "
+                    "FROM research_recommendation_batch b "
+                    "JOIN research_workspace w ON w.id = b.workspace_id "
+                    "WHERE b.id = :bid"
+                ),
+                {"bid": batch_id},
+            )
+            owner_row = row.first()
+            if owner_row is None:
+                return {"batch_id": batch_id, "status": "not_found", "item_count": 0}
+
+        service = RecommendationService(
+            session_factory=factory,
+            department_id=owner_row[1],
+            actor_id=owner_row[0],
+            model_gateway=gateway,
+        )
         ref = await service.execute_batch(UUID(batch_id))
         return {
             "batch_id": str(ref.batch_id),

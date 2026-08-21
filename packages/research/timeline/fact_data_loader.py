@@ -2,24 +2,23 @@
 
 Used by:
   - RecommendationService (initial + followup prompt context)
-  - TimelineQueryService (turn detail → fact_context for chart-ref rendering)
-  - AnalysisService (analyze endpoint → data context for PlanService)
+  - TimelineQueryService (turn detail -> fact_context for chart-ref rendering)
+  - AnalysisService (analyze endpoint -> data context for PlanService)
 
-Extracted from inline code in research_timeline.py to avoid triplicate logic.
+Identity-aware: uses department_id and actor_id from the calling Service
+instead of reading IRIP_ALEMBIC_DATABASE_URL or admin@irip.local.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 from uuid import UUID
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.common.database import build_session_factory
 from packages.research.entities import WorkspaceEvidenceRef
 
 logger = logging.getLogger("research.fact_data")
@@ -28,14 +27,40 @@ logger = logging.getLogger("research.fact_data")
 class FactDataLoader:
     """Loads fact_data from WorkspaceEvidenceRef via FactQueryService.
 
-    Encapsulates the three-step flow:
-      1. Query WorkspaceEvidenceRef for active refs
-      2. Resolve admin user for FactQueryService
-      3. Call CoreFactProviderImpl.get_fact_data for each ref
+    Identity-aware: constructed with (session_factory, department_id, actor_id).
+    Does NOT read IRIP_ALEMBIC_DATABASE_URL or admin@irip.local.
     """
 
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        department_id: UUID | None = None,
+        actor_id: UUID | None = None,
+    ) -> None:
         self._factory = session_factory
+        self._dept_id = department_id
+        self._actor_id = actor_id
+
+    def _build_fact_provider(self):
+        """Build CoreFactProviderImpl using the injected session factory."""
+        try:
+            from apps.api.main import _build_s3_repo
+            from packages.facts.query_service import FactQueryService
+            from packages.research.lineage.core_adapter import (
+                CoreFactProviderImpl,
+            )
+        except ImportError:
+            logger.warning("FactQueryService or CoreFactProviderImpl not available")
+            return None
+
+        s3_repo = _build_s3_repo()
+        fact_query = FactQueryService(
+            session_factory=self._factory,
+            department_id=self._dept_id,  # type: ignore[arg-type]
+            actor_id=self._actor_id,
+            s3_repo=s3_repo,
+        )
+        return CoreFactProviderImpl(query_service=fact_query)
 
     async def load_fact_rows(
         self,
@@ -49,13 +74,6 @@ class FactDataLoader:
           - metadata: dict
           - points: list
           - series: list (with name, columns, rows_sample)
-
-        Args:
-            session: Any DB session (for querying WorkspaceEvidenceRef).
-            workspace_id: Workspace ID.
-
-        Returns:
-            List of fact_data dicts (empty if loading fails).
         """
         refs_result = await session.execute(
             sa.select(WorkspaceEvidenceRef).where(
@@ -67,64 +85,35 @@ class FactDataLoader:
         if not refs:
             return []
 
-        # Build FactQueryService + CoreFactProviderImpl
-        try:
-            from apps.api.main import _build_s3_repo
-            from packages.facts.query_service import FactQueryService
-            from packages.research.lineage.core_adapter import CoreFactProviderImpl
-        except ImportError:
-            logger.warning("FactQueryService or CoreFactProviderImpl not available")
+        fact_provider = self._build_fact_provider()
+        if fact_provider is None:
             return []
 
-        analysis_db_url = os.environ.get(
-            "IRIP_ALEMBIC_DATABASE_URL",
-            "postgresql+psycopg://irip:irip_dev_password@localhost:5432/irip",
-        )
-        analysis_factory = build_session_factory(analysis_db_url)
-
-        async with analysis_factory() as fact_session:
-            user_result = await fact_session.execute(
-                sa.text(
-                    "SELECT id, department_id FROM app_user "
-                    "WHERE email = 'admin@irip.local' LIMIT 1"
+        fact_rows: list[dict[str, Any]] = []
+        for ref in refs:
+            fact_info: dict[str, Any] = {"source_name": ref.source_name or ""}
+            try:
+                data = await fact_provider.get_fact_data(ref.source_id)
+                if isinstance(data, dict):
+                    fact_info["metadata"] = data.get("metadata", {})
+                    fact_info["points"] = data.get("points", [])
+                    series_full = data.get("series", [])
+                    fact_info["series"] = [
+                        {
+                            "name": s.get("name", ""),
+                            "columns": s.get("columns", []),
+                            "rows_sample": (s.get("rows", []) or [])[:5],
+                        }
+                        for s in series_full
+                        if isinstance(s, dict)
+                    ]
+            except Exception as exc:
+                logger.warning(
+                    "Failed to load fact data for %s: %s", ref.source_id, exc
                 )
-            )
-            user_row = user_result.first()
-            if not user_row:
-                return []
+            fact_rows.append(fact_info)
 
-            s3_repo = _build_s3_repo()
-            fact_query = FactQueryService(
-                session_factory=analysis_factory,
-                department_id=user_row[1],
-                actor_id=user_row[0],
-                s3_repo=s3_repo,
-            )
-            fact_provider = CoreFactProviderImpl(query_service=fact_query)
-
-            fact_rows: list[dict[str, Any]] = []
-            for ref in refs:
-                fact_info: dict[str, Any] = {"source_name": ref.source_name or ""}
-                try:
-                    data = await fact_provider.get_fact_data(ref.source_id)
-                    if isinstance(data, dict):
-                        fact_info["metadata"] = data.get("metadata", {})
-                        fact_info["points"] = data.get("points", [])
-                        series_full = data.get("series", [])
-                        fact_info["series"] = [
-                            {
-                                "name": s.get("name", ""),
-                                "columns": s.get("columns", []),
-                                "rows_sample": (s.get("rows", []) or [])[:5],
-                            }
-                            for s in series_full
-                            if isinstance(s, dict)
-                        ]
-                except Exception as exc:
-                    logger.warning("Failed to load fact data for %s: %s", ref.source_id, exc)
-                fact_rows.append(fact_info)
-
-            return fact_rows
+        return fact_rows
 
     async def load_fact_context_string(
         self,
@@ -133,7 +122,7 @@ class FactDataLoader:
     ) -> str | None:
         """Load fact_data and format as systemContext string for ChartRefBlock.
 
-        Format: "### 样品: XXX\\n```json\\n{...}\\n```"
+        Format: "### sample: XXX\\n```json\\n{...}\\n```"
 
         Returns None if no data or loading fails.
         """
@@ -144,7 +133,8 @@ class FactDataLoader:
         context_parts: list[str] = []
         for s in samples:
             context_parts.append(
-                f"### 样品: {s['label']}\n```json\n{json.dumps(s['data'], ensure_ascii=False)}\n```"
+                f"### \u6837\u54c1: {s['label']}\n```json\n"
+                f"{json.dumps(s['data'], ensure_ascii=False)}\n```"
             )
         return "\n\n".join(context_parts)
 
@@ -153,16 +143,7 @@ class FactDataLoader:
         session: AsyncSession,
         workspace_id: UUID,
     ) -> list[dict[str, Any]] | None:
-        """Load fact_data as structured sample list for ChartRefBlock.
-
-        Returns a list of dicts, each containing:
-          - label: str (sample name)
-          - data: dict (full fact_data: metadata/points/series)
-
-        Returns None if no data or loading fails.
-        This is the structured alternative to load_fact_context_string —
-        no text parsing needed on the frontend.
-        """
+        """Load fact_data as structured sample list for ChartRefBlock."""
         try:
             refs_result = await session.execute(
                 sa.select(WorkspaceEvidenceRef).where(
@@ -174,43 +155,17 @@ class FactDataLoader:
             if not refs:
                 return None
 
-            from apps.api.main import _build_s3_repo
-            from packages.facts.query_service import FactQueryService
-            from packages.research.lineage.core_adapter import CoreFactProviderImpl
+            fact_provider = self._build_fact_provider()
+            if fact_provider is None:
+                return None
 
-            analysis_db_url = os.environ.get(
-                "IRIP_ALEMBIC_DATABASE_URL",
-                "postgresql+psycopg://irip:irip_dev_password@localhost:5432/irip",
-            )
-            analysis_factory = build_session_factory(analysis_db_url)
-
-            async with analysis_factory() as fact_session:
-                user_result = await fact_session.execute(
-                    sa.text(
-                        "SELECT id, department_id FROM app_user "
-                        "WHERE email = 'admin@irip.local' LIMIT 1"
-                    )
-                )
-                user_row = user_result.first()
-                if not user_row:
-                    return None
-
-                s3_repo = _build_s3_repo()
-                fact_query = FactQueryService(
-                    session_factory=analysis_factory,
-                    department_id=user_row[1],
-                    actor_id=user_row[0],
-                    s3_repo=s3_repo,
-                )
-                fact_provider = CoreFactProviderImpl(query_service=fact_query)
-
-                samples: list[dict[str, Any]] = []
-                for ref in refs:
-                    data = await fact_provider.get_fact_data(ref.source_id)
-                    if isinstance(data, dict):
-                        label = ref.source_name or str(ref.source_id)
-                        samples.append({"label": label, "data": data})
-                return samples if samples else None
+            samples: list[dict[str, Any]] = []
+            for ref in refs:
+                data = await fact_provider.get_fact_data(ref.source_id)
+                if isinstance(data, dict):
+                    label = ref.source_name or str(ref.source_id)
+                    samples.append({"label": label, "data": data})
+            return samples if samples else None
         except Exception as exc:
             logger.warning("fact_samples loading failed: %s", exc)
         return None
