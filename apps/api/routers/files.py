@@ -203,10 +203,15 @@ async def upload_file(
         AppError: code="file_too_large"，当文件超过 100 MiB。
         AppError: code="unsupported_media_type"，当媒体类型不在白名单。
     """
-    # F-21: 流式分块读取，避免一次性将大文件加载到内存
+    # F-21: SpooledTemporaryFile — 8 MiB in-memory, overflow to disk
+    import hashlib
+    import tempfile
+
     _CHUNK_SIZE: int = 1024 * 1024  # 1 MiB chunks
-    chunks: list[bytes] = []
+    _SPOOL_MAX_SIZE: int = 8 * 1024 * 1024  # 8 MiB in-memory threshold
+    spool = tempfile.SpooledTemporaryFile(max_size=_SPOOL_MAX_SIZE)
     total_size: int = 0
+    sha256 = hashlib.sha256()
 
     while True:
         chunk: bytes = await file.read(_CHUNK_SIZE)
@@ -214,19 +219,26 @@ async def upload_file(
             break
         total_size += len(chunk)
         if total_size > MAX_UPLOAD_SIZE_BYTES:
+            spool.close()
             raise AppError(
                 code="file_too_large",
-                message=(f"文件大小超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"),
+                message=(
+                    f"文件大小超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
+                ),
                 retryable=False,
                 fields={
                     "size_bytes": total_size,
                     "max_size_bytes": MAX_UPLOAD_SIZE_BYTES,
                 },
             )
-        chunks.append(chunk)
+        spool.write(chunk)
+        sha256.update(chunk)
 
-    data: bytes = b"".join(chunks)
+    spool.seek(0)
+    data: bytes = spool.read()
+    spool.close()
     size: int = total_size
+    file_hash: str = sha256.hexdigest()
 
     filename: str = file.filename or "unnamed"
     content_type: str | None = file.content_type
