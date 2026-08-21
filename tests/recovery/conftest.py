@@ -3,8 +3,11 @@
 确保 alembic.ini 的相对路径 script_location=migrations 可被正确解析，
 无论 pytest 从哪个目录启动。
 对需要 pg_dump 的备份恢复测试，检查工具是否可用，否则 skip。
+当 IRIP_REQUIRE_RECOVERY_TESTS=1 时，工具缺失将直接报错而非跳过，
+确保 CI 和发布门中恢复测试不会被隐式跳过。
 """
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -59,6 +62,22 @@ def _has_docker_compose() -> bool:
     return _docker_daemon_running() and _has_pg_dump()
 
 
+def validate_recovery_prerequisites() -> bool:
+    """检查恢复测试所需工具是否存在。
+
+    返回 True 表示工具齐全可以运行；返回 False 表示工具缺失但允许跳过。
+    当环境变量 IRIP_REQUIRE_RECOVERY_TESTS=1 且工具缺失时，抛出
+    pytest.UsageError，使 CI / 发布门中恢复测试不会被隐式跳过。
+    """
+    required = ["pg_basebackup", "pg_restore", "mc", "age"]
+    missing = [t for t in required if not shutil.which(t)]
+    if not missing:
+        return True
+    if os.environ.get("IRIP_REQUIRE_RECOVERY_TESTS") == "1":
+        raise pytest.UsageError(f"Recovery tests required but tools missing: {missing}")
+    return False
+
+
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     """自动给需要 pg_dump / Docker 的测试标记条件 skip。
 
@@ -67,7 +86,13 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
     - test_backup_restore: 需要 Docker daemon + pg_dump（条件 skip）；
     - test_minio_outage: 仅需 pg_dump（条件 skip）。
+
+    当 IRIP_REQUIRE_RECOVERY_TESTS=1 时，validate_recovery_prerequisites()
+    会直接抛出 pytest.UsageError，阻止测试被隐式跳过。
     """
+    # P1-T7: 先执行硬门禁检查 -- CI / 发布门中工具缺失必须报错而非跳过
+    validate_recovery_prerequisites()
+
     _skip_backup = pytest.mark.skipif(
         not _has_pg_dump(),
         reason="pg_dump not found; install postgresql@16 or run inside Docker container",

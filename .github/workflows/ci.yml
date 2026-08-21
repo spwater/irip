@@ -314,6 +314,8 @@ jobs:
       IRIP_MINIO_BUCKET: irip-test
       IRIP_JWT_SECRET: ci-test-secret-2026
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: Admin-IRIP-2026
+      # P1-T7: CI 中禁止恢复测试被隐式跳过 -- 工具缺失时报错而非 skip
+      IRIP_REQUIRE_RECOVERY_TESTS: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
@@ -321,6 +323,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
+      # P1-T7: 恢复测试硬门禁 -- 工具缺失即阻断
+      - run: bash scripts/ci/check_recovery_tools.sh
       # H-10: 恢复测试独立执行，不加 marker 过滤
       - run: python -m pytest tests/recovery/ -v --junit-xml=recovery-results.xml
       # B-3: Upload JUnit XML for acceptance report generation

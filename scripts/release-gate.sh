@@ -186,6 +186,11 @@ fi
 
 # ---- Step 9: Integration + Security + Recovery tests (H-10: 环境就绪后执行) ----
 step_header "集成 + 安全 + 恢复测试 (integration + security + recovery)"
+
+# P1-T7: 恢复测试硬门禁 -- 工具缺失必须报错而非隐式跳过
+bash scripts/ci/check_recovery_tools.sh
+export IRIP_REQUIRE_RECOVERY_TESTS=1
+
 if $PY -m pytest tests/integration tests/security tests/recovery -q; then
     step_pass "Integration + Security + Recovery tests -- 100% pass"
 else
