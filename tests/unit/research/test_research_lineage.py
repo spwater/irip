@@ -613,9 +613,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,
@@ -640,9 +638,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,
@@ -679,9 +675,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,
@@ -699,9 +693,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,
@@ -719,9 +711,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,
@@ -741,9 +731,7 @@ class TestLineageWriterService:
         svc = self._make_service()
 
         ws_id = uuid4()
-        with patch.object(
-            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
-        ):
+        with patch.object(svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id):
             with patch(
                 "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
                 new_callable=AsyncMock,

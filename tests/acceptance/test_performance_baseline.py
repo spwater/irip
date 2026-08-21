@@ -70,13 +70,9 @@ def test_reconciler_task_exists_in_worker():
     assert "research.timeline.reconcile" in content, (
         "Worker must define the research.timeline.reconcile task"
     )
-    assert "def reconcile_timeline" in content, (
-        "Worker must have reconcile_timeline function"
-    )
+    assert "def reconcile_timeline" in content, "Worker must have reconcile_timeline function"
     # Must use FOR UPDATE SKIP LOCKED (not just a plain SELECT)
-    assert "skip_locked" in content, (
-        "Reconciler must use FOR UPDATE SKIP LOCKED"
-    )
+    assert "skip_locked" in content, "Reconciler must use FOR UPDATE SKIP LOCKED"
 
 
 def test_worker_tasks_accept_principal_kwargs():

@@ -97,9 +97,7 @@ class TimelineQueryService(ScopedSessionMixin):
             )
 
             if not turns:
-                return TimelinePage(
-                    items=[], next_cursor=None, active_run_status=None
-                )
+                return TimelinePage(items=[], next_cursor=None, active_run_status=None)
 
             turn_ids = [t.id for t in turns]
 
@@ -113,9 +111,7 @@ class TimelineQueryService(ScopedSessionMixin):
                 .where(ResearchTurnContext.turn_id.in_(turn_ids))
                 .group_by(ResearchTurnContext.turn_id)
             )
-            ctx_counts: dict[UUID, int] = {
-                row[0]: row[1] for row in ctx_rows
-            }
+            ctx_counts: dict[UUID, int] = {row[0]: row[1] for row in ctx_rows}
 
             # 2b: result existence (turn_ids with at least one result)
             result_rows = await session.execute(
@@ -156,9 +152,7 @@ class TimelineQueryService(ScopedSessionMixin):
                         status=turn.status,
                         question_text=turn.question_text_snapshot,
                         question_origin=turn.question_origin,
-                        snapshot_number=snap_map.get(
-                            turn.evidence_snapshot_id, 0
-                        ),
+                        snapshot_number=snap_map.get(turn.evidence_snapshot_id, 0),
                         selected_conclusion_count=ctx_counts.get(turn.id, 0),
                         created_at=turn.created_at,
                         has_result=turn.id in has_result_set,
@@ -214,8 +208,9 @@ class TimelineQueryService(ScopedSessionMixin):
             selected_conclusions: list[FixedConclusionInput] = []
             if revision_ids:
                 rev_rows = await session.execute(
-                    sa.select(ResearchConclusionRevision)
-                    .where(ResearchConclusionRevision.id.in_(revision_ids))
+                    sa.select(ResearchConclusionRevision).where(
+                        ResearchConclusionRevision.id.in_(revision_ids)
+                    )
                 )
                 revisions_map = {r.id: r for r in rev_rows.scalars()}
 
@@ -223,8 +218,9 @@ class TimelineQueryService(ScopedSessionMixin):
                 conclusion_ids = [r.conclusion_id for r in revisions_map.values()]
                 if conclusion_ids:
                     concl_rows = await session.execute(
-                        sa.select(ResearchConclusion)
-                        .where(ResearchConclusion.id.in_(conclusion_ids))
+                        sa.select(ResearchConclusion).where(
+                            ResearchConclusion.id.in_(conclusion_ids)
+                        )
                     )
                     conclusions_map = {c.id: c for c in concl_rows.scalars()}
                 else:
@@ -296,9 +292,7 @@ class TimelineQueryService(ScopedSessionMixin):
 
             # Load saved conclusions for this turn (batch latest revisions)
             saved_result = await session.execute(
-                sa.select(ResearchConclusion).where(
-                    ResearchConclusion.source_turn_id == turn_id
-                )
+                sa.select(ResearchConclusion).where(ResearchConclusion.source_turn_id == turn_id)
             )
             saved_conclusions: list[ConclusionRef] = []
             saved_concl_list = list(saved_result.scalars())
@@ -309,30 +303,17 @@ class TimelineQueryService(ScopedSessionMixin):
                 rev_subq = (
                     sa.select(
                         ResearchConclusionRevision.conclusion_id,
-                        sa.func.max(
-                            ResearchConclusionRevision.revision_number
-                        ).label("max_rev"),
+                        sa.func.max(ResearchConclusionRevision.revision_number).label("max_rev"),
                     )
-                    .where(
-                        ResearchConclusionRevision.conclusion_id.in_(
-                            saved_concl_ids
-                        )
-                    )
+                    .where(ResearchConclusionRevision.conclusion_id.in_(saved_concl_ids))
                     .group_by(ResearchConclusionRevision.conclusion_id)
                     .subquery()
                 )
                 rev_rows = await session.execute(
-                    sa.select(ResearchConclusionRevision)
-                    .join(
+                    sa.select(ResearchConclusionRevision).join(
                         rev_subq,
-                        (
-                            ResearchConclusionRevision.conclusion_id
-                            == rev_subq.c.conclusion_id
-                        )
-                        & (
-                            ResearchConclusionRevision.revision_number
-                            == rev_subq.c.max_rev
-                        ),
+                        (ResearchConclusionRevision.conclusion_id == rev_subq.c.conclusion_id)
+                        & (ResearchConclusionRevision.revision_number == rev_subq.c.max_rev),
                     )
                 )
                 rev_map = {r.conclusion_id: r for r in rev_rows.scalars()}
@@ -387,9 +368,7 @@ class TimelineQueryService(ScopedSessionMixin):
             )
 
     @staticmethod
-    async def _load_plan_ref(
-        session: AsyncSession, turn_id: UUID
-    ) -> PlanVersionRef | None:
+    async def _load_plan_ref(session: AsyncSession, turn_id: UUID) -> PlanVersionRef | None:
         """Load the latest plan version scoped to a turn.
 
         Args:
@@ -535,9 +514,7 @@ class TimelineQueryService(ScopedSessionMixin):
             # Load fact_samples (structured) + fact_context (text, for backward compat)
             from packages.research.timeline.fact_data_loader import FactDataLoader
 
-            fact_loader = FactDataLoader(
-                self._factory, self._dept_id, self._actor_id
-            )
+            fact_loader = FactDataLoader(self._factory, self._dept_id, self._actor_id)
             fact_samples = await fact_loader.load_fact_samples(session, workspace_id)
 
             # Latest plan version scoped to this turn (for plan review UI).

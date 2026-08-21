@@ -134,9 +134,7 @@ def _build_onnx_model() -> bytes:
     p_out = helper.make_tensor_value_info("product", TensorProto.FLOAT, [None, 1])
     add_node = helper.make_node("Add", ["x", "y"], ["sum"])
     mul_node = helper.make_node("Mul", ["x", "y"], ["product"])
-    graph = helper.make_graph(
-        [add_node, mul_node], "tiny", [x_in, y_in], [s_out, p_out]
-    )
+    graph = helper.make_graph([add_node, mul_node], "tiny", [x_in, y_in], [s_out, p_out])
     model = helper.make_model(graph)
     model.opset_import[0].opset = 13
     return model.SerializeToString()

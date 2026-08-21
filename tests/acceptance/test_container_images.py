@@ -1,4 +1,5 @@
 """Runtime images must not contain ops tools."""
+
 from pathlib import Path
 
 
@@ -45,9 +46,7 @@ def test_api_dockerfile_does_not_install_pg_tools():
     forbidden = ("postgresql-client", "minio-client", "mc ", "docker.io", "docker-ce")
     joined = "\n".join(final_lines)
     for token in forbidden:
-        assert token not in joined, (
-            f"runtime stage '{final_name}' must not install '{token}'"
-        )
+        assert token not in joined, f"runtime stage '{final_name}' must not install '{token}'"
 
 
 def test_ops_dockerfile_installs_pg_client_and_mc():

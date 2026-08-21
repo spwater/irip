@@ -1,10 +1,12 @@
 """Nginx TLS configuration tests."""
+
 from pathlib import Path
 
 
 def test_production_web_maps_tls():
     """Production compose should expose 443 and mount TLS secrets."""
     import yaml
+
     compose = {"services": {}}
     for f in ("compose.base.yaml", "compose.production.yaml"):
         if Path(f).exists():

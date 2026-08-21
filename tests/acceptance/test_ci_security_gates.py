@@ -1,4 +1,5 @@
 """CI security gates must be blocking."""
+
 from pathlib import Path
 
 

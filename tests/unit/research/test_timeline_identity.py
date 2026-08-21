@@ -99,6 +99,4 @@ def test_analysis_service_has_no_database_url_reads():
                     if not is_docstring:
                         pytest.fail(f"Forbidden pattern '{pattern}' found in code")
     # Also check no build_session_factory import
-    assert "build_session_factory" not in source.replace(
-        '"""Analysis service', "", 1
-    )
+    assert "build_session_factory" not in source.replace('"""Analysis service', "", 1)

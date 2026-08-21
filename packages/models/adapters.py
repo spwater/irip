@@ -607,9 +607,7 @@ class OnnxModelAdapter:
             ) from exc
 
         out_props: dict[str, Any] = contract.output_schema.get("properties", {})
-        output_names_contract: list[str] = (
-            list(out_props.keys()) if out_props else []
-        )
+        output_names_contract: list[str] = list(out_props.keys()) if out_props else []
 
         predictions: dict[str, Any] = {}
         if len(results) == 1 and len(output_names_contract) > 1:
@@ -618,11 +616,7 @@ class OnnxModelAdapter:
                 predictions[name] = flat[i] if i < len(flat) else 0.0
         else:
             for i, res in enumerate(results):
-                name = (
-                    output_names_contract[i]
-                    if i < len(output_names_contract)
-                    else f"output_{i}"
-                )
+                name = output_names_contract[i] if i < len(output_names_contract) else f"output_{i}"
                 flat = np.asarray(res).reshape(-1).tolist()
                 predictions[name] = flat[0] if flat else 0.0
 
@@ -663,12 +657,8 @@ def build_adapter(contract: ModelContract) -> OnnxModelAdapter:
     adapter_type: str = executor.get("type", "")
 
     if adapter_type == "onnx":
-        timeout_seconds: int = int(
-            executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
-        )
-        max_artifact_bytes: int = int(
-            executor.get("max_artifact_bytes", _MAX_ONNX_ARTIFACT_BYTES)
-        )
+        timeout_seconds: int = int(executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS))
+        max_artifact_bytes: int = int(executor.get("max_artifact_bytes", _MAX_ONNX_ARTIFACT_BYTES))
         return OnnxModelAdapter(
             timeout_seconds=timeout_seconds,
             max_artifact_bytes=max_artifact_bytes,

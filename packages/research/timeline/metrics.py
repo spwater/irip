@@ -15,13 +15,15 @@ logger = logging.getLogger("research.metrics")
 _turn_status_counter: Counter[str] = Counter()
 _run_completion_seconds: list[float] = []
 
-METRIC_NAMES = frozenset({
-    "research_turns_by_status",
-    "research_run_completion_seconds",
-    "research_extraction_by_status",
-    "research_reconciler_requeued_total",
-    "research_reconciler_marked_lost_total",
-})
+METRIC_NAMES = frozenset(
+    {
+        "research_turns_by_status",
+        "research_run_completion_seconds",
+        "research_extraction_by_status",
+        "research_reconciler_requeued_total",
+        "research_reconciler_marked_lost_total",
+    }
+)
 
 
 def record_turn_status(status: str) -> None:
@@ -43,9 +45,7 @@ def get_metrics_snapshot() -> dict[str, object]:
         "research_turns_by_status": dict(_turn_status_counter),
         "research_run_completion_seconds_count": len(_run_completion_seconds),
         "research_run_completion_seconds_p95": (
-            sorted(_run_completion_seconds)[
-                int(len(_run_completion_seconds) * 0.95)
-            ]
+            sorted(_run_completion_seconds)[int(len(_run_completion_seconds) * 0.95)]
             if _run_completion_seconds
             else 0
         ),

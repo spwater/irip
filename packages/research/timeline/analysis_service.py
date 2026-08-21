@@ -102,9 +102,7 @@ class AnalysisService(ScopedSessionMixin):
 
         async with self._scoped_session() as session:
             # 1. Load + verify turn ownership
-            turn = await require_owned_turn(
-                session, workspace_id, turn_id, actor_id
-            )
+            turn = await require_owned_turn(session, workspace_id, turn_id, actor_id)
 
             # 2. Check turn is in a runnable state
             if not TurnStateMachine.can_run(turn.status):
@@ -132,19 +130,14 @@ class AnalysisService(ScopedSessionMixin):
             if plan is None:
                 raise AppError(
                     code="state_conflict",
-                    message=(
-                        "No confirmed plan for this turn; "
-                        "call start_planning first"
-                    ),
+                    message=("No confirmed plan for this turn; call start_planning first"),
                     retryable=True,
                     fields={"turn_id": str(turn_id)},
                 )
 
             # 4. Check no active run in workspace
-            active_run = (
-                await ResearchRepositoryTrusted.get_active_run_for_workspace(
-                    session, workspace_id
-                )
+            active_run = await ResearchRepositoryTrusted.get_active_run_for_workspace(
+                session, workspace_id
             )
             if active_run is not None:
                 raise AppError(
@@ -158,9 +151,7 @@ class AnalysisService(ScopedSessionMixin):
                 )
 
             # 5. Compute run_number (workspace-level) + attempt_number
-            run_number = await ResearchRepositoryTrusted.get_next_run_number(
-                session, workspace_id
-            )
+            run_number = await ResearchRepositoryTrusted.get_next_run_number(session, workspace_id)
 
             attempt_result = await session.execute(
                 sa.select(sa.func.count())

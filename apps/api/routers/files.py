@@ -222,9 +222,7 @@ async def upload_file(
             spool.close()
             raise AppError(
                 code="file_too_large",
-                message=(
-                    f"文件大小超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"
-                ),
+                message=(f"文件大小超过上限 {MAX_UPLOAD_SIZE_BYTES} 字节（100 MiB）"),
                 retryable=False,
                 fields={
                     "size_bytes": total_size,

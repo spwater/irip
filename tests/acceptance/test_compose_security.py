@@ -1,4 +1,5 @@
 """Production Compose must not expose internal services."""
+
 from pathlib import Path
 
 import yaml
@@ -13,6 +14,7 @@ def _load_compose(*files):
             config["networks"].update(data.get("networks", {}))
             config["volumes"].update(data.get("volumes", {}))
     return config
+
 
 def test_only_web_exposes_production_ports():
     compose = _load_compose("compose.base.yaml", "compose.production.yaml")

@@ -37,9 +37,7 @@ def test_from_payload_rejects_invalid_uuid():
 
 def test_as_kwargs_returns_strings():
     actor, dept, ws = uuid4(), uuid4(), uuid4()
-    p = ResearchTaskPrincipal(
-        actor_id=actor, department_id=dept, workspace_id=ws
-    )
+    p = ResearchTaskPrincipal(actor_id=actor, department_id=dept, workspace_id=ws)
     kwargs = p.as_kwargs()
     assert set(kwargs) == {"actor_id", "department_id", "workspace_id"}
     assert kwargs["actor_id"] == str(actor)

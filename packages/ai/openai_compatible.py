@@ -332,9 +332,7 @@ class OpenAICompatibleProvider:
             # 日志：确认 system_context 传到了
             import logging
 
-            logging.getLogger("irip.ai").info(
-                "system_context 已拼接, 长度=%d", len(system_context)
-            )
+            logging.getLogger("irip.ai").info("system_context 已拼接, 长度=%d", len(system_context))
 
         # 如果调用方传了 system message，使用调用方的 system content（覆盖默认）
         caller_system_content = None

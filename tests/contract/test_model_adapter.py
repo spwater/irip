@@ -418,9 +418,7 @@ class TestOnnxModelAdapter:
         """ONNX 适配器加载模型并预测 sum/product。"""
         artifact_bytes = _build_onnx_contract_model()
 
-        contract = _make_contract(
-            executor={"type": "onnx", "timeout_seconds": 30}
-        )
+        contract = _make_contract(executor={"type": "onnx", "timeout_seconds": 30})
         adapter = OnnxModelAdapter(timeout_seconds=30)
 
         loaded = await adapter.load(artifact_bytes, contract)

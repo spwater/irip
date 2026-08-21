@@ -14,9 +14,7 @@ def test_plotly_is_dynamic_import():
         for line in content.split("\n"):
             stripped = line.strip()
             if stripped.startswith("import ") and "plotly.js" in stripped.lower():
-                assert "import(" in stripped, (
-                    f"Static plotly.js import in {py_file}: {stripped}"
-                )
+                assert "import(" in stripped, f"Static plotly.js import in {py_file}: {stripped}"
 
 
 def test_tsconfig_has_strict_mode():
@@ -57,10 +55,6 @@ def test_vite_config_has_manual_chunks():
     vite_path = Path("apps/web/vite.config.ts")
     assert vite_path.exists(), "vite.config.ts missing"
     content = vite_path.read_text()
-    assert "manualChunks" in content, (
-        "vite.config.ts must define manualChunks for vendor splitting"
-    )
+    assert "manualChunks" in content, "vite.config.ts must define manualChunks for vendor splitting"
     assert "react-vendor" in content, "manualChunks must split react-vendor"
-    assert "chunkSizeWarningLimit" in content, (
-        "vite.config.ts must set chunkSizeWarningLimit"
-    )
+    assert "chunkSizeWarningLimit" in content, "vite.config.ts must set chunkSizeWarningLimit"

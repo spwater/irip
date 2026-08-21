@@ -66,9 +66,7 @@ def _redact(value: Any, key: str | None = None) -> Any:
     if key is not None and key.lower() in SENSITIVE_LOG_KEYS:
         return "[REDACTED]"
     if isinstance(value, dict):
-        return {
-            k: _redact(v, k if isinstance(k, str) else None) for k, v in value.items()
-        }
+        return {k: _redact(v, k if isinstance(k, str) else None) for k, v in value.items()}
     if isinstance(value, list):
         return [_redact(item) for item in value]
     return value

@@ -104,9 +104,7 @@ class TestBuildAdapter:
 
     def test_onnx_executor_builds_onnx_adapter(self) -> None:
         """executor.type=onnx 构建 OnnxModelAdapter。"""
-        contract = _make_contract(
-            executor={"type": "onnx", "timeout_seconds": 60}
-        )
+        contract = _make_contract(executor={"type": "onnx", "timeout_seconds": 60})
         adapter = build_adapter(contract)
         assert isinstance(adapter, OnnxModelAdapter)
         assert adapter._timeout_seconds == 60
@@ -145,9 +143,7 @@ class TestBuildAdapter:
 
     def test_cli_executor_no_longer_builds_command_adapter(self) -> None:
         """cli executor 不再构建 CommandModelAdapter（安全收敛）。"""
-        contract = _make_contract(
-            executor={"type": "cli", "command": ["python", "predict.py"]}
-        )
+        contract = _make_contract(executor={"type": "cli", "command": ["python", "predict.py"]})
         with pytest.raises(AppError) as exc:
             build_adapter(contract)
         assert exc.value.code == "unsafe_model_format"
@@ -384,9 +380,7 @@ class TestOnnxModelAdapterValidateInput:
         """非法输入返回错误。"""
         schema = {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}
         adapter = OnnxModelAdapter()
-        result = adapter.validate_input(
-            {"x": "not-a-number"}, _make_contract(input_schema=schema)
-        )
+        result = adapter.validate_input({"x": "not-a-number"}, _make_contract(input_schema=schema))
         assert result.valid is False
 
 

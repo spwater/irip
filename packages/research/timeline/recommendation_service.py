@@ -254,9 +254,7 @@ class RecommendationService(ScopedSessionMixin):
             try:
                 from packages.research.timeline.fact_data_loader import FactDataLoader
 
-                fact_loader = FactDataLoader(
-                    self._factory, self._dept_id, self._actor_id
-                )
+                fact_loader = FactDataLoader(self._factory, self._dept_id, self._actor_id)
                 async with self._factory() as fact_session:
                     fact_rows = await fact_loader.load_fact_rows(fact_session, batch.workspace_id)
                 if fact_rows:

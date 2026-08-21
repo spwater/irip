@@ -102,9 +102,7 @@ async def _build_plan_service(
     from packages.research.planning.model_gateway import ModelGateway
     from packages.research.planning.plan_core import PlanService
 
-    research_model_name = ai_config.get("research_model_name") or ai_config.get(
-        "model_name", ""
-    )
+    research_model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
     thinking = ai_config.get("research_thinking_enabled", False)
     ai_provider = OpenAICompatibleProvider(
         api_key=ai_config["api_key"],
@@ -354,9 +352,7 @@ def generate_plan(
                 snapshot_id=snapshot_uuid,
             )
         except Exception as exc:  # noqa: BLE001 - finalizer records failure
-            logger.exception(
-                "plan generation failed for turn %s: %s", turn_id, exc
-            )
+            logger.exception("plan generation failed for turn %s: %s", turn_id, exc)
             async with _scoped_session(
                 factory, actor_id=actor_uuid, department_id=dept_uuid
             ) as session:
@@ -392,9 +388,7 @@ def generate_plan(
                 current = await session.get(ResearchTurn, turn_uuid)
                 new_status = current.status if current is not None else "plan_review"
 
-        logger.info(
-            "generated plan %s for turn %s", str(plan_id), turn_id
-        )
+        logger.info("generated plan %s for turn %s", str(plan_id), turn_id)
         return {
             "turn_id": turn_id,
             "status": new_status,
@@ -660,9 +654,7 @@ def extract_candidates(
                     new_status="running",
                 )
             except AppError:
-                existing = await TimelineRepository.get_extraction_job(
-                    session, extraction_uuid
-                )
+                existing = await TimelineRepository.get_extraction_job(session, extraction_uuid)
                 if existing is None:
                     return {
                         "extraction_id": extraction_id,
@@ -888,9 +880,7 @@ def reconcile_timeline() -> dict[str, Any]:
 
         sys_dept, sys_user = get_system_guc()
 
-        async with _scoped_session(
-            factory, actor_id=sys_user, department_id=sys_dept
-        ) as session:
+        async with _scoped_session(factory, actor_id=sys_user, department_id=sys_dept) as session:
             # Find stale Runs (queued/running for >10 min)
             stale_runs = await session.execute(
                 sa.select(ResearchAnalysisRun)
@@ -945,9 +935,9 @@ def reconcile_timeline() -> dict[str, Any]:
                         payload={
                             "actor_id": "",
                             "department_id": "",
-                            "workspace_id": str(
-                                job.workspace_id
-                            ) if hasattr(job, "workspace_id") else "",
+                            "workspace_id": str(job.workspace_id)
+                            if hasattr(job, "workspace_id")
+                            else "",
                         },
                     )
                     requeued += 1

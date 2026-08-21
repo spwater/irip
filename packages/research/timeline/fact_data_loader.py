@@ -108,9 +108,7 @@ class FactDataLoader:
                         if isinstance(s, dict)
                     ]
             except Exception as exc:
-                logger.warning(
-                    "Failed to load fact data for %s: %s", ref.source_id, exc
-                )
+                logger.warning("Failed to load fact data for %s: %s", ref.source_id, exc)
             fact_rows.append(fact_info)
 
         return fact_rows

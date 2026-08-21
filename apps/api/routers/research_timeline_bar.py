@@ -125,9 +125,7 @@ async def list_conclusion_bar_items(
 ) -> BarItemListResponse:
     """List conclusion-bar items for a workspace (newest first)."""
     data = await service.list_items(workspace_id)
-    return BarItemListResponse(
-        items=[BarItemResponse(**item) for item in data["items"]]
-    )
+    return BarItemListResponse(items=[BarItemResponse(**item) for item in data["items"]])
 
 
 @research_timeline_router.post(
@@ -244,9 +242,7 @@ async def list_results(
 ) -> ResultListResponse:
     """List all ResearchResults for a workspace (newest first)."""
     data = await service.list_results(workspace_id)
-    return ResultListResponse(
-        items=[ResultItemResponse(**item) for item in data["items"]]
-    )
+    return ResultListResponse(items=[ResultItemResponse(**item) for item in data["items"]])
 
 
 @research_timeline_router.get(

@@ -134,9 +134,7 @@ class TestAnalysisFeatureGuard:
         # Override analysis service: must never be called when feature is disabled
         class _NeverCalledService:
             async def run_analysis(self, *args: object, **kwargs: object) -> dict:
-                raise AssertionError(
-                    "AnalysisService must not be called when feature is disabled"
-                )
+                raise AssertionError("AnalysisService must not be called when feature is disabled")
 
         app.dependency_overrides[get_analysis_service] = lambda: _NeverCalledService()
 

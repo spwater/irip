@@ -83,8 +83,6 @@ def test_redact_preserves_non_sensitive_values() -> None:
 def test_no_known_sensitive_debug_sinks() -> None:
     """源码中不应存在已知敏感日志 sink。"""
     roots = [Path("apps"), Path("packages")]
-    source = "\n".join(
-        p.read_text(errors="ignore") for root in roots for p in root.rglob("*.py")
-    )
+    source = "\n".join(p.read_text(errors="ignore") for root in roots for p in root.rglob("*.py"))
     assert "irip-insight-debug.log" not in source
     assert "[PAYLOAD msg" not in source

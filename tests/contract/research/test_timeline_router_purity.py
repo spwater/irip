@@ -23,7 +23,8 @@ def test_timeline_router_has_no_import_os_for_db():
     lines = source.split("\n")
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith("import os") and "IRIP_DATABASE" in lines[
-            min(lines.index(line) + 1, len(lines) - 1)
-        ]:
+        if (
+            stripped.startswith("import os")
+            and "IRIP_DATABASE" in lines[min(lines.index(line) + 1, len(lines) - 1)]
+        ):
             raise AssertionError("Router imports os for database URL reads")

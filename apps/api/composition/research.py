@@ -121,35 +121,23 @@ def register(ctx: CompositionContext) -> None:
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> TimelineQueryService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return TimelineQueryService(
-            ctx.session_factory, dept_id, current_user.user_id
-        )
+        return TimelineQueryService(ctx.session_factory, dept_id, current_user.user_id)
 
     async def _get_recommendation_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> RecommendationService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return RecommendationService(
-            ctx.session_factory, dept_id, current_user.user_id
-        )
+        return RecommendationService(ctx.session_factory, dept_id, current_user.user_id)
 
     async def _get_analysis_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> AnalysisService:
         dept_id = await lookup_dept_id(ctx.session_factory, current_user.user_id)
-        return AnalysisService(
-            ctx.session_factory, dept_id, current_user.user_id
-        )
+        return AnalysisService(ctx.session_factory, dept_id, current_user.user_id)
 
-    ctx.app.dependency_overrides[get_timeline_query_service] = (
-        _get_timeline_query_service_dep
-    )
-    ctx.app.dependency_overrides[get_recommendation_service] = (
-        _get_recommendation_service_dep
-    )
-    ctx.app.dependency_overrides[get_analysis_service] = (
-        _get_analysis_service_dep
-    )
+    ctx.app.dependency_overrides[get_timeline_query_service] = _get_timeline_query_service_dep
+    ctx.app.dependency_overrides[get_recommendation_service] = _get_recommendation_service_dep
+    ctx.app.dependency_overrides[get_analysis_service] = _get_analysis_service_dep
 
     async def _get_turn_service_dep(
         current_user: Annotated[CurrentUser, Depends(get_current_user)],

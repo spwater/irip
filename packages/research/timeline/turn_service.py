@@ -356,9 +356,7 @@ class TurnService(ScopedSessionMixin):
                 evidence_snapshot_id=command.evidence_snapshot_id,
             )
 
-    async def start_planning(
-        self, workspace_id: UUID, turn_id: UUID
-    ) -> PlanVersionRef:
+    async def start_planning(self, workspace_id: UUID, turn_id: UUID) -> PlanVersionRef:
         """Lock turn inputs, transition to planning, and enqueue plan generation.
 
         Writes a ``research.plan.requested`` Outbox event so the Worker
@@ -381,9 +379,7 @@ class TurnService(ScopedSessionMixin):
 
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            turn = await require_owned_turn(
-                session, workspace_id, turn_id, self._actor_id
-            )
+            turn = await require_owned_turn(session, workspace_id, turn_id, self._actor_id)
 
             if not TurnStateMachine.can_plan(turn.status):
                 raise AppError(
@@ -467,9 +463,7 @@ class TurnService(ScopedSessionMixin):
 
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            turn = await require_owned_turn(
-                session, workspace_id, turn_id, self._actor_id
-            )
+            turn = await require_owned_turn(session, workspace_id, turn_id, self._actor_id)
 
             plan = await session.get(ResearchAnalysisPlanVersion, plan_id)
             if plan is None or plan.turn_id != turn_id:
@@ -541,9 +535,7 @@ class TurnService(ScopedSessionMixin):
         from packages.research.timeline.access import require_owned_turn
 
         async with self._scoped_session() as session:
-            turn = await require_owned_turn(
-                session, workspace_id, turn_id, self._actor_id
-            )
+            turn = await require_owned_turn(session, workspace_id, turn_id, self._actor_id)
             await session.delete(turn)
 
     @staticmethod

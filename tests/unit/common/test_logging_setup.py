@@ -175,9 +175,19 @@ class TestSensitiveLogKeys:
     def test_contains_known_sensitive_keys(self) -> None:
         """应包含已知敏感键。"""
         expected = {
-            "prompt", "content", "messages", "tool_result", "analysis_markdown",
-            "statement", "api_key", "authorization", "cookie", "token",
-            "password", "database_url", "secret_key",
+            "prompt",
+            "content",
+            "messages",
+            "tool_result",
+            "analysis_markdown",
+            "statement",
+            "api_key",
+            "authorization",
+            "cookie",
+            "token",
+            "password",
+            "database_url",
+            "secret_key",
         }
         assert expected.issubset(SENSITIVE_LOG_KEYS)
 

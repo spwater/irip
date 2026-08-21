@@ -14,9 +14,7 @@ def _get_bundle_stats() -> list[dict]:
         return []
     stats = []
     for f in dist.glob("*.js"):
-        stats.append(
-            {"name": f.name, "size_bytes": f.stat().st_size}
-        )
+        stats.append({"name": f.name, "size_bytes": f.stat().st_size})
     return stats
 
 
@@ -26,16 +24,12 @@ def test_main_entry_under_750kb():
     if not stats:
         return  # Build not run
     # Find the main entry (index-*.js, not vendor chunks)
-    main_chunks = [
-        s for s in stats
-        if s["name"].startswith("index-") and s["size_bytes"] < 200_000
-    ]
+    main_chunks = [s for s in stats if s["name"].startswith("index-") and s["size_bytes"] < 200_000]
     # The small index is the entry, the large one is vendor
     if main_chunks:
         for chunk in main_chunks:
             assert chunk["size_bytes"] < 750 * 1024, (
-                f"Main entry {chunk['name']} is "
-                f"{chunk['size_bytes'] / 1024:.0f} KiB (max 750 KiB)"
+                f"Main entry {chunk['name']} is {chunk['size_bytes'] / 1024:.0f} KiB (max 750 KiB)"
             )
 
 
@@ -50,6 +44,5 @@ def test_no_async_chunk_over_1_5_mib():
         if "plotly" in chunk["name"]:
             continue  # plotly is dynamically imported, size exempted
         assert chunk["size_bytes"] < max_chunk_size, (
-            f"Chunk {chunk['name']} is "
-            f"{chunk['size_bytes'] / 1024:.0f} KiB (max 1536 KiB)"
+            f"Chunk {chunk['name']} is {chunk['size_bytes'] / 1024:.0f} KiB (max 1536 KiB)"
         )

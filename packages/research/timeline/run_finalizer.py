@@ -66,16 +66,12 @@ class TimelineRunFinalizer(ScopedSessionMixin):
                     "status": "succeeded",
                 }
             if run.status not in ("queued", "running"):
-                raise ValueError(
-                    f"Run {run_id} in invalid state: {run.status}"
-                )
+                raise ValueError(f"Run {run_id} in invalid state: {run.status}")
             run.status = "succeeded"
 
             # 2. Write immutable TurnResult (idempotent: skip if exists)
             existing = await session.execute(
-                sa.select(ResearchTurnResult).where(
-                    ResearchTurnResult.run_id == run_id
-                )
+                sa.select(ResearchTurnResult).where(ResearchTurnResult.run_id == run_id)
             )
             if existing.scalar_one_or_none() is None:
                 result = ResearchTurnResult(
@@ -84,8 +80,7 @@ class TimelineRunFinalizer(ScopedSessionMixin):
                     run_id=run_id,
                     result_kind="analysis",
                     summary=analysis_text[:500],
-                    structured_output=structured_output
-                    or {"analysis_markdown": analysis_text},
+                    structured_output=structured_output or {"analysis_markdown": analysis_text},
                 )
                 session.add(result)
 
@@ -99,9 +94,7 @@ class TimelineRunFinalizer(ScopedSessionMixin):
             #    otherwise the worker has nothing to claim when it consumes the event.
             from packages.research.timeline.repository import TimelineRepository
 
-            extraction_job = await TimelineRepository.get_extraction_by_run(
-                session, run_id
-            )
+            extraction_job = await TimelineRepository.get_extraction_by_run(session, run_id)
             if extraction_job is None:
                 extraction_job = await TimelineRepository.insert_extraction_job(
                     session,

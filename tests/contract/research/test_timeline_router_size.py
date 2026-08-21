@@ -15,13 +15,9 @@ def test_research_timeline_router_under_500_lines():
         key = str(path)
         if key in baseline.get("files", {}):
             max_lines = baseline["files"][key].get("lines", 500)
-            assert lines <= max_lines, (
-                f"research_timeline.py grew from {max_lines} to {lines}"
-            )
+            assert lines <= max_lines, f"research_timeline.py grew from {max_lines} to {lines}"
             return
-    assert lines <= 500, (
-        f"research_timeline.py is {lines} lines (max 500)"
-    )
+    assert lines <= 500, f"research_timeline.py is {lines} lines (max 500)"
 
 
 def test_router_files_under_500_or_in_baseline():
@@ -40,10 +36,6 @@ def test_router_files_under_500_or_in_baseline():
         key = str(f)
         if key in baseline_files:
             max_lines = baseline_files[key].get("lines", lines)
-            assert lines <= max_lines, (
-                f"{f.name} grew from {max_lines} to {lines}"
-            )
+            assert lines <= max_lines, f"{f.name} grew from {max_lines} to {lines}"
         else:
-            assert lines <= 500, (
-                f"{f.name} is {lines} lines (max 500 for new files)"
-            )
+            assert lines <= 500, f"{f.name} is {lines} lines (max 500 for new files)"

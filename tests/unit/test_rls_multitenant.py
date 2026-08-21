@@ -749,9 +749,7 @@ class TestRLSCrossDeptReadBlocked:
                     result = rls_conn.execute(sa.text("SELECT count(*) FROM job"))
                     total = result.scalar()
                     # Should see at least 1 job (childA's); history may add more
-                    assert total >= 1, (
-                        f"user_a should see >=1 jobs, got {total}"
-                    )
+                    assert total >= 1, f"user_a should see >=1 jobs, got {total}"
         finally:
             self._cleanup_test_data(engine, ids)
             engine.dispose()

@@ -19,7 +19,7 @@ def test_load_job_uses_limited_runtime_role():
         return
     text = workflow.read_text()
     # The load-test job section — everything from "load-test" onward
-    load_section = text[text.find("load-test"):] if "load-test" in text else ""
+    load_section = text[text.find("load-test") :] if "load-test" in text else ""
     if load_section:
         assert "irip_app" in load_section
     # Should NOT use irip role for runtime

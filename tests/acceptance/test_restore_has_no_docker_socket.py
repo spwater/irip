@@ -1,4 +1,5 @@
 """Restore must not use Docker Socket or docker compose commands."""
+
 from pathlib import Path
 
 
@@ -11,6 +12,7 @@ def test_restore_py_has_no_docker_compose():
 
 def test_production_compose_restore_has_no_docker_socket():
     import yaml
+
     compose = {"services": {}}
     for f in ("compose.base.yaml", "compose.production.yaml"):
         if Path(f).exists():

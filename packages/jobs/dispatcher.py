@@ -163,8 +163,7 @@ class OutboxDispatcherService:
                     principal = ResearchTaskPrincipal.from_payload(payload)
                 except ValueError:
                     logger.warning(
-                        "Invalid principal for event %s (type=%s); "
-                        "not delivered",
+                        "Invalid principal for event %s (type=%s); not delivered",
                         event.id,
                         event.event_type,
                     )
@@ -176,8 +175,7 @@ class OutboxDispatcherService:
                     queue=queue,
                 )
                 logger.info(
-                    "Dispatched research event %s (type=%s, "
-                    "aggregate_id=%s, queue=%s)",
+                    "Dispatched research event %s (type=%s, aggregate_id=%s, queue=%s)",
                     event.id,
                     event.event_type,
                     event.aggregate_id,

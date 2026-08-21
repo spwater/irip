@@ -28,9 +28,7 @@ RESEARCH_MODULE_ENABLED: bool = os.getenv("RESEARCH_MODULE_ENABLED", "true").low
 #: 控制 POST /workspaces/{id}/turns/{turn_id}/analyze 端点，
 #: 关闭时该端点返回 503 feature_disabled，阻止高风险分析流程执行。
 #: 不影响只读历史研究页面（timeline、turn detail 等仍可访问）。
-RESEARCH_ANALYSIS_ENABLED: bool = (
-    os.getenv("RESEARCH_ANALYSIS_ENABLED", "false").lower() == "true"
-)
+RESEARCH_ANALYSIS_ENABLED: bool = os.getenv("RESEARCH_ANALYSIS_ENABLED", "false").lower() == "true"
 
 #: 遗留模型执行高风险入口开关。默认关闭（false）。
 #:

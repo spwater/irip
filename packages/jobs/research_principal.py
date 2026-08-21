@@ -27,9 +27,7 @@ class ResearchTaskPrincipal:
     workspace_id: UUID
 
     @classmethod
-    def from_payload(
-        cls, payload: Mapping[str, object]
-    ) -> ResearchTaskPrincipal:
+    def from_payload(cls, payload: Mapping[str, object]) -> ResearchTaskPrincipal:
         """Parse and validate a principal from an Outbox payload.
 
         Args:
@@ -48,9 +46,7 @@ class ResearchTaskPrincipal:
                 workspace_id=UUID(str(payload["workspace_id"])),
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Invalid research task principal payload: {exc}"
-            ) from exc
+            raise ValueError(f"Invalid research task principal payload: {exc}") from exc
 
     def as_kwargs(self) -> dict[str, str]:
         """Return as string kwargs for Celery task calls."""
