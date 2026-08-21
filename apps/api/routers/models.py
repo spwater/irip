@@ -334,6 +334,10 @@ async def predict_model(
 ) -> PredictionResponse:
     """使用当前发布版本预测。
 
+    P0 数据隔离守卫：LEGACY_MODEL_EXECUTION_ENABLED 默认关闭（fail-closed），
+    关闭时直接返回 503 feature_disabled，阻止不可信模型代码在主进程中执行。
+    不影响模型列表/详情/版本等只读操作。
+
     Args:
         model_id: 模型 UUID。
         body: 预测请求。
@@ -343,6 +347,12 @@ async def predict_model(
     Returns:
         PredictionResponse: 预测结果。
     """
+    from packages.common.feature_flags import (
+        LEGACY_MODEL_EXECUTION_ENABLED,
+        require_feature_enabled,
+    )
+
+    require_feature_enabled(LEGACY_MODEL_EXECUTION_ENABLED, "legacy_model_execution")
     result = await service.predict(model_id, body.inputs)
     return PredictionResponse(
         model_id=str(result.model_id),

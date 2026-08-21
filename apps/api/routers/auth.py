@@ -129,11 +129,23 @@ def _clear_refresh_cookie(response: Response) -> None:
     response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/api/v1/auth")
 
 
-def _get_research_module_enabled() -> bool:
-    """获取研究模块功能开关状态。"""
-    from packages.common.feature_flags import RESEARCH_MODULE_ENABLED
+def _get_feature_flags() -> dict[str, bool]:
+    """聚合所有功能开关状态，供 /me 响应暴露给前端。
 
-    return RESEARCH_MODULE_ENABLED
+    高风险入口开关（research_analysis、legacy_model_execution）默认关闭，
+    前端据此控制高风险入口的可见性与禁用态。
+    """
+    from packages.common.feature_flags import (
+        LEGACY_MODEL_EXECUTION_ENABLED,
+        RESEARCH_ANALYSIS_ENABLED,
+        RESEARCH_MODULE_ENABLED,
+    )
+
+    return {
+        "research_module": RESEARCH_MODULE_ENABLED,
+        "research_analysis": RESEARCH_ANALYSIS_ENABLED,
+        "legacy_model_execution": LEGACY_MODEL_EXECUTION_ENABLED,
+    }
 
 
 @auth_router.post("/login", response_model=TokenResponse)
@@ -238,7 +250,5 @@ async def me(
         if user is not None and user.department_id is not None
         else None,
         is_root_member=getattr(current_user, "is_root_member", False),
-        feature_flags={
-            "research_module": _get_research_module_enabled(),
-        },
+        feature_flags=_get_feature_flags(),
     )

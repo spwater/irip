@@ -742,7 +742,18 @@ async def run_analysis(
     current_user: ResearchUserDep,
     service: AnalysisServiceDep,
 ) -> dict[str, Any]:
-    """Run analysis using PlanService flow: generate plan → confirm → analyze_data."""
+    """Run analysis using PlanService flow: generate plan -> confirm -> analyze_data.
+
+    P0 数据隔离守卫：RESEARCH_ANALYSIS_ENABLED 默认关闭（fail-closed），
+    关闭时直接返回 503 feature_disabled，不执行任何分析流程。
+    只读历史页面（timeline / turn detail）不受影响。
+    """
+    from packages.common.feature_flags import (
+        RESEARCH_ANALYSIS_ENABLED,
+        require_feature_enabled,
+    )
+
+    require_feature_enabled(RESEARCH_ANALYSIS_ENABLED, "research_analysis")
     try:
         return await service.run_analysis(workspace_id, turn_id)
     except Exception:

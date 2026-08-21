@@ -126,6 +126,9 @@ class ErrorCode(enum.Enum):
     # ---- 403 补充：研究发布权限 ----
     ACL_EXCEEDS_ENVELOPE = ("acl_exceeds_envelope", 403)
 
+    # ---- 503 功能开关关闭（安全默认）----
+    FEATURE_DISABLED = ("feature_disabled", 503)
+
     # ---- 409 补充：研究时间轴状态机 ----
     STATE_CONFLICT = ("state_conflict", 409)
     ANALYSIS_BUSY = ("analysis_busy", 409)

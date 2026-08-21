@@ -19,6 +19,8 @@ export type CurrentUser = {
   /** 功能开关状态（由后端 /me feature_flags 映射） */
   featureFlags?: {
     researchModule: boolean;
+    researchAnalysis: boolean;
+    legacyModelExecution: boolean;
   };
 };
 
@@ -71,6 +73,8 @@ type MeApiResponse = {
   /** 功能开关 */
   feature_flags?: {
     research_module?: boolean;
+    research_analysis?: boolean;
+    legacy_model_execution?: boolean;
   };
 };
 
@@ -213,6 +217,8 @@ export async function apiGetMe(): Promise<CurrentUser> {
     isRootMember: res.data.is_root_member ?? false,
     featureFlags: {
       researchModule: res.data.feature_flags?.research_module ?? false,
+      researchAnalysis: res.data.feature_flags?.research_analysis ?? false,
+      legacyModelExecution: res.data.feature_flags?.legacy_model_execution ?? false,
     },
   };
 }
