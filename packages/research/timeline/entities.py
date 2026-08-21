@@ -174,10 +174,10 @@ class ResearchTurnResult(Base):
     turn_id: Mapped[UUID] = mapped_column(
         GUID, sa.ForeignKey("research_turn.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    run_id: Mapped[UUID | None] = mapped_column(
+    run_id: Mapped[UUID] = mapped_column(
         GUID,
         sa.ForeignKey("research_analysis_run.id", ondelete="CASCADE"),
-        nullable=True,
+        nullable=False,
         unique=True,
     )
     result_kind: Mapped[str] = mapped_column(
