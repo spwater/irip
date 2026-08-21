@@ -28,7 +28,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.artifacts import ArtifactService
-from packages.common.database import ScopedSessionMixin
+from packages.common.database import ScopedSessionMixin, get_database_url
 from packages.common.tenant_guc import set_dept_guc, set_user_guc
 from packages.facts.observations import FactDetailRow
 from packages.facts.repository import FactRepository
@@ -45,7 +45,7 @@ def _get_superuser_factory() -> Any:
     if _superuser_engine is None:
         import os as _os
 
-        _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", _os.getenv("IRIP_DATABASE_URL", ""))
+        _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_url()
         if not _alembic_url:
             return None
         _url = _alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)

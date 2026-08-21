@@ -17,7 +17,7 @@ from celery import shared_task
 
 from apps.worker.tasks import get_system_guc
 from packages.common.clock import SystemClock
-from packages.common.database import session_scope
+from packages.common.database import get_database_url, session_scope
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def _get_superuser_factory() -> Any:
     if _superuser_factory is not None:
         return _superuser_factory
 
-    alembic_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL", os.getenv("IRIP_DATABASE_URL", ""))
+    alembic_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_url()
     if not alembic_url:
         raise RuntimeError("无法获取超级用户连接：IRIP_ALEMBIC_DATABASE_URL 未配置")
 

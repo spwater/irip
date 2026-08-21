@@ -76,11 +76,10 @@ async def get_system_service_user_id() -> UUID:
     # 回退：查询数据库
     import sqlalchemy as sa
 
-    from packages.common.database import build_session_factory, session_scope
+    from packages.common.database import build_session_factory, get_database_url, session_scope
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)

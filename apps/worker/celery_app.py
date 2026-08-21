@@ -22,6 +22,8 @@ from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init
 
+from packages.common.database import get_database_url
+
 #: Redis URL（从环境变量读取，默认本地测试 Redis）。
 REDIS_URL: str = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
 
@@ -218,14 +220,12 @@ def reap_expired_leases() -> int:
         int: 被回收的作业数。
     """
     import asyncio
-    import os
 
     from packages.common.database import build_session_factory
     from packages.jobs.worker import WorkerLeaseManager
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
@@ -260,7 +260,6 @@ def retry_wait_jobs() -> int:
         int: 重新入队的作业数。
     """
     import asyncio
-    import os
 
     import sqlalchemy as sa
 
@@ -268,9 +267,8 @@ def retry_wait_jobs() -> int:
     from packages.jobs.entities import Job, JobStatus
     from packages.jobs.outbox import OutboxEvent
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
@@ -348,9 +346,8 @@ def daily_backup() -> str:
     from packages.jobs.entities import Job, JobStatus
     from packages.jobs.outbox import OutboxDispatcher
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
@@ -458,14 +455,12 @@ def retention_cleanup() -> int:
         int: 实际清理的记录数量。
     """
     import asyncio
-    import os
 
     from packages.backups.service import BackupRecordService
     from packages.common.database import build_session_factory
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
@@ -560,7 +555,7 @@ def _assert_not_superuser() -> None:
     RLS 是唯一隔离层，运行时连接角色不能是 superuser 或 bypassrls，
     否则 RLS 将被绕过，纵深归零。使用同步 SQLAlchemy 引擎执行检查。
     """
-    db_url: str = os.getenv("IRIP_DATABASE_URL", "")
+    db_url: str = get_database_url()
     if not db_url:
         return
 

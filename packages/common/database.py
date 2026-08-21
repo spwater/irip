@@ -45,6 +45,51 @@ class Base(DeclarativeBase):
     """
 
 
+def get_database_url(default: str = "") -> str:
+    """读取运行时数据库连接串（file-backed secret 优先）。
+
+    约定（阶段2 A1）：**完整 URL 走 ``*_FILE``**。优先读取
+    ``IRIP_DATABASE_URL_FILE`` 指向的 secret 文件（内容为完整的
+    ``postgresql+psycopg://...`` 连接串，含运行时 ``irip_app`` 角色凭据），
+    文件不存在/未配置时回退到 ``IRIP_DATABASE_URL`` 环境变量。两者皆缺失时
+    返回 ``default``。
+
+    该约定侵入最小：应用侧从 ``os.getenv("IRIP_DATABASE_URL")`` 一句式替换为
+    ``get_database_url()`` 即可，无需在运行时据密码重拼连接串。
+
+    Args:
+        default: 连接串缺失时返回的默认值（开发环境用于指向本地测试库）。
+
+    Returns:
+        str: 同步驱动连接串（如 ``postgresql+psycopg://...``），调用方按需转异步。
+    """
+    from packages.common.secret_files import read_secret
+
+    return read_secret("IRIP_DATABASE_URL", required=False) or default
+
+
+def get_database_admin_url(default: str = "") -> str:
+    """读取运维（superuser）数据库连接串（file-backed secret 优先）。
+
+    约定（阶段2 A1）：**完整 URL 走 ``*_FILE``**。优先读取
+    ``IRIP_DATABASE_ADMIN_URL_FILE`` 指向的 secret 文件（内容为完整的
+    superuser 连接串），回退到 ``IRIP_DATABASE_ADMIN_URL`` 环境变量。
+
+    仅 backup/restore（pg_dump / pg_basebackup / pg_restore）使用 superuser
+    连接以访问全量数据（RLS 会过滤 ``irip_app``）；常规 API/Worker 运行时严禁
+    使用 superuser 连接，否则 RLS 纵深被绕过。
+
+    Args:
+        default: 连接串缺失时返回的默认值。
+
+    Returns:
+        str: superuser 同步驱动连接串，缺失时返回 ``default``。
+    """
+    from packages.common.secret_files import read_secret
+
+    return read_secret("IRIP_DATABASE_ADMIN_URL", required=False) or default
+
+
 def build_session_factory(url: str) -> async_sessionmaker[AsyncSession]:
     """构建异步会话工厂。
 

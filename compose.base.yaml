@@ -108,8 +108,10 @@ services:
       - frontend
       - backend
     environment:
-      # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser。
+      # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
+      # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
+      IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -149,10 +151,13 @@ services:
       - backend
     command: ["celery", "-A", "apps.worker.celery_app", "worker", "--loglevel=info", "--concurrency=2", "-Q", "irip-fast,irip-normal,irip-research,irip-ops"]
     environment:
-      # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
-      # 备份/恢复 subprocess 专用 superuser 连接串（pg_basebackup/pg_dump 需全量数据，RLS 会过滤 irip_app）
-      IRIP_DATABASE_ADMIN_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser。
+      # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
+      # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
+      IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
+      # 备份/恢复 subprocess 专用 superuser 连接串（pg_basebackup/pg_dump 需全量数据，RLS 会过滤 irip_app）。
+      # 阶段2 A1：superuser 连接串改走 file-backed secret，不再内联密码。
+      IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -200,8 +205,10 @@ services:
       - backend
     command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
     environment:
-      # 运行时使用 irip_app（RLS 生效），不使用 superuser
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_APP_USER:-irip_app}:${IRIP_DATABASE_APP_PASSWORD:?IRIP_DATABASE_APP_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 运行时使用 irip_app（RLS 生效），不使用 superuser。
+      # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
+      # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
+      IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -295,7 +302,8 @@ services:
       - backend
     command: ["python", "-m", "deployments.compose.backup"]
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 阶段2 A1：备份使用 superuser 连接，改走 file-backed secret。
+      IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
@@ -332,7 +340,8 @@ services:
       - backend
     command: ["python", "-m", "deployments.compose.restore"]
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 阶段2 A1：恢复使用 superuser 连接，改走 file-backed secret。
+      IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}

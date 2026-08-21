@@ -15,8 +15,8 @@ services:
         target: jwt_secret
       - source: irip_master_key
         target: master_key
-      - source: irip_database_app_password
-        target: database_app_password
+      - source: irip_database_app_url
+        target: database_app_url
       - source: irip_redis_password
         target: redis_password
       - source: irip_minio_secret_key
@@ -32,10 +32,10 @@ services:
         target: jwt_secret
       - source: irip_master_key
         target: master_key
-      - source: irip_database_app_password
-        target: database_app_password
-      - source: irip_database_password
-        target: database_password
+      - source: irip_database_app_url
+        target: database_app_url
+      - source: irip_database_admin_url
+        target: database_admin_url
       - source: irip_redis_password
         target: redis_password
       - source: irip_minio_secret_key
@@ -49,8 +49,8 @@ services:
         target: jwt_secret
       - source: irip_master_key
         target: master_key
-      - source: irip_database_app_password
-        target: database_app_password
+      - source: irip_database_app_url
+        target: database_app_url
       - source: irip_redis_password
         target: redis_password
       - source: irip_minio_secret_key
@@ -94,6 +94,18 @@ services:
       - source: irip_bootstrap_admin_password
         target: bootstrap_admin_password
 
+  # 阶段2 A1：backup/restore（dangerous-ops profile）使用 superuser 连接，
+  # 连接串走 file-backed secret。
+  backup:
+    secrets:
+      - source: irip_database_admin_url
+        target: database_admin_url
+
+  restore:
+    secrets:
+      - source: irip_database_admin_url
+        target: database_admin_url
+
 secrets:
   irip_jwt_secret:
     file: ./secrets/jwt_secret
@@ -101,8 +113,10 @@ secrets:
     file: ./secrets/master_key
   irip_database_password:
     file: ./secrets/database_password
-  irip_database_app_password:
-    file: ./secrets/database_app_password
+  irip_database_admin_url:
+    file: ./secrets/database_admin_url
+  irip_database_app_url:
+    file: ./secrets/database_app_url
   irip_redis_password:
     file: ./secrets/redis_password
   irip_minio_secret_key:

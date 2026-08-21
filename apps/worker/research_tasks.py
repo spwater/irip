@@ -39,7 +39,7 @@ def _build_orchestrator() -> Any:
     """
     import redis as redis_lib
 
-    from packages.common.database import build_session_factory
+    from packages.common.database import build_session_factory, get_database_url
     from packages.research.execution.models_trusted import ModelConfig, TaskType
     from packages.research.execution.orchestrator import ResearchOrchestrator
     from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
@@ -49,7 +49,7 @@ def _build_orchestrator() -> Any:
     from packages.research.planning.model_gateway import ModelGateway
     from packages.research.products.artifact_service import RunArtifactService
 
-    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    db_url = get_database_url()
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -178,11 +178,11 @@ def execute_analysis_run(self: object, run_id: str) -> str:
     # 部门并发上限检查
     import sqlalchemy as sa
 
-    from packages.common.database import build_session_factory
+    from packages.common.database import build_session_factory, get_database_url
     from packages.research.entities import ResearchWorkspace
     from packages.research.execution.entities_trusted import ResearchAnalysisRun
 
-    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    db_url = get_database_url()
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -252,11 +252,11 @@ def check_run_heartbeat() -> int:
 
     import sqlalchemy as sa
 
-    from packages.common.database import build_session_factory
+    from packages.common.database import build_session_factory, get_database_url
     from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
     from packages.research.execution.scheduler import ResearchScheduler
 
-    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    db_url = get_database_url()
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -307,10 +307,10 @@ def promote_queued_runs() -> int:
     async def _promote() -> int:
         promoted = await scheduler.check_and_promote()
         # 对每个提升的 Run 发送执行任务（检查 DB 状态，跳过已取消/失败的）
-        from packages.common.database import build_session_factory
+        from packages.common.database import build_session_factory, get_database_url
         from packages.research.execution.repository_trusted import ResearchRepositoryTrusted
 
-        db_url = os.getenv("IRIP_DATABASE_URL", "")
+        db_url = get_database_url()
         if db_url.startswith("postgresql+psycopg://"):
             async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
         else:

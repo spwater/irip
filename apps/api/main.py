@@ -49,7 +49,7 @@ from apps.api.routers.provenance import provenance_router
 from apps.api.routers.showcase import showcase_router
 from apps.api.routers.uploads import artifacts_router, uploads_router
 from apps.api.routers.user_departments import user_departments_router
-from packages.common.database import build_session_factory
+from packages.common.database import build_session_factory, get_database_url
 from packages.common.error_codes import ErrorCode
 from packages.common.errors import AppError
 from packages.common.s3_repository import S3Repository
@@ -105,7 +105,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from apps.api.composition import CompositionContext, lookup_root_dept_id, register_all
 
     # ---- 1. 数据库会话工厂 ----
-    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    # 阶段2 A1：连接串从 IRIP_DATABASE_URL_FILE（secret 文件，完整 URL）优先读取，
+    # 否则回退 IRIP_DATABASE_URL 环境变量（见 packages.common.database.get_database_url）。
+    db_url = get_database_url()
     if not db_url:
         raise RuntimeError("IRIP_DATABASE_URL environment variable is required")
     async_url = _to_async_url(db_url)

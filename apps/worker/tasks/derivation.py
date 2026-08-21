@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from typing import Any
 from uuid import UUID
 
@@ -35,14 +34,13 @@ async def _process_derivation_async(
     """
     import sqlalchemy as sa
 
-    from packages.common.database import build_session_factory, session_scope
+    from packages.common.database import build_session_factory, get_database_url, session_scope
     from packages.common.tenant_guc import set_dept_guc, set_user_guc
     from packages.jobs.entities import Job, JobStatus
     from packages.provenance.derivations import DerivationService
 
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)

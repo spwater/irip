@@ -121,7 +121,11 @@ def _build_pg_env() -> dict[str, str]:
         dict: 环境变量字典。
     """
     env: dict[str, str] = os.environ.copy()
-    db_url: str = os.getenv("IRIP_DATABASE_URL", "")
+    from packages.common.database import get_database_admin_url, get_database_url
+
+    # 阶段2 A1：恢复使用 superuser 连接（file-backed secret 优先），
+    # 与 build_restore_config_from_env 的解析顺序保持一致。
+    db_url: str = get_database_admin_url() or get_database_url()
     if db_url:
         try:
             from urllib.parse import urlparse
@@ -1068,10 +1072,11 @@ def build_restore_config_from_env(backup_dir: Path) -> RestoreConfig:
     Returns:
         RestoreConfig: 恢复配置。
     """
-    db_url: str = (
-        os.getenv("IRIP_DATABASE_ADMIN_URL", "")
-        or os.getenv("IRIP_DATABASE_URL", "")
-    )
+    from packages.common.database import get_database_admin_url, get_database_url
+
+    # 阶段2 A1：superuser 连接优先走 IRIP_DATABASE_ADMIN_URL_FILE（secret 文件），
+    # 回退 IRIP_DATABASE_ADMIN_URL / IRIP_DATABASE_URL。
+    db_url: str = get_database_admin_url() or get_database_url()
     if not db_url:
         raise RuntimeError(
             "IRIP_DATABASE_URL or IRIP_DATABASE_ADMIN_URL environment variable is required"

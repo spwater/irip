@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from packages.common.database import build_session_factory, session_scope
+from packages.common.database import build_session_factory, get_database_url, session_scope
 from packages.common.errors import AppError
 from packages.common.job_policy import JobKindPolicy
 from packages.jobs.worker import JobExecutor, WorkerLeaseManager
@@ -41,9 +41,8 @@ def _async_db_url() -> str:
     Returns:
         str: 异步数据库连接字符串。
     """
-    db_url = os.getenv(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip",
+    db_url = get_database_url(
+        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
     )
     if db_url.startswith("postgresql+psycopg://"):
         return db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
