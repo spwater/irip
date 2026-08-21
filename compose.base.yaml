@@ -330,7 +330,7 @@ services:
     logging: *logging-base
     networks:
       - backend
-    command: ["python", "-m", "deployments.compose.restore", "--backup-dir", "${IRIP_RESTORE_BACKUP_DIR:-/backups}"]
+    command: ["python", "-m", "deployments.compose.restore"]
     environment:
       IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
@@ -349,12 +349,9 @@ services:
       - ${IRIP_BACKUP_HOST_DIR:-./backups}:/backups
       # PITR: WAL 归档目录（PITR 恢复时 PG 从此处读取 WAL）
       - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
-      # 安全提示：Docker socket 挂载为容器逃逸风险点。
-      # 生产环境应使用专用恢复服务（非 Docker socket）或通过 API 代理限制可执行命令。
-      # 仅在 dangerous-ops profile 下启动，且需 system:manage 权限。
-      # PITR: Docker socket（需控制 PG 容器 stop/start）
-      - /var/run/docker.sock:/var/run/docker.sock
       # PITR: pgdata 卷（PITR 恢复需写入 PG data 目录）
+      # 安全说明：Docker socket 不再挂载。服务的停启由宿主编排脚本
+      # （scripts/ops/restore.sh）负责，restore 容器仅执行纯数据操作。
       - pgdata:/var/lib/postgresql/data
     depends_on:
       postgres:
