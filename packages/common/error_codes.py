@@ -103,6 +103,7 @@ class ErrorCode(enum.Enum):
     COMPONENT_NOT_FOUND = ("component_not_found", 404)
     INVALID_OUTPUT = ("invalid_output", 422)
     INVALID_MODEL_ARTIFACT = ("invalid_model_artifact", 422)
+    UNSAFE_MODEL_FORMAT = ("unsafe_model_format", 422)
     MODEL_FAILED = ("model_failed", 500)
     MODEL_NOT_LOADED = ("model_not_loaded", 422)
     MODEL_TIMEOUT = ("model_timeout", 504)
