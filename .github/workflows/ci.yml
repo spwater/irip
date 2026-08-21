@@ -547,7 +547,7 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
       # 种子数据：创建哨兵部门 + 管理员用户（幂等，重复运行不报错）
-      - run: python -m deployments.compose.bootstrap || true
+      - run: python -m deployments.compose.bootstrap || :
       - run: corepack enable pnpm
       - run: corepack prepare pnpm@11.15.1 --activate
       - run: pnpm --dir apps/web install --frozen-lockfile
@@ -582,7 +582,7 @@ jobs:
           pnpm --dir apps/web exec playwright test
           TEST_EXIT=$?
           # 清理后台进程
-          kill $API_PID $WEB_PID 2>/dev/null || true
+          kill $API_PID $WEB_PID 2>/dev/null || :
           exit $TEST_EXIT
       - name: Upload Playwright report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
@@ -592,7 +592,7 @@ jobs:
           path: apps/web/playwright-report/
           retention-days: 7
 
-  # ---- 依赖漏洞扫描 (P0: 生产安全) ----
+  # ---- 依赖漏洞扫描 (P1-T4: 硬门禁，失败即阻断) ----
   dependency-scan:
     name: Dependency Vulnerability Scan
     runs-on: ubuntu-latest
@@ -614,31 +614,39 @@ jobs:
         run: |
           corepack enable pnpm
           pnpm install --frozen-lockfile
-          pnpm audit --audit-level=high || true
-      - name: Secret scan (gitleaks)
-        run: |
-          # 检测代码中是否泄露密钥
-          docker run --rm -v "${{ github.workspace }}:/repo" zricethezav/gitleaks:latest \
-            detect --source /repo --no-banner --redact
+          pnpm audit --audit-level=high
+
+  # ---- 镜像漏洞扫描 (P1-T4: 独立硬门禁 job) ----
+  container-scan:
+    name: Container Image Scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Container image scan (trivy)
         run: |
-          # 扫描 Docker 镜像中的已知漏洞
+          # 扫描 Docker 镜像中的已知漏洞 -- 失败即阻断
           docker build -f deployments/compose/api.Dockerfile -t irip-api:scan .
-          trivy image --severity HIGH,CRITICAL --exit-code 1 irip-api:scan || true
+          trivy image --severity HIGH,CRITICAL --exit-code 1 irip-api:scan
 
-  # ---- SAST 静态应用安全测试 ----
+  # ---- SAST 静态应用安全测试 (P1-T4: Bandit + Semgrep 硬门禁) ----
   sast:
-    name: SAST (Bandit)
+    name: SAST (Bandit + Semgrep)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
-      - run: pip install bandit
-      - run: bandit -r packages apps -lll -ii -x tests/
+      - name: Bandit scan
+        run: |
+          pip install bandit
+          bandit -r packages apps -lll -ii -x tests/
+      - name: Semgrep scan (custom rules)
+        run: |
+          pip install semgrep
+          semgrep --config security/semgrep.yml --error
 
-  # ---- Secret 扫描 ----
+  # ---- Secret 扫描 (P1-T4: 硬门禁) ----
   secret-scan:
     name: Secret Scan (gitleaks)
     runs-on: ubuntu-latest
@@ -649,12 +657,11 @@ jobs:
           docker run --rm -v "${{ github.workspace }}:/repo" \
             zricethezav/gitleaks:latest detect --source /repo --config /repo/.gitleaks.toml --no-banner --redact
 
-  # P2-I10: 负载测试（冒烟级，仅 PR/nightly，不阻塞）
+  # P2-I10: 负载测试（冒烟级，仅 PR/nightly）
   load-test:
     name: Load Test (k6 smoke)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-    continue-on-error: true
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -730,6 +737,7 @@ jobs:
       - web-build
       - test-e2e
       - dependency-scan
+      - container-scan
       - sast
       - secret-scan
       - load-test

@@ -32,7 +32,7 @@ PNPM="${PNPM:-pnpm}"
 
 # 步骤计数器
 STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 
 # ---- 辅助函数 ----
 
@@ -114,7 +114,36 @@ else
     step_fail "前端构建失败"
 fi
 
-# ---- Step 7: 启动隔离的测试基础设施 + 迁移 (H-10: 先启动环境和迁移) ----
+# ---- Step 7: Security scans (P1-T4: Semgrep + pip-audit, 硬门禁) ----
+step_header "安全扫描 (Semgrep + pip-audit)"
+
+# Semgrep — 自定义规则 (security/semgrep.yml)
+if ! command -v semgrep > /dev/null 2>&1 && ! $PY -m semgrep --help > /dev/null 2>&1; then
+    echo -e "${YELLOW}  semgrep 未安装，尝试安装...${NC}"
+    if ! $PY -m pip install semgrep; then
+        step_fail "semgrep 安装失败 -- 安全扫描工具缺失，发布门禁止"
+    fi
+fi
+if $PY -m semgrep --config security/semgrep.yml --error; then
+    step_pass "Semgrep 自定义规则 -- 0 violations"
+else
+    step_fail "Semgrep 扫描发现违规 -- 发布门阻断"
+fi
+
+# pip-audit -- Python 依赖漏洞扫描
+if ! command -v pip-audit > /dev/null 2>&1; then
+    echo -e "${YELLOW}  pip-audit 未安装，尝试安装...${NC}"
+    if ! $PY -m pip install pip-audit; then
+        step_fail "pip-audit 安装失败 -- 安全扫描工具缺失，发布门禁止"
+    fi
+fi
+if $PY -m pip-audit --skip-editable --ignore-vuln PYSEC-2026-1845; then
+    step_pass "pip-audit 依赖漏洞扫描 -- 0 vulnerabilities"
+else
+    step_fail "pip-audit 发现已知漏洞 -- 发布门阻断"
+fi
+
+# ---- Step 8: 启动隔离的测试基础设施 + 迁移 (H-10: 先启动环境和迁移) ----
 step_header "启动测试基础设施 + 迁移 (postgres-test/minio-test/redis-test)"
 echo "  启动隔离的测试容器（端口 55432/56379/59000，不冲突开发环境）..."
 if docker compose -f "$TEST_COMPOSE_FILE" up -d; then
@@ -155,7 +184,7 @@ else
     step_fail "测试基础设施启动失败"
 fi
 
-# ---- Step 8: Integration + Security + Recovery tests (H-10: 环境就绪后执行) ----
+# ---- Step 9: Integration + Security + Recovery tests (H-10: 环境就绪后执行) ----
 step_header "集成 + 安全 + 恢复测试 (integration + security + recovery)"
 if $PY -m pytest tests/integration tests/security tests/recovery -q; then
     step_pass "Integration + Security + Recovery tests -- 100% pass"
@@ -163,7 +192,7 @@ else
     step_fail "Integration + Security + Recovery tests 失败"
 fi
 
-# ---- Step 9: E2E tests (可选，需完整 compose web 服务栈) ----
+# ---- Step 10: E2E tests (可选，需完整 compose web 服务栈) ----
 step_header "E2E 测试 (Playwright)"
 # E2E 依赖完整的 web 服务（compose.yaml 全套 + 8080 端口），本地发布门不作为硬门禁，
 # 若 Playwright 浏览器或 web 服务不可用则跳过并明确提示（退出码 0，非 FAIL）。

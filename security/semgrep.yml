@@ -1,0 +1,31 @@
+rules:
+  - id: no-pickle-loads
+    pattern: pickle.loads(...)
+    message: "pickle.loads is unsafe; use ONNX or declarative adapters"
+    severity: ERROR
+    languages: [python]
+    paths:
+      exclude: ["tests/*"]
+  - id: no-joblib-load
+    pattern: joblib.load(...)
+    message: "joblib.load is unsafe; use ONNX or declarative adapters"
+    severity: ERROR
+    languages: [python]
+    paths:
+      exclude: ["tests/*"]
+  - id: no-build-session-factory-in-routers
+    pattern: build_session_factory(...)
+    message: "Routers must not construct database sessions"
+    severity: ERROR
+    languages: [python]
+    paths:
+      include: ["apps/api/routers/*"]
+  - id: no-hardcoded-admin
+    pattern-either:
+      - pattern: "'admin@irip.local'"
+      - pattern: '"admin@irip.local"'
+    message: "Hardcoded admin credentials are prohibited"
+    severity: ERROR
+    languages: [python]
+    paths:
+      exclude: ["tests/*"]
