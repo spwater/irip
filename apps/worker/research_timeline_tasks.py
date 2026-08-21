@@ -26,6 +26,37 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     return build_session_factory(db_url)
 
 
+async def _load_ai_config(
+    factory: async_sessionmaker[AsyncSession],
+) -> dict[str, Any] | None:
+    """Load active AI configuration from the database."""
+    import sqlalchemy as sa
+
+    async with factory() as session:
+        result = await session.execute(
+            sa.text(
+                "SELECT base_url, api_key, model_name, "
+                "research_model_name, research_thinking_enabled "
+                "FROM ai_config WHERE enabled = true "
+                "ORDER BY updated_at DESC LIMIT 1"
+            )
+        )
+        row = result.first()
+        if row is None:
+            return None
+        from packages.common.crypto import EnvelopeCrypto
+
+        crypto = EnvelopeCrypto.from_env()
+        decrypted_key = crypto.decrypt(row[1])
+        return {
+            "base_url": row[0],
+            "api_key": decrypted_key,
+            "model_name": row[2],
+            "research_model_name": row[3],
+            "research_thinking_enabled": row[4],
+        }
+
+
 @shared_task(
     name="research.recommendations.generate",
     bind=True,
@@ -183,6 +214,7 @@ def execute_analysis_run(
     from uuid import UUID
 
     async def _run() -> dict[str, Any]:
+
         from packages.research.execution.entities_trusted import (
             ResearchAnalysisRun,
         )
@@ -202,20 +234,96 @@ def execute_analysis_run(
             actor_id=actor_uuid,
         )
 
-        # Load run to get turn_id and workspace_id
+        # 1. Load run + turn + plan
         async with factory() as session:
             run = await session.get(ResearchAnalysisRun, run_uuid)
             if run is None:
                 return {"run_id": run_id, "turn_id": "", "status": "not_found"}
             turn_id = run.turn_id
             actual_ws_id = run.workspace_id
+            plan_version_id = run.plan_version_id
+            snapshot_id = run.snapshot_id
 
-        # Execute analysis (simplified: LLM call)
+        # 2. Load AI config and build PlanService
+        ai_config = await _load_ai_config(factory)
+        if not ai_config:
+            fail_result = await finalizer.fail(
+                run_id=run_uuid,
+                turn_id=turn_id,
+                error_message="AI config not found",
+            )
+            return fail_result
+
+        from packages.ai.openai_compatible import OpenAICompatibleProvider
+        from packages.research.execution.models_trusted import (
+            ModelConfig,
+            TaskType,
+        )
+        from packages.research.planning.context_router import ContextRouter
+        from packages.research.planning.model_gateway import ModelGateway
+        from packages.research.planning.plan_core import PlanService
+
+        research_model_name = ai_config.get("research_model_name") or ai_config.get(
+            "model_name", ""
+        )
+        thinking = ai_config.get("research_thinking_enabled", False)
+        ai_provider = OpenAICompatibleProvider(
+            api_key=ai_config["api_key"],
+            base_url=ai_config["base_url"],
+            model=research_model_name,
+            thinking_enabled=thinking,
+        )
+        model_registry = {
+            task: ModelConfig(
+                provider="openai_compatible",
+                model=research_model_name,
+                version="custom",
+                context_limit=128000,
+            )
+            for task in TaskType
+        }
+        model_gateway = ModelGateway(
+            provider=ai_provider,
+            audit_recorder=None,
+            model_registry=model_registry,
+        )
+
+        from packages.facts.query_service import FactQueryService
+        from packages.research.lineage.core_adapter import CoreFactProviderImpl
+
+        fact_provider = CoreFactProviderImpl(
+            query_service=FactQueryService(
+                session_factory=factory,
+                department_id=dept_uuid,  # type: ignore[arg-type]
+                actor_id=actor_uuid,
+                s3_repo=None,
+            )
+        )
+
+        plan_service = PlanService(
+            session_factory=factory,
+            department_id=dept_uuid,  # type: ignore[arg-type]
+            actor_id=actor_uuid,
+            model_gateway=model_gateway,
+            context_router=ContextRouter(),
+            fact_provider=fact_provider,
+        )
+
+        # 3. Execute analysis via PlanService.analyze_data
         try:
-            # In production this calls PlanService.analyze_data
-            # For now, use the existing AnalysisService.run_analysis
-            # which handles the full LLM flow
-            analysis_text = "Analysis completed via async worker."
+            analysis_result = await plan_service.analyze_data(
+                workspace_id=actual_ws_id,
+                plan_id=plan_version_id,
+                snapshot_id=snapshot_id,
+                turn_id=turn_id,
+            )
+
+            if isinstance(analysis_result, dict):
+                analysis_text = analysis_result.get("analysis_result", "")
+            elif isinstance(analysis_result, str):
+                analysis_text = analysis_result
+            else:
+                analysis_text = str(analysis_result)
 
             result = await finalizer.complete(
                 run_id=run_uuid,
@@ -272,14 +380,17 @@ def extract_candidates(
     async def _run() -> dict[str, Any]:
         import sqlalchemy as sa
 
+        from packages.research.execution.entities_trusted import (
+            ResearchAnalysisPlanVersion,
+        )
         from packages.research.timeline.entities import (
             CandidateExtractionJob,
-            ResearchTurnResult,
+            ResearchTurn,
         )
 
         factory = _get_session_factory()
-        UUID(department_id) if department_id else None
-        UUID(actor_id) if actor_id else None
+        dept_uuid = UUID(department_id) if department_id else None
+        actor_uuid = UUID(actor_id) if actor_id else None
         extraction_uuid = UUID(extraction_id)
 
         async with factory() as session:
@@ -293,7 +404,7 @@ def extract_candidates(
 
             # CAS: queued -> running
             if job.status == "succeeded":
-                logger.info("Extraction %s already done, idempotent skip", extraction_id)
+                logger.info("Extraction %s already done, skip", extraction_id)
                 return {
                     "extraction_id": extraction_id,
                     "status": "succeeded",
@@ -308,14 +419,9 @@ def extract_candidates(
             job.status = "running"
             await session.commit()
 
-            # Load turn result for analysis text
-            result_row = await session.execute(
-                sa.select(ResearchTurnResult).where(
-                    ResearchTurnResult.turn_id == job.turn_id
-                )
-            )
-            turn_result = result_row.scalar_one_or_none()
-            if turn_result is None or not turn_result.structured_output:
+            # Load turn to get workspace_id, snapshot_id, plan_version_id
+            turn = await session.get(ResearchTurn, job.turn_id)
+            if turn is None:
                 job.status = "failed"
                 await session.commit()
                 return {
@@ -324,24 +430,129 @@ def extract_candidates(
                     "candidate_count": 0,
                 }
 
-            (
-                turn_result.structured_output.get("analysis_markdown", "")
-                if isinstance(turn_result.structured_output, dict)
-                else str(turn_result.summary or "")
+            ws_id = turn.workspace_id
+            snapshot_id = turn.evidence_snapshot_id
+
+            # Find the confirmed plan for this turn
+            plan_result = await session.execute(
+                sa.select(ResearchAnalysisPlanVersion)
+                .where(ResearchAnalysisPlanVersion.turn_id == job.turn_id)
+                .order_by(ResearchAnalysisPlanVersion.version_number.desc())
+                .limit(1)
             )
+            plan = plan_result.scalar_one_or_none()
+            if plan is None:
+                job.status = "failed"
+                await session.commit()
+                return {
+                    "extraction_id": extraction_id,
+                    "status": "failed",
+                    "candidate_count": 0,
+                }
 
-            # Extract candidate conclusions from analysis text
-            # (Simplified: in production this calls LLM for candidate extraction)
-            candidates_created = 0
-            # TODO: Call LLM to extract candidates from analysis_text
+            plan_version_id = plan.id
 
-            job.status = "succeeded"
-            await session.commit()
+        # Load AI config and build PlanService
+        ai_config = await _load_ai_config(factory)
+        if not ai_config:
+            async with factory() as session:
+                job = await session.get(CandidateExtractionJob, extraction_uuid)
+                if job:
+                    job.status = "failed"
+                    await session.commit()
+            return {
+                "extraction_id": extraction_id,
+                "status": "failed",
+                "candidate_count": 0,
+            }
+
+        from packages.ai.openai_compatible import OpenAICompatibleProvider
+        from packages.research.execution.models_trusted import (
+            ModelConfig,
+            TaskType,
+        )
+        from packages.research.planning.context_router import ContextRouter
+        from packages.research.planning.model_gateway import ModelGateway
+        from packages.research.planning.plan_core import PlanService
+
+        research_model_name = ai_config.get("research_model_name") or ai_config.get(
+            "model_name", ""
+        )
+        ai_provider = OpenAICompatibleProvider(
+            api_key=ai_config["api_key"],
+            base_url=ai_config["base_url"],
+            model=research_model_name,
+            thinking_enabled=ai_config.get("research_thinking_enabled", False),
+        )
+        model_registry = {
+            task: ModelConfig(
+                provider="openai_compatible",
+                model=research_model_name,
+                version="custom",
+                context_limit=128000,
+            )
+            for task in TaskType
+        }
+        model_gateway = ModelGateway(
+            provider=ai_provider,
+            audit_recorder=None,
+            model_registry=model_registry,
+        )
+
+        from packages.facts.query_service import FactQueryService
+        from packages.research.lineage.core_adapter import CoreFactProviderImpl
+
+        fact_provider = CoreFactProviderImpl(
+            query_service=FactQueryService(
+                session_factory=factory,
+                department_id=dept_uuid,  # type: ignore[arg-type]
+                actor_id=actor_uuid,
+                s3_repo=None,
+            )
+        )
+
+        plan_service = PlanService(
+            session_factory=factory,
+            department_id=dept_uuid,  # type: ignore[arg-type]
+            actor_id=actor_uuid,
+            model_gateway=model_gateway,
+            context_router=ContextRouter(),
+            fact_provider=fact_provider,
+        )
+
+        # Execute candidate extraction via PlanService.extract_insight
+        try:
+            result = await plan_service.extract_insight(
+                workspace_id=ws_id,
+                plan_id=plan_version_id,
+                snapshot_id=snapshot_id,
+                turn_id=job.turn_id,
+            )
+            candidate_id = result.get("insight_candidate_id")
+            candidates_created = 1 if candidate_id else 0
+
+            async with factory() as session:
+                job = await session.get(CandidateExtractionJob, extraction_uuid)
+                if job:
+                    job.status = "succeeded"
+                    await session.commit()
 
             return {
                 "extraction_id": extraction_id,
                 "status": "succeeded",
                 "candidate_count": candidates_created,
+            }
+        except Exception as exc:
+            logger.exception("Extraction %s failed: %s", extraction_id, exc)
+            async with factory() as session:
+                job = await session.get(CandidateExtractionJob, extraction_uuid)
+                if job:
+                    job.status = "failed"
+                    await session.commit()
+            return {
+                "extraction_id": extraction_id,
+                "status": "failed",
+                "candidate_count": 0,
             }
 
     logger.info("extracting candidates for extraction %s", extraction_id)
