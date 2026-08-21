@@ -328,25 +328,7 @@ async def restore_workspace(
     service: WorkspaceServiceDep,
 ) -> None:
     """恢复已归档的研究工作空间为活跃状态。"""
-    import os
-
-    import sqlalchemy as sa
-
-    from packages.common.database import build_session_factory
-    from packages.research.entities import ResearchWorkspace
-
-    db_url = os.environ.get(
-        "IRIP_DATABASE_URL",
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-    )
-    factory = build_session_factory(db_url)
-    async with factory() as session:
-        await session.execute(
-            sa.update(ResearchWorkspace)
-            .where(ResearchWorkspace.id == workspace_id)
-            .values(status="draft", updated_at=sa.func.now())
-        )
-        await session.commit()
+    await service.restore_workspace(workspace_id)
 
 
 # NOTE: fork_workspace and update_question endpoints removed in timeline refactoring.

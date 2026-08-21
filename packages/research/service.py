@@ -407,6 +407,39 @@ class WorkspaceService(ScopedSessionMixin):
                 ),
             )
 
+    async def restore_workspace(self, workspace_id: UUID) -> None:
+        """恢复已归档的工作空间（status → draft）。
+
+        Args:
+            workspace_id: 工作空间 ID。
+
+        Raises:
+            AppError: code="not_found"，当工作空间不存在时。
+        """
+        actor_id = self._require_actor()
+        async with self._scoped_session() as session:
+            workspace = await ResearchRepository.get_workspace(session, workspace_id, actor_id)
+            if workspace is None:
+                raise AppError(
+                    code="not_found",
+                    message="研究工作空间不存在",
+                    retryable=False,
+                    fields={"workspace_id": str(workspace_id)},
+                )
+
+            await ResearchRepository.update_workspace_status(session, workspace_id, "draft")
+
+            await AuditRecorder.record(
+                session,
+                AuditEventData(
+                    department_id=self._dept_id,
+                    action="research.workspace.restore",
+                    actor_user_id=actor_id,
+                    resource_type="research_workspace",
+                    resource_id=workspace_id,
+                ),
+            )
+
     async def delete_workspace(self, workspace_id: UUID) -> None:
         """物理删除工作空间（CASCADE 级联删除子表）。
 
