@@ -355,32 +355,34 @@ class TurnService(ScopedSessionMixin):
                 evidence_snapshot_id=command.evidence_snapshot_id,
             )
 
-    async def start_planning(self, turn_id: UUID) -> PlanVersionRef:
-        """Lock turn inputs and transition to planning state.
+    async def start_planning(
+        self, workspace_id: UUID, turn_id: UUID
+    ) -> PlanVersionRef:
+        """Lock turn inputs, transition to planning, and enqueue plan generation.
 
-        This writes prompt_template_version and output_schema_version,
-        then transitions the turn status to "planning". After this,
-        question, snapshot and context cannot be changed.
+        Writes a ``research.plan.requested`` Outbox event so the Worker
+        can generate the plan asynchronously. Returns a stub PlanVersionRef;
+        the actual plan is produced by the Worker.
 
         Args:
+            workspace_id: Workspace ID (ownership check).
             turn_id: The turn ID.
 
         Returns:
-            PlanVersionRef stub (actual plan generation is in Task 6).
+            PlanVersionRef stub (actual plan generation is async).
 
         Raises:
+            AppError: not_found if turn doesn't exist.
             AppError: state_conflict if the turn cannot enter planning.
         """
+        from packages.jobs.outbox import OutboxDispatcher
+        from packages.research.timeline.access import require_owned_turn
+
         actor_id = self._require_actor()
         async with self._scoped_session() as session:
-            turn = await TimelineRepository.get_turn(session, turn_id)
-            if turn is None:
-                raise AppError(
-                    code="not_found",
-                    message="Turn not found",
-                    retryable=False,
-                    fields={"turn_id": str(turn_id)},
-                )
+            turn = await require_owned_turn(
+                session, workspace_id, turn_id, self._actor_id
+            )
 
             if not TurnStateMachine.can_plan(turn.status):
                 raise AppError(
@@ -410,9 +412,21 @@ class TurnService(ScopedSessionMixin):
                 ),
             )
 
-            # Return a stub — Task 6 will implement actual plan generation
+            # Enqueue async plan generation via Outbox
+            await OutboxDispatcher.enqueue(
+                session,
+                aggregate_type="research_turn",
+                aggregate_id=turn_id,
+                event_type="research.plan.requested",
+                payload={
+                    "actor_id": str(actor_id),
+                    "department_id": str(self._dept_id),
+                    "workspace_id": str(workspace_id),
+                },
+            )
+
             return PlanVersionRef(
-                plan_id=turn_id,  # placeholder
+                plan_id=turn_id,  # placeholder until Worker creates real plan
                 turn_id=turn_id,
                 version_number=0,
                 status="planning",

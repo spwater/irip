@@ -566,7 +566,7 @@ async def start_planning(
     service: TurnServiceDep,
 ) -> dict[str, Any]:
     """Start generating an analysis plan for a turn."""
-    ref = await service.start_planning(turn_id)
+    ref = await service.start_planning(workspace_id, turn_id)
     return {"turn_id": str(ref.turn_id), "status": ref.status}
 
 

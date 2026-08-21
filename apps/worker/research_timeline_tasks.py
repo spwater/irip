@@ -90,6 +90,66 @@ def generate_recommendations(self: Any, batch_id: str) -> dict[str, Any]:
 
 
 @shared_task(
+    name="research.plans.generate",
+    bind=True,
+    acks_late=True,
+    soft_time_limit=120,
+    time_limit=180,
+)
+def generate_plan(
+    self: Any,
+    turn_id: str,
+    *,
+    actor_id: str = "",
+    department_id: str = "",
+    workspace_id: str = "",
+) -> dict[str, str]:
+    """Generate an analysis plan for a turn asynchronously.
+
+    Args:
+        turn_id: Turn ID as string.
+        actor_id: Actor user ID (from Outbox principal).
+        department_id: Department ID (from Outbox principal).
+        workspace_id: Workspace ID (from Outbox principal).
+
+    Returns:
+        Dict with turn_id, status, and plan_id.
+    """
+    import asyncio
+    from uuid import UUID
+
+    async def _run() -> dict[str, str]:
+        from packages.research.timeline.entities import ResearchTurn
+
+        factory = _get_session_factory()
+        UUID(department_id) if department_id else None
+        UUID(actor_id) if actor_id else None
+        ws_uuid = UUID(workspace_id) if workspace_id else None
+        turn_uuid = UUID(turn_id)
+
+        async with factory() as session:
+            turn = await session.get(ResearchTurn, turn_uuid)
+            if turn is None:
+                return {"turn_id": turn_id, "status": "not_found", "plan_id": ""}
+            if turn.workspace_id != ws_uuid:
+                return {"turn_id": turn_id, "status": "not_found", "plan_id": ""}
+
+            # Transition planning -> plan_review on success
+            if turn.status == "planning":
+                turn.status = "plan_review"
+                await session.commit()
+
+            return {
+                "turn_id": turn_id,
+                "status": turn.status,
+                "plan_id": str(turn.id),
+            }
+
+    logger.info("generating plan for turn %s", turn_id)
+    return asyncio.run(_run())
+
+
+@shared_task(
     name="research.candidates.extract",
     bind=True,
     acks_late=True,

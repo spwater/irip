@@ -30,6 +30,10 @@ DEFAULT_BATCH_SIZE: int = 100
 #: Research timeline 事件的显式路由白名单。
 #: 不允许由 payload 注入任意 task 名。
 RESEARCH_EVENT_ROUTES: dict[str, tuple[str, str]] = {
+    "research.plan.requested": (
+        "research.plans.generate",
+        "irip-research",
+    ),
     "research.recommendation.requested": (
         "research.recommendations.generate",
         "irip-research",
