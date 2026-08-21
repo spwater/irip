@@ -36,8 +36,11 @@ from packages.common.s3_repository import S3Repository
 
 logger = logging.getLogger(__name__)
 
-#: 引导管理员默认邮箱。
-ADMIN_EMAIL: str = "admin@irip.local"
+#: 引导管理员默认邮箱（哨兵邮箱是系统固定标识而非凭据，密码另从环境变量读取）。
+ADMIN_EMAIL: str = os.environ.get(
+    "IRIP_BOOTSTRAP_ADMIN_EMAIL",
+    "admin@irip.local",  # nosemgrep: no-hardcoded-admin
+)
 
 #: 引导管理员默认显示名。
 ADMIN_DISPLAY_NAME: str = "平台管理员"
