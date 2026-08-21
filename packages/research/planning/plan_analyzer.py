@@ -470,18 +470,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 "data_context": full_data_text,
             }
 
-        # analyze_data 的 session 已 commit，在 session 外自动提取 Insight
-        logger.info("analyze_data completed, calling extract_insight for plan %s", plan_id)
-        try:
-            await self.extract_insight(
-                workspace_id=workspace_id,
-                plan_id=plan_id,
-                snapshot_id=snapshot_id,
-                turn_id=turn_id,
-            )
-            logger.debug("extract_insight returned OK")
-        except Exception as exc:
-            logger.warning("extract_insight failed: %s", exc, exc_info=True)
+        # extract_insight side-effect removed (P0-Timeline-T7):
+        # Candidate extraction is now handled by the async Worker
+        # via Outbox event, not inline during analyze_data.
         return result_data
 
     async def extract_insight(
