@@ -1,0 +1,36 @@
+# IRIP 开发覆盖：暴露内部服务端口到宿主机，便于本机调试
+# 用法：docker compose -f compose.base.yaml -f compose.development.yaml up -d
+#
+# 仅用于本地开发。密码从项目根目录 .env 读取（docker compose 自动加载）。
+# IRIP_ENV=development，并暴露 postgres/redis/minio/api/web 端口。
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"
+
+  minio:
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  api:
+    ports:
+      - "8000:8000"
+    environment:
+      IRIP_ENV: "development"
+
+  worker:
+    environment:
+      IRIP_ENV: "development"
+
+  scheduler:
+    environment:
+      IRIP_ENV: "development"
+
+  web:
+    ports:
+      - "8080:80"

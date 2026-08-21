@@ -1,0 +1,106 @@
+# IRIP 生产覆盖：仅对外暴露 web 的 80/443，其余服务仅 backend 内网可达。
+# 用法：docker compose -f compose.base.yaml -f compose.production.yaml up -d
+#
+# 安全要点：
+# - 仅 web 暴露宿主端口 80:80 / 443:443
+# - IRIP_ENV=production
+# - 敏感凭据使用 file-backed secrets（Docker secrets），不内联开发密码
+# - secrets 文件由部署方通过受控途径分发到 ./secrets/ 目录（权限 0400）
+services:
+  api:
+    environment:
+      IRIP_ENV: "production"
+    secrets:
+      - source: irip_jwt_secret
+        target: jwt_secret
+      - source: irip_master_key
+        target: master_key
+      - source: irip_database_app_password
+        target: database_app_password
+      - source: irip_redis_password
+        target: redis_password
+      - source: irip_minio_secret_key
+        target: minio_secret_key
+      - source: irip_bootstrap_admin_password
+        target: bootstrap_admin_password
+
+  worker:
+    environment:
+      IRIP_ENV: "production"
+    secrets:
+      - source: irip_jwt_secret
+        target: jwt_secret
+      - source: irip_master_key
+        target: master_key
+      - source: irip_database_app_password
+        target: database_app_password
+      - source: irip_database_password
+        target: database_password
+      - source: irip_redis_password
+        target: redis_password
+      - source: irip_minio_secret_key
+        target: minio_secret_key
+
+  scheduler:
+    environment:
+      IRIP_ENV: "production"
+    secrets:
+      - source: irip_jwt_secret
+        target: jwt_secret
+      - source: irip_master_key
+        target: master_key
+      - source: irip_database_app_password
+        target: database_app_password
+      - source: irip_redis_password
+        target: redis_password
+      - source: irip_minio_secret_key
+        target: minio_secret_key
+
+  web:
+    ports:
+      - "80:80"
+      - "443:443"
+
+  postgres:
+    secrets:
+      - source: irip_database_password
+        target: postgres_password
+
+  redis:
+    secrets:
+      - source: irip_redis_password
+        target: redis_password
+
+  minio:
+    secrets:
+      - source: irip_minio_secret_key
+        target: minio_secret_key
+
+  bootstrap:
+    secrets:
+      - source: irip_jwt_secret
+        target: jwt_secret
+      - source: irip_master_key
+        target: master_key
+      - source: irip_database_password
+        target: database_password
+      - source: irip_minio_secret_key
+        target: minio_secret_key
+      - source: irip_bootstrap_admin_password
+        target: bootstrap_admin_password
+
+secrets:
+  irip_jwt_secret:
+    file: ./secrets/jwt_secret
+  irip_master_key:
+    file: ./secrets/master_key
+  irip_database_password:
+    file: ./secrets/database_password
+  irip_database_app_password:
+    file: ./secrets/database_app_password
+  irip_redis_password:
+    file: ./secrets/redis_password
+  irip_minio_secret_key:
+    file: ./secrets/minio_secret_key
+  irip_bootstrap_admin_password:
+    file: ./secrets/bootstrap_admin_password
