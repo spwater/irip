@@ -105,6 +105,11 @@ celery_app.conf.update(
             "task": "worker.retry_wait_jobs",
             "schedule": 15.0,
         },
+        # 时间线 Reconciler：每 30 秒检测并重排队 stale 任务
+        "timeline-reconcile": {
+            "task": "research.timeline.reconcile",
+            "schedule": 30.0,
+        },
         # 每日数据库备份：每日 02:00 UTC 触发 PITR 基础备份（pg_basebackup + mc mirror）
         "daily-backup": {
             "task": "backup.daily",
