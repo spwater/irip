@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.common.clock import Clock, SystemClock
 from packages.common.database import session_scope
 from packages.jobs.outbox import OutboxEvent
+from packages.jobs.research_principal import ResearchTaskPrincipal
 from packages.jobs.task_sender import TaskSender
 
 logger = logging.getLogger(__name__)
@@ -152,13 +153,27 @@ class OutboxDispatcherService:
             # Check research event routes first (explicit whitelist)
             if event.event_type in RESEARCH_EVENT_ROUTES:
                 task_name, queue = RESEARCH_EVENT_ROUTES[event.event_type]
+                # Parse principal from payload (allowlisted IDs only)
+                payload = event.payload or {}
+                try:
+                    principal = ResearchTaskPrincipal.from_payload(payload)
+                except ValueError:
+                    logger.warning(
+                        "Invalid principal for event %s (type=%s); "
+                        "not delivered",
+                        event.id,
+                        event.event_type,
+                    )
+                    return False
                 self._task_sender.send_task(
                     task_name,
                     args=[str(event.aggregate_id)],
+                    kwargs=principal.as_kwargs(),
                     queue=queue,
                 )
                 logger.info(
-                    "Dispatched research event %s (type=%s, aggregate_id=%s, queue=%s)",
+                    "Dispatched research event %s (type=%s, "
+                    "aggregate_id=%s, queue=%s)",
                     event.id,
                     event.event_type,
                     event.aggregate_id,
