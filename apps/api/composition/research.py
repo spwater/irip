@@ -104,14 +104,16 @@ def register(ctx: CompositionContext) -> None:
 
     # ---- Timeline services (Task 11) ----
     from apps.api.routers.research_timeline import (
-        get_analysis_service,
-        get_conclusion_service,
         get_recommendation_service,
-        get_timeline_query_service,
-        get_turn_service,
     )
     from apps.api.routers.research_timeline_bar import (
         get_conclusion_bar_service,
+    )
+    from apps.api.routers.research_timeline_turns import (
+        get_analysis_service,
+        get_conclusion_service,
+        get_timeline_query_service,
+        get_turn_service,
     )
     from packages.research.timeline.analysis_service import AnalysisService
     from packages.research.timeline.recommendation_service import RecommendationService

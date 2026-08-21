@@ -3,7 +3,7 @@
   "generated_from_commit": "636dd028",
   "max_new_file_lines": 500,
   "files": {
-    "apps/api/routers/research_timeline.py": {"lines": 598, "max_complexity": 15},
+    "apps/api/routers/research_timeline.py": {"lines": 450, "max_complexity": 15},
     "apps/api/routers/flows.py": {"lines": 904, "max_complexity": 15},
     "apps/api/routers/research_products.py": {"lines": 883, "max_complexity": 15},
     "apps/api/routers/research_publish.py": {"lines": 759, "max_complexity": 15},

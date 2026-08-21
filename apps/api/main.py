@@ -384,6 +384,7 @@ def create_app() -> FastAPI:
 
         # Import bar routes to register them on the shared research_timeline_router
         import apps.api.routers.research_timeline_bar  # noqa: F401
+        import apps.api.routers.research_timeline_turns  # noqa: F401
 
     # ---- AppError 异常处理器 ----
     @app.exception_handler(AppError)
