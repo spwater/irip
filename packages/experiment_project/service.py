@@ -46,7 +46,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import ScopedSessionMixin
+from packages.common.database import ScopedSessionMixin, get_database_url
 from packages.common.errors import AppError
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from packages.experiment_project.entities import (
@@ -523,7 +523,7 @@ class ExperimentProjectService(ScopedSessionMixin):
             from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
             from sqlalchemy.ext.asyncio import create_async_engine as _cae
 
-            _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "")
+            _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_url()
             if _alembic_url and fd_ids:
                 _eng = _cae(
                     _alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)

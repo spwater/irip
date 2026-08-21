@@ -274,7 +274,8 @@ services:
     # 先跑 alembic 迁移建表，再跑 bootstrap 创建组织+角色+管理员+bucket
     command: ["sh", "-c", "alembic upgrade head && python -m deployments.compose.bootstrap"]
     environment:
-      IRIP_DATABASE_URL: postgresql+psycopg://${IRIP_DATABASE_USER:-irip}:${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}@postgres:5432/${IRIP_DATABASE_NAME:-irip}
+      # 阶段2 A1：bootstrap 用 superuser（irip）做 DDL + 建角色/组织，连接串走 file-backed secret。
+      IRIP_DATABASE_URL_FILE: /run/secrets/database_admin_url
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
@@ -413,11 +414,19 @@ services:
     logging: *logging-base
     networks:
       - backend
+    # 阶段2 A1：DB_PASSWORD 走 file-backed secret（irip_app 密码）。
+    # edoburu/pgbouncer 镜像不支持 *_FILE 环境变量，用 entrypoint shim 从
+    # /run/secrets/database_app_password 读入并导出 DB_PASSWORD，再 exec 原 entrypoint。
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'DB_PASSWORD=$(cat /run/secrets/database_app_password); export DB_PASSWORD; exec /entrypoint.sh "$@"'
+      - pgbouncer-shim
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
+      # 角色/密码匹配：irip_app 配 app password；不再注入 DB_PASSWORD（由 shim 从 secret 读）
       DB_USER: ${IRIP_DATABASE_APP_USER:-irip_app}
-      DB_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
       DB_NAME: ${IRIP_DATABASE_NAME:-irip}
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 200

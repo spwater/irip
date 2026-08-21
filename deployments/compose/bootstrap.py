@@ -687,10 +687,10 @@ def _to_async_url(url: str) -> str:
 
 def _build_container() -> ApplicationContainer:
     """从环境变量构建应用容器。"""
-    from packages.common.database import build_session_factory
+    from packages.common.database import build_session_factory, get_database_url
     from packages.common.s3_repository import S3Repository
 
-    db_url = os.getenv("IRIP_DATABASE_URL", "")
+    db_url = get_database_url()
     if not db_url:
         raise RuntimeError("IRIP_DATABASE_URL environment variable is required")
 

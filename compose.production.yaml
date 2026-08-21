@@ -87,12 +87,19 @@ services:
         target: jwt_secret
       - source: irip_master_key
         target: master_key
-      - source: irip_database_password
-        target: database_password
+      - source: irip_database_admin_url
+        target: database_admin_url
       - source: irip_minio_secret_key
         target: minio_secret_key
       - source: irip_bootstrap_admin_password
         target: bootstrap_admin_password
+
+  # 阶段2 A1：pgbouncer 用 app（irip_app）角色，密码走 file-backed secret，
+  # 由 entrypoint shim 从 /run/secrets/database_app_password 注入 DB_PASSWORD。
+  pgbouncer:
+    secrets:
+      - source: irip_database_app_password
+        target: database_app_password
 
   # 阶段2 A1：backup/restore（dangerous-ops profile）使用 superuser 连接，
   # 连接串走 file-backed secret。
@@ -117,6 +124,8 @@ secrets:
     file: ./secrets/database_admin_url
   irip_database_app_url:
     file: ./secrets/database_app_url
+  irip_database_app_password:
+    file: ./secrets/database_app_password
   irip_redis_password:
     file: ./secrets/redis_password
   irip_minio_secret_key:
