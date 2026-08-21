@@ -1,23 +1,28 @@
 """IRIP 模型适配器实现（V2-T04）。
 
 提供两种 ModelAdapter 实现：
-- CommandModelAdapter: 命令行模型适配器，通过 subprocess 执行外部命令，
+- CommandModelAdapter: 命令行模型适配器，通过子进程执行外部命令，
   创建隔离工作目录，写入 input.json，读取 output.json，
   支持超时、SIGTERM 取消、受限环境变量与输出大小限制；
-- PythonModelAdapter: 进程内 Python 模型适配器，加载 pickle / joblib
-  序列化的 sklearn 等模型，直接调用 predict()。
+- OnnxModelAdapter: 声明式 ONNX 模型适配器，加载 ONNX 计算图工件，
+  在进程内通过 onnxruntime 执行推理。ONNX 为声明式格式，
+  反序列化不触发任意代码执行，是唯一允许在主进程内执行的模型格式。
 
 设计要点：
 - 两种适配器均实现 contracts.ModelAdapter 协议；
-- CommandModelAdapter 通信协议：input.json → 命令 → output.json，
+- CommandModelAdapter 通信协议：input.json -> 命令 -> output.json，
   超时发 SIGTERM，输出超过 max_output_bytes 时拒绝；
-- PythonModelAdapter 延迟导入 joblib / pickle / sklearn，
-  仅在 load() 时反序列化工件字节；
+- OnnxModelAdapter 加载前校验工件 SHA-256 完整性，
+  固定 CPUExecutionProvider 单线程执行，异常消息不泄露解析器内部信息；
 - validate_input 使用 jsonschema 校验输入契约；
 - 受限环境变量仅传递安全前缀（PATH/HOME/LANG/LC_*/IRIP_MODEL_*）。
+- build_adapter 默认拒绝（fail closed），仅 executor.type == "onnx" 在进程内接受，
+  其余类型（python/cli/缺失/未知）一律抛 unsafe_model_format，
+  禁止主进程执行不可信模型代码。
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import tempfile
@@ -41,6 +46,9 @@ _DEFAULT_TIMEOUT_SECONDS: int = 300
 #: 默认最大输出字节数（10 MB）。
 _DEFAULT_MAX_OUTPUT_BYTES: int = 10 * 1024 * 1024
 
+#: ONNX 工件最大字节数（256 MB），超过即拒绝加载（防止资源耗尽）。
+_MAX_ONNX_ARTIFACT_BYTES: int = 256 * 1024 * 1024
+
 #: 安全的环境变量前缀白名单（其余一律过滤）。
 _SAFE_ENV_PREFIXES: tuple[str, ...] = (
     "PATH",
@@ -52,10 +60,65 @@ _SAFE_ENV_PREFIXES: tuple[str, ...] = (
 )
 
 
+def _verify_sha256(artifact_bytes: bytes, expected_sha256: str) -> None:
+    """校验工件字节与期望 SHA-256 摘要一致。
+
+    期望摘要为空时跳过校验（向后兼容）；非空时严格比对，
+    不匹配则抛 invalid_model_artifact（消息不含内部细节）。
+
+    Args:
+        artifact_bytes: 模型工件字节内容。
+        expected_sha256: 期望的 SHA-256 摘要（hex 小写），空字符串跳过。
+
+    Raises:
+        AppError: code="invalid_model_artifact"，当摘要不匹配时。
+    """
+    if not expected_sha256:
+        return
+    actual_sha: str = hashlib.sha256(artifact_bytes).hexdigest()
+    if actual_sha != expected_sha256:
+        raise AppError(
+            code="invalid_model_artifact",
+            message="工件 SHA-256 校验失败，内容可能被篡改",
+            retryable=False,
+            fields={},
+        )
+
+
+def _validate_input_schema(
+    inputs: dict[str, Any],
+    contract: ModelContract,
+) -> ValidationResult:
+    """基于契约的 input_schema 校验输入。
+
+    使用 jsonschema 校验输入字典是否符合契约声明的 JSON Schema。
+    空 schema 视为始终通过。
+
+    Args:
+        inputs: 输入参数字典。
+        contract: 模型契约。
+
+    Returns:
+        ValidationResult: 校验结果。校验失败返回 valid=False，
+        errors 含校验错误信息。
+    """
+    schema: dict[str, Any] = contract.input_schema
+    if not schema:
+        return ValidationResult(valid=True, errors=())
+    try:
+        jsonschema.validate(instance=inputs, schema=schema)
+    except jsonschema.ValidationError as exc:
+        return ValidationResult(
+            valid=False,
+            errors=(f"input_validation_failed: {exc.message}",),
+        )
+    return ValidationResult(valid=True, errors=())
+
+
 class CommandModelAdapter:
     """命令行模型适配器。
 
-    通过 subprocess 执行外部命令行模型。创建隔离工作目录，
+    通过子进程执行外部命令行模型。创建隔离工作目录，
     将模型工件写入工作目录，写入 input.json，执行命令，
     读取 output.json。
 
@@ -69,6 +132,10 @@ class CommandModelAdapter:
     - 超时用 asyncio.wait_for，到期发 SIGTERM；
     - 输出超过 max_output_bytes 时拒绝（防止内存耗尽）；
     - 环境变量白名单过滤。
+
+    注意：本适配器可通过直接构造使用，但 build_adapter 不会自动构建它
+    （cli 类型在 build_adapter 中被拒绝）。如需使用，应由可信部署流程
+    显式构造，而非由用户契约驱动。
 
     Attributes:
         _command: 命令元组（如 ``("python", "predict.py")``）。
@@ -138,27 +205,14 @@ class CommandModelAdapter:
     ) -> ValidationResult:
         """基于契约的 input_schema 校验输入。
 
-        使用 jsonschema 校验输入字典是否符合契约声明的 JSON Schema。
-
         Args:
             inputs: 输入参数字典。
             contract: 模型契约。
 
         Returns:
-            ValidationResult: 校验结果。校验失败返回 valid=False，
-            errors 含校验错误信息。
+            ValidationResult: 校验结果。
         """
-        schema: dict[str, Any] = contract.input_schema
-        if not schema:
-            return ValidationResult(valid=True, errors=())
-        try:
-            jsonschema.validate(instance=inputs, schema=schema)
-        except jsonschema.ValidationError as exc:
-            return ValidationResult(
-                valid=False,
-                errors=(f"input_validation_failed: {exc.message}",),
-            )
-        return ValidationResult(valid=True, errors=())
+        return _validate_input_schema(inputs, contract)
 
     async def predict(self, inputs: dict[str, Any]) -> ModelOutput:
         """执行命令行预测。
@@ -171,7 +225,7 @@ class CommandModelAdapter:
         5. 执行命令（command + workdir + input_path + output_path）；
         6. asyncio.wait_for 等待完成（超时发 SIGTERM）；
         7. 检查输出大小限制；
-        8. 读取 output.json → ModelOutput。
+        8. 读取 output.json -> ModelOutput。
 
         Args:
             inputs: 输入参数字典。
@@ -342,108 +396,116 @@ class CommandModelAdapter:
             pass
 
 
-class PythonModelAdapter:
-    """进程内 Python 模型适配器。
+class OnnxModelAdapter:
+    """声明式 ONNX 模型适配器（进程内安全执行）。
 
-    加载 pickle / joblib 序列化的 sklearn 等模型，
-    在当前进程内直接调用 predict()。
+    加载 ONNX 序列化模型工件，在进程内通过 onnxruntime 执行推理。
+    ONNX 是声明式计算图格式，不包含任意可执行代码，
+    因此反序列化不会触发 RCE，是唯一允许在主进程内执行的模型格式。
 
-    适用于 sklearn、xgboost 等支持 pickle 序列化的模型。
-    延迟导入 joblib / pickle，仅在 load() 时反序列化工件字节。
+    安全措施：
+    - 加载前校验工件 SHA-256 完整性（篡改即拒绝）；
+    - 工件大小超过 max_artifact_bytes 即拒绝（防止资源耗尽）；
+    - 固定使用 CPUExecutionProvider，单线程执行（intra/inter op num threads=1）；
+    - 异常消息不泄露解析器内部信息（不包含底层异常文本）。
 
     Attributes:
-        _timeout_seconds: 超时秒数（用于 predict 超时保护）。
-        _loaded: 已加载的模型实例。
+        _timeout_seconds: 推理超时秒数（用于 predict 超时保护）。
+        _max_artifact_bytes: 工件最大字节数。
+        _session: onnxruntime 推理会话（加载后非空）。
         _contract: 已加载的模型契约。
-        _model_obj: 反序列化后的模型对象。
+        _loaded: 已加载的模型引用。
     """
 
     def __init__(
         self,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
-        max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES,
+        max_artifact_bytes: int = _MAX_ONNX_ARTIFACT_BYTES,
     ) -> None:
-        """初始化 Python 适配器。
+        """初始化 ONNX 适配器。
 
         Args:
-            timeout_seconds: 超时秒数（用于 predict 超时保护）。
-            max_output_bytes: 预留参数，兼容协议（Python 适配器无输出文件）。
+            timeout_seconds: 推理超时秒数（默认 300）。
+            max_artifact_bytes: 工件最大字节数（默认 256 MB）。
         """
         self._timeout_seconds: int = timeout_seconds
-        self._max_output_bytes: int = max_output_bytes
-        self._loaded: LoadedModel | None = None
+        self._max_artifact_bytes: int = max_artifact_bytes
+        self._session: Any = None
         self._contract: ModelContract | None = None
-        self._model_obj: Any = None
+        self._loaded: LoadedModel | None = None
 
     async def load(
         self,
         artifact_bytes: bytes,
         contract: ModelContract,
     ) -> LoadedModel:
-        """加载 pickle / joblib 序列化的模型。
+        """加载 ONNX 模型工件为推理会话。
 
-        延迟导入 joblib（优先）或 pickle，反序列化工件字节为模型对象。
-
-        安全约束：
-        - pickle 反序列化是已知 RCE 向量。本方法仅接受经 artifact_service 上传的工件，
-          上传需要 model:manage 权限。
-        - 工件必须携带 SHA-256 哈希，load 前校验完整性。
-        - 这是已接受的信任边界：有 model:manage 权限的用户被视为可信上传者。
-        - 如需更高安全性，应在 artifact 上传阶段增加签名校验或沙箱加载。
+        流程：
+        1. 校验工件 SHA-256 完整性（契约声明 artifact_sha256 时）；
+        2. 校验工件大小不超限；
+        3. 延迟导入 onnxruntime 并构建单线程 CPU 推理会话。
 
         Args:
-            artifact_bytes: 模型工件字节内容（pickle 序列化）。
+            artifact_bytes: ONNX 模型工件字节内容。
             contract: 模型契约（含 artifact_sha256 用于完整性校验）。
 
         Returns:
-            LoadedModel: 已加载的模型引用。
+            LoadedModel: 已加载的模型引用（artifact_ref 为 "<in-memory>"）。
 
         Raises:
-            AppError: code="invalid_model_artifact"，当反序列化失败或哈希校验不通过时。
+            AppError: code="invalid_model_artifact"，当哈希校验失败、
+                工件过大或不是有效 ONNX 格式时。
+            AppError: code="model_failed"，当 onnxruntime 未安装时。
         """
-        import hashlib
+        _verify_sha256(artifact_bytes, contract.artifact_sha256)
 
-        expected_sha = getattr(contract, "artifact_sha256", None)
-        if expected_sha:
-            actual_sha = hashlib.sha256(artifact_bytes).hexdigest()
-            if actual_sha != expected_sha:
-                raise AppError(
-                    code="invalid_model_artifact",
-                    message="工件 SHA-256 校验失败，内容可能被篡改",
-                    retryable=False,
-                    fields={"expected": expected_sha[:16], "actual": actual_sha[:16]},
-                )
-
-        try:
-            try:
-                import io
-
-                import joblib
-
-                self._model_obj = joblib.load(io.BytesIO(artifact_bytes))
-            except ImportError:
-                import io
-                import pickle
-
-                self._model_obj = pickle.loads(artifact_bytes)  # nosec B301 — SHA-256 校验在前，仅反序列化已验证内容
-        except Exception as exc:
+        if len(artifact_bytes) > self._max_artifact_bytes:
             raise AppError(
                 code="invalid_model_artifact",
-                message=f"模型工件反序列化失败: {exc}",
+                message="模型工件过大，超出允许上限",
+                retryable=False,
+                fields={
+                    "size": len(artifact_bytes),
+                    "max": self._max_artifact_bytes,
+                },
+            )
+
+        try:
+            import onnxruntime
+        except ImportError as exc:
+            raise AppError(
+                code="model_failed",
+                message="onnxruntime 未安装，无法加载 ONNX 模型",
                 retryable=False,
                 fields={},
             ) from exc
 
-        metadata: dict[str, Any] = {
-            "artifact_size": len(artifact_bytes),
-            "adapter_type": "python",
-            "model_class": type(self._model_obj).__name__,
-        }
+        try:
+            options = onnxruntime.SessionOptions()
+            options.intra_op_num_threads = 1
+            options.inter_op_num_threads = 1
+            self._session = onnxruntime.InferenceSession(
+                artifact_bytes,
+                sess_options=options,
+                providers=["CPUExecutionProvider"],
+            )
+        except Exception as exc:
+            raise AppError(
+                code="invalid_model_artifact",
+                message="模型工件不是有效的 ONNX 格式",
+                retryable=False,
+                fields={},
+            ) from exc
+
+        self._contract = contract
         self._loaded = LoadedModel(
             artifact_ref="<in-memory>",
-            metadata=metadata,
+            metadata={
+                "adapter_type": "onnx",
+                "artifact_size": len(artifact_bytes),
+            },
         )
-        self._contract = contract
         return self._loaded
 
     def validate_input(
@@ -460,35 +522,37 @@ class PythonModelAdapter:
         Returns:
             ValidationResult: 校验结果。
         """
-        schema: dict[str, Any] = contract.input_schema
-        if not schema:
-            return ValidationResult(valid=True, errors=())
-        try:
-            jsonschema.validate(instance=inputs, schema=schema)
-        except jsonschema.ValidationError as exc:
-            return ValidationResult(
-                valid=False,
-                errors=(f"input_validation_failed: {exc.message}",),
-            )
-        return ValidationResult(valid=True, errors=())
+        return _validate_input_schema(inputs, contract)
 
     async def predict(self, inputs: dict[str, Any]) -> ModelOutput:
-        """执行进程内预测。
+        """执行 ONNX 进程内推理。
 
-        按契约声明的输入维度顺序构造特征矩阵，
-        调用模型 predict()，按契约声明的输出维度顺序映射结果。
+        按契约声明的输入维度顺序构造喂入张量，调用 onnxruntime 推理，
+        按契约声明的输出维度顺序映射结果。
+
+        输入映射策略：
+        - 若 ONNX 模型仅 1 个输入且契约有多个输入维度，
+          将各维度标量堆叠为单行二维张量 ``[[v0, v1, ...]]``；
+        - 否则按位置一一映射，每个输入构造为 ``[[v]]``。
+
+        输出映射策略：
+        - 若 ONNX 模型仅 1 个输出且契约有多个输出维度，
+          将输出展平后按顺序映射到各维度名；
+        - 否则按位置一一映射，取每个输出张量的首个元素。
 
         Args:
-            inputs: 输入参数字典。
+            inputs: 输入参数字典（应已通过 validate_input 校验）。
 
         Returns:
             ModelOutput: 预测输出。
 
         Raises:
             AppError: code="model_not_loaded"，当未加载时。
-            AppError: code="model_failed"，当预测抛异常时。
+            AppError: code="model_timeout"，当推理超时时。
+            AppError: code="model_failed"，当输入构造或推理失败时
+                （消息不包含底层异常文本）。
         """
-        if self._loaded is None or self._contract is None:
+        if self._session is None or self._contract is None:
             raise AppError(
                 code="model_not_loaded",
                 message="模型未加载，请先调用 load()",
@@ -496,95 +560,123 @@ class PythonModelAdapter:
                 fields={},
             )
 
-        # 从 input_schema 提取输入维度顺序
-        input_schema = self._contract.input_schema
-        properties: dict[str, Any] = input_schema.get("properties", {})
-        if properties:
-            input_dims: list[str] = list(properties.keys())
-        else:
-            input_dims = list(inputs.keys())
+        import numpy as np
 
-        # 从 output_schema 提取输出维度顺序
-        output_schema = self._contract.output_schema
-        out_properties: dict[str, Any] = output_schema.get("properties", {})
-        if out_properties:
-            output_dims: list[str] = list(out_properties.keys())
-        else:
-            output_dims = []
+        contract = self._contract
+        input_metas = self._session.get_inputs()
+        in_props: dict[str, Any] = contract.input_schema.get("properties", {})
+        input_names: list[str] = list(in_props.keys()) if in_props else list(inputs.keys())
 
-        # 构造特征矩阵
-        feature_row: list[float] = [float(inputs[dim]) for dim in input_dims]
-
+        feed: dict[str, Any] = {}
         try:
-            raw_pred = await asyncio.to_thread(self._model_obj.predict, [feature_row])
+            if len(input_metas) == 1 and len(input_names) > 1:
+                row: list[float] = [float(inputs[name]) for name in input_names]
+                feed[input_metas[0].name] = np.asarray([row], dtype=np.float32)
+            else:
+                for idx, meta in enumerate(input_metas):
+                    cname = input_names[idx] if idx < len(input_names) else meta.name
+                    feed[meta.name] = np.asarray(
+                        [[float(inputs[cname])]],
+                        dtype=np.float32,
+                    )
+            output_names: list[str] = [o.name for o in self._session.get_outputs()]
+            results = await asyncio.wait_for(
+                asyncio.to_thread(self._session.run, output_names, feed),
+                timeout=self._timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise AppError(
+                code="model_timeout",
+                message=f"ONNX 推理超时（{self._timeout_seconds}s）",
+                retryable=False,
+                fields={"timeout_seconds": self._timeout_seconds},
+            ) from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AppError(
+                code="model_failed",
+                message="ONNX 推理输入构造失败",
+                retryable=False,
+                fields={},
+            ) from exc
         except Exception as exc:
             raise AppError(
                 code="model_failed",
-                message=f"模型预测失败: {exc}",
+                message="ONNX 推理执行失败",
                 retryable=False,
                 fields={},
             ) from exc
 
-        # 映射预测结果
+        out_props: dict[str, Any] = contract.output_schema.get("properties", {})
+        output_names_contract: list[str] = (
+            list(out_props.keys()) if out_props else []
+        )
+
         predictions: dict[str, Any] = {}
-        pred_list = raw_pred.tolist()[0] if hasattr(raw_pred, "tolist") else list(raw_pred[0])
-        if output_dims and len(pred_list) == len(output_dims):
-            for i, dim in enumerate(output_dims):
-                predictions[dim] = pred_list[i]
+        if len(results) == 1 and len(output_names_contract) > 1:
+            flat = np.asarray(results[0]).reshape(-1).tolist()
+            for i, name in enumerate(output_names_contract):
+                predictions[name] = flat[i] if i < len(flat) else 0.0
         else:
-            for i, value in enumerate(pred_list):
-                key = output_dims[i] if i < len(output_dims) else f"output_{i}"
-                predictions[key] = value
+            for i, res in enumerate(results):
+                name = (
+                    output_names_contract[i]
+                    if i < len(output_names_contract)
+                    else f"output_{i}"
+                )
+                flat = np.asarray(res).reshape(-1).tolist()
+                predictions[name] = flat[0] if flat else 0.0
 
         return ModelOutput(
             predictions=predictions,
-            metadata={"adapter_type": "python"},
+            metadata={"adapter_type": "onnx"},
         )
 
     def healthcheck(self) -> HealthStatus:
-        """检查模型是否已加载。
+        """检查 ONNX 模型是否已加载。
 
         Returns:
             HealthStatus: 健康检查结果。
         """
-        if self._model_obj is None:
+        if self._session is None:
             return HealthStatus(healthy=False, message="模型未加载")
-        if not hasattr(self._model_obj, "predict"):
-            return HealthStatus(
-                healthy=False,
-                message="模型对象缺少 predict 方法",
-            )
-        return HealthStatus(
-            healthy=True,
-            message=f"模型已加载: {type(self._model_obj).__name__}",
-        )
+        return HealthStatus(healthy=True, message="ONNX 模型已加载")
 
 
-def build_adapter(
-    contract: ModelContract,
-) -> CommandModelAdapter | PythonModelAdapter:
-    """根据契约的 executor 规格构建适配器。
+def build_adapter(contract: ModelContract) -> OnnxModelAdapter:
+    """根据契约的 executor 规格构建适配器（fail closed）。
 
-    契约中 executor.type 为 "cli" 时构建 CommandModelAdapter，
-    为 "python" 时构建 PythonModelAdapter。未声明 executor 时
-    默认构建 PythonModelAdapter（适用于 sklearn 等序列化模型）。
+    安全策略：仅 executor.type == "onnx" 在进程内执行（声明式计算图，
+    无 RCE 风险）。其余类型（python / cli / 缺失 / 未知）一律抛
+    unsafe_model_format，禁止主进程执行不可信模型代码。
 
     Args:
         contract: 模型契约。
 
     Returns:
-        CommandModelAdapter | PythonModelAdapter: 适配器实例。
+        OnnxModelAdapter: ONNX 适配器实例。
+
+    Raises:
+        AppError: code="unsafe_model_format"，当 executor 类型非 onnx 时。
     """
     contract_dict = contract.to_dict()
     executor: dict[str, Any] = contract_dict.get("executor", {}) or {}
-    adapter_type: str = executor.get("type", "python")
-    timeout_seconds: int = int(executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS))
+    adapter_type: str = executor.get("type", "")
 
-    if adapter_type == "cli":
-        command_list: list[str] = list(executor.get("command", []))
-        command_tuple: tuple[str, ...] = tuple(command_list)
-        return CommandModelAdapter(
-            command=command_tuple,
-            timeout_seconds=timeout_seconds,
+    if adapter_type == "onnx":
+        timeout_seconds: int = int(
+            executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
         )
-    return PythonModelAdapter(timeout_seconds=timeout_seconds)
+        max_artifact_bytes: int = int(
+            executor.get("max_artifact_bytes", _MAX_ONNX_ARTIFACT_BYTES)
+        )
+        return OnnxModelAdapter(
+            timeout_seconds=timeout_seconds,
+            max_artifact_bytes=max_artifact_bytes,
+        )
+
+    raise AppError(
+        code="unsafe_model_format",
+        message="不支持的模型执行格式，仅允许声明式 ONNX 工件在进程内执行",
+        retryable=False,
+        fields={"executor_type": adapter_type} if adapter_type else {},
+    )

@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-import io
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -25,12 +24,12 @@ from packages.common.errors import AppError
 from packages.models.contracts import ModelContract
 from packages.models.service import ModelService
 
-_SKLEARN_AVAILABLE: bool = True
+_ONNX_AVAILABLE: bool = True
 try:
-    import joblib  # noqa: F401
-    import sklearn  # noqa: F401
+    import onnx  # noqa: F401
+    import onnxruntime  # noqa: F401
 except ImportError:
-    _SKLEARN_AVAILABLE = False
+    _ONNX_AVAILABLE = False
 
 
 #: 测试用模型契约（2 输入 → 2 输出）。
@@ -59,7 +58,7 @@ _TEST_CONTRACT_DICT: dict = {
         "x": {"min": 0.0, "max": 100.0},
         "y": {"min": 0.0, "max": 100.0},
     },
-    "executor": {"type": "python", "timeout_seconds": 60},
+    "executor": {"type": "onnx", "timeout_seconds": 60},
 }
 
 
@@ -119,38 +118,28 @@ class _FakeFactService:
         )
 
 
-def _train_tiny_model() -> bytes:
-    """训练一个微型 sklearn 多输出模型并序列化为字节。
+def _build_onnx_model() -> bytes:
+    """构建一个微型确定性 ONNX 模型（x,y 两输入 -> sum,product 两输出）。
+
+    sum = x + y，product = x * y。需 onnx 包。
 
     Returns:
-        bytes: joblib 序列化的 Pipeline 字节。
+        bytes: 序列化的 ONNX 模型字节。
     """
-    import numpy as np
-    from sklearn.ensemble import RandomForestRegressor
-    from sklearn.pipeline import Pipeline
-    from sklearn.preprocessing import StandardScaler
+    from onnx import TensorProto, helper
 
-    rng = np.random.RandomState(42)
-    x = rng.uniform(0, 100, size=(60, 2))
-    y = np.column_stack([x[:, 0] + x[:, 1], x[:, 0] * x[:, 1] * 0.01])
-    pipeline = Pipeline(
-        steps=[
-            ("scaler", StandardScaler()),
-            (
-                "rf",
-                RandomForestRegressor(
-                    n_estimators=10,
-                    random_state=42,
-                    n_jobs=1,
-                ),
-            ),
-        ]
+    x_in = helper.make_tensor_value_info("x", TensorProto.FLOAT, [None, 1])
+    y_in = helper.make_tensor_value_info("y", TensorProto.FLOAT, [None, 1])
+    s_out = helper.make_tensor_value_info("sum", TensorProto.FLOAT, [None, 1])
+    p_out = helper.make_tensor_value_info("product", TensorProto.FLOAT, [None, 1])
+    add_node = helper.make_node("Add", ["x", "y"], ["sum"])
+    mul_node = helper.make_node("Mul", ["x", "y"], ["product"])
+    graph = helper.make_graph(
+        [add_node, mul_node], "tiny", [x_in, y_in], [s_out, p_out]
     )
-    pipeline.fit(x, y)
-
-    buf = io.BytesIO()
-    joblib.dump(pipeline, buf)
-    return buf.getvalue()
+    model = helper.make_model(graph)
+    model.opset_import[0].opset = 13
+    return model.SerializeToString()
 
 
 @pytest_asyncio.fixture
@@ -167,11 +156,11 @@ async def model_service(
     Returns:
         ModelService: 模型服务实例。
     """
-    if not _SKLEARN_AVAILABLE:
-        pytest.skip("scikit-learn 未安装")
+    if not _ONNX_AVAILABLE:
+        pytest.skip("onnx/onnxruntime 未安装")
 
     org_id = test_user.department_id  # type: ignore[attr-defined]
-    model_bytes = _train_tiny_model()
+    model_bytes = _build_onnx_model()
     artifact_service = _FakeArtifactService(model_bytes)
     fact_service = _FakeFactService()
     service = ModelService(

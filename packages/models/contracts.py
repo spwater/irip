@@ -10,8 +10,8 @@
 
 设计要点：
 - 所有值对象为 frozen dataclass，确保不可变性与可测试性；
-- ModelAdapter 为 Protocol，具体实现（CommandModelAdapter / PythonModelAdapter）
-  在 adapters.py 中提供，支持进程内与命令行两种执行模式；
+- ModelAdapter 为 Protocol，具体实现（CommandModelAdapter / OnnxModelAdapter）
+  在 adapters.py 中提供，支持声明式 ONNX 进程内执行与命令行子进程执行；
 - ModelContract.sha256 为契约内容（name+version+schemas+domain）的
   SHA-256 摘要，用于内容寻址与完整性校验。
 """
@@ -71,6 +71,8 @@ class ModelContract:
         applicability_domain: 适用域，各输入维度的 min/max 范围，
             格式 ``{dimension: {"min": float, "max": float, "unit": str}}``。
         sha256: 契约内容的 SHA-256 摘要（hex 小写）。
+        artifact_sha256: 模型工件的 SHA-256 摘要（hex 小写），
+            适配器加载工件时校验完整性，为空时跳过校验。
     """
 
     name: str
@@ -80,6 +82,7 @@ class ModelContract:
     applicability_domain: dict[str, Any]
     sha256: str = ""
     executor: dict[str, Any] = field(default_factory=dict)
+    artifact_sha256: str = ""
 
     def __post_init__(self) -> None:
         """若未提供 sha256，则自动计算契约摘要。"""
@@ -102,6 +105,7 @@ class ModelContract:
             "output_schema": self.output_schema,
             "applicability_domain": self.applicability_domain,
             "sha256": self.sha256,
+            "artifact_sha256": self.artifact_sha256,
         }
         if self.executor:
             result["executor"] = self.executor
@@ -125,6 +129,7 @@ class ModelContract:
             applicability_domain=data.get("applicability_domain", {}),
             sha256=data.get("sha256", ""),
             executor=data.get("executor", {}) or {},
+            artifact_sha256=data.get("artifact_sha256", ""),
         )
 
 
@@ -191,7 +196,7 @@ class HealthStatus:
 class ModelAdapter(Protocol):
     """模型适配器协议。
 
-    每个具体适配器（CommandModelAdapter / PythonModelAdapter）实现此协议，
+    每个具体适配器（CommandModelAdapter / OnnxModelAdapter）实现此协议，
     提供统一的模型加载、输入校验、预测与健康检查接口。
 
     约定：

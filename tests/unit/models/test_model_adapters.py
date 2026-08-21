@@ -1,14 +1,17 @@
-"""单元测试：模型适配器 CommandModelAdapter / PythonModelAdapter / build_adapter。
+"""单元测试：模型适配器 CommandModelAdapter / OnnxModelAdapter / build_adapter。
 
 覆盖：
-- build_adapter：cli / python / 默认（无 executor）路由；
+- build_adapter：onnx 构建 OnnxModelAdapter；python / cli / 缺失 / 未知
+  一律抛 unsafe_model_format（fail closed）；
 - CommandModelAdapter：load 写入工件 + validate_input（空 schema / 合法 / 非法）
   + healthcheck（空命令 / 绝对路径 / PATH 命令 / 不存在）+ _build_safe_env 过滤；
-- PythonModelAdapter：load（pickle/pickle 回退 + SHA-256 校验失败 + 反序列化失败）
-  + validate_input + predict（按 schema 映射 / 无 schema 回退）+ healthcheck；
-- CommandModelAdapter.predict：未加载抛错 / 命令不存在 / 非零退出 / 输出过大 / JSON 解析失败。
+- OnnxModelAdapter：load（有效 ONNX + SHA-256 校验失败 + 无效字节 + 超大工件）
+  + validate_input + predict（按 schema 映射 / 未知输入拒绝）+ healthcheck；
+- 源码安全扫描：生产代码不含 pickle.loads / joblib.load；
+- CommandModelAdapter.predict：未加载抛错 / 命令不存在。
 """
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -16,7 +19,7 @@ import pytest
 from packages.common.errors import AppError
 from packages.models.adapters import (
     CommandModelAdapter,
-    PythonModelAdapter,
+    OnnxModelAdapter,
     build_adapter,
 )
 from packages.models.contracts import (
@@ -47,38 +50,48 @@ def _make_contract(
         applicability_domain=applicability_domain or {},
         executor=executor or {},
         sha256=artifact_sha256 or "",
+        artifact_sha256=artifact_sha256 or "",
     )
 
 
-# ---- 模块级 Fake 模型类（pickle 可序列化，joblib 不可用时回退 pickle） ----
+def _build_onnx_model() -> bytes:
+    """构建一个确定性最小 ONNX 模型：单输入 X[None,2] -> 单输出 Y[None,2] = X（Identity）。
+
+    用于 OnnxModelAdapter 单元测试。需要 onnx 包。
+
+    Returns:
+        bytes: 序列化的 ONNX 模型字节。
+    """
+    pytest.importorskip("onnx")
+    from onnx import TensorProto, helper
+
+    x = helper.make_tensor_value_info("X", TensorProto.FLOAT, [None, 2])
+    y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [None, 2])
+    node = helper.make_node("Identity", ["X"], ["Y"])
+    graph = helper.make_graph([node], "test_identity", [x], [y])
+    model = helper.make_model(graph)
+    model.opset_import[0].version = 13
+    return model.SerializeToString()
 
 
-class _FakePredictResult:
-    """模拟 numpy-like 预测结果（含 tolist）。"""
-
-    def tolist(self) -> list[list[float]]:
-        return [[3.5, 4.5]]
+# ============================================================
+# 源码安全扫描
+# ============================================================
 
 
-class _FakeSchemaModel:
-    """带 schema 映射的 Fake 模型。"""
+class TestSourceScan:
+    """生产源码安全扫描：禁止反序列化 RCE 向量。"""
 
-    def predict(self, x: Any) -> _FakePredictResult:
-        return _FakePredictResult()
+    def test_production_source_has_no_pickle_or_joblib_load(self) -> None:
+        """adapters.py 不得包含 pickle.loads 或 joblib.load（反序列化 RCE 向量）。"""
+        source = Path("packages/models/adapters.py").read_text(encoding="utf-8")
+        assert "pickle.loads" not in source
+        assert "joblib.load" not in source
 
-
-class _FakeListModel:
-    """返回 list 的 Fake 模型。"""
-
-    def predict(self, x: Any) -> list[list[float]]:
-        return [[7.0, 8.0]]
-
-
-class _FakeFailingModel:
-    """predict 抛异常的 Fake 模型。"""
-
-    def predict(self, x: Any) -> list[list[float]]:
-        raise RuntimeError("boom")
+    def test_production_source_has_no_import_subprocess(self) -> None:
+        """adapters.py 不得直接 import subprocess（避免通过契约传递任意命令）。"""
+        source = Path("packages/models/adapters.py").read_text(encoding="utf-8")
+        assert "import subprocess" not in source
 
 
 # ============================================================
@@ -87,43 +100,57 @@ class _FakeFailingModel:
 
 
 class TestBuildAdapter:
-    """build_adapter 工厂函数测试。"""
+    """build_adapter 工厂函数测试（fail closed）。"""
 
-    def test_cli_executor_builds_command_adapter(self) -> None:
-        """executor.type=cli 构建 CommandModelAdapter。"""
+    def test_onnx_executor_builds_onnx_adapter(self) -> None:
+        """executor.type=onnx 构建 OnnxModelAdapter。"""
         contract = _make_contract(
-            executor={"type": "cli", "command": ["python", "predict.py"], "timeout_seconds": 120}
+            executor={"type": "onnx", "timeout_seconds": 60}
         )
         adapter = build_adapter(contract)
-        assert isinstance(adapter, CommandModelAdapter)
-        assert adapter._command == ("python", "predict.py")
-        assert adapter._timeout_seconds == 120
-
-    def test_python_executor_builds_python_adapter(self) -> None:
-        """executor.type=python 构建 PythonModelAdapter。"""
-        contract = _make_contract(executor={"type": "python", "timeout_seconds": 60})
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, PythonModelAdapter)
+        assert isinstance(adapter, OnnxModelAdapter)
         assert adapter._timeout_seconds == 60
 
-    def test_no_executor_defaults_to_python(self) -> None:
-        """无 executor 默认构建 PythonModelAdapter。"""
+    @pytest.mark.parametrize("executor_type", ["python", "cli"])
+    def test_build_adapter_rejects_code_executing_formats(
+        self,
+        executor_type: str,
+    ) -> None:
+        """python / cli 类型抛 unsafe_model_format（禁止主进程执行不可信代码）。"""
+        contract = _make_contract(executor={"type": executor_type})
+        with pytest.raises(AppError) as exc:
+            build_adapter(contract)
+        assert exc.value.code == "unsafe_model_format"
+
+    def test_no_executor_rejected(self) -> None:
+        """无 executor 默认拒绝（fail closed）。"""
         contract = _make_contract()
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, PythonModelAdapter)
+        with pytest.raises(AppError) as exc:
+            build_adapter(contract)
+        assert exc.value.code == "unsafe_model_format"
 
-    def test_empty_executor_dict_defaults_to_python(self) -> None:
-        """空 executor dict 默认构建 PythonModelAdapter。"""
+    def test_empty_executor_dict_rejected(self) -> None:
+        """空 executor dict 拒绝（fail closed）。"""
         contract = _make_contract(executor={})
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, PythonModelAdapter)
+        with pytest.raises(AppError) as exc:
+            build_adapter(contract)
+        assert exc.value.code == "unsafe_model_format"
 
-    def test_cli_executor_empty_command(self) -> None:
-        """cli executor 无 command 时构建空命令元组的 CommandModelAdapter。"""
-        contract = _make_contract(executor={"type": "cli"})
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, CommandModelAdapter)
-        assert adapter._command == ()
+    def test_unknown_executor_type_rejected(self) -> None:
+        """未知 executor 类型拒绝。"""
+        contract = _make_contract(executor={"type": "torchscript"})
+        with pytest.raises(AppError) as exc:
+            build_adapter(contract)
+        assert exc.value.code == "unsafe_model_format"
+
+    def test_cli_executor_no_longer_builds_command_adapter(self) -> None:
+        """cli executor 不再构建 CommandModelAdapter（安全收敛）。"""
+        contract = _make_contract(
+            executor={"type": "cli", "command": ["python", "predict.py"]}
+        )
+        with pytest.raises(AppError) as exc:
+            build_adapter(contract)
+        assert exc.value.code == "unsafe_model_format"
 
 
 # ============================================================
@@ -269,160 +296,184 @@ class TestCommandModelAdapterPredict:
 
 
 # ============================================================
-# PythonModelAdapter
+# OnnxModelAdapter
 # ============================================================
 
 
-class TestPythonModelAdapterLoad:
-    """PythonModelAdapter.load 测试。"""
+class TestOnnxModelAdapterLoad:
+    """OnnxModelAdapter.load 测试。"""
 
-    async def test_load_pickle_artifact(self) -> None:
-        """pickle 反序列化工件成功。"""
-        import pickle
+    async def test_load_valid_onnx(self) -> None:
+        """有效 ONNX 工件加载成功。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter()
+        loaded = await adapter.load(artifact, _make_contract(executor={"type": "onnx"}))
 
-        model_obj = _FakeListModel()
-        artifact = pickle.dumps(model_obj)
-
-        adapter = PythonModelAdapter()
-        loaded = await adapter.load(artifact, _make_contract())
-
-        assert loaded.metadata["adapter_type"] == "python"
-        assert loaded.metadata["model_class"] == "_FakeListModel"
-        assert adapter._model_obj is not None
+        assert loaded.metadata["adapter_type"] == "onnx"
+        assert loaded.metadata["artifact_size"] == len(artifact)
+        assert adapter._session is not None
+        assert adapter._contract is not None
 
     async def test_load_sha256_mismatch_raises(self) -> None:
         """SHA-256 校验不通过抛 invalid_model_artifact。"""
-        adapter = PythonModelAdapter()
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter()
         with pytest.raises(AppError) as exc_info:
             await adapter.load(
-                b"artifact-bytes",
-                _make_contract(artifact_sha256="0" * 64),
+                artifact,
+                _make_contract(executor={"type": "onnx"}, artifact_sha256="0" * 64),
             )
         assert exc_info.value.code == "invalid_model_artifact"
 
-    async def test_load_invalid_artifact_raises(self) -> None:
-        """反序列化失败抛 invalid_model_artifact。"""
-        adapter = PythonModelAdapter()
+    async def test_load_invalid_bytes_raises(self) -> None:
+        """无效字节抛 invalid_model_artifact，且消息不含解析器内部信息。"""
+        pytest.importorskip("onnxruntime")
+        adapter = OnnxModelAdapter()
         with pytest.raises(AppError) as exc_info:
-            await adapter.load(b"not-a-valid-pickle", _make_contract())
+            await adapter.load(
+                b"not-a-valid-onnx-model",
+                _make_contract(executor={"type": "onnx"}),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+        assert "onnxruntime" not in exc_info.value.message
+        assert "Traceback" not in exc_info.value.message
+
+    async def test_load_oversized_artifact_raises(self) -> None:
+        """工件超过大小上限抛 invalid_model_artifact。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter(max_artifact_bytes=len(artifact) - 1)
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(artifact, _make_contract(executor={"type": "onnx"}))
         assert exc_info.value.code == "invalid_model_artifact"
 
-    async def test_load_without_sha_check(self) -> None:
-        """无 artifact_sha256 时不校验哈希。"""
-        import pickle
+    async def test_load_with_correct_sha256(self) -> None:
+        """提供正确 SHA-256 时校验通过。"""
+        import hashlib
 
-        model_obj = _FakeSchemaModel()
-        artifact = pickle.dumps(model_obj)
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        correct_sha = hashlib.sha256(artifact).hexdigest()
+        adapter = OnnxModelAdapter()
+        loaded = await adapter.load(
+            artifact,
+            _make_contract(executor={"type": "onnx"}, artifact_sha256=correct_sha),
+        )
+        assert loaded.metadata["adapter_type"] == "onnx"
 
-        adapter = PythonModelAdapter()
-        loaded = await adapter.load(artifact, _make_contract())
-        assert loaded.metadata["model_class"] == "_FakeSchemaModel"
 
-
-class TestPythonModelAdapterValidateInput:
-    """PythonModelAdapter.validate_input 测试。"""
+class TestOnnxModelAdapterValidateInput:
+    """OnnxModelAdapter.validate_input 测试。"""
 
     def test_empty_schema_valid(self) -> None:
         """空 schema 始终通过。"""
-        adapter = PythonModelAdapter()
+        adapter = OnnxModelAdapter()
         result = adapter.validate_input({}, _make_contract())
         assert result.valid is True
 
     def test_valid_input(self) -> None:
-        """合法输入通过。"""
+        """合法输入通过校验。"""
         schema = {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}
-        adapter = PythonModelAdapter()
+        adapter = OnnxModelAdapter()
         result = adapter.validate_input({"x": 1}, _make_contract(input_schema=schema))
         assert result.valid is True
 
     def test_invalid_input(self) -> None:
         """非法输入返回错误。"""
         schema = {"type": "object", "properties": {"x": {"type": "number"}}, "required": ["x"]}
-        adapter = PythonModelAdapter()
-        result = adapter.validate_input({"x": "not-a-number"}, _make_contract(input_schema=schema))
+        adapter = OnnxModelAdapter()
+        result = adapter.validate_input(
+            {"x": "not-a-number"}, _make_contract(input_schema=schema)
+        )
         assert result.valid is False
 
 
-class TestPythonModelAdapterPredict:
-    """PythonModelAdapter.predict 测试。"""
+class TestOnnxModelAdapterPredict:
+    """OnnxModelAdapter.predict 测试。"""
 
     async def test_predict_not_loaded_raises(self) -> None:
         """未加载时 predict 抛 model_not_loaded。"""
-        adapter = PythonModelAdapter()
+        adapter = OnnxModelAdapter()
         with pytest.raises(AppError) as exc_info:
             await adapter.predict({"x": 1})
         assert exc_info.value.code == "model_not_loaded"
 
     async def test_predict_with_schema_mapping(self) -> None:
-        """按 output_schema 映射预测结果。"""
-        import pickle
-
-        artifact = pickle.dumps(_FakeSchemaModel())
-        adapter = PythonModelAdapter()
-        input_schema = {"properties": {"x": {"type": "number"}, "y": {"type": "number"}}}
-        output_schema = {"properties": {"a": {"type": "number"}, "b": {"type": "number"}}}
+        """按 output_schema 映射预测结果（Identity 模型：输出 = 输入）。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter()
+        input_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
+            "required": ["x", "y"],
+        }
+        output_schema = {
+            "type": "object",
+            "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+            "required": ["a", "b"],
+        }
         await adapter.load(
-            artifact, _make_contract(input_schema=input_schema, output_schema=output_schema)
+            artifact,
+            _make_contract(
+                executor={"type": "onnx"},
+                input_schema=input_schema,
+                output_schema=output_schema,
+            ),
         )
 
-        output = await adapter.predict({"x": 1.0, "y": 2.0})
+        output = await adapter.predict({"x": 3.0, "y": 4.0})
         assert isinstance(output, ModelOutput)
-        assert output.predictions["a"] == 3.5
-        assert output.predictions["b"] == 4.5
-        assert output.metadata["adapter_type"] == "python"
+        assert output.predictions["a"] == 3.0
+        assert output.predictions["b"] == 4.0
+        assert output.metadata["adapter_type"] == "onnx"
 
-    async def test_predict_without_schema_fallback(self) -> None:
-        """无 output_schema 时按 output_{i} 命名。"""
-        import pickle
+    async def test_predict_unknown_input_raises(self) -> None:
+        """缺失输入维度抛 model_failed。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter()
+        input_schema = {
+            "type": "object",
+            "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
+            "required": ["x", "y"],
+        }
+        output_schema = {"type": "object", "properties": {"a": {"type": "number"}}}
+        await adapter.load(
+            artifact,
+            _make_contract(
+                executor={"type": "onnx"},
+                input_schema=input_schema,
+                output_schema=output_schema,
+            ),
+        )
 
-        artifact = pickle.dumps(_FakeListModel())
-        adapter = PythonModelAdapter()
-        await adapter.load(artifact, _make_contract(input_schema={}, output_schema={}))
-
-        output = await adapter.predict({"x": 1.0})
-        assert output.predictions["output_0"] == 7.0
-        assert output.predictions["output_1"] == 8.0
-
-    async def test_predict_model_failure_raises(self) -> None:
-        """模型 predict 抛异常时转为 model_failed。"""
-        import pickle
-
-        artifact = pickle.dumps(_FakeFailingModel())
-        adapter = PythonModelAdapter()
-        await adapter.load(artifact, _make_contract())
-
+        # 缺少 y 维度
         with pytest.raises(AppError) as exc_info:
-            await adapter.predict({"x": 1.0})
+            await adapter.predict({"x": 3.0})
         assert exc_info.value.code == "model_failed"
+        # 消息不含底层异常文本
+        assert "KeyError" not in exc_info.value.message
 
 
-class TestPythonModelAdapterHealthcheck:
-    """PythonModelAdapter.healthcheck 测试。"""
+class TestOnnxModelAdapterHealthcheck:
+    """OnnxModelAdapter.healthcheck 测试。"""
 
     def test_not_loaded_unhealthy(self) -> None:
         """未加载不健康。"""
-        adapter = PythonModelAdapter()
+        adapter = OnnxModelAdapter()
         status = adapter.healthcheck()
         assert status.healthy is False
         assert "模型未加载" in status.message
 
-    def test_loaded_without_predict_unhealthy(self) -> None:
-        """加载的模型缺少 predict 方法不健康。"""
-        adapter = PythonModelAdapter()
-        adapter._model_obj = object()
-        status = adapter.healthcheck()
-        assert status.healthy is False
-        assert "predict" in status.message
-
-    def test_loaded_with_predict_healthy(self) -> None:
-        """加载的模型有 predict 方法健康。"""
-        adapter = PythonModelAdapter()
-
-        class FakeModel:
-            def predict(self, x: Any) -> list[list[float]]:
-                return [[1.0]]
-
-        adapter._model_obj = FakeModel()
+    async def test_loaded_healthy(self) -> None:
+        """加载后健康。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter()
+        await adapter.load(artifact, _make_contract(executor={"type": "onnx"}))
         status = adapter.healthcheck()
         assert status.healthy is True
-        assert "FakeModel" in status.message
+        assert "ONNX" in status.message

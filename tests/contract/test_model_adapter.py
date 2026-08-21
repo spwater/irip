@@ -5,7 +5,7 @@
 - 超时处理；
 - 输出大小限制；
 - 无效输入拒绝；
-- Python 适配器（PythonModelAdapter）加载/验证/预测（需 sklearn）。
+- ONNX 适配器（OnnxModelAdapter）加载/验证/预测（需 onnxruntime）。
 
 无数据库依赖（纯适配器逻辑测试）。
 """
@@ -19,7 +19,7 @@ import pytest
 from packages.common.errors import AppError
 from packages.models.adapters import (
     CommandModelAdapter,
-    PythonModelAdapter,
+    OnnxModelAdapter,
     build_adapter,
 )
 from packages.models.applicability import ApplicabilityChecker
@@ -277,10 +277,10 @@ class TestCommandModelAdapter:
 
 
 class TestBuildAdapter:
-    """适配器工厂测试。"""
+    """适配器工厂测试（fail closed）。"""
 
-    def test_build_cli_adapter(self) -> None:
-        """根据 executor.type=cli 构建 CommandModelAdapter。"""
+    def test_build_cli_adapter_rejected(self) -> None:
+        """executor.type=cli 抛 unsafe_model_format（禁止主进程执行不可信命令）。"""
         contract = _make_contract(
             executor={
                 "type": "cli",
@@ -288,22 +288,31 @@ class TestBuildAdapter:
                 "timeout_seconds": 60,
             }
         )
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, CommandModelAdapter)
+        with pytest.raises(AppError) as exc_info:
+            build_adapter(contract)
+        assert exc_info.value.code == "unsafe_model_format"
 
-    def test_build_python_adapter(self) -> None:
-        """根据 executor.type=python 构建 PythonModelAdapter。"""
+    def test_build_python_adapter_rejected(self) -> None:
+        """executor.type=python 抛 unsafe_model_format（禁止反序列化 RCE）。"""
         contract = _make_contract(executor={"type": "python", "timeout_seconds": 60})
-        adapter = build_adapter(contract)
-        assert isinstance(adapter, PythonModelAdapter)
+        with pytest.raises(AppError) as exc_info:
+            build_adapter(contract)
+        assert exc_info.value.code == "unsafe_model_format"
 
-    def test_build_default_python(self) -> None:
-        """未声明 executor 时默认构建 PythonModelAdapter。"""
+    def test_build_default_rejected(self) -> None:
+        """未声明 executor 时拒绝（fail closed）。"""
         data = dict(_TEST_CONTRACT_DICT)
         data.pop("executor", None)
         contract = ModelContract.from_dict(data)
+        with pytest.raises(AppError) as exc_info:
+            build_adapter(contract)
+        assert exc_info.value.code == "unsafe_model_format"
+
+    def test_build_onnx_adapter(self) -> None:
+        """executor.type=onnx 构建 OnnxModelAdapter。"""
+        contract = _make_contract(executor={"type": "onnx", "timeout_seconds": 60})
         adapter = build_adapter(contract)
-        assert isinstance(adapter, PythonModelAdapter)
+        assert isinstance(adapter, OnnxModelAdapter)
 
 
 class TestApplicabilityChecker:
@@ -367,81 +376,69 @@ class TestModelContract:
         assert contract2.sha256 == contract.sha256
 
 
-@pytest.mark.skipif(
-    True,
-    reason="sklearn 适配器测试在 TestPythonModelAdapter 中按需运行",
-)
-class TestPythonModelAdapterSklearn:
-    """Python 适配器 sklearn 测试占位。"""
-
-    pass
-
-
-_SKLEARN_AVAILABLE: bool = True
+_ONNX_AVAILABLE: bool = True
 try:
-    import joblib  # noqa: F401
-    import sklearn  # noqa: F401
+    import onnx  # noqa: F401
+    import onnxruntime  # noqa: F401
 except ImportError:
-    _SKLEARN_AVAILABLE = False
+    _ONNX_AVAILABLE = False
+
+
+def _build_onnx_contract_model() -> bytes:
+    """构建契约测试用 ONNX 模型（x,y 两输入 -> sum,product 两输出）。
+
+    sum = x + y，product = x * y。需 onnx 包。
+
+    Returns:
+        bytes: 序列化的 ONNX 模型字节。
+    """
+    from onnx import TensorProto, helper
+
+    x_in = helper.make_tensor_value_info("x", TensorProto.FLOAT, [None, 1])
+    y_in = helper.make_tensor_value_info("y", TensorProto.FLOAT, [None, 1])
+    s_out = helper.make_tensor_value_info("sum", TensorProto.FLOAT, [None, 1])
+    p_out = helper.make_tensor_value_info("product", TensorProto.FLOAT, [None, 1])
+    add_node = helper.make_node("Add", ["x", "y"], ["sum"])
+    mul_node = helper.make_node("Mul", ["x", "y"], ["product"])
+    graph = helper.make_graph([add_node, mul_node], "contract_model", [x_in, y_in], [s_out, p_out])
+    model = helper.make_model(graph)
+    model.opset_import[0].version = 13
+    return model.SerializeToString()
 
 
 @pytest.mark.skipif(
-    not _SKLEARN_AVAILABLE,
-    reason="scikit-learn 未安装，跳过 Python 适配器 sklearn 测试",
+    not _ONNX_AVAILABLE,
+    reason="onnx/onnxruntime 未安装，跳过 ONNX 适配器契约测试",
 )
-class TestPythonModelAdapter:
-    """Python 进程内适配器测试（需 sklearn）。"""
+class TestOnnxModelAdapter:
+    """ONNX 进程内适配器契约测试（需 onnx/onnxruntime）。"""
 
     @pytest.mark.asyncio
-    async def test_load_validate_predict(self, tmp_path: Path) -> None:
-        """Python 适配器加载 sklearn 模型并预测。"""
-        import io
+    async def test_load_validate_predict(self) -> None:
+        """ONNX 适配器加载模型并预测 sum/product。"""
+        artifact_bytes = _build_onnx_contract_model()
 
-        import joblib
-
-        # 训练一个微型多输出模型
-        import numpy as np
-        from sklearn.ensemble import RandomForestRegressor
-        from sklearn.pipeline import Pipeline
-        from sklearn.preprocessing import StandardScaler
-
-        rng = np.random.RandomState(42)
-        x = rng.uniform(0, 100, size=(50, 2))
-        y = np.column_stack([x[:, 0] + x[:, 1], x[:, 0] * x[:, 1] * 0.01])
-        pipeline = Pipeline(
-            steps=[
-                ("scaler", StandardScaler()),
-                (
-                    "rf",
-                    RandomForestRegressor(
-                        n_estimators=10,
-                        random_state=42,
-                        n_jobs=1,
-                    ),
-                ),
-            ]
+        contract = _make_contract(
+            executor={"type": "onnx", "timeout_seconds": 30}
         )
-        pipeline.fit(x, y)
-
-        buf = io.BytesIO()
-        joblib.dump(pipeline, buf)
-        artifact_bytes = buf.getvalue()
-
-        contract = ModelContract.from_dict(_TEST_CONTRACT_DICT)
-        adapter = PythonModelAdapter(timeout_seconds=30)
+        adapter = OnnxModelAdapter(timeout_seconds=30)
 
         loaded = await adapter.load(artifact_bytes, contract)
-        assert loaded.metadata["adapter_type"] == "python"
+        assert loaded.metadata["adapter_type"] == "onnx"
 
         result = adapter.validate_input({"x": 10, "y": 20}, contract)
         assert result.valid is True
 
-        output = await adapter.predict({"x": 10, "y": 20})
+        output = await adapter.predict({"x": 10.0, "y": 20.0})
         assert "sum" in output.predictions
         assert "product" in output.predictions
+        assert output.predictions["sum"] == pytest.approx(30.0)
+        assert output.predictions["product"] == pytest.approx(200.0)
 
     def test_healthcheck_not_loaded(self) -> None:
         """未加载时健康检查返回 healthy=False。"""
-        adapter = PythonModelAdapter()
+        adapter = OnnxModelAdapter()
+        status = adapter.healthcheck()
+        assert status.healthy is False
         status = adapter.healthcheck()
         assert status.healthy is False
