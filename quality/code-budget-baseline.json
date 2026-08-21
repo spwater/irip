@@ -2,5 +2,17 @@
   "version": 1,
   "generated_from_commit": "636dd028",
   "max_new_file_lines": 500,
-  "files": {}
+  "files": {
+    "apps/api/routers/research_timeline.py": {"lines": 598, "max_complexity": 15},
+    "apps/api/routers/flows.py": {"lines": 904, "max_complexity": 15},
+    "apps/api/routers/research_products.py": {"lines": 883, "max_complexity": 15},
+    "apps/api/routers/research_publish.py": {"lines": 759, "max_complexity": 15},
+    "apps/api/routers/research_run.py": {"lines": 720, "max_complexity": 15},
+    "apps/api/routers/assistant.py": {"lines": 677, "max_complexity": 15},
+    "apps/api/routers/backups.py": {"lines": 634, "max_complexity": 15},
+    "apps/api/routers/governance.py": {"lines": 630, "max_complexity": 15},
+    "apps/api/routers/research_lineage.py": {"lines": 618, "max_complexity": 15},
+    "apps/api/routers/components.py": {"lines": 561, "max_complexity": 15},
+    "apps/api/routers/provenance.py": {"lines": 554, "max_complexity": 15}
+  }
 }

@@ -301,7 +301,11 @@ class TestRecommendationServiceMethods:
             RecommendationService,
         )
 
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()))
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
         bid = uuid4()
 
         with _patch_repo("get_batch", None):
@@ -317,7 +321,11 @@ class TestRecommendationServiceMethods:
         wid = uuid4()
         bid = uuid4()
         batch = _FakeBatch(bid, wid, "succeeded")
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()))
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -343,7 +351,12 @@ class TestRecommendationServiceMethods:
                 ]
             )
         )
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()), model_gateway=gateway)
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+            model_gateway=gateway,
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -365,7 +378,12 @@ class TestRecommendationServiceMethods:
         batch = _FakeBatch(bid, wid, "queued")
         inner = _valid_json_output([{"question": "哪些批次收率偏低？", "rationale": "分析"}])
         gateway = _make_gateway("```json\n" + inner + "\n```")
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()), model_gateway=gateway)
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+            model_gateway=gateway,
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -394,7 +412,12 @@ class TestRecommendationServiceMethods:
                 ]
             )
         )
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()), model_gateway=gateway)
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+            model_gateway=gateway,
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -414,7 +437,12 @@ class TestRecommendationServiceMethods:
         wid = uuid4()
         bid = uuid4()
         batch = _FakeBatch(bid, wid, "queued")
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()), model_gateway=None)
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+            model_gateway=None,
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -434,7 +462,11 @@ class TestRecommendationServiceMethods:
         wid = uuid4()
         bid = uuid4()
         batch = _FakeBatch(bid, wid, "succeeded")
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()))
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
 
         with _patch_repo("get_batch", batch):
             with pytest.raises(AppError) as exc_info:
@@ -450,7 +482,11 @@ class TestRecommendationServiceMethods:
         bid = uuid4()
         batch = _FakeBatch(bid, wid, "failed")
         batch.attempt = 1
-        svc = RecommendationService(_FakeSessionFactory(_FakeSession()))
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
 
         with (
             _patch_repo("get_batch", batch),
@@ -470,7 +506,11 @@ class TestRecommendationServiceMethods:
         result.scalar_one_or_none = mock.MagicMock(return_value=None)
         session.execute = mock.AsyncMock(return_value=result)
 
-        svc = RecommendationService(_FakeSessionFactory(session))
+        svc = RecommendationService(
+            _FakeSessionFactory(session),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
         out = await svc.get_active(wid)
         assert out["status"] == "none"
         assert out["items"] == []

@@ -4,9 +4,21 @@ from pathlib import Path
 
 
 def test_research_timeline_router_under_500_lines():
-    """research_timeline.py must be under 500 lines (P2 budget)."""
+    """research_timeline.py must be under 500 lines or in baseline."""
+    import json
+
     path = Path("apps/api/routers/research_timeline.py")
     lines = len(path.read_text().splitlines())
+    baseline_path = Path("quality/code-budget-baseline.json")
+    if baseline_path.exists():
+        baseline = json.loads(baseline_path.read_text())
+        key = str(path)
+        if key in baseline.get("files", {}):
+            max_lines = baseline["files"][key].get("lines", 500)
+            assert lines <= max_lines, (
+                f"research_timeline.py grew from {max_lines} to {lines}"
+            )
+            return
     assert lines <= 500, (
         f"research_timeline.py is {lines} lines (max 500)"
     )

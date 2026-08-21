@@ -4,21 +4,19 @@ from pathlib import Path
 
 
 def test_plotly_is_dynamic_import():
-    """Plotly must be loaded via dynamic import, not static import."""
+    """Plotly library must be loaded via dynamic import, not static import."""
     src = Path("apps/web/src")
     if not src.exists():
         return
-    # Check no static import of plotly in source files
+    # Check no static import of plotly library in source files
+    # Importing a local component named PlotlyBlock is OK
     for py_file in src.rglob("*.tsx"):
         content = py_file.read_text()
-        # Dynamic import is OK: import("plotly...") or lazy(() => import(...))
-        # Static import is NOT OK: import ... from "plotly..."
         for line in content.split("\n"):
             stripped = line.strip()
-            if stripped.startswith("import ") and "plotly" in stripped.lower():
-                # Must be a dynamic import (import())
+            if stripped.startswith("import ") and "plotly.js" in stripped.lower():
                 assert "import(" in stripped, (
-                    f"Static plotly import in {py_file}: {stripped}"
+                    f"Static plotly.js import in {py_file}: {stripped}"
                 )
 
 
