@@ -612,39 +612,47 @@ class TestLineageWriterService:
         """快照冻结 Hook：创建 fact→snapshot 边。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_snapshot_frozen(
-                uuid4(),
-                [
-                    {"namespace": "core:fact", "id": str(uuid4())},
-                    {"namespace": "core:fact", "id": str(uuid4())},
-                ],
-            )
-            # 应调用 2 次（2 个 source_refs）
-            assert mock_insert.call_count == 2
-            # 验证 edge_type
-            first_call = mock_insert.call_args_list[0]
-            assert first_call.kwargs["edge_type"] == "fact_to_snapshot"
-            assert first_call.kwargs["target_namespace"] == "research:evidence_snapshot"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_snapshot_frozen(
+                    uuid4(),
+                    [
+                        {"namespace": "core:fact", "id": str(uuid4())},
+                        {"namespace": "core:fact", "id": str(uuid4())},
+                    ],
+                )
+                # 应调用 2 次（2 个 source_refs）
+                assert mock_insert.call_count == 2
+                # 验证 edge_type
+                first_call = mock_insert.call_args_list[0]
+                assert first_call.kwargs["edge_type"] == "fact_to_snapshot"
+                assert first_call.kwargs["target_namespace"] == "research:evidence_snapshot"
 
     @pytest.mark.asyncio
     async def test_on_snapshot_frozen_published_derived(self):
         """快照冻结 Hook：published_derived 来源使用正确的 edge_type。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_snapshot_frozen(
-                uuid4(),
-                [{"namespace": "research:published_derived", "id": str(uuid4())}],
-            )
-            assert mock_insert.call_count == 1
-            assert mock_insert.call_args.kwargs["edge_type"] == "published_derived_to_snapshot"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_snapshot_frozen(
+                    uuid4(),
+                    [{"namespace": "research:published_derived", "id": str(uuid4())}],
+                )
+                assert mock_insert.call_count == 1
+                assert mock_insert.call_args.kwargs["edge_type"] == "published_derived_to_snapshot"
 
     @pytest.mark.asyncio
     async def test_on_snapshot_frozen_invalid_ref(self):
@@ -670,63 +678,79 @@ class TestLineageWriterService:
         """Run 启动 Hook：创建 snapshot→run 边。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_run_started(uuid4(), [uuid4(), uuid4(), uuid4()])
-            assert mock_insert.call_count == 3
-            for call in mock_insert.call_args_list:
-                assert call.kwargs["edge_type"] == "snapshot_to_run"
-                assert call.kwargs["target_namespace"] == "research:analysis_run"
-                assert call.kwargs["source_namespace"] == "research:evidence_snapshot"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_run_started(uuid4(), [uuid4(), uuid4(), uuid4()])
+                assert mock_insert.call_count == 3
+                for call in mock_insert.call_args_list:
+                    assert call.kwargs["edge_type"] == "snapshot_to_run"
+                    assert call.kwargs["target_namespace"] == "research:analysis_run"
+                    assert call.kwargs["source_namespace"] == "research:evidence_snapshot"
 
     @pytest.mark.asyncio
     async def test_on_step_completed_hook(self):
         """步骤完成 Hook：创建 run→step 边。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_step_completed(uuid4(), uuid4())
-            assert mock_insert.call_count == 1
-            call = mock_insert.call_args
-            assert call.kwargs["edge_type"] == "run_to_step"
-            assert call.kwargs["source_namespace"] == "research:analysis_run"
-            assert call.kwargs["target_namespace"] == "research:analysis_step"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_step_completed(uuid4(), uuid4())
+                assert mock_insert.call_count == 1
+                call = mock_insert.call_args
+                assert call.kwargs["edge_type"] == "run_to_step"
+                assert call.kwargs["source_namespace"] == "research:analysis_run"
+                assert call.kwargs["target_namespace"] == "research:analysis_step"
 
     @pytest.mark.asyncio
     async def test_on_product_confirmed_hook(self):
         """产物确认 Hook：创建 run→product 边。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_product_confirmed(
-                uuid4(),
-                "research:derived_dataset",
-                uuid4(),
-                "dataset",
-            )
-            assert mock_insert.call_count == 1
-            assert mock_insert.call_args.kwargs["edge_type"] == "run_to_dataset"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_product_confirmed(
+                    uuid4(),
+                    "research:derived_dataset",
+                    uuid4(),
+                    "dataset",
+                )
+                assert mock_insert.call_count == 1
+                assert mock_insert.call_args.kwargs["edge_type"] == "run_to_dataset"
 
     @pytest.mark.asyncio
     async def test_on_knowledge_referenced_hook(self):
         """知识引用 Hook：创建 knowledge_ref→insight 边。"""
         svc = self._make_service()
 
-        with patch(
-            "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
-            new_callable=AsyncMock,
-        ) as mock_insert:
-            await svc.on_knowledge_referenced(uuid4(), uuid4())
-            assert mock_insert.call_count == 1
-            assert mock_insert.call_args.kwargs["edge_type"] == "knowledge_ref_to_insight"
+        ws_id = uuid4()
+        with patch.object(
+            svc, "_resolve_workspace_id", new_callable=AsyncMock, return_value=ws_id
+        ):
+            with patch(
+                "packages.research.lineage_writer.ResearchRepository.insert_lineage_edge",
+                new_callable=AsyncMock,
+            ) as mock_insert:
+                await svc.on_knowledge_referenced(uuid4(), uuid4())
+                assert mock_insert.call_count == 1
+                assert mock_insert.call_args.kwargs["edge_type"] == "knowledge_ref_to_insight"
 
     @pytest.mark.asyncio
     async def test_on_knowledge_referenced_no_insight(self):
