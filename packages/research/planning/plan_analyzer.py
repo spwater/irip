@@ -471,10 +471,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
             }
 
         # analyze_data 的 session 已 commit，在 session 外自动提取 Insight
-        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-            _f.write(
-                f"=== analyze_data done, calling extract_insight ws={workspace_id} plan={plan_id}\n"
-            )
+        logger.info("analyze_data completed, calling extract_insight for plan %s", plan_id)
         try:
             await self.extract_insight(
                 workspace_id=workspace_id,
@@ -482,13 +479,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 snapshot_id=snapshot_id,
                 turn_id=turn_id,
             )
-            with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                _f.write("=== extract_insight returned OK\n")
+            logger.debug("extract_insight returned OK")
         except Exception as exc:
-            import traceback
-
-            with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                _f.write(f"=== extract_insight FAILED: {exc}\n{traceback.format_exc()}\n")
+            logger.warning("extract_insight failed: %s", exc, exc_info=True)
         return result_data
 
     async def extract_insight(
@@ -551,11 +544,10 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
             insight_candidate = None
             try:
-                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                    _f.write(
-                        f"extract_insight: calling LLM, "
-                        f"analysis_result_len={len(analysis_result)}\n"
-                    )
+                logger.info(
+                    "extract_insight: calling LLM, analysis_result_len=%d",
+                    len(analysis_result),
+                )
                 response = await self._model_gateway.call(
                     task_type=TaskType.INSIGHT,
                     system_prompt=insight_system_prompt,
@@ -563,11 +555,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     research_context=insight_context,
                 )
                 answer = response.answer if hasattr(response, "answer") else str(response)
-                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                    _f.write(
-                        f"extract_insight: LLM answer len={len(answer)}, "
-                        f"first 300: {answer[:300]}\n"
-                    )
+                logger.info("extract_insight: LLM answer received, len=%d", len(answer))
                 import json as _json
 
                 clean = answer.strip()
@@ -577,17 +565,9 @@ class PlanAnalyzerMixin(PlanServiceBase):
                     clean = clean.rsplit("```", 1)[0]
                 clean = clean.strip()
                 insight_candidate = _json.loads(clean)
-                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                    _f.write(
-                        "extract_insight: parsed OK, "
-                        f"conclusion={insight_candidate.get('conclusion', '')[:100]}\n"
-                    )
+                logger.info("extract_insight: insight candidate parsed successfully")
             except (json.JSONDecodeError, AttributeError, IndexError) as exc:
-                import traceback
-
-                with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                    _f.write(f"extract_insight: FAILED: {exc}\n{traceback.format_exc()}\n")
-                logger.warning("Insight extraction failed: %s", exc)
+                logger.warning("Insight extraction failed: %s", exc, exc_info=True)
 
             # 4. 写入候选记录
             insight_candidate_id = None
@@ -686,8 +666,6 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             {"rid": str(run_id)},
                         )
                         turn_row = run_row.first()
-                        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                            _f.write(f"conclusion_candidate: turn_row={turn_row}\n")
                         if turn_row and turn_row[0]:
                             turn_id_val = str(turn_row[0])
                             # 创建 extraction_job
@@ -731,14 +709,10 @@ class PlanAnalyzerMixin(PlanServiceBase):
                                 turn_id_val,
                             )
                     except Exception as exc2:
-                        with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                            _f.write(f"conclusion_candidate: FAILED: {exc2}\n")
                         logger.warning(
                             "extract_insight: failed to sync conclusion_candidate: %s", exc2
                         )
                 except (SQLAlchemyError, TypeError, KeyError) as exc:
-                    with open("/tmp/irip-insight-debug.log", "a") as _f:  # noqa: ASYNC230
-                        _f.write(f"insight_candidate write FAILED: {exc}\n")
                     logger.warning("Failed to save insight candidate: %s", exc)
                     insight_candidate_id = None
                     insight_run_id = None

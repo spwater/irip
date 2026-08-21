@@ -14,6 +14,7 @@
 
 import sys
 import uuid
+from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
@@ -27,6 +28,73 @@ CORRELATION_ID_HEADER: str = "X-Request-ID"
 
 #: 上下文变量键名（用于 structlog contextvar 绑定）。
 CORRELATION_ID_CONTEXT_KEY: str = "correlation_id"
+
+#: 敏感日志键名集合：匹配这些键名的值在日志中被替换为 ``[REDACTED]``。
+#: 覆盖 prompt 正文、分析正文、工具结果、密钥/凭证等敏感字段。
+SENSITIVE_LOG_KEYS: frozenset[str] = frozenset(
+    {
+        "prompt",
+        "content",
+        "messages",
+        "tool_result",
+        "analysis_markdown",
+        "statement",
+        "api_key",
+        "authorization",
+        "cookie",
+        "token",
+        "password",
+        "database_url",
+        "secret_key",
+    }
+)
+
+
+def _redact(value: Any, key: str | None = None) -> Any:
+    """递归脱敏：将敏感键对应的值替换为 ``[REDACTED]``。
+
+    遍历嵌套的 dict 和 list，对键名（大小写不敏感）匹配
+    ``SENSITIVE_LOG_KEYS`` 的值进行脱敏。非敏感键的值原样返回。
+
+    Args:
+        value: 待脱敏的值（dict / list / 标量）。
+        key: 当前值在父结构中的键名（顶层调用时为 None）。
+
+    Returns:
+        脱敏后的值（结构同输入，敏感值替换为 ``"[REDACTED]"``）。
+    """
+    if key is not None and key.lower() in SENSITIVE_LOG_KEYS:
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {
+            k: _redact(v, k if isinstance(k, str) else None) for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact(item) for item in value]
+    return value
+
+
+def redact_sensitive_fields(
+    logger: Any,
+    method_name: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
+    """structlog 处理器：递归脱敏事件字典中的敏感字段。
+
+    在 structlog 处理链中、JSON 渲染器之前插入此处理器，自动将
+    ``event_dict`` 中敏感键的值替换为 ``[REDACTED]``，支持嵌套
+    dict 和 list。确保 prompt、分析正文、工具结果、密钥等
+    敏感内容不会出现在日志输出中。
+
+    Args:
+        logger: structlog logger 实例（未使用，符合处理器签名约定）。
+        method_name: 日志方法名（未使用，符合处理器签名约定）。
+        event_dict: structlog 事件字典。
+
+    Returns:
+        脱敏后的事件字典。
+    """
+    return _redact(event_dict)
 
 
 def configure_logging(
@@ -74,7 +142,7 @@ def configure_logging(
     level_int: int = level_map.get(log_level.upper(), logging.INFO)
 
     structlog.configure(
-        processors=[*shared_processors, renderer],
+        processors=[*shared_processors, redact_sensitive_fields, renderer],
         wrapper_class=structlog.make_filtering_bound_logger(level_int),
         logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
         cache_logger_on_first_use=True,

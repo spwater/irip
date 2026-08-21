@@ -14,10 +14,12 @@ import structlog
 from packages.common.logging_setup import (
     CORRELATION_ID_CONTEXT_KEY,
     CORRELATION_ID_HEADER,
+    SENSITIVE_LOG_KEYS,
     CorrelationIdMiddleware,
     configure_logging,
     get_correlation_id,
     get_logger,
+    redact_sensitive_fields,
 )
 
 
@@ -161,3 +163,81 @@ class TestConstants:
     def test_correlation_id_context_key(self) -> None:
         """CORRELATION_ID_CONTEXT_KEY 值正确。"""
         assert CORRELATION_ID_CONTEXT_KEY == "correlation_id"
+
+
+class TestSensitiveLogKeys:
+    """SENSITIVE_LOG_KEYS 常量测试。"""
+
+    def test_is_frozenset(self) -> None:
+        """SENSITIVE_LOG_KEYS 应为 frozenset。"""
+        assert isinstance(SENSITIVE_LOG_KEYS, frozenset)
+
+    def test_contains_known_sensitive_keys(self) -> None:
+        """应包含已知敏感键。"""
+        expected = {
+            "prompt", "content", "messages", "tool_result", "analysis_markdown",
+            "statement", "api_key", "authorization", "cookie", "token",
+            "password", "database_url", "secret_key",
+        }
+        assert expected.issubset(SENSITIVE_LOG_KEYS)
+
+
+class TestRedactSensitiveFields:
+    """redact_sensitive_fields 处理器测试。"""
+
+    def test_redacts_top_level_sensitive_key(self) -> None:
+        """顶层敏感键被脱敏。"""
+        event: dict[str, object] = {"prompt": "secret", "trace_id": "t1"}
+        result = redact_sensitive_fields(None, "info", event)
+        assert result["prompt"] == "[REDACTED]"
+        assert result["trace_id"] == "t1"
+
+    def test_redacts_nested_dict(self) -> None:
+        """嵌套 dict 中的敏感键被脱敏。"""
+        event: dict[str, object] = {
+            "data": {"content": "secret-content", "id": "safe"},
+        }
+        result = redact_sensitive_fields(None, "info", event)
+        data = result["data"]
+        assert isinstance(data, dict)
+        assert data["content"] == "[REDACTED]"
+        assert data["id"] == "safe"
+
+    def test_redacts_list_of_dicts(self) -> None:
+        """list 中的 dict 敏感键被脱敏。"""
+        event: dict[str, object] = {
+            "items": [{"api_key": "key1"}, {"token": "tok2"}],
+        }
+        result = redact_sensitive_fields(None, "info", event)
+        items = result["items"]
+        assert isinstance(items, list)
+        assert items[0]["api_key"] == "[REDACTED]"
+        assert items[1]["token"] == "[REDACTED]"
+
+    def test_case_insensitive_key_matching(self) -> None:
+        """键名匹配应大小写不敏感。"""
+        event: dict[str, object] = {"API_KEY": "secret", "Password": "p"}
+        result = redact_sensitive_fields(None, "info", event)
+        assert result["API_KEY"] == "[REDACTED]"
+        assert result["Password"] == "[REDACTED]"
+
+    def test_preserves_non_sensitive_keys(self) -> None:
+        """非敏感键原样保留。"""
+        event: dict[str, object] = {
+            "trace_id": "t1",
+            "service": "api",
+            "status": 200,
+        }
+        result = redact_sensitive_fields(None, "info", event)
+        assert result == event
+
+    def test_returns_dict_type(self) -> None:
+        """返回值应为 dict。"""
+        event: dict[str, object] = {"prompt": "x"}
+        result = redact_sensitive_fields(None, "info", event)
+        assert isinstance(result, dict)
+
+    def test_empty_event_dict(self) -> None:
+        """空 event_dict 不抛异常。"""
+        result = redact_sensitive_fields(None, "info", {})
+        assert result == {}

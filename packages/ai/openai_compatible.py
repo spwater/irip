@@ -332,7 +332,9 @@ class OpenAICompatibleProvider:
             # 日志：确认 system_context 传到了
             import logging
 
-            logging.getLogger("irip.ai").info(f"system_context 已拼接, 长度={len(system_context)}")
+            logging.getLogger("irip.ai").info(
+                "system_context 已拼接, 长度=%d", len(system_context)
+            )
 
         # 如果调用方传了 system message，使用调用方的 system content（覆盖默认）
         caller_system_content = None
@@ -363,15 +365,13 @@ class OpenAICompatibleProvider:
                 msg["tool_call_id"] = m["tool_call_id"]
             messages.append(msg)
 
-        # DEBUG: 打印完整 messages（排查 data 代码块来源）
-        for i, msg in enumerate(messages):
-            content_preview = str(msg.get("content", ""))[:300]
-            content_len = len(str(msg.get("content", "")))
-            print(
-                f"[PAYLOAD msg {i}] role={msg.get('role')} "
-                f"len={content_len} preview={content_preview}",
-                flush=True,
-            )
+        # 元数据级日志：仅记录消息数量和总字符数，不记录消息正文
+        logger.info(
+            "llm_request_prepared: message_count=%d, content_chars=%d, model=%s",
+            len(messages),
+            sum(len(str(m.get("content", ""))) for m in messages),
+            self._model,
+        )
 
         payload: dict[str, Any] = {
             "model": self._model,

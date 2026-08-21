@@ -113,7 +113,6 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
       if (echartsStr.includes('function')) {
         echartsStr = echartsStr.replace(/"formatter"\s*:\s*function[\s\S]*?\}\s*,/g, '"formatter": "{b}: {c}",');
       }
-      console.log('[echarts] codeStr len=%d, starts=%s, ends=%s', echartsStr.length, echartsStr.substring(0, 20), echartsStr.substring(echartsStr.length - 20));
       return <ChartBlock optionStr={echartsStr} />;
     }
     if (lang === 'describe_series' || lang === 'describe-series' || lang === 'describeSeries') {
@@ -254,10 +253,6 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                 code({ className, children }) {
                   const lang = className?.replace('language-', '') || '';
                   const codeStr = String(children || '').replace(/\n$/, '');
-                  // debug: 记录 code 块
-                  if (lang === 'echarts' || lang === 'chart-ref' || lang === 'chart') {
-                    console.log('[TurnDetailPanel] code block: lang=%s, len=%d, first50=%s', lang, codeStr.length, codeStr.substring(0, 50));
-                  }
                   const isBlock =
                     lang === 'chart-ref' ||
                     lang === 'chart' ||
