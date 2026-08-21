@@ -80,13 +80,13 @@ describe('ConclusionLibrary', () => {
   });
 
   it('calls onToggle when checkbox clicked', async () => {
+    const user = userEvent.setup();
     const onToggle = vi.fn();
     renderLibrary({
       conclusions: [makeConclusion({ conclusion_id: 'c-1' })],
       onToggle,
     });
-    const checkbox = screen.getByRole('checkbox');
-    await userEvent.click(checkbox);
+    await user.click(screen.getByRole('checkbox', { name: /温度升高/ }));
     expect(onToggle).toHaveBeenCalledWith('c-1');
   });
 

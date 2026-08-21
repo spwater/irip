@@ -177,7 +177,8 @@ export function ConclusionLibrary({
       </div>
 
       {conclusions.map((conclusion) => {
-        const isSelected = selectedRevisionIds.has(conclusion.current_revision_id ?? '');
+        const revisionId = conclusion.current_revision_id ?? conclusion.conclusion_id;
+        const isSelected = selectedRevisionIds.has(revisionId);
         const disabled = !isSelected && atMax;
         const badge = SOURCE_BADGE[conclusion.source_type] || {
           label: conclusion.source_type,
@@ -198,8 +199,9 @@ export function ConclusionLibrary({
             <div style={{ display: "flex", alignItems: "flex-start" }}>
               <Checkbox
                 checked={isSelected}
-                onChange={() => onToggle(conclusion.current_revision_id ?? '')}
+                onChange={() => onToggle(revisionId)}
                 disabled={disabled}
+                aria-label={`选择结论: ${conclusion.statement}`}
                 style={{ marginRight: 8, marginTop: 2 }}
               />
               <div style={{ flex: 1 }}>

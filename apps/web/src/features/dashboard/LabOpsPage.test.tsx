@@ -85,7 +85,7 @@ describe('LabOpsPage', () => {
     useAuthStore.setState({
       user: {
         id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [],
-        featureFlags: { researchModule: true },
+        featureFlags: { researchModule: true, researchAnalysis: false, legacyModelExecution: false },
       },
     });
     renderPage();
@@ -130,7 +130,7 @@ describe('LabOpsPage', () => {
     useAuthStore.setState({
       user: {
         id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [],
-        featureFlags: { researchModule: true },
+        featureFlags: { researchModule: true, researchAnalysis: false, legacyModelExecution: false },
       },
     });
     renderPage();

@@ -184,7 +184,7 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
                 {item.status === "question_draft" ? "开始分析" : "重新分析"}
               </Button>
             </div>
-            <div onClick={(e) => e.stopPropagation()}>
+            <div>
               <Popconfirm
                 title="确认删除此轮次？"
                 description="删除后不可恢复，关联的分析结果也会一并删除。"
@@ -198,6 +198,7 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
                   size="small"
                   icon={<DeleteOutlined />}
                   loading={deleting === item.turn_id}
+                  onClick={(e) => e.stopPropagation()}
                   danger
                   style={{ padding: '0 4px' }}
                 />

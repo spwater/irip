@@ -5,8 +5,9 @@
  * 中栏: 研究时间线（卡片按序号排列，展开显示问题+分析结果）
  * 右栏: 结论库
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { Button, Row, Col, Spin, message, Popconfirm, Tag, Typography, Modal, Input } from 'antd';
+import type { InputRef } from 'antd';
 import { ArrowLeftOutlined, DeleteOutlined, InboxOutlined, EditOutlined } from '@ant-design/icons';
 import { apiGetWorkspace, apiArchiveWorkspace, apiDeleteWorkspace, apiUpdateWorkspace, type WorkspaceDetail as WorkspaceDetailType } from '@/api/research';
 import { http } from '@/api/client';
@@ -37,6 +38,14 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const editNameInputRef = useRef<InputRef>(null);
+
+  // Focus the name input when entering edit mode (replaces deprecated autoFocus)
+  useEffect(() => {
+    if (editingName) {
+      editNameInputRef.current?.focus();
+    }
+  }, [editingName]);
 
   const handleSaveName = useCallback(async () => {
     if (!editNameValue.trim()) {
@@ -124,12 +133,12 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
         {editingName ? (
           <>
             <Input
+              ref={editNameInputRef}
               value={editNameValue}
               onChange={(e) => setEditNameValue(e.target.value)}
               onPressEnter={handleSaveName}
               style={{ width: 200, marginLeft: 8 }}
               size="small"
-              autoFocus
             />
             <Button size="small" type="primary" loading={savingName} onClick={handleSaveName} style={{ marginLeft: 4 }}>
               保存

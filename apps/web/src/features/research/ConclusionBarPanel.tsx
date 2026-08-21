@@ -121,14 +121,14 @@ export function ConclusionBarPanel({
                     </Text>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                   {r.status === 'withdrawn' && (
                     <Button
                       size="small"
                       type="text"
                       icon={<SendOutlined />}
                       loading={republishMutation.isPending && republishMutation.variables === r.id}
-                      onClick={() => republishMutation.mutate(r.id)}
+                      onClick={(e) => { e.stopPropagation(); republishMutation.mutate(r.id); }}
                       style={{ color: '#52c41a' }}
                     />
                   )}
@@ -144,6 +144,7 @@ export function ConclusionBarPanel({
                         type="text"
                         icon={<UndoOutlined />}
                         loading={withdrawMutation.isPending && withdrawMutation.variables === r.id}
+                        onClick={(e) => e.stopPropagation()}
                         style={{ color: '#faad14' }}
                       />
                     </Popconfirm>
@@ -161,6 +162,7 @@ export function ConclusionBarPanel({
                       type="text"
                       icon={<DeleteOutlined />}
                       loading={deleteMutation.isPending && deleteMutation.variables === r.id}
+                      onClick={(e) => e.stopPropagation()}
                       danger
                     />
                   </Popconfirm>

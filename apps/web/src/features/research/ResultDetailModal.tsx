@@ -96,7 +96,7 @@ export function ResultDetailModal({
       onCancel={onClose}
       footer={null}
       width={1200}
-      destroyOnClose
+      destroyOnHidden
     >
       {isLoading || !detail ? (
         <div style={{ textAlign: 'center', padding: 48 }}>
