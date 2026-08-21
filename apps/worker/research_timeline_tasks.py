@@ -78,6 +78,77 @@ async def _load_ai_config(
         }
 
 
+async def _build_plan_service(
+    factory: async_sessionmaker[AsyncSession],
+    dept_uuid: UUID | None,
+    actor_uuid: UUID | None,
+) -> Any | None:
+    """Build a PlanService wired to the active AI config and fact provider.
+
+    Returns None when no active AI config exists.  This mirrors the setup in
+    ``execute_analysis_run`` / ``extract_candidates`` so plan generation uses
+    the same identity-aware ModelGateway + FactProvider stack.
+    """
+    ai_config = await _load_ai_config(factory)
+    if not ai_config:
+        return None
+
+    from packages.ai.openai_compatible import OpenAICompatibleProvider
+    from packages.research.execution.models_trusted import (
+        ModelConfig,
+        TaskType,
+    )
+    from packages.research.planning.context_router import ContextRouter
+    from packages.research.planning.model_gateway import ModelGateway
+    from packages.research.planning.plan_core import PlanService
+
+    research_model_name = ai_config.get("research_model_name") or ai_config.get(
+        "model_name", ""
+    )
+    thinking = ai_config.get("research_thinking_enabled", False)
+    ai_provider = OpenAICompatibleProvider(
+        api_key=ai_config["api_key"],
+        base_url=ai_config["base_url"],
+        model=research_model_name,
+        thinking_enabled=thinking,
+    )
+    model_registry = {
+        task: ModelConfig(
+            provider="openai_compatible",
+            model=research_model_name,
+            version="custom",
+            context_limit=128000,
+        )
+        for task in TaskType
+    }
+    model_gateway = ModelGateway(
+        provider=ai_provider,
+        audit_recorder=None,
+        model_registry=model_registry,
+    )
+
+    from packages.facts.query_service import FactQueryService
+    from packages.research.lineage.core_adapter import CoreFactProviderImpl
+
+    fact_provider = CoreFactProviderImpl(
+        query_service=FactQueryService(
+            session_factory=factory,
+            department_id=dept_uuid,  # type: ignore[arg-type]
+            actor_id=actor_uuid,
+            s3_repo=None,
+        )
+    )
+
+    return PlanService(
+        session_factory=factory,
+        department_id=dept_uuid,  # type: ignore[arg-type]
+        actor_id=actor_uuid,
+        model_gateway=model_gateway,
+        context_router=ContextRouter(),
+        fact_provider=fact_provider,
+    )
+
+
 @shared_task(
     name="research.recommendations.generate",
     bind=True,
@@ -200,7 +271,14 @@ def generate_plan(
     from uuid import UUID
 
     async def _run() -> dict[str, str]:
+        import sqlalchemy as sa
+
+        from packages.common.errors import AppError
+        from packages.research.execution.entities_trusted import (
+            ResearchAnalysisPlanVersion,
+        )
         from packages.research.timeline.entities import ResearchTurn
+        from packages.research.timeline.repository import TimelineRepository
 
         factory = _get_session_factory()
         dept_uuid = UUID(department_id) if department_id else None
@@ -208,24 +286,120 @@ def generate_plan(
         ws_uuid = UUID(workspace_id) if workspace_id else None
         turn_uuid = UUID(turn_id)
 
+        # 1. Load the turn; handle not-found / workspace mismatch and
+        #    redelivery idempotency (a plan may already exist for this turn).
         async with _scoped_session(
             factory, actor_id=actor_uuid, department_id=dept_uuid
         ) as session:
             turn = await session.get(ResearchTurn, turn_uuid)
-            if turn is None:
-                return {"turn_id": turn_id, "status": "not_found", "plan_id": ""}
-            if turn.workspace_id != ws_uuid:
+            if turn is None or (ws_uuid is not None and turn.workspace_id != ws_uuid):
                 return {"turn_id": turn_id, "status": "not_found", "plan_id": ""}
 
-            # Transition planning -> plan_review on success
-            if turn.status == "planning":
-                turn.status = "plan_review"
+            existing_row = await session.execute(
+                sa.select(ResearchAnalysisPlanVersion)
+                .where(ResearchAnalysisPlanVersion.turn_id == turn_uuid)
+                .order_by(ResearchAnalysisPlanVersion.version_number.desc())
+                .limit(1)
+            )
+            existing = existing_row.scalar_one_or_none()
+            if existing is not None:
+                # Redelivery after a successful generation: plan already
+                # persisted.  Only ensure the turn is moved forward.
+                if turn.status == "planning":
+                    try:
+                        await TimelineRepository.update_turn_status(
+                            session, turn_uuid, "planning", "plan_review"
+                        )
+                    except AppError:
+                        pass
+                    else:
+                        turn.status = "plan_review"
+                return {
+                    "turn_id": turn_id,
+                    "status": turn.status,
+                    "plan_id": str(existing.id),
+                }
 
+            if turn.status != "planning":
+                return {
+                    "turn_id": turn_id,
+                    "status": turn.status,
+                    "plan_id": "",
+                }
+
+            workspace_uuid = turn.workspace_id
+            snapshot_uuid = turn.evidence_snapshot_id
+
+        # 2. Generate and persist the plan version via PlanService.
+        plan_service = await _build_plan_service(factory, dept_uuid, actor_uuid)
+        if plan_service is None:
+            async with _scoped_session(
+                factory, actor_id=actor_uuid, department_id=dept_uuid
+            ) as session:
+                try:
+                    await TimelineRepository.update_turn_status(
+                        session, turn_uuid, "planning", "planning_failed"
+                    )
+                except AppError:
+                    pass
             return {
                 "turn_id": turn_id,
-                "status": turn.status,
-                "plan_id": str(turn.id),
+                "status": "planning_failed",
+                "plan_id": "",
             }
+
+        try:
+            plan_ref = await plan_service.generate_plan(
+                workspace_id=workspace_uuid,
+                snapshot_id=snapshot_uuid,
+            )
+        except Exception as exc:  # noqa: BLE001 - finalizer records failure
+            logger.exception(
+                "plan generation failed for turn %s: %s", turn_id, exc
+            )
+            async with _scoped_session(
+                factory, actor_id=actor_uuid, department_id=dept_uuid
+            ) as session:
+                try:
+                    await TimelineRepository.update_turn_status(
+                        session, turn_uuid, "planning", "planning_failed"
+                    )
+                except AppError:
+                    pass
+            return {
+                "turn_id": turn_id,
+                "status": "planning_failed",
+                "plan_id": "",
+            }
+
+        plan_id = plan_ref.plan_id
+
+        # 3. Bind the plan to the turn and advance planning -> plan_review.
+        async with _scoped_session(
+            factory, actor_id=actor_uuid, department_id=dept_uuid
+        ) as session:
+            await session.execute(
+                sa.update(ResearchAnalysisPlanVersion)
+                .where(ResearchAnalysisPlanVersion.id == plan_id)
+                .values(turn_id=turn_uuid)
+            )
+            try:
+                await TimelineRepository.update_turn_status(
+                    session, turn_uuid, "planning", "plan_review"
+                )
+                new_status = "plan_review"
+            except AppError:
+                current = await session.get(ResearchTurn, turn_uuid)
+                new_status = current.status if current is not None else "plan_review"
+
+        logger.info(
+            "generated plan %s for turn %s", str(plan_id), turn_id
+        )
+        return {
+            "turn_id": turn_id,
+            "status": new_status,
+            "plan_id": str(plan_id),
+        }
 
     logger.info("generating plan for turn %s", turn_id)
     return asyncio.run(_run())

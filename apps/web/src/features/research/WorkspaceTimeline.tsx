@@ -10,6 +10,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button, Spin, Empty, Tag, Typography, Popconfirm, message } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { useResearchTimeline } from "./useResearchTimeline";
+import { startPlanning, submitRun } from "@/api/researchTimeline";
 import { http } from "@/api/client";
 
 const { Text } = Typography;
@@ -72,8 +73,15 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
     e.stopPropagation();
     setAnalyzing(turnId);
     try {
-      await http.post(`/research/workspaces/${workspaceId}/turns/${turnId}/analyze`);
-      message.success("分析已启动");
+      // question_draft → generate plan; plan_confirmed / run_failed → submit run.
+      const item = items.find((it) => it.turn_id === turnId);
+      if (item && item.status === "question_draft") {
+        await startPlanning(workspaceId, turnId);
+        message.success("已开始生成分析计划");
+      } else {
+        await submitRun(workspaceId, turnId);
+        message.success("分析已启动");
+      }
       refresh();
       onTurnChanged?.();
     } catch (err) {
@@ -81,6 +89,27 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
       message.error(msg);
     } finally {
       setAnalyzing(null);
+    }
+  };
+
+  /** Map a turn status to the inline timeline action button (if any). */
+  const actionForStatus = (status: string): { label: string; disabled: boolean } | null => {
+    switch (status) {
+      case "question_draft":
+        return { label: "生成计划", disabled: false };
+      case "planning":
+        return { label: "计划生成中", disabled: true };
+      case "plan_review":
+        return { label: "待确认计划", disabled: true };
+      case "plan_confirmed":
+        return { label: "执行分析", disabled: false };
+      case "run_failed":
+        return { label: "重试", disabled: false };
+      case "queued":
+      case "running":
+        return { label: STATUS_LABELS[status] || status, disabled: true };
+      default:
+        return null;
     }
   };
 
@@ -174,15 +203,22 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
               )}
               {item.has_result && <span>{" · 有结果"}</span>}
               {item.has_candidates && <span>{" · 有候选"}</span>}
-              <Button
-                type="link"
-                size="small"
-                loading={analyzing === item.turn_id}
-                onClick={(e) => handleAnalyze(e, item.turn_id)}
-                style={{ padding: 0, fontSize: 12, height: 16, lineHeight: "16px" }}
-              >
-                {item.status === "question_draft" ? "开始分析" : "重新分析"}
-              </Button>
+              {(() => {
+                const action = actionForStatus(item.status);
+                if (!action) return null;
+                return (
+                  <Button
+                    type="link"
+                    size="small"
+                    loading={analyzing === item.turn_id}
+                    disabled={action.disabled}
+                    onClick={(e) => handleAnalyze(e, item.turn_id)}
+                    style={{ padding: 0, fontSize: 12, height: 16, lineHeight: "16px" }}
+                  >
+                    {action.label}
+                  </Button>
+                );
+              })()}
             </div>
             <div>
               <Popconfirm

@@ -12,6 +12,7 @@ from uuid import UUID
 
 import fastapi
 from fastapi import Depends
+from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
@@ -72,6 +73,32 @@ async def start_planning(
     """Start generating an analysis plan for a turn."""
     ref = await service.start_planning(workspace_id, turn_id)
     return {"turn_id": str(ref.turn_id), "status": ref.status}
+
+
+class ConfirmPlanRequest(BaseModel):
+    """确认计划请求体。"""
+
+    plan_id: str = Field(..., description="待确认的计划版本 ID")
+
+
+@research_timeline_router.post(
+    "/workspaces/{workspace_id}/turns/{turn_id}/confirm-plan",
+)
+async def confirm_plan(
+    workspace_id: UUID,
+    turn_id: UUID,
+    body: ConfirmPlanRequest,
+    current_user: ResearchUserDep,
+    service: TurnServiceDep,
+) -> dict[str, Any]:
+    """确认已生成的计划，将轮次推进到 plan_confirmed。"""
+    ref = await service.confirm_plan(workspace_id, turn_id, UUID(body.plan_id))
+    return {
+        "plan_id": str(ref.plan_id),
+        "turn_id": str(ref.turn_id),
+        "version_number": ref.version_number,
+        "status": ref.status,
+    }
 
 
 @research_timeline_router.post("/extract-text")

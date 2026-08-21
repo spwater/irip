@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button, Input, Typography, message, Tag } from 'antd';
 import { PaperClipOutlined } from '@ant-design/icons';
-import { createTurn } from '@/api/researchTimeline';
+import { createTurn, startPlanning } from '@/api/researchTimeline';
 import { http } from '@/api/client';
 
 const { Text } = Typography;
@@ -25,7 +25,6 @@ export function ResearchComposer({ workspaceId, snapshotId, selectedRevisionIds,
   const [question, setQuestion] = useState(initialQuestion || '');
   const [loading, setLoading] = useState(false);
   const [backgroundFiles, setBackgroundFiles] = useState<File[]>([]);
-  const [extractedText, setExtractedText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -39,19 +38,14 @@ export function ResearchComposer({ workspaceId, snapshotId, selectedRevisionIds,
     const newFiles = Array.from(files);
     setBackgroundFiles((prev) => [...prev, ...newFiles]);
 
-    // Extract text from each file
+    // Upload each file for background context extraction.
     for (const file of newFiles) {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await http.post<{ text?: string; error?: string }>(
-          '/research/extract-text',
-          formData,
-          { headers: { 'Content-Type': 'multipart/form-data' } },
-        );
-        if (res.data.text) {
-          setExtractedText((prev) => prev + (prev ? '\n\n' : '') + res.data.text!);
-        }
+        await http.post('/research/extract-text', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
       } catch {
         message.warning(`文件 ${file.name} 解析失败`);
       }
@@ -74,20 +68,18 @@ export function ResearchComposer({ workspaceId, snapshotId, selectedRevisionIds,
         evidence_snapshot_id: snapshotId,
         selected_conclusion_revision_ids: selectedRevisionIds,
       });
-      message.success(`研究轮次 #${ref.turn_number} 已创建，正在启动分析...`);
+      message.success(`研究轮次 #${ref.turn_number} 已创建，正在生成分析计划...`);
 
-      // Refresh timeline immediately — don't wait for analysis to finish
+      // Refresh timeline immediately — don't wait for plan generation to finish
       setQuestion('');
       setBackgroundFiles([]);
-      setExtractedText('');
       onTurnCreated(ref.turn_id);
 
-      // Auto-start analysis in background
+      // Auto-start planning in background; the worker will generate the plan
+      // and move the turn to plan_review, where the user reviews & confirms it
+      // before analysis is submitted.
       try {
-        await http.post(
-          `/research/workspaces/${workspaceId}/turns/${ref.turn_id}/analyze`,
-          { background_text: extractedText || undefined },
-        );
+        await startPlanning(workspaceId, ref.turn_id);
       } catch {
         // non-fatal — user can retry from timeline
       }

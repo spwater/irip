@@ -14,7 +14,7 @@ import remarkGfm from 'remark-gfm';
 import { ChartRefBlock } from '@/features/assistant/ChartRefBlock';
 import { ChartBlock } from '@/features/assistant/message-thread/components/ChartBlock';
 import { http } from '@/api/client';
-import type { TurnDetail } from '@/api/researchTimeline';
+import { confirmPlan, submitRun, type TurnDetail } from '@/api/researchTimeline';
 import { ReportBlockWrapper, detectBlockType } from './ReportBlockWrapper';
 import { buildTableSnapshot, type BlockType } from './blockUtils';
 
@@ -30,7 +30,9 @@ const STATUS_LABELS: Record<string, string> = {
   question_draft: '待分析',
   queued: '排队中',
   running: '分析中',
-  planning: '分析中',
+  planning: '计划生成中',
+  plan_review: '待确认计划',
+  plan_confirmed: '计划已确认',
   succeeded: '已完成',
   partially_succeeded: '部分完成',
   run_failed: '分析失败',
@@ -43,6 +45,8 @@ const STATUS_LABELS: Record<string, string> = {
 export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Props) {
   const [detail, setDetail] = useState<TurnDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [confirming, setConfirming] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const blockIndexRef = useRef(0);
 
   const fetchDetail = useCallback(async () => {
@@ -73,6 +77,33 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
     return () => clearInterval(interval);
   }, [detail?.turn.status, fetchDetail]);
 
+  const handleConfirmPlan = async () => {
+    if (!detail?.plan) return;
+    setConfirming(true);
+    try {
+      await confirmPlan(workspaceId, turnId, detail.plan.plan_id);
+      message.success('计划已确认');
+      await fetchDetail();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '确认计划失败');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const handleExecute = async () => {
+    setExecuting(true);
+    try {
+      await submitRun(workspaceId, turnId);
+      message.success('分析已启动');
+      await fetchDetail();
+    } catch (err) {
+      message.error(err instanceof Error ? err.message : '启动分析失败');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: 24 }}>
@@ -85,7 +116,7 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
     return <Empty description="无法加载轮次详情" />;
   }
 
-  const { turn, result, candidates, access_restricted } = detail;
+  const { turn, plan, result, candidates, access_restricted } = detail;
   const statusLabel = STATUS_LABELS[turn.status] || turn.status;
   const isActive = ['queued', 'running', 'planning'].includes(turn.status);
 
@@ -211,6 +242,50 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
         </div>
       )}
 
+      {/* Plan review / confirm / execute */}
+      {plan && (turn.status === 'plan_review' || turn.status === 'plan_confirmed') && (
+        <div
+          style={{
+            padding: 12,
+            border: '1px solid #e6f4ff',
+            borderRadius: 6,
+            marginBottom: 12,
+            background: '#fafafa',
+          }}
+        >
+          <Text strong style={{ display: 'block', marginBottom: 4 }}>
+            {'分析计划 v'}{plan.version_number}
+            {'  '}
+            <Tag color={plan.status === 'confirmed' ? 'success' : 'processing'}>
+              {plan.status === 'confirmed' ? '已确认' : '待确认'}
+            </Tag>
+          </Text>
+          <PlanPreview plan={plan} />
+          {turn.status === 'plan_review' && (
+            <Button
+              type="primary"
+              size="small"
+              loading={confirming}
+              onClick={handleConfirmPlan}
+              style={{ marginTop: 8 }}
+            >
+              {'确认计划'}
+            </Button>
+          )}
+          {turn.status === 'plan_confirmed' && (
+            <Button
+              type="primary"
+              size="small"
+              loading={executing}
+              onClick={handleExecute}
+              style={{ marginTop: 8 }}
+            >
+              {'执行分析'}
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Running spinner */}
       {isActive && (
         <div style={{ textAlign: 'center', padding: 24, background: '#f0f5ff', borderRadius: 6 }}>
@@ -332,6 +407,38 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
         </div>
       )}
 
+    </div>
+  );
+}
+
+/** Render the plan steps and the first step's advice text for review. */
+function PlanPreview({ plan }: { plan: NonNullable<TurnDetail['plan']> }) {
+  const steps = plan.dag_structure?.steps ?? [];
+  const advice = steps.length > 0 ? (steps[0].expected_output ?? steps[0].question ?? '') : '';
+
+  return (
+    <div style={{ fontSize: 13 }}>
+      {steps.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {steps.map((s) => (
+            <div
+              key={s.step_key}
+              style={{ padding: '2px 0', borderBottom: '1px solid #f0f0f0' }}
+            >
+              <Text strong>{s.step_key}</Text>
+              <span style={{ marginLeft: 8, color: '#8c8c8c' }}>{s.question}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {advice && (
+        <div
+          className="research-markdown"
+          style={{ fontSize: 13, lineHeight: 1.7, color: '#595959' }}
+        >
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{advice}</ReactMarkdown>
+        </div>
+      )}
     </div>
   );
 }

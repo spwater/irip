@@ -23,6 +23,7 @@ from packages.research.timeline.contracts import (
     ConclusionRef,
     FixedConclusionInput,
     FixedTurnContext,
+    PlanVersionRef,
     TimelinePage,
     TimelineTurnCard,
     TurnDetail,
@@ -370,11 +371,13 @@ class TimelineQueryService(ScopedSessionMixin):
                 output_schema_version=turn.output_schema_version,
             )
 
+            plan_ref = await self._load_plan_ref(session, turn_id)
+
             return TurnDetail(
                 turn=turn_ref,
                 context=context,
                 selected_conclusions=selected_conclusions,
-                plan=None,  # Task 6 will populate
+                plan=plan_ref,
                 run_status=None,  # Task 7 will populate
                 result=result_dict,
                 extraction_status=extraction_status,
@@ -382,6 +385,39 @@ class TimelineQueryService(ScopedSessionMixin):
                 saved_conclusions=saved_conclusions,
                 access_restricted=False,
             )
+
+    @staticmethod
+    async def _load_plan_ref(
+        session: AsyncSession, turn_id: UUID
+    ) -> PlanVersionRef | None:
+        """Load the latest plan version scoped to a turn.
+
+        Args:
+            session: Async DB session.
+            turn_id: Turn ID.
+
+        Returns:
+            PlanVersionRef for the latest plan, or None if no plan exists yet.
+        """
+        from packages.research.execution.entities_trusted import (
+            ResearchAnalysisPlanVersion,
+        )
+
+        row = await session.execute(
+            sa.select(ResearchAnalysisPlanVersion)
+            .where(ResearchAnalysisPlanVersion.turn_id == turn_id)
+            .order_by(ResearchAnalysisPlanVersion.version_number.desc())
+            .limit(1)
+        )
+        plan = row.scalar_one_or_none()
+        if plan is None:
+            return None
+        return PlanVersionRef(
+            plan_id=plan.id,
+            turn_id=plan.turn_id,
+            version_number=plan.version_number,
+            status=plan.status,
+        )
 
     async def get_turn_detail_api(
         self,
@@ -504,6 +540,28 @@ class TimelineQueryService(ScopedSessionMixin):
             )
             fact_samples = await fact_loader.load_fact_samples(session, workspace_id)
 
+            # Latest plan version scoped to this turn (for plan review UI).
+            from packages.research.execution.entities_trusted import (
+                ResearchAnalysisPlanVersion,
+            )
+
+            plan_row = await session.execute(
+                sa.select(ResearchAnalysisPlanVersion)
+                .where(ResearchAnalysisPlanVersion.turn_id == turn_id)
+                .order_by(ResearchAnalysisPlanVersion.version_number.desc())
+                .limit(1)
+            )
+            plan_entity = plan_row.scalar_one_or_none()
+            plan: dict[str, Any] | None = None
+            if plan_entity is not None:
+                plan = {
+                    "plan_id": str(plan_entity.id),
+                    "version_number": plan_entity.version_number,
+                    "status": plan_entity.status,
+                    "dag_structure": plan_entity.dag_structure,
+                    "coverage_declaration": plan_entity.coverage_declaration,
+                }
+
             return {
                 "turn": {
                     "turn_id": str(turn.id),
@@ -516,6 +574,7 @@ class TimelineQueryService(ScopedSessionMixin):
                     "evidence_snapshot_id": str(turn.evidence_snapshot_id),
                 },
                 "selected_conclusions": selected,
+                "plan": plan,
                 "result": result,
                 "fact_samples": fact_samples,
                 "extraction_status": None,

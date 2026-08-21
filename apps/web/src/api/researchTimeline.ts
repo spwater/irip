@@ -114,6 +114,21 @@ export interface ConclusionCandidate {
   status: CandidateStatus;
 }
 
+export interface PlanDetail {
+  plan_id: string;
+  version_number: number;
+  status: "draft" | "confirmed" | "superseded";
+  dag_structure: {
+    steps: Array<{
+      step_key: string;
+      question: string;
+      expected_output?: string;
+      [key: string]: unknown;
+    }>;
+  };
+  coverage_declaration: Record<string, unknown> | null;
+}
+
 export interface TurnDetail {
   turn: TurnRef;
   selected_conclusions: Array<{
@@ -122,6 +137,7 @@ export interface TurnDetail {
     source_type: SourceType;
     evidence_status: EvidenceStatus;
   }>;
+  plan: PlanDetail | null;
   result: Record<string, unknown> | null;
   fact_samples: Array<{ label: string; data: Record<string, unknown> }> | null;
   extraction_status: ExtractionStatus | null;
@@ -276,6 +292,42 @@ export async function reviseConclusion(
   const res = await http.patch<ConclusionRef>(
     `${BASE}/workspaces/${workspaceId}/conclusions/${conclusionId}`,
     body,
+  );
+  return res.data;
+}
+
+export async function startPlanning(
+  workspaceId: string,
+  turnId: string,
+): Promise<{ turn_id: string; status: string }> {
+  const res = await http.post<{ turn_id: string; status: string }>(
+    `${BASE}/workspaces/${workspaceId}/turns/${turnId}/plan`,
+  );
+  return res.data;
+}
+
+export async function confirmPlan(
+  workspaceId: string,
+  turnId: string,
+  planId: string,
+): Promise<{ plan_id: string; turn_id: string; version_number: number; status: string }> {
+  const res = await http.post<{
+    plan_id: string;
+    turn_id: string;
+    version_number: number;
+    status: string;
+  }>(`${BASE}/workspaces/${workspaceId}/turns/${turnId}/confirm-plan`, {
+    plan_id: planId,
+  });
+  return res.data;
+}
+
+export async function submitRun(
+  workspaceId: string,
+  turnId: string,
+): Promise<{ run_id: string; turn_id: string; status: string }> {
+  const res = await http.post<{ run_id: string; turn_id: string; status: string }>(
+    `${BASE}/workspaces/${workspaceId}/turns/${turnId}/analyze`,
   );
   return res.data;
 }

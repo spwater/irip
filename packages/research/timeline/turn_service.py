@@ -14,6 +14,7 @@ Key invariants:
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -430,6 +431,101 @@ class TurnService(ScopedSessionMixin):
                 turn_id=turn_id,
                 version_number=0,
                 status="planning",
+            )
+
+    async def confirm_plan(
+        self, workspace_id: UUID, turn_id: UUID, plan_id: UUID
+    ) -> PlanVersionRef:
+        """Confirm a generated plan and advance the turn to ``plan_confirmed``.
+
+        Flow:
+          1. Verify turn ownership (fail-closed).
+          2. Load the plan version, verify it belongs to this turn.
+          3. Reject unless the plan is still ``draft``.
+          4. Mark the plan ``confirmed`` (sets confirmed_at + confirmed_by).
+          5. Compare-and-set the turn ``plan_review → plan_confirmed``.
+
+        Args:
+            workspace_id: Workspace ID (ownership check).
+            turn_id: The turn ID.
+            plan_id: The draft plan version ID to confirm.
+
+        Returns:
+            PlanVersionRef (status=confirmed).
+
+        Raises:
+            AppError: not_found if turn/plan don't exist or don't match.
+            AppError: state_conflict if plan isn't draft or turn isn't plan_review.
+        """
+        from packages.research.execution.entities_trusted import (
+            ResearchAnalysisPlanVersion,
+        )
+        from packages.research.execution.repository_trusted import (
+            ResearchRepositoryTrusted,
+        )
+        from packages.research.timeline.access import require_owned_turn
+
+        actor_id = self._require_actor()
+        async with self._scoped_session() as session:
+            turn = await require_owned_turn(
+                session, workspace_id, turn_id, self._actor_id
+            )
+
+            plan = await session.get(ResearchAnalysisPlanVersion, plan_id)
+            if plan is None or plan.turn_id != turn_id:
+                raise AppError(
+                    code="not_found",
+                    message="计划不存在或不属于此轮次",
+                    retryable=False,
+                    fields={"plan_id": str(plan_id), "turn_id": str(turn_id)},
+                )
+
+            if plan.status != "draft":
+                raise AppError(
+                    code="state_conflict",
+                    message=f"计划状态为 '{plan.status}'，仅 draft 可确认",
+                    retryable=True,
+                    fields={"plan_id": str(plan_id), "status": plan.status},
+                )
+
+            # Confirm the immutable plan version.
+            await ResearchRepositoryTrusted.update_plan_status(
+                session,
+                plan_id,
+                "confirmed",
+                confirmed_at=datetime.now(UTC),
+                confirmed_by=actor_id,
+            )
+
+            # Advance the turn: plan_review → plan_confirmed (CAS).
+            await TimelineRepository.update_turn_status(
+                session,
+                turn_id,
+                expected_status="plan_review",
+                new_status="plan_confirmed",
+            )
+
+            await AuditRecorder.record(
+                session,
+                AuditEventData(
+                    department_id=self._dept_id,
+                    action="research.turn.confirm_plan",
+                    actor_user_id=actor_id,
+                    resource_type="research_turn",
+                    resource_id=turn_id,
+                    payload={
+                        "plan_id": str(plan_id),
+                        "version_number": plan.version_number,
+                        "turn_number": turn.turn_number,
+                    },
+                ),
+            )
+
+            return PlanVersionRef(
+                plan_id=plan_id,
+                turn_id=turn_id,
+                version_number=plan.version_number,
+                status="confirmed",
             )
 
     async def delete_turn(self, workspace_id: UUID, turn_id: UUID) -> None:
