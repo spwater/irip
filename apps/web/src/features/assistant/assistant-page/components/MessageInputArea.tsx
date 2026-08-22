@@ -38,7 +38,7 @@ export function MessageInputArea(props: MessageInputAreaProps): JSX.Element {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <Tooltip title="开启后 AI 会先思考再回答。需同时在大模型配置中开启思考模式才生效。">
+        <Tooltip title="开启后 AI 会先思考再回答。">
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 8, flexShrink: 0 }}>
             <Switch
               size="small"

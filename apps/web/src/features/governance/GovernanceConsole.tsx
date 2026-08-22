@@ -3,7 +3,6 @@ import { Row, Col } from 'antd';
 import { UsersPage } from '@/features/governance/UsersPage';
 import { AuditPage } from '@/features/governance/AuditPage';
 import { SystemHealthPage } from '@/features/governance/SystemHealthPage';
-import { AIConfigPage } from '@/features/governance/AIConfigPage';
 import { DatabaseBackupPage } from '@/features/governance/DatabaseBackupPage';
 import { JobsPage } from '@/features/jobs/JobsPage';
 import { DataTransferPanel } from '@/features/governance/DataTransferPanel';
@@ -70,12 +69,7 @@ export function GovernanceConsole(): JSX.Element {
     <div className="ocean-page-enter" key={activeTab} style={{ paddingTop: 10 }}>
       {activeTab === 'system-config' && isAdmin && (
         <Row gutter={24}>
-          <Col xs={24} lg={12}>
-            <div style={{ marginTop: -8 }}>
-              <AIConfigPage />
-            </div>
-          </Col>
-          <Col xs={24} lg={12}>
+          <Col xs={24} lg={24}>
             <SystemHealthPage />
           </Col>
         </Row>

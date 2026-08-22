@@ -15,9 +15,6 @@ vi.mock('@/features/governance/AuditPage', () => ({
 vi.mock('@/features/governance/SystemHealthPage', () => ({
   SystemHealthPage: () => <div data-testid="health-page">SystemHealthPage</div>,
 }));
-vi.mock('@/features/governance/AIConfigPage', () => ({
-  AIConfigPage: () => <div data-testid="ai-config-page">AIConfigPage</div>,
-}));
 vi.mock('@/features/governance/DatabaseBackupPage', () => ({
   DatabaseBackupPage: () => <div data-testid="db-backup-page">DatabaseBackupPage</div>,
 }));
@@ -129,7 +126,6 @@ describe('GovernanceConsole', () => {
       },
     });
     renderConsole();
-    expect(screen.getByTestId('ai-config-page')).toBeInTheDocument();
     expect(screen.getByTestId('health-page')).toBeInTheDocument();
   });
 
