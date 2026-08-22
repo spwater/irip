@@ -66,6 +66,9 @@ _PROVIDERS_CACHE: list[ProviderConfig] | None = None
 #: 模块级缓存：场景配置字典（ai-usage.yaml + models.yaml 交叉解析结果）。
 _SCENARIO_CACHE: dict[str, ScenarioConfig] | None = None
 
+#: 模块级缓存：配置文件 mtime（用于热重载检测）。
+_CACHE_MTIMES: dict[str, float] | None = None
+
 
 # ---------------------------------------------------------------------------
 # Data Structures
@@ -137,22 +140,48 @@ def _get_config_dir() -> Path:
 
 
 def _reset_cache() -> None:
-    """清除模块级缓存（主要用于测试）。
+    """清除模块级缓存（主要用于测试和热重载）。
 
     将 provider 和 scenario 缓存重置为 None，下次调用 load_config() 时重新加载。
     """
-    global _PROVIDERS_CACHE, _SCENARIO_CACHE
+    global _PROVIDERS_CACHE, _SCENARIO_CACHE, _CACHE_MTIMES
     _PROVIDERS_CACHE = None
     _SCENARIO_CACHE = None
+    _CACHE_MTIMES = None
 
 
 def reload() -> None:
     """强制重新加载 YAML 配置（清除缓存）。
 
-    非测试场景一般不需要调用（配置启动时加载一次，修改需重启进程）。
+    可用于手动触发热重载。
     """
     _reset_cache()
     logger.info("AI config cache cleared, will reload on next access")
+
+
+def _check_and_reload_if_changed() -> bool:
+    """检测配置文件是否被修改，若修改则清除缓存。
+
+    通过比较文件 mtime 判断是否需要重新加载。
+
+    Returns:
+        bool: True 表示配置已变更并清除了缓存（下次访问会重新加载），
+              False 表示配置未变更。
+    """
+    if _CACHE_MTIMES is None:
+        return False
+
+    config_dir = _get_config_dir()
+    for filename, old_mtime in _CACHE_MTIMES.items():
+        path = config_dir / filename
+        if not path.exists():
+            continue
+        current_mtime = path.stat().st_mtime
+        if current_mtime != old_mtime:
+            logger.info("AI config file changed: %s, reloading...", filename)
+            _reset_cache()
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +407,13 @@ def load_config() -> None:
     _PROVIDERS_CACHE = providers
     _SCENARIO_CACHE = scenarios
 
+    # 记录文件 mtime 用于热重载检测
+    global _CACHE_MTIMES
+    _CACHE_MTIMES = {
+        "models.yaml": models_path.stat().st_mtime,
+        "ai-usage.yaml": usage_path.stat().st_mtime,
+    }
+
     logger.info(
         "AI config loaded: %d providers, %d scenarios",
         len(providers),
@@ -491,6 +527,11 @@ def get_scenario_config(scenario_name: str) -> ScenarioConfig:
         FileNotFoundError: 配置文件不存在（自动加载时）。
         ValueError: schema 不合法（自动加载时）。
     """
+    if _SCENARIO_CACHE is None:
+        load_config()
+
+    # 热重载检测：文件被修改后自动清除缓存并重新加载
+    _check_and_reload_if_changed()
     if _SCENARIO_CACHE is None:
         load_config()
 
