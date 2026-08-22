@@ -1,6 +1,6 @@
 # IRIP API / Worker / Bootstrap Dockerfile (multi-stage)
 # 镜像固定 tag：python:3.12-slim-bookworm（架构文档 §6.3）
-# pip 走阿里云镜像（架构文档 §6.1）
+# pip 走中科大镜像（架构文档 §6.1）；基础镜像走 DaoCloud（科大 Docker Hub 镜像已下线）
 #
 # 多阶段拆分（deploy: split minimal runtime and operations images）：
 #   - builder: 安装编译依赖 + 构建 Python 包（含 C 扩展）
@@ -15,8 +15,8 @@ FROM docker.m.daocloud.io/python:3.12-slim-bookworm AS builder
 
 # 系统依赖：libpq-dev（psycopg 编译）、gcc（C 扩展编译）
 # 使用阿里云 Debian 镜像源加速
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true && \
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       libpq-dev gcc && \
@@ -34,7 +34,7 @@ COPY schemas/ ./schemas/
 # 安装 Python 依赖到独立前缀 /install，便于 runtime 阶段精确拷贝
 # BuildKit 缓存挂载：pip 下载的包跨构建持久化
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com \
+    pip install -i https://mirrors.ustc.edu.cn/pypi/simple/ --trusted-host mirrors.ustc.edu.cn \
       --prefix=/install -e .
 
 # ============================================================
@@ -43,8 +43,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM docker.m.daocloud.io/python:3.12-slim-bookworm AS runtime
 
 # 运行时仅需 libpq 共享库（psycopg 运行时链接），无需 gcc/libpq-dev
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true && \
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       libpq5 curl ca-certificates && \

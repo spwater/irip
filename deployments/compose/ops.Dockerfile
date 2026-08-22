@@ -6,15 +6,15 @@
 # 不含 Docker CLI（PITR 恢复改由专用恢复流程控制 PG 容器，不挂载 docker.sock）。
 #
 # 镜像固定 tag：python:3.12-slim-bookworm（架构文档 §6.3）
-# pip 走阿里云镜像（架构文档 §6.1）
+# pip 走中科大镜像（架构文档 §6.1）；基础镜像走 DaoCloud（科大 Docker Hub 镜像已下线）
 
 # ============================================================
 # Stage 1: builder —— 编译 C 扩展并安装 Python 依赖（与 api.Dockerfile 对齐）
 # ============================================================
 FROM docker.m.daocloud.io/python:3.12-slim-bookworm AS builder
 
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true && \
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       libpq-dev gcc && \
@@ -29,7 +29,7 @@ COPY migrations/ ./migrations/
 COPY schemas/ ./schemas/
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -i https://mirrors.aliyun.com/pypi/simple/ --trusted-host mirrors.aliyun.com \
+    pip install -i https://mirrors.ustc.edu.cn/pypi/simple/ --trusted-host mirrors.ustc.edu.cn \
       --prefix=/install -e .
 
 # ============================================================
@@ -38,8 +38,8 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 FROM docker.m.daocloud.io/python:3.12-slim-bookworm AS ops
 
 # 运行时系统依赖 + libpq 共享库
-RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true && \
+RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       libpq5 curl ca-certificates gnupg && \
