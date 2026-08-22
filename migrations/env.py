@@ -18,7 +18,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from packages.common.database import Base, get_database_url
+from packages.common.database import Base, get_database_url, get_database_admin_url
 
 config = context.config
 
@@ -28,9 +28,10 @@ if config.config_file_name is not None:
 # 从环境变量覆盖数据库 URL（支持 async 驱动）
 # RLS 通电后：应用运行时用 irip_app（非 superuser，受 RLS 约束），
 # 迁移用 irip（superuser，可 DDL + 绕过 RLS 做 schema 操作）。
-# 优先 IRIP_ALEMBIC_DATABASE_URL（迁移专用 superuser），退回 file-backed 的
-# IRIP_DATABASE_URL_FILE / IRIP_DATABASE_URL（阶段2 A1，bootstrap 挂载 database_admin_url）。
-_db_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL") or get_database_url()
+# 回退优先级：IRIP_ALEMBIC_DATABASE_URL（迁移专用 superuser）→
+# get_database_admin_url()（file-backed superuser，backup/restore/bootstrap 场景）
+# → get_database_url()（file-backed 业务连接，最后兜底）。
+_db_url = os.getenv("IRIP_ALEMBIC_DATABASE_URL") or get_database_admin_url() or get_database_url()
 if _db_url is not None:
     if _db_url.startswith("postgresql+psycopg://"):
         _async_url = _db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
