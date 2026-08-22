@@ -28,7 +28,9 @@ def upgrade() -> None:
 
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    raw_key = os.getenv("IRIP_MASTER_KEY", "")
+    from packages.common.secret_files import read_secret
+
+    raw_key = read_secret("IRIP_MASTER_KEY", required=False) or ""
     is_test_env = os.getenv("IRIP_ENV") == "test"
 
     if not raw_key and not is_test_env:
