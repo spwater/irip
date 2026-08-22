@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Row, Col } from 'antd';
 import { UsersPage } from '@/features/governance/UsersPage';
 import { AuditPage } from '@/features/governance/AuditPage';
-import { SystemHealthPage } from '@/features/governance/SystemHealthPage';
 import { DatabaseBackupPage } from '@/features/governance/DatabaseBackupPage';
 import { JobsPage } from '@/features/jobs/JobsPage';
 import { DataTransferPanel } from '@/features/governance/DataTransferPanel';
@@ -28,9 +26,6 @@ export function GovernanceConsole(): JSX.Element {
 
   const tabs = useMemo(() => {
     const items: Array<{ key: string; label: string }> = [];
-    if (isAdmin) {
-      items.push({ key: 'system-config', label: '系统配置' });
-    }
     // irip-ai-collab: platform_administrator 和 lab_director 均可见用户管理
     if (isAdmin || isLabDirector) {
       items.push({ key: 'users', label: '用户管理' });
@@ -67,13 +62,6 @@ export function GovernanceConsole(): JSX.Element {
 
   return (
     <div className="ocean-page-enter" key={activeTab} style={{ paddingTop: 10 }}>
-      {activeTab === 'system-config' && isAdmin && (
-        <Row gutter={24}>
-          <Col xs={24} lg={24}>
-            <SystemHealthPage />
-          </Col>
-        </Row>
-      )}
       {activeTab === 'users' && <UsersPage />}
       {activeTab === 'audit' && (isAdmin || isAuditor) && <AuditPage />}
       {activeTab === 'jobs' && isAdmin && <JobsPage />}

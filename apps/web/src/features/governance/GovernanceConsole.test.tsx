@@ -12,9 +12,6 @@ vi.mock('@/features/governance/UsersPage', () => ({
 vi.mock('@/features/governance/AuditPage', () => ({
   AuditPage: () => <div data-testid="audit-page">AuditPage</div>,
 }));
-vi.mock('@/features/governance/SystemHealthPage', () => ({
-  SystemHealthPage: () => <div data-testid="health-page">SystemHealthPage</div>,
-}));
 vi.mock('@/features/governance/DatabaseBackupPage', () => ({
   DatabaseBackupPage: () => <div data-testid="db-backup-page">DatabaseBackupPage</div>,
 }));
@@ -74,13 +71,13 @@ describe('GovernanceConsole', () => {
       },
     });
     renderConsole();
-    expect(screen.getByTestId('tab-system-config')).toHaveTextContent('系统配置');
+    expect(screen.queryByTestId('tab-system-config')).not.toBeInTheDocument();
     expect(screen.getByTestId('tab-users')).toHaveTextContent('用户管理');
     expect(screen.getByTestId('tab-audit')).toHaveTextContent('审计事件');
     expect(screen.getByTestId('tab-jobs')).toHaveTextContent('作业中心');
     expect(screen.getByTestId('tab-data-transfer')).toHaveTextContent('数据移交');
     expect(screen.getByTestId('tab-db-backup')).toHaveTextContent('数据库备份');
-    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('6');
+    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('5');
   });
 
   it('shows only users tab for lab_director', () => {
@@ -116,7 +113,7 @@ describe('GovernanceConsole', () => {
     expect(screen.getByTestId('header-tab-count')).toHaveTextContent('1');
   });
 
-  it('renders system-config content by default for admin', () => {
+  it('renders users content by default for admin', () => {
     useAuthStore.setState({
       user: {
         id: 'u-admin',
@@ -126,24 +123,7 @@ describe('GovernanceConsole', () => {
       },
     });
     renderConsole();
-    expect(screen.getByTestId('health-page')).toBeInTheDocument();
-  });
-
-  it('switches to users tab when clicked', () => {
-    useAuthStore.setState({
-      user: {
-        id: 'u-admin',
-        displayName: '管理员',
-        roles: ['platform_administrator'],
-        permissions: [],
-      },
-    });
-    renderConsole();
-    const usersTab = screen.getByTestId('tab-users');
-    expect(usersTab).toBeInTheDocument();
-    fireEvent.click(usersTab);
-    // The click should not throw and the component should still be mounted
-    expect(screen.getByTestId('header-title')).toHaveTextContent('平台治理');
+    expect(screen.getByTestId('users-page')).toBeInTheDocument();
   });
 
   it('switches to audit tab when clicked', () => {
