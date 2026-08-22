@@ -477,10 +477,10 @@ services:
     restart: unless-stopped
 
 networks:
+  # 不设置显式 name，让 compose 按 <project>_<network> 自动前缀化，
+  # 使 `-p <project>` 能隔离网络层（staging/drill/生产同机不再 host 名冲突）。
   frontend:
-    name: irip-frontend
   backend:
-    name: irip-backend
     internal: true
 
 volumes:
