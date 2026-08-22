@@ -20,6 +20,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.common.database import ScopedSessionMixin
+from packages.common.errors import AppError
 from packages.research.timeline.contracts import (
     RECOMMENDATION_OUTPUT_SCHEMA_VERSION,
     RECOMMENDATION_PROMPT_VERSION,
@@ -192,8 +193,6 @@ class RecommendationService(ScopedSessionMixin):
         async with self._factory() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
-                from packages.common.errors import AppError
-
                 raise AppError(
                     code="not_found",
                     message="Recommendation batch not found",
@@ -425,8 +424,6 @@ class RecommendationService(ScopedSessionMixin):
         async with self._factory() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
-                from packages.common.errors import AppError
-
                 raise AppError(
                     code="not_found",
                     message="Recommendation batch not found",
@@ -435,8 +432,6 @@ class RecommendationService(ScopedSessionMixin):
                 )
 
             if not RecommendationBatchStateMachine.can_retry(batch.status):
-                from packages.common.errors import AppError
-
                 raise AppError(
                     code="state_conflict",
                     message=f"Batch in status '{batch.status}' cannot be retried",
