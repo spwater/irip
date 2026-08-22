@@ -603,11 +603,11 @@ class RestoreService:
     async def _validate_referential_integrity(self) -> None:
         """引用完整性校验（P0-UP-08）。
 
-        查询 artifact_blob 表的 storage_key 列，逐 key 检查 MinIO 对象是否存在。
+        查询 artifact_blob 表的 object_key 列，逐 key 检查 MinIO 对象是否存在。
         任一缺失则 raise RuntimeError。
 
         Raises:
-            RuntimeError: 任一 storage_key 对应的 MinIO 对象缺失时。
+            RuntimeError: 任一 object_key 对应的 MinIO 对象缺失时。
         """
         from sqlalchemy import create_engine, text
 
@@ -616,7 +616,7 @@ class RestoreService:
         try:
             with engine.connect() as conn:
                 result = conn.execute(
-                    text("SELECT storage_key FROM artifact_blob")
+                    text("SELECT object_key FROM artifact_blob")
                 )
                 storage_keys: list[str] = [str(row[0]) for row in result.fetchall()]
         except Exception as exc:
