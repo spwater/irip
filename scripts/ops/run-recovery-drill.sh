@@ -144,7 +144,7 @@ MC_ALIAS="${IRIP_MINIO_MC_ALIAS:-irip}"
 MC_CONFIG_DIR="/tmp/mc-drill"
 
 # 基线行数聚合 SQL：核心业务表行数之和（与 restore.py SMOKE_QUERIES 对齐）
-ROW_QUERY="${IRIP_DRILL_ROW_QUERY:-SELECT COALESCE((SELECT count(*) FROM app_user),0) + COALESCE((SELECT count(*) FROM organization),0) + COALESCE((SELECT count(*) FROM role),0) + COALESCE((SELECT count(*) FROM artifact_blob),0) + COALESCE((SELECT count(*) FROM job),0);}"
+ROW_QUERY="${IRIP_DRILL_ROW_QUERY:-SELECT COALESCE((SELECT count(*) FROM app_user),0) + COALESCE((SELECT count(*) FROM department),0) + COALESCE((SELECT count(*) FROM role),0) + COALESCE((SELECT count(*) FROM artifact_blob),0) + COALESCE((SELECT count(*) FROM job),0);}"
 
 # 破坏阶段 truncate 的目录表（逗号分隔）
 TRUNCATE_TABLES="${IRIP_DRILL_TRUNCATE_TABLES:-job,artifact_blob}"
@@ -161,7 +161,7 @@ build_ops_admin_url() {
     if [ -z "$PG_PASSWORD" ]; then
         die "IRIP_DATABASE_PASSWORD not set and IRIP_DRILL_DATABASE_ADMIN_URL not provided"
     fi
-    printf 'postgresql://%s:%s@postgres:5432/%s' "$PG_USER" "$PG_PASSWORD" "$PG_DB"
+    printf 'postgresql+psycopg://%s:%s@postgres:5432/%s' "$PG_USER" "$PG_PASSWORD" "$PG_DB"
 }
 
 OPS_ADMIN_URL="$(build_ops_admin_url)"
