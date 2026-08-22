@@ -119,6 +119,13 @@ class TestRecommendationBatchStateMachine:
         assert RecommendationBatchStateMachine.can_retry("failed")
         assert not RecommendationBatchStateMachine.can_retry("succeeded")
 
+    def test_same_status_returns_same(self) -> None:
+        assert RecommendationBatchStateMachine.transition("queued", "queued") == "queued"
+
+    def test_invalid_transition_raises(self) -> None:
+        with pytest.raises(InvalidBatchTransition):
+            RecommendationBatchStateMachine.transition("cancelled", "running")
+
 
 class TestExtractionStateMachine:
     """Candidate extraction job state transitions."""
@@ -151,3 +158,10 @@ class TestExtractionStateMachine:
         assert ExtractionStateMachine.can_retry("failed")
         assert ExtractionStateMachine.can_retry("task_lost")
         assert not ExtractionStateMachine.can_retry("succeeded")
+
+    def test_same_status_returns_same(self) -> None:
+        assert ExtractionStateMachine.transition("running", "running") == "running"
+
+    def test_invalid_transition_raises(self) -> None:
+        with pytest.raises(InvalidExtractionTransition):
+            ExtractionStateMachine.transition("cancelled", "running")

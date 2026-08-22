@@ -12,6 +12,15 @@ from packages.research.timeline.synthesis_service import SynthesisService
 class TestValidateResult:
     """Test synthesis result parsing and validation."""
 
+    def test_constructor_defaults_factory_to_none(self) -> None:
+        svc = SynthesisService()
+        assert svc._factory is None
+
+    def test_constructor_accepts_factory(self) -> None:
+        factory = object()
+        svc = SynthesisService(session_factory=factory)  # type: ignore[arg-type]
+        assert svc._factory is factory
+
     def test_valid_all_present(self) -> None:
         data = {
             "summary": "两轮分析共同支持温度升高与收率上升有关。",

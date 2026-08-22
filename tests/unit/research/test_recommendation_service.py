@@ -514,3 +514,123 @@ class TestRecommendationServiceMethods:
         out = await svc.get_active(wid)
         assert out["status"] == "none"
         assert out["items"] == []
+
+    async def test_request_followup_creates_batch(self) -> None:
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+
+        wid = uuid4()
+        sid = uuid4()
+        new_batch = _FakeBatch(uuid4(), wid, "queued")
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
+        with (
+            _patch_repo("get_batch_by_idempotency", None),
+            _patch_repo("insert_batch", new_batch),
+        ):
+            ref = await svc.request_followup(wid, sid, (), "fk")
+        assert ref.batch_id == new_batch.id
+        assert ref.status == "queued"
+
+    async def test_request_followup_idempotent(self) -> None:
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+
+        wid = uuid4()
+        existing = _FakeBatch(uuid4(), wid, "succeeded")
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
+        with (
+            _patch_repo("get_batch_by_idempotency", existing),
+            _patch_repo("list_recommendation_items", [1, 2]),
+        ):
+            ref = await svc.request_followup(wid, uuid4(), (), "fk")
+        assert ref.status == "succeeded"
+        assert ref.item_count == 2
+
+    async def test_retry_batch_not_found(self) -> None:
+        from packages.common.errors import AppError
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
+        with _patch_repo("get_batch", None):
+            with pytest.raises(AppError) as exc_info:
+                await svc.retry_batch(uuid4())
+            assert exc_info.value.code == "not_found"
+
+    async def test_execute_batch_snapshot_not_none(self) -> None:
+        from types import SimpleNamespace
+
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+
+        wid = uuid4()
+        bid = uuid4()
+        batch = _FakeBatch(bid, wid, "queued")
+        gateway = _make_gateway(
+            _valid_json_output([{"question": "温度如何影响收率？", "rationale": "分析"}])
+        )
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+            model_gateway=gateway,
+        )
+        snapshot = SimpleNamespace(
+            field_manifest=["field"],
+            source_refs=[{"id": "1"}, {"id": "2"}],
+            snapshot_number=7,
+        )
+        with (
+            _patch_repo("get_batch", batch),
+            _patch_repo("update_batch_status", True),
+            _patch_repo("insert_recommendation_items", None),
+            _patch_snapshot(snapshot),
+        ):
+            ref = await svc.execute_batch(bid)
+        assert ref.status == "succeeded"
+
+    async def test_execute_batch_cas_conflict_returns_current(self) -> None:
+        from packages.common.errors import AppError
+        from packages.research.timeline.recommendation_service import (
+            RecommendationService,
+        )
+        from packages.research.timeline.repository import TimelineRepository
+
+        wid = uuid4()
+        bid = uuid4()
+        batch = _FakeBatch(bid, wid, "queued")
+        svc = RecommendationService(
+            _FakeSessionFactory(_FakeSession()),
+            department_id=uuid4(),
+            actor_id=uuid4(),
+        )
+        with (
+            _patch_repo("get_batch", batch),
+            mock.patch.object(
+                TimelineRepository,
+                "update_batch_status",
+                new=mock.AsyncMock(
+                    side_effect=AppError(code="state_conflict", message="conflict")
+                ),
+            ),
+        ):
+            ref = await svc.execute_batch(bid)
+        assert ref.status == "queued"
+
+
