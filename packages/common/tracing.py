@@ -7,6 +7,22 @@
   IRIP_OTEL_ENDPOINT=http://jaeger:4317 IRIP_ENV=production
 
 未配置 IRIP_OTEL_ENDPOINT 时不启用追踪（开发环境零开销）。
+
+.. note::
+
+    ``opentelemetry-*`` 包 **不在** ``pyproject.toml`` 的运行时依赖中。
+    要启用追踪，需手动安装以下包::
+
+        pip install opentelemetry-sdk opentelemetry-exporter-otlp \\
+                    opentelemetry-instrumentation-fastapi \\
+                    opentelemetry-instrumentation-sqlalchemy
+
+    未安装时，所有 ``init_tracing`` / ``instrument_*`` 调用会
+    静默跳过（``except ImportError`` 分支），不影响应用正常运行。
+
+    Docker Compose 中 Jaeger 服务定义在 ``compose.base.yaml`` 的
+    ``monitoring`` profile 下（``profiles: ["monitoring"]``），
+    默认不启动；需要时用 ``--profile monitoring`` 拉起。
 """
 
 import logging

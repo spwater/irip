@@ -497,6 +497,9 @@ services:
 
   # P2-I9: 分布式追踪（Jaeger）
   # 接收 OTLP gRPC (4317) / HTTP (4318)，UI 在 16686
+  # Jaeger — 可选分布式追踪后端（需 --profile monitoring 拉起）。
+  # 启用前还需安装 opentelemetry-* 包并设置 IRIP_OTEL_ENDPOINT=http://jaeger:4317。
+  # 详见 packages/common/tracing.py 模块文档。
   jaeger:
     profiles: ["monitoring"]
     image: docker.m.daocloud.io/jaegertracing/all-in-one:1.62.0
