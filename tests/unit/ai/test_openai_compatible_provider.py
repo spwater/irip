@@ -63,6 +63,7 @@ class _FakeResponse:
         self.status_code = status_code
         self._json_data = json_data or {}
         self.text = json.dumps(self._json_data)
+        self.headers: dict[str, str] = {"content-type": "application/json"}
 
     def json(self) -> dict[str, Any]:
         return self._json_data

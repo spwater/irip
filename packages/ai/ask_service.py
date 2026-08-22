@@ -700,7 +700,7 @@ class AskService:
             mentions=mentions,
         )
         _t0 = time.monotonic()
-        logger.debug("[TIMING] stream_ask entered, question=%s", question[:50])
+        logger.debug("[TIMING] stream_ask entered, question_len=%d", len(question))
         _t1 = time.monotonic()
         logger.debug("[TIMING] prepare=%.0fms", (_t1 - _t0) * 1000)
 

@@ -69,7 +69,7 @@ async def _call_llm(
     if resp.status_code != 200:
         raise AppError(
             code="ai_request_failed",
-            message=f"LLM API 返回 {resp.status_code}: {resp.text[:200]}",
+            message=f"LLM API 返回 {resp.status_code}",
             retryable=True,
         )
     return resp

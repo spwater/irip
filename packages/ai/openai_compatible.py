@@ -159,16 +159,18 @@ class OpenAICompatibleProvider:
             ) from exc
 
         if resp.status_code != 200:
-            import logging
-
-            logging.getLogger(__name__).error(
-                f"AI provider error {resp.status_code}: {resp.text[:500]}"
-            )  # noqa: E501
+            # 绝不记录响应正文（可能含 prompt/分析结果等敏感内容），仅记录安全元数据。
+            logger.error(
+                "AI provider error: status_code=%s, content_type=%s, body_len=%s",
+                resp.status_code,
+                resp.headers.get("content-type", ""),
+                len(resp.text),
+            )
             raise AppError(
                 code="ai_provider_error",
-                message=f"AI 服务返回错误状态码 {resp.status_code}: {resp.text[:200]}",
+                message=f"AI 服务返回错误状态码 {resp.status_code}",
                 retryable=resp.status_code >= 500,
-                fields={},
+                fields={"status_code": resp.status_code},
             )
 
         data: dict[str, Any] = resp.json()
@@ -212,19 +214,18 @@ class OpenAICompatibleProvider:
                     headers=headers,
                 ) as resp:
                     if resp.status_code != 200:
-                        # 读取错误响应体（流式模式下需要显式 aread）
+                        # 丢弃错误响应体（仅统计长度），绝不把正文写进日志/消息。
                         error_body = await resp.aread()
-                        error_text = error_body.decode("utf-8", errors="replace")
-                        import logging
-
-                        logging.getLogger(__name__).error(
-                            f"AI provider stream error {resp.status_code}: {error_text[:500]}"
+                        logger.error(
+                            "AI provider stream error: status_code=%s, "
+                            "content_type=%s, body_len=%s",
+                            resp.status_code,
+                            resp.headers.get("content-type", ""),
+                            len(error_body),
                         )
                         yield {
                             "type": "error",
-                            "message": (
-                                f"AI 服务返回错误状态码 {resp.status_code}: {error_text[:200]}"
-                            ),
+                            "message": f"AI 服务返回错误状态码 {resp.status_code}",
                         }
                         return
 
