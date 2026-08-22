@@ -630,11 +630,17 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
+      - name: Validate vulnerability allowlist (gate)
+        run: |
+          pip install pyyaml
+          # 校验 allowlist 合法（owner/expiry 齐全、未过期），失败即阻断 job
+          python scripts/security/check_vulnerability_allowlist.py security/vulnerability-allowlist.yaml
       - name: Python dependency scan (pip-audit)
         run: |
           pip install pip-audit
           pip install -e ".[dev]"
-          pip-audit --skip-editable --ignore-vuln PYSEC-2026-1845
+          # 漏洞豁免由 allowlist 驱动，不再硬编码 --ignore-vuln
+          python scripts/security/pip_audit_with_allowlist.py security/vulnerability-allowlist.yaml --skip-editable
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: "22"
