@@ -362,6 +362,11 @@ jobs:
           sudo install -m 0755 /tmp/age/age-keygen /usr/local/bin/age-keygen
       # P1-T7: 恢复测试硬门禁 -- 工具缺失即阻断
       - run: bash scripts/ci/check_recovery_tools.sh
+      # 创建 MinIO bucket（backup/restore 测试需要 bucket 存在）
+      - name: Create MinIO bucket
+        run: |
+          mc alias set --config-dir /tmp/mc irip http://localhost:59000 irip irip_dev_password
+          mc mb --ignore-existing --config-dir /tmp/mc irip/irip-test
       # H-10: 恢复测试独立执行，不加 marker 过滤
       - run: python -m pytest tests/recovery/ -v --junit-xml=recovery-results.xml
       # B-3: Upload JUnit XML for acceptance report generation
