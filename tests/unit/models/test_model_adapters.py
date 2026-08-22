@@ -41,6 +41,9 @@ def _make_contract(
     applicability_domain: dict[str, Any] | None = None,
     executor: dict[str, Any] | None = None,
     artifact_sha256: str = "",
+    artifact_signature: str = "",
+    signing_public_key: str = "",
+    publisher: str = "",
 ) -> ModelContract:
     return ModelContract(
         name=name,
@@ -51,6 +54,9 @@ def _make_contract(
         executor=executor or {},
         sha256=artifact_sha256 or "",
         artifact_sha256=artifact_sha256 or "",
+        artifact_signature=artifact_signature,
+        signing_public_key=signing_public_key,
+        publisher=publisher,
     )
 
 
@@ -72,6 +78,49 @@ def _build_onnx_model() -> bytes:
     model = helper.make_model(graph)
     model.opset_import[0].version = 13
     return model.SerializeToString()
+
+
+def _build_onnx_add_model() -> bytes:
+    """构建含未授权算子 Add 的最小 ONNX 模型（两输入相加）。
+
+    用于算子白名单拒绝测试：Add 可用 allowed_op_types=frozenset({"Identity"})
+    剔除。需要 onnx 包。
+
+    Returns:
+        bytes: 序列化的 ONNX 模型字节。
+    """
+    pytest.importorskip("onnx")
+    from onnx import TensorProto, helper
+
+    x = helper.make_tensor_value_info("X", TensorProto.FLOAT, [None, 2])
+    y = helper.make_tensor_value_info("Y", TensorProto.FLOAT, [None, 2])
+    z = helper.make_tensor_value_info("Z", TensorProto.FLOAT, [None, 2])
+    node = helper.make_node("Add", ["X", "Y"], ["Z"])
+    graph = helper.make_graph([node], "test_add", [x, y], [z])
+    model = helper.make_model(graph)
+    model.opset_import[0].version = 13
+    return model.SerializeToString()
+
+
+def _sign_artifact(artifact: bytes) -> tuple[str, str]:
+    """用固定 Ed25519 私钥（bytes(range(32))）对工件签名，返回 (signature_hex, public_key_hex)。
+
+    固定私钥保证测试可复现（与 crypto.py 测试环境固定密钥同思路）。
+
+    Returns:
+        tuple[str, str]: (64 字节签名的 hex, 32 字节公钥的 hex)。
+    """
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    private_key = Ed25519PrivateKey.from_private_bytes(bytes(range(32)))
+    signature = private_key.sign(artifact)
+    public_key = private_key.public_key()
+    public_raw = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return signature.hex(), public_raw.hex()
 
 
 # ============================================================
@@ -471,3 +520,141 @@ class TestOnnxModelAdapterHealthcheck:
         status = adapter.healthcheck()
         assert status.healthy is True
         assert "ONNX" in status.message
+
+
+class TestOnnxModelAdapterSecurity:
+    """OnnxModelAdapter 三层安全校验（B4）：签名 / 发布者白名单 / 算子白名单。
+
+    均通过 enforce_security=True 开启；生产入口 build_adapter 默认开启。
+    直接构造 OnnxModelAdapter() 时默认 False（遗留/可信部署路径，向后兼容），
+    因此本类测试显式传 enforce_security=True 以验证 fail-closed 语义。
+    """
+
+    async def test_signature_valid_passes(self) -> None:
+        """签名、发布者、算子三者均合法时加载成功。"""
+        pytest.importorskip("onnxruntime")
+        artifact = _build_onnx_model()
+        sig_hex, pub_hex = _sign_artifact(artifact)
+        contract = _make_contract(
+            executor={"type": "onnx"},
+            artifact_signature=sig_hex,
+            signing_public_key=pub_hex,
+            publisher="org:trusted",
+        )
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+        )
+        loaded = await adapter.load(artifact, contract)
+        assert loaded.metadata["adapter_type"] == "onnx"
+
+    async def test_signature_missing_rejected_fail_closed(self) -> None:
+        """enforce_security=True 且缺签名/公钥时拒绝加载。"""
+        artifact = _build_onnx_model()
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(
+                artifact,
+                _make_contract(executor={"type": "onnx"}, publisher="org:trusted"),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+
+    async def test_signature_mismatch_rejected(self) -> None:
+        """签名与工件不匹配（篡改）时拒绝加载。"""
+        artifact = _build_onnx_model()
+        sig_hex, pub_hex = _sign_artifact(artifact)
+        tampered = artifact + b"tampered"
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(
+                tampered,
+                _make_contract(
+                    executor={"type": "onnx"},
+                    artifact_signature=sig_hex,
+                    signing_public_key=pub_hex,
+                    publisher="org:trusted",
+                ),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+
+    async def test_publisher_not_in_allowlist_rejected(self) -> None:
+        """发布者不在白名单内时拒绝加载。"""
+        artifact = _build_onnx_model()
+        sig_hex, pub_hex = _sign_artifact(artifact)
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(
+                artifact,
+                _make_contract(
+                    executor={"type": "onnx"},
+                    artifact_signature=sig_hex,
+                    signing_public_key=pub_hex,
+                    publisher="org:evil",
+                ),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+
+    async def test_publisher_missing_rejected(self) -> None:
+        """契约未声明发布者时拒绝加载（fail-closed）。"""
+        artifact = _build_onnx_model()
+        sig_hex, pub_hex = _sign_artifact(artifact)
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(
+                artifact,
+                _make_contract(
+                    executor={"type": "onnx"},
+                    artifact_signature=sig_hex,
+                    signing_public_key=pub_hex,
+                ),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+
+    async def test_opset_not_in_allowlist_rejected(self) -> None:
+        """图中含未授权算子（Add 不在 {Identity} 白名单）时拒绝加载。"""
+        artifact = _build_onnx_add_model()
+        sig_hex, pub_hex = _sign_artifact(artifact)
+        adapter = OnnxModelAdapter(
+            enforce_security=True,
+            allowed_publishers=frozenset({"org:trusted"}),
+            allowed_op_types=frozenset({"Identity"}),
+        )
+        with pytest.raises(AppError) as exc_info:
+            await adapter.load(
+                artifact,
+                _make_contract(
+                    executor={"type": "onnx"},
+                    artifact_signature=sig_hex,
+                    signing_public_key=pub_hex,
+                    publisher="org:trusted",
+                ),
+            )
+        assert exc_info.value.code == "invalid_model_artifact"
+
+    def test_build_adapter_defaults_enforce_security_on(self) -> None:
+        """生产入口 build_adapter 默认 enforce_security=True（fail-closed）。"""
+        contract = _make_contract(
+            executor={"type": "onnx"},
+        )
+        adapter = build_adapter(contract)
+        assert adapter._enforce_security is True
+
+    def test_build_adapter_can_disable_enforce_security(self) -> None:
+        """executor.enforce_security=false 可显式关闭（仅限可信内部部署）。"""
+        contract = _make_contract(
+            executor={"type": "onnx", "enforce_security": False},
+        )
+        adapter = build_adapter(contract)
+        assert adapter._enforce_security is False

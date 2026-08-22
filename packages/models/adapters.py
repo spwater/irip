@@ -14,11 +14,22 @@
   超时发 SIGTERM，输出超过 max_output_bytes 时拒绝；
 - OnnxModelAdapter 加载前校验工件 SHA-256 完整性，
   固定 CPUExecutionProvider 单线程执行，异常消息不泄露解析器内部信息；
+  在 enforce_security=True（生产入口 build_adapter 的默认）下还会校验
+  Ed25519 签名、发布者白名单与算子（opset）白名单，三层缺一即拒绝（fail closed）；
 - validate_input 使用 jsonschema 校验输入契约；
 - 受限环境变量仅传递安全前缀（PATH/HOME/LANG/LC_*/IRIP_MODEL_*）。
 - build_adapter 默认拒绝（fail closed），仅 executor.type == "onnx" 在进程内接受，
   其余类型（python/cli/缺失/未知）一律抛 unsafe_model_format，
-  禁止主进程执行不可信模型代码。
+  禁止主进程执行不可信模型代码；对 onnx 类型默认开启 enforce_security=True，
+  即签名/发布者/算子三层校验 fail-closed。
+
+安全分层说明（B4）：
+- 第一层「摘要」SHA-256 已存在（_verify_sha256，空值跳过，向后兼容）；
+- 第二层「签名」Ed25519（_verify_artifact_signature）；
+- 第三层「发布者白名单」（_verify_publisher + _allowed_publishers）；
+- 第四层「算子/opset 白名单」（_extract_op_types + _allowed_op_types）。
+后三层统一由 enforce_security 开关控制：enforce_security=True 时缺签名/
+发布者/白名单声明一律 fail-closed；False 时跳过（直接构造适配器的遗留路径）。
 """
 
 import asyncio
@@ -59,6 +70,75 @@ _SAFE_ENV_PREFIXES: tuple[str, ...] = (
     "PYTHONPATH",
 )
 
+#: 默认允许的 ONNX 算子（保守最小集合）。仅含常见的数值/线性代数/激活/
+#: 张量整形算子，覆盖线性回归、浅层神经网络等基础推理场景；不含任何
+#: 具备文件/网络/子进程副作用或动态代码加载能力的算子。
+_DEFAULT_ALLOWED_OP_TYPES: frozenset[str] = frozenset(
+    {
+        "Identity",
+        "Add",
+        "Sub",
+        "Mul",
+        "Div",
+        "Abs",
+        "Neg",
+        "Pow",
+        "Sqrt",
+        "Sum",
+        "MatMul",
+        "Gemm",
+        "Relu",
+        "Sigmoid",
+        "Tanh",
+        "Softmax",
+        "LeakyRelu",
+        "Conv",
+        "MaxPool",
+        "AveragePool",
+        "GlobalAveragePool",
+        "GlobalMaxPool",
+        "Reshape",
+        "Flatten",
+        "Transpose",
+        "Concat",
+        "Gather",
+        "Cast",
+        "Constant",
+        "ConstantOfShape",
+        "Shape",
+        "Slice",
+        "Squeeze",
+        "Unsqueeze",
+        "Dropout",
+        "BatchNormalization",
+        "InstanceNormalization",
+        "LayerNormalization",
+        "Exp",
+        "Log",
+        "Clip",
+        "Min",
+        "Max",
+        "ReduceMean",
+        "ReduceSum",
+    }
+)
+
+#: 环境变量名：允许的模型发布者白名单（逗号分隔）。
+_ENV_ALLOWED_PUBLISHERS: str = "IRIP_MODEL_ALLOWED_PUBLISHERS"
+
+
+def _resolve_publishers() -> frozenset[str]:
+    """从环境变量解析允许的发布者白名单。
+
+    读取 ``IRIP_MODEL_ALLOWED_PUBLISHERS``（逗号分隔），构建允许发布者集合；
+    为空时返回空集合（fail-closed：任何发布者都被拒绝）。
+
+    Returns:
+        frozenset[str]: 允许的发布者集合。
+    """
+    raw = os.getenv(_ENV_ALLOWED_PUBLISHERS, "")
+    return frozenset(p.strip() for p in raw.split(",") if p.strip())
+
 
 def _verify_sha256(artifact_bytes: bytes, expected_sha256: str) -> None:
     """校验工件字节与期望 SHA-256 摘要一致。
@@ -83,6 +163,108 @@ def _verify_sha256(artifact_bytes: bytes, expected_sha256: str) -> None:
             retryable=False,
             fields={},
         )
+
+
+def _verify_artifact_signature(
+    artifact_bytes: bytes,
+    contract: ModelContract,
+    *,
+    enforce: bool,
+) -> None:
+    """用 Ed25519 验证工件字节的签名（第二层安全校验）。
+
+    语义（fail-closed 边界）：
+    - ``enforce=True``（生产）时，缺签名或缺公钥即拒绝加载；
+      签名与公钥同时存在时用 Ed25519 严格验签，不匹配即拒绝。
+    - ``enforce=False``（直接构造适配器的遗留/可信部署路径）时，
+      跳过验签以保持向后兼容。
+
+    Args:
+        artifact_bytes: 模型工件字节内容。
+        contract: 模型契约（含 artifact_signature / signing_public_key）。
+        enforce: 是否强制（缺即拒绝，fail-closed）。
+
+    Raises:
+        AppError: code="invalid_model_artifact"，当 enforce=True 且缺签名/
+            公钥、或验签失败时。
+    """
+    signature_hex: str = (contract.artifact_signature or "").strip()
+    public_key_hex: str = (contract.signing_public_key or "").strip()
+
+    if not enforce:
+        # 遗留路径：即便声明了签名也不强制（保持与旧调用方一致）。
+        return
+
+    if not signature_hex or not public_key_hex:
+        raise AppError(
+            code="invalid_model_artifact",
+            message="模型工件缺少签名或签名公钥，拒绝加载",
+            retryable=False,
+            fields={},
+        )
+
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+        public_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(public_key_hex))
+        signature = bytes.fromhex(signature_hex)
+        public_key.verify(signature, artifact_bytes)
+    except InvalidSignature:
+        raise AppError(
+            code="invalid_model_artifact",
+            message="模型工件签名校验失败，内容可能被篡改",
+            retryable=False,
+            fields={},
+        ) from None
+    except (ValueError, TypeError):
+        # 非法 hex / 非法公钥长度等情况，一律 fail-closed。
+        raise AppError(
+            code="invalid_model_artifact",
+            message="模型工件签名或公钥格式非法，拒绝加载",
+            retryable=False,
+            fields={},
+        ) from None
+
+
+def _extract_op_types(artifact_bytes: bytes) -> set[str]:
+    """解析 ONNX 计算图，收集主图与所有子图（函数体）的算子类型。
+
+    Args:
+        artifact_bytes: ONNX 模型字节内容。
+
+    Returns:
+        set[str]: 图中出现的全部算子类型集合。
+
+    Raises:
+        AppError: code="invalid_model_artifact"，当无法解析 ONNX 图时
+            （消息不含底层异常文本）。
+    """
+    try:
+        import onnx
+
+        model = onnx.load_model_from_string(artifact_bytes)
+    except Exception as exc:
+        raise AppError(
+            code="invalid_model_artifact",
+            message="无法解析 ONNX 计算图，拒绝加载",
+            retryable=False,
+            fields={},
+        ) from exc
+
+    op_types: set[str] = set()
+    graph_queue: list[Any] = [model.graph]
+    while graph_queue:
+        graph = graph_queue.pop()
+        for node in graph.node:
+            op_types.add(node.op_type)
+            # 递归进入控制流算子（If/Loop/Scan）的子图。
+            for attr in node.attribute:
+                if attr.HasField("g"):
+                    graph_queue.append(attr.g)
+                for subgraph in attr.graphs:
+                    graph_queue.append(subgraph)
+    return op_types
 
 
 def _validate_input_schema(
@@ -405,6 +587,8 @@ class OnnxModelAdapter:
 
     安全措施：
     - 加载前校验工件 SHA-256 完整性（篡改即拒绝）；
+    - enforce_security=True 时额外校验 Ed25519 签名、发布者白名单与
+      算子白名单（三层缺一即拒绝，fail-closed）；
     - 工件大小超过 max_artifact_bytes 即拒绝（防止资源耗尽）；
     - 固定使用 CPUExecutionProvider，单线程执行（intra/inter op num threads=1）；
     - 异常消息不泄露解析器内部信息（不包含底层异常文本）。
@@ -412,6 +596,9 @@ class OnnxModelAdapter:
     Attributes:
         _timeout_seconds: 推理超时秒数（用于 predict 超时保护）。
         _max_artifact_bytes: 工件最大字节数。
+        _enforce_security: 是否强制签名/发布者/算子三层校验（fail-closed）。
+        _allowed_publishers: 允许的发布者集合（空集合时拒绝一切发布者）。
+        _allowed_op_types: 允许的算子集合。
         _session: onnxruntime 推理会话（加载后非空）。
         _contract: 已加载的模型契约。
         _loaded: 已加载的模型引用。
@@ -421,15 +608,33 @@ class OnnxModelAdapter:
         self,
         timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
         max_artifact_bytes: int = _MAX_ONNX_ARTIFACT_BYTES,
+        *,
+        enforce_security: bool = False,
+        allowed_publishers: frozenset[str] | None = None,
+        allowed_op_types: frozenset[str] | None = None,
     ) -> None:
         """初始化 ONNX 适配器。
 
         Args:
             timeout_seconds: 推理超时秒数（默认 300）。
             max_artifact_bytes: 工件最大字节数（默认 256 MB）。
+            enforce_security: 是否强制签名/发布者/算子三层校验（默认 False，
+                表示直接构造时的遗留/可信部署路径；生产入口 build_adapter
+                默认传 True，fail-closed）。
+            allowed_publishers: 允许的发布者集合。None 时从环境变量
+                ``IRIP_MODEL_ALLOWED_PUBLISHERS`` 解析，缺省为空集合
+                （fail-closed：拒绝一切发布者）。
+            allowed_op_types: 允许的算子集合。None 时采用保守默认集合。
         """
         self._timeout_seconds: int = timeout_seconds
         self._max_artifact_bytes: int = max_artifact_bytes
+        self._enforce_security: bool = enforce_security
+        self._allowed_publishers: frozenset[str] = (
+            allowed_publishers if allowed_publishers is not None else _resolve_publishers()
+        )
+        self._allowed_op_types: frozenset[str] = (
+            allowed_op_types if allowed_op_types is not None else _DEFAULT_ALLOWED_OP_TYPES
+        )
         self._session: Any = None
         self._contract: ModelContract | None = None
         self._loaded: LoadedModel | None = None
@@ -443,22 +648,31 @@ class OnnxModelAdapter:
 
         流程：
         1. 校验工件 SHA-256 完整性（契约声明 artifact_sha256 时）；
-        2. 校验工件大小不超限；
-        3. 延迟导入 onnxruntime 并构建单线程 CPU 推理会话。
+        2. （enforce_security）校验 Ed25519 签名（缺签名即拒绝，fail-closed）；
+        3. （enforce_security）校验发布者在白名单内；
+        4. （enforce_security）校验图中全部算子属于算子白名单；
+        5. 校验工件大小不超限；
+        6. 延迟导入 onnxruntime 并构建单线程 CPU 推理会话。
 
         Args:
             artifact_bytes: ONNX 模型工件字节内容。
-            contract: 模型契约（含 artifact_sha256 用于完整性校验）。
+            contract: 模型契约（含 artifact_sha256 / artifact_signature /
+                signing_public_key / publisher）。
 
         Returns:
             LoadedModel: 已加载的模型引用（artifact_ref 为 "<in-memory>"）。
 
         Raises:
-            AppError: code="invalid_model_artifact"，当哈希校验失败、
-                工件过大或不是有效 ONNX 格式时。
+            AppError: code="invalid_model_artifact"，当哈希/签名/发布者/算子
+                校验失败、工件过大或不是有效 ONNX 格式时。
             AppError: code="model_failed"，当 onnxruntime 未安装时。
         """
         _verify_sha256(artifact_bytes, contract.artifact_sha256)
+
+        if self._enforce_security:
+            self._verify_signature(artifact_bytes, contract)
+            self._verify_publisher(contract)
+            self._verify_op_types(artifact_bytes)
 
         if len(artifact_bytes) > self._max_artifact_bytes:
             raise AppError(
@@ -507,6 +721,62 @@ class OnnxModelAdapter:
             },
         )
         return self._loaded
+
+    def _verify_signature(
+        self,
+        artifact_bytes: bytes,
+        contract: ModelContract,
+    ) -> None:
+        """校验工件 Ed25519 签名（fail-closed）。"""
+        _verify_artifact_signature(artifact_bytes, contract, enforce=True)
+
+    def _verify_publisher(self, contract: ModelContract) -> None:
+        """校验契约声明的发布者在允许白名单内（fail-closed）。
+
+        发布者缺失或不在白名单（含白名单为空）时拒绝加载。
+
+        Args:
+            contract: 模型契约（含 publisher）。
+
+        Raises:
+            AppError: code="invalid_model_artifact"，当发布者缺失或未授权时。
+        """
+        publisher: str = (contract.publisher or "").strip()
+        if not publisher:
+            raise AppError(
+                code="invalid_model_artifact",
+                message="模型契约未声明发布者，拒绝加载",
+                retryable=False,
+                fields={},
+            )
+        if publisher not in self._allowed_publishers:
+            raise AppError(
+                code="invalid_model_artifact",
+                message="模型发布者不在允许白名单内，拒绝加载",
+                retryable=False,
+                fields={"publisher": publisher},
+            )
+
+    def _verify_op_types(self, artifact_bytes: bytes) -> None:
+        """校验图中全部算子属于算子白名单（fail-closed）。
+
+        任一算子不在白名单内即拒绝加载。
+
+        Args:
+            artifact_bytes: ONNX 模型字节内容。
+
+        Raises:
+            AppError: code="invalid_model_artifact"，当存在未授权算子时。
+        """
+        op_types: set[str] = _extract_op_types(artifact_bytes)
+        disallowed: set[str] = op_types - self._allowed_op_types
+        if disallowed:
+            raise AppError(
+                code="invalid_model_artifact",
+                message="模型包含未授权的算子，拒绝加载",
+                retryable=False,
+                fields={"disallowed_op_types": sorted(disallowed)},
+            )
 
     def validate_input(
         self,
@@ -643,6 +913,12 @@ def build_adapter(contract: ModelContract) -> OnnxModelAdapter:
     无 RCE 风险）。其余类型（python / cli / 缺失 / 未知）一律抛
     unsafe_model_format，禁止主进程执行不可信模型代码。
 
+    onnx 类型默认开启 enforce_security=True（B4）：加载前强制校验
+    Ed25519 签名、发布者白名单与算子白名单，三者缺一即拒绝。
+    可通过 executor 中的 ``enforce_security: false`` 显式关闭（仅限
+    可信内部部署），``allowed_publishers``（数组）覆盖发布者白名单，
+    ``allowed_op_types``（数组）覆盖算子白名单。
+
     Args:
         contract: 模型契约。
 
@@ -659,9 +935,25 @@ def build_adapter(contract: ModelContract) -> OnnxModelAdapter:
     if adapter_type == "onnx":
         timeout_seconds: int = int(executor.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS))
         max_artifact_bytes: int = int(executor.get("max_artifact_bytes", _MAX_ONNX_ARTIFACT_BYTES))
+        enforce_security: bool = bool(executor.get("enforce_security", True))
+        raw_publishers = executor.get("allowed_publishers")
+        allowed_publishers: frozenset[str] | None = (
+            frozenset(str(p) for p in raw_publishers)
+            if isinstance(raw_publishers, list)
+            else None
+        )
+        raw_op_types = executor.get("allowed_op_types")
+        allowed_op_types: frozenset[str] | None = (
+            frozenset(str(op) for op in raw_op_types)
+            if isinstance(raw_op_types, list)
+            else None
+        )
         return OnnxModelAdapter(
             timeout_seconds=timeout_seconds,
             max_artifact_bytes=max_artifact_bytes,
+            enforce_security=enforce_security,
+            allowed_publishers=allowed_publishers,
+            allowed_op_types=allowed_op_types,
         )
 
     raise AppError(

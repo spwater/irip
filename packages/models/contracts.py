@@ -73,6 +73,13 @@ class ModelContract:
         sha256: 契约内容的 SHA-256 摘要（hex 小写）。
         artifact_sha256: 模型工件的 SHA-256 摘要（hex 小写），
             适配器加载工件时校验完整性，为空时跳过校验。
+        artifact_signature: 模型工件的 Ed25519 签名（hex 小写，128 字符），
+            为空表示未签名（遗留契约）。与 signing_public_key 配合，
+            在安全强制模式下（enforce_security=True）缺签名即拒绝加载。
+        signing_public_key: 签名者的 Ed25519 公钥（hex 小写，64 字符），
+            用于验证 artifact_signature，为空表示未绑定签名者。
+        publisher: 发布者标识（如 ``org:team`` 或 UUID），用于发布者白名单
+            校验；为空表示未声明发布者（遗留契约）。
     """
 
     name: str
@@ -83,6 +90,9 @@ class ModelContract:
     sha256: str = ""
     executor: dict[str, Any] = field(default_factory=dict)
     artifact_sha256: str = ""
+    artifact_signature: str = ""
+    signing_public_key: str = ""
+    publisher: str = ""
 
     def __post_init__(self) -> None:
         """若未提供 sha256，则自动计算契约摘要。"""
@@ -106,6 +116,9 @@ class ModelContract:
             "applicability_domain": self.applicability_domain,
             "sha256": self.sha256,
             "artifact_sha256": self.artifact_sha256,
+            "artifact_signature": self.artifact_signature,
+            "signing_public_key": self.signing_public_key,
+            "publisher": self.publisher,
         }
         if self.executor:
             result["executor"] = self.executor
@@ -130,6 +143,9 @@ class ModelContract:
             sha256=data.get("sha256", ""),
             executor=data.get("executor", {}) or {},
             artifact_sha256=data.get("artifact_sha256", ""),
+            artifact_signature=data.get("artifact_signature", ""),
+            signing_public_key=data.get("signing_public_key", ""),
+            publisher=data.get("publisher", ""),
         )
 
 

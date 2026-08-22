@@ -58,7 +58,7 @@ _TEST_CONTRACT_DICT: dict = {
         "x": {"min": 0.0, "max": 100.0},
         "y": {"min": 0.0, "max": 100.0},
     },
-    "executor": {"type": "onnx", "timeout_seconds": 60},
+    "executor": {"type": "onnx", "timeout_seconds": 60, "enforce_security": False},
 }
 
 
