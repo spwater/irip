@@ -16,11 +16,12 @@
         raise AppError(code="rate_limited", message="账号登录尝试过多")
 """
 
-import os
 import threading
 import time
 from collections import defaultdict
 from typing import Any
+
+from packages.common.redis_url import get_redis_url
 
 
 class RedisRateLimiter:
@@ -195,7 +196,7 @@ def get_rate_limiter() -> RateLimiter | RedisRateLimiter:
     if _global_limiter is not None:
         return _global_limiter
 
-    redis_url: str = os.getenv("IRIP_REDIS_URL", "")
+    redis_url: str = get_redis_url("")
     if redis_url:
         try:
             import redis as redis_lib

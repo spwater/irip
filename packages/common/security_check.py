@@ -8,7 +8,7 @@
 - IRIP_MASTER_KEY: 不能为空、不能为开发默认值
 - IRIP_BOOTSTRAP_ADMIN_PASSWORD: 不能为开发默认值
 - IRIP_DATABASE_PASSWORD: 不能为开发默认值
-- IRIP_REDIS_PASSWORD: 不能为空
+- IRIP_REDIS_URL: 必须含 requirepass 密码（层次2 起 redis 密码并入完整 URL）
 - IRIP_MINIO_SECRET_KEY: 不能为开发默认值
 
 用法::
@@ -37,6 +37,44 @@ WEAK_SECRETS: set[str] = {
 
 #: JWT secret 最小长度（字节）。
 MIN_JWT_SECRET_LENGTH: int = 32
+
+
+def _extract_redis_password(redis_url: str) -> str:
+    """从 redis URL 提取 requirepass 密码。
+
+    redis URL 形如 ``redis://:password@host:port/db``（有密码）或
+    ``redis://host:port/db``（无密码）。无密码或解析失败时返回空串。
+
+    Args:
+        redis_url: 完整的 redis 连接串。
+
+    Returns:
+        str: 提取出的密码（无密码时返回 ``""``）。
+    """
+    if not redis_url:
+        return ""
+    try:
+        from urllib.parse import urlsplit
+
+        password = urlsplit(redis_url).password
+        return password or ""
+    except ValueError:
+        return ""
+
+
+def _redis_password() -> str:
+    """读取 redis requirepass 密码。
+
+    层次2 起密码并入完整 redis URL（``IRIP_REDIS_URL_FILE`` / ``IRIP_REDIS_URL``）；
+    为向后兼容（开发/legacy 部署仍可能单独提供 ``IRIP_REDIS_PASSWORD``），
+    URL 中无密码时回退到 ``IRIP_REDIS_PASSWORD``。两者皆缺失时返回空串，
+    触发「Redis 连接串必须包含密码」校验。
+    """
+    redis_url: str = read_secret("IRIP_REDIS_URL", required=False) or ""
+    password: str = _extract_redis_password(redis_url)
+    if password:
+        return password
+    return read_secret("IRIP_REDIS_PASSWORD", required=False) or ""
 
 
 def assert_production_keys() -> None:
@@ -73,10 +111,10 @@ def assert_production_keys() -> None:
             "信封加密主密钥不能为空",
         ),
         (
-            "IRIP_REDIS_PASSWORD",
-            read_secret("IRIP_REDIS_PASSWORD", required=False) or "",
+            "IRIP_REDIS_URL",
+            _redis_password(),
             True,
-            "Redis 密码不能为空",
+            "Redis 连接串必须包含密码（requirepass 不能为空）",
         ),
     ]
 

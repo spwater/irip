@@ -17,8 +17,8 @@ services:
         target: master_key
       - source: irip_database_app_url
         target: database_app_url
-      - source: irip_redis_password
-        target: redis_password
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
       - source: irip_bootstrap_admin_password
@@ -36,8 +36,8 @@ services:
         target: database_app_url
       - source: irip_database_admin_url
         target: database_admin_url
-      - source: irip_redis_password
-        target: redis_password
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
 
@@ -51,8 +51,8 @@ services:
         target: master_key
       - source: irip_database_app_url
         target: database_app_url
-      - source: irip_redis_password
-        target: redis_password
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
 
@@ -89,6 +89,8 @@ services:
         target: master_key
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
       - source: irip_bootstrap_admin_password
@@ -107,6 +109,8 @@ services:
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
 
@@ -114,6 +118,8 @@ services:
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_redis_url
+        target: redis_url
       - source: irip_minio_secret_key
         target: minio_secret_key
 
@@ -132,6 +138,8 @@ secrets:
     file: ./secrets/database_app_password
   irip_redis_password:
     file: ./secrets/redis_password
+  irip_redis_url:
+    file: ./secrets/redis_url
   irip_minio_secret_key:
     file: ./secrets/minio_secret_key
   irip_bootstrap_admin_password:

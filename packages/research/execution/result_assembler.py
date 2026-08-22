@@ -7,12 +7,12 @@ Run 最终状态判定（_determine_final_status）、覆盖率聚合（_aggrega
 """
 
 import json
-import os
 from collections import deque
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from packages.common.redis_url import get_redis_url
 from packages.research.execution.models_trusted import CoverageDeclaration
 from packages.research.execution.orchestrator_base import ResearchOrchestratorBase, logger
 
@@ -79,7 +79,7 @@ class ResultAssemblerMixin(ResearchOrchestratorBase):
         try:
             import redis as redis_lib
 
-            redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+            redis_url = get_redis_url()
             r = redis_lib.from_url(redis_url)
             channel = f"research:run:{run_id}:events"
             message = json.dumps(

@@ -14,7 +14,6 @@
 全部通过返回 200；任一失败返回 503 + 详细状态。
 """
 
-import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -25,6 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.redis_url import get_redis_url as _read_redis_url
 from packages.common.s3_repository import S3Repository
 
 #: 路由实例。
@@ -70,8 +70,8 @@ def get_health_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 def get_redis_url() -> str:
-    """获取 Redis 连接 URL（从环境变量读取）。"""
-    return os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    """获取 Redis 连接 URL（file-backed secret 优先，env 回退）。"""
+    return _read_redis_url()
 
 
 def get_s3_repo() -> S3Repository:

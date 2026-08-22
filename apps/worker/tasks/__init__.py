@@ -30,6 +30,7 @@ from uuid import UUID
 from packages.common.database import build_session_factory, get_database_url, session_scope
 from packages.common.errors import AppError
 from packages.common.job_policy import JobKindPolicy
+from packages.common.redis_url import get_redis_url
 from packages.jobs.worker import JobExecutor, WorkerLeaseManager
 
 
@@ -99,7 +100,7 @@ async def _execute_job_async(job_id: str) -> str:
     from packages.jobs.dept_concurrency import DeptConcurrencyLimiter
     from packages.jobs.entities import Job
 
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     import redis as redis_lib
 
     redis_client = redis_lib.from_url(redis_url)

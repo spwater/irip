@@ -23,9 +23,11 @@ from celery.schedules import crontab
 from celery.signals import worker_process_init
 
 from packages.common.database import get_database_url
+from packages.common.redis_url import get_redis_url
 
-#: Redis URL（从环境变量读取，默认本地测试 Redis）。
-REDIS_URL: str = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+#: Redis URL（file-backed secret 优先，env 回退；默认本地测试 Redis）。
+#: 该 URL 同时作为 Celery broker 与 result backend（两个用途均指向同一 Redis 实例）。
+REDIS_URL: str = get_redis_url("redis://localhost:6379/0")
 
 #: Worker 健康检查 HTTP 端口（可通过环境变量覆盖）。
 WORKER_HEALTHCHECK_PORT: int = int(os.getenv("IRIP_WORKER_HEALTHCHECK_PORT", "9100"))
@@ -201,7 +203,7 @@ def worker_heartbeat() -> str:
 
         import redis
 
-        redis_url = os.getenv("IRIP_REDIS_URL", "redis://redis:6379/0")
+        redis_url = get_redis_url("redis://redis:6379/0")
         r = redis.from_url(redis_url)
         r.set("irip:worker:heartbeat", str(time.time()), ex=120)
     except Exception:

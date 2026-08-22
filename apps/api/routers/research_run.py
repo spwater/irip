@@ -22,7 +22,6 @@
 """
 
 import json
-import os
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -33,6 +32,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from packages.common.redis_url import get_redis_url
 from packages.research.conversation_service import AIConversationService
 from packages.research.execution.run_service import AnalysisRunService
 from packages.research.planning.plan_service import PlanService
@@ -631,7 +631,7 @@ async def run_events(
     订阅 Redis pub/sub 频道 research:run:{run_id}:events，
     将事件转发给前端。
     """
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     channel = f"research:run:{run_id}:events"
 
     async def event_generator() -> Any:

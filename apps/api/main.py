@@ -52,6 +52,7 @@ from apps.api.routers.user_departments import user_departments_router
 from packages.common.database import build_session_factory, get_database_url
 from packages.common.error_codes import ErrorCode
 from packages.common.errors import AppError
+from packages.common.redis_url import get_redis_url
 from packages.common.s3_repository import S3Repository
 from packages.common.secret_files import read_secret
 
@@ -138,7 +139,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await asyncio.to_thread(s3_repo.ensure_bucket)
 
     # ---- 3. Redis URL ----
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
 
     # ---- 4. JWT 密钥 ----（fail-closed: 非测试环境缺密钥拒绝启动）
     token_secret = read_secret("IRIP_JWT_SECRET", required=False) or ""

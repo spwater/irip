@@ -68,12 +68,29 @@ services:
     logging: *logging-base
     networks:
       - backend
-    # H-13: Redis 加密码
-    command: ["redis-server", "--requirepass", "${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}"]
+    # H-13: Redis 加密码。
+    # 层次2：redis:7-alpine 官方镜像不支持 REDIS_PASSWORD_FILE，用 entrypoint
+    # shim 从 /run/secrets/redis_password（生产 overlay 挂载）读入密码；文件缺失
+    # 时回退到 IRIP_REDIS_PASSWORD 环境变量（仅 compose.development.yaml 注入）。
+    # 两者皆缺失时 fail-closed（拒绝无密码启动）。
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        if [ -f /run/secrets/redis_password ]; then
+          REDIS_PASSWORD="$$(cat /run/secrets/redis_password)";
+        else
+          REDIS_PASSWORD="$$IRIP_REDIS_PASSWORD";
+        fi;
+        if [ -z "$$REDIS_PASSWORD" ]; then
+          echo "IRIP_REDIS_PASSWORD or /run/secrets/redis_password is required" >&2;
+          exit 1;
+        fi;
+        exec docker-entrypoint.sh redis-server --requirepass "$$REDIS_PASSWORD"
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${IRIP_REDIS_PASSWORD}", "ping"]
+      test: ["CMD-SHELL", "if [ -f /run/secrets/redis_password ]; then redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping; else redis-cli -a \"$$IRIP_REDIS_PASSWORD\" ping; fi"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -88,7 +105,10 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      MINIO_ROOT_PASSWORD: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      # 层次2：minio 镜像原生支持 *_FILE，root 密码改走 file-backed secret。
+      # 开发环境由 compose.development.yaml 额外注入 MINIO_ROOT_PASSWORD
+      # （minio 在两者同设时优先采用环境变量）。
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_secret_key
     volumes:
       - miniodata:/data
     healthcheck:
@@ -112,13 +132,10 @@ services:
       # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
       # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
       IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
-      # 导出 IRIP_REDIS_PASSWORD，供 assert_production_keys 校验（仅检查非空）。
-      # 之前仅拼进 IRIP_REDIS_URL，production 下启动校验必报 "Redis 密码不能为空"。
-      # 注：完整 file-backed 化（IRIP_REDIS_PASSWORD_FILE）属「密钥 file-backed 全覆盖」专项。
-      IRIP_REDIS_PASSWORD: ${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
+      # 层次2：完整 redis URL（含密码）改走 file-backed secret，不再内联密码。
+      # Celery broker/result 由 celery_app 复用 IRIP_REDIS_URL，故不再单独设
+      # IRIP_CELERY_BROKER_URL / IRIP_CELERY_RESULT_BACKEND。
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
@@ -162,9 +179,8 @@ services:
       # 备份/恢复 subprocess 专用 superuser 连接串（pg_basebackup/pg_dump 需全量数据，RLS 会过滤 irip_app）。
       # 阶段2 A1：superuser 连接串改走 file-backed secret，不再内联密码。
       IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
+      # 层次2：完整 redis URL（含密码）改走 file-backed secret，不再内联密码。
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
@@ -213,13 +229,10 @@ services:
       # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
       # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
       IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
-      # 导出 IRIP_REDIS_PASSWORD，供 assert_production_keys 校验（仅检查非空）。
-      # 之前仅拼进 IRIP_REDIS_URL，production 下启动校验必报 "Redis 密码不能为空"。
-      # 注：完整 file-backed 化（IRIP_REDIS_PASSWORD_FILE）属「密钥 file-backed 全覆盖」专项。
-      IRIP_REDIS_PASSWORD: ${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
-      IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
-      IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
+      # 层次2：完整 redis URL（含密码）改走 file-backed secret，不再内联密码。
+      # Celery broker/result 由 celery_app 复用 IRIP_REDIS_URL，故不再单独设
+      # IRIP_CELERY_BROKER_URL / IRIP_CELERY_RESULT_BACKEND。
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
@@ -284,7 +297,7 @@ services:
     environment:
       # 阶段2 A1：bootstrap 用 superuser（irip）做 DDL + 建角色/组织，连接串走 file-backed secret。
       IRIP_DATABASE_URL_FILE: /run/secrets/database_admin_url
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
@@ -313,7 +326,7 @@ services:
     environment:
       # 阶段2 A1：备份使用 superuser 连接，改走 file-backed secret。
       IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
@@ -351,7 +364,7 @@ services:
     environment:
       # 阶段2 A1：恢复使用 superuser 连接，改走 file-backed secret。
       IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
-      IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
+      IRIP_REDIS_URL_FILE: /run/secrets/redis_url
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
       IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key

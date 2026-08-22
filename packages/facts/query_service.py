@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.artifacts import ArtifactService
 from packages.common.database import ScopedSessionMixin, get_database_url
+from packages.common.redis_url import get_redis_url
 from packages.common.tenant_guc import set_dept_guc, set_user_guc
 from packages.facts.observations import FactDetailRow
 from packages.facts.repository import FactRepository
@@ -68,9 +69,7 @@ def _get_redis() -> Any:
     """
     global _redis_client
     if _redis_client is None:
-        import os as _os
-
-        _redis_url = _os.getenv("IRIP_REDIS_URL", "")
+        _redis_url = get_redis_url("")
         if _redis_url:
             import redis as _redis_lib
 

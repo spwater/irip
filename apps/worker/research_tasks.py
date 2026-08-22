@@ -17,6 +17,7 @@ from typing import Any
 from uuid import UUID
 
 from apps.worker.celery_app import celery_app
+from packages.common.redis_url import get_redis_url
 
 logger = logging.getLogger("research.tasks")
 
@@ -56,7 +57,7 @@ def _build_orchestrator() -> Any:
         async_url = db_url
     factory = build_session_factory(async_url)
 
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     redis_client = redis_lib.from_url(redis_url)
 
     # 从 ai_config 表读取研发助手模型配置，构建真实 AI provider
@@ -193,7 +194,7 @@ def execute_analysis_run(self: object, run_id: str) -> str:
 
     from packages.jobs.dept_concurrency import DeptConcurrencyLimiter
 
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     redis_client = redis_lib.from_url(redis_url)
     limiter = DeptConcurrencyLimiter(redis_client)
 
@@ -247,7 +248,7 @@ def check_run_heartbeat() -> int:
     """
     import redis as redis_lib
 
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     r = redis_lib.from_url(redis_url)
 
     import sqlalchemy as sa
@@ -300,7 +301,7 @@ def promote_queued_runs() -> int:
 
     from packages.research.execution.scheduler import ResearchScheduler
 
-    redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
+    redis_url = get_redis_url()
     r = redis_lib.from_url(redis_url)
     scheduler = ResearchScheduler(redis_client=r)
 
