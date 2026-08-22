@@ -46,7 +46,10 @@ services:
       -c max_wal_senders=3
     environment:
       POSTGRES_USER: ${IRIP_DATABASE_USER:-irip}
-      POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
+      # 第6缺陷根治：postgres 官方镜像原生支持 POSTGRES_PASSWORD_FILE，
+      # superuser 密码改走 file-backed secret（生产 overlay 挂载 postgres_password）；
+      # 开发环境由 compose.development.yaml 额外注入 POSTGRES_PASSWORD（env 优先于 _FILE）。
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
       POSTGRES_DB: ${IRIP_DATABASE_NAME:-irip}
     volumes:
       - pgdata:/var/lib/postgresql/data

@@ -7,6 +7,12 @@ services:
   postgres:
     ports:
       - "5432:5432"
+    environment:
+      # 第6缺陷：开发环境无 secret 文件，注入 superuser 密码（env 生效）。
+      POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
+      # 清空 base.yaml 的 _FILE：postgres 官方镜像两者互斥（同设报错），
+      # dev 走 env、生产走 file，必须显式置空其一。
+      POSTGRES_PASSWORD_FILE: ""
 
   redis:
     ports:
