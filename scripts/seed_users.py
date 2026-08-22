@@ -51,6 +51,8 @@ USERS = [
     ("liutao@cbmi.com.cn", "刘韬", _SEED_PASSWORD, "platform_administrator", ["研发中心", "先进控制实验室"]),
     ("13855189911@irip.com", "王虔虔", _SEED_PASSWORD, "platform_auditor", ["合肥水泥研究设计院有限公司"]),
     ("zza@cbmi.com.cn", "朱子昂", _SEED_PASSWORD, "lab_director", ["复合耐磨材料实验室"]),
+    # k6 冒烟测试专用用户（tests/performance/k6-smoke.js 默认 TEST_EMAIL/TEST_PASSWORD）
+    ("seeded@irip.local", "K6 Smoke Test", "Correct-Horse-2026!", "lab_member", ["研发中心"]),
 ]
 
 
