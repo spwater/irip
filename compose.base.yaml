@@ -371,6 +371,13 @@ services:
       context: .
       dockerfile: deployments/compose/ops.Dockerfile
     <<: *security-base
+    # PITR 恢复需写 pgdata 卷（属主 postgres uid 999，权限 700）；ops 镜像默认
+    # 以非 root 的 irip（uid 1000）运行，无法清空/解压/write recovery.signal 到
+    # pgdata（PermissionError）。restore 是运维数据操作而非应用运行时，故以 root
+    # 运行（清空只删目录内容、不动目录本身；解压后文件 retain postgres 属主，
+    # postgres 容器恢复启动仍可正常读取）。backup 仅 pg_basebackup 读 + mc mirror，
+    # 不写 pgdata，保持非 root。
+    user: root
     logging: *logging-base
     networks:
       - backend
