@@ -59,6 +59,10 @@
       "lines": 1008,
       "max_complexity": 15
     },
+    "packages/ai/yaml_config.py": {
+      "lines": 553,
+      "max_complexity": 15
+    },
     "packages/ai/collaboration_service.py": {
       "lines": 623,
       "max_complexity": 15
