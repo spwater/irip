@@ -39,6 +39,8 @@ jobs:
       - run: ruff check apps packages tests
       # F-24: Ruff format check -- 范围与 Makefile/release-gate 一致
       - run: ruff format --check apps packages tests
+      # P2-C4: 代码预算门禁 -- 新文件 >500 行 / 既有超限文件再增长即报错（非零退出阻断）
+      - run: python scripts/quality/check_code_budgets.py --baseline quality/code-budget-baseline.json apps packages
 
   # F-14/T2-8: 错误码穷尽性检查 -- 确保所有被抛出的 AppError code 都在 ErrorCode 枚举中注册
   error-code-check:
