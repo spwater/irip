@@ -121,14 +121,14 @@ services:
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
-      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
+      IRIP_JWT_SECRET_FILE: /run/secrets/jwt_secret
       IRIP_API_CORS_ORIGINS: ${IRIP_API_CORS_ORIGINS:-http://localhost:8080}
-      IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_MASTER_KEY_FILE: /run/secrets/master_key
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
     depends_on:
@@ -167,12 +167,12 @@ services:
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
-      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
+      IRIP_JWT_SECRET_FILE: /run/secrets/jwt_secret
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_MASTER_KEY_FILE: /run/secrets/master_key
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
@@ -222,12 +222,12 @@ services:
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
-      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
+      IRIP_JWT_SECRET_FILE: /run/secrets/jwt_secret
       IRIP_ALLOW_PRIVATE_NETWORK: ${IRIP_ALLOW_PRIVATE_NETWORK:-0}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_MASTER_KEY_FILE: /run/secrets/master_key
       IRIP_SAFE_CLI_MODE: "true"
       IRIP_ENV: production
       IRIP_BACKUP_OUTPUT_DIR: ${IRIP_BACKUP_OUTPUT_DIR:-/backups}
@@ -287,12 +287,12 @@ services:
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
-      IRIP_JWT_SECRET: ${IRIP_JWT_SECRET:?IRIP_JWT_SECRET is required}
-      IRIP_BOOTSTRAP_ADMIN_PASSWORD: ${IRIP_BOOTSTRAP_ADMIN_PASSWORD:?IRIP_BOOTSTRAP_ADMIN_PASSWORD is required}
-      IRIP_MASTER_KEY: ${IRIP_MASTER_KEY:?IRIP_MASTER_KEY is required}
+      IRIP_JWT_SECRET_FILE: /run/secrets/jwt_secret
+      IRIP_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password
+      IRIP_MASTER_KEY_FILE: /run/secrets/master_key
     depends_on:
       postgres:
         condition: service_healthy
@@ -316,7 +316,7 @@ services:
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_APPLICATION_VERSION: ${IRIP_APPLICATION_VERSION:-0.8.0}
@@ -354,7 +354,7 @@ services:
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_MINIO_ENDPOINT: http://minio:9000
       IRIP_MINIO_ACCESS_KEY: ${IRIP_MINIO_ACCESS_KEY:-irip}
-      IRIP_MINIO_SECRET_KEY: ${IRIP_MINIO_SECRET_KEY:?IRIP_MINIO_SECRET_KEY is required}
+      IRIP_MINIO_SECRET_KEY_FILE: /run/secrets/minio_secret_key
       IRIP_MINIO_BUCKET: ${IRIP_MINIO_BUCKET:-irip-artifacts}
       IRIP_MINIO_REGION: ${IRIP_MINIO_REGION:-us-east-1}
       IRIP_BACKUP_AGE_IDENTITY: ${IRIP_BACKUP_AGE_IDENTITY:-}

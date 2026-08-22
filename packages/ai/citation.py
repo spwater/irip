@@ -29,6 +29,8 @@ import os
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from packages.common.secret_files import read_secret
+
 
 def _get_signing_secret() -> str:
     """从环境变量读取签名密钥。
@@ -39,7 +41,7 @@ def _get_signing_secret() -> str:
     Raises:
         RuntimeError: 当环境变量未设置时。
     """
-    secret = os.getenv("IRIP_JWT_SECRET", "")
+    secret = read_secret("IRIP_JWT_SECRET", required=False) or ""
     if not secret:
         # 开发环境回退（生产环境应通过 compose.yaml 强制设置）
         secret = os.getenv("IRIP_CITATION_SECRET", "irip-citation-dev-key")

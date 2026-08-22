@@ -37,6 +37,8 @@ import secrets
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from packages.common.secret_files import read_secret
+
 
 def _generate_master_key() -> bytes:
     """生成随机 32 字节 master key。
@@ -147,7 +149,7 @@ class EnvelopeCrypto:
 
         logger = logging.getLogger(__name__)
 
-        raw_key = os.getenv("IRIP_MASTER_KEY", "")
+        raw_key = read_secret("IRIP_MASTER_KEY", required=False) or ""
         is_test_env = os.getenv("IRIP_ENV") == "test"
 
         if not raw_key:

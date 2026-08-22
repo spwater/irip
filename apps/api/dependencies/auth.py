@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from packages.auth.entities import AppUser
 from packages.auth.tokens import decode_access_token
 from packages.common.errors import AppError
+from packages.common.secret_files import read_secret
 
 
 @dataclass(frozen=True)
@@ -53,7 +54,7 @@ def get_token_secret() -> str:
     非测试环境缺密钥时拒绝启动（fail-closed），与 EnvelopeCrypto 策略对齐。
     测试环境使用固定默认值。
     """
-    secret = os.getenv("IRIP_JWT_SECRET", "")
+    secret = read_secret("IRIP_JWT_SECRET", required=False) or ""
     if not secret:
         if os.getenv("IRIP_ENV") != "test":
             raise RuntimeError(

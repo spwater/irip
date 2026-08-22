@@ -22,6 +22,8 @@
 import logging
 import os
 
+from packages.common.secret_files import read_secret
+
 #: 开发环境已知弱密钥集合（这些值出现在 .env.example 和文档中，不可用于生产）。
 WEAK_SECRETS: set[str] = {
     "dev_only_insecure_jwt_secret_change_me_0123456789abcdef",
@@ -60,19 +62,19 @@ def assert_production_keys() -> None:
     checks: list[tuple[str, str, bool, str]] = [
         (
             "IRIP_JWT_SECRET",
-            os.getenv("IRIP_JWT_SECRET", ""),
+            read_secret("IRIP_JWT_SECRET", required=False) or "",
             True,
             "JWT 签名密钥不能为空",
         ),
         (
             "IRIP_MASTER_KEY",
-            os.getenv("IRIP_MASTER_KEY", ""),
+            read_secret("IRIP_MASTER_KEY", required=False) or "",
             True,
             "信封加密主密钥不能为空",
         ),
         (
             "IRIP_REDIS_PASSWORD",
-            os.getenv("IRIP_REDIS_PASSWORD", ""),
+            read_secret("IRIP_REDIS_PASSWORD", required=False) or "",
             True,
             "Redis 密码不能为空",
         ),
@@ -96,7 +98,7 @@ def assert_production_keys() -> None:
                 _log_warning(f"{msg} (非生产环境，仅警告)")
 
     # JWT secret 长度检查
-    jwt_secret: str = os.getenv("IRIP_JWT_SECRET", "")
+    jwt_secret: str = read_secret("IRIP_JWT_SECRET", required=False) or ""
     if jwt_secret and len(jwt_secret) < MIN_JWT_SECRET_LENGTH:
         msg = (
             f"[IRIP_JWT_SECRET] 长度仅 {len(jwt_secret)} 字节，"
@@ -114,7 +116,7 @@ def assert_production_keys() -> None:
         "IRIP_MINIO_SECRET_KEY",
     )
     for var_name in weak_password_vars:
-        pw_value = os.getenv(var_name, "")
+        pw_value = read_secret(var_name, required=False) or ""
         if pw_value and pw_value in WEAK_SECRETS:
             msg = f"[{var_name}] 使用了开发默认值，生产环境必须替换"
             if is_production:
@@ -123,7 +125,7 @@ def assert_production_keys() -> None:
                 _log_warning(f"{msg} (非生产环境，仅警告)")
 
     # SSRF 防护检查
-    allow_private: str = os.getenv("IRIP_ALLOW_PRIVATE_NETWORK", "0")
+    allow_private: str = read_secret("IRIP_ALLOW_PRIVATE_NETWORK", required=False) or "0"
     if is_production and allow_private == "1":
         errors.append("[IRIP_ALLOW_PRIVATE_NETWORK] 生产环境不能设为 1（禁用 SSRF 防护）")
 

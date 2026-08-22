@@ -372,6 +372,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 import os as _os
 
                 from packages.common.s3_repository import S3Repository
+                from packages.common.secret_files import read_secret
                 from packages.research.execution.validation import ThreeSegmentValidator
 
                 # 构建 S3 client
@@ -381,7 +382,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 _s3 = S3Repository(
                     endpoint_url=_endpoint,
                     access_key=_os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-                    secret_key=_os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+                    secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False)
+                    or "irip_dev_password",
                     bucket_name=_os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
                     region=_os.getenv("IRIP_MINIO_REGION", "us-east-1"),
                 )
@@ -718,6 +720,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
 
                     from packages.common.ids import new_id as _new_id
                     from packages.common.s3_repository import S3Repository
+                    from packages.common.secret_files import read_secret
                     from packages.research.execution.validation import ThreeSegmentValidator
 
                     # 检查当前 run 已有的 data/chart 工件数量
@@ -744,9 +747,8 @@ class PlanAnalyzerMixin(PlanServiceBase):
                             _s3 = S3Repository(
                                 endpoint_url=_endpoint,
                                 access_key=_os3.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-                                secret_key=_os3.getenv(
-                                    "IRIP_MINIO_SECRET_KEY", "irip_dev_password"
-                                ),
+                                secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False)
+                                or "irip_dev_password",
                                 bucket_name=_os3.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
                                 region=_os3.getenv("IRIP_MINIO_REGION", "us-east-1"),
                             )

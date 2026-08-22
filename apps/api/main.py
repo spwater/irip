@@ -53,6 +53,7 @@ from packages.common.database import build_session_factory, get_database_url
 from packages.common.error_codes import ErrorCode
 from packages.common.errors import AppError
 from packages.common.s3_repository import S3Repository
+from packages.common.secret_files import read_secret
 
 #: AppError code → HTTP 状态码映射，由 ErrorCode 封闭枚举自动生成（F-14/F-24）。
 #: 新增错误码只需在 ErrorCode 枚举中注册，无需维护手工映射。
@@ -78,7 +79,7 @@ def _build_s3_repo() -> S3Repository:
     return S3Repository(
         endpoint_url=endpoint,
         access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
         bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
         region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
         external_endpoint_url=external_endpoint,
@@ -140,7 +141,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     redis_url = os.getenv("IRIP_REDIS_URL", "redis://localhost:6379/0")
 
     # ---- 4. JWT 密钥 ----（fail-closed: 非测试环境缺密钥拒绝启动）
-    token_secret = os.getenv("IRIP_JWT_SECRET", "")
+    token_secret = read_secret("IRIP_JWT_SECRET", required=False) or ""
     if not token_secret:
         if os.getenv("IRIP_ENV") == "test":
             token_secret = "irip-dev-secret-2026"

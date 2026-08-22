@@ -107,11 +107,15 @@ services:
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_minio_secret_key
+        target: minio_secret_key
 
   restore:
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_minio_secret_key
+        target: minio_secret_key
 
 secrets:
   irip_jwt_secret:

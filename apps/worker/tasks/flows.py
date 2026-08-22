@@ -20,6 +20,7 @@ from uuid import UUID
 
 from apps.worker.celery_app import celery_app
 from apps.worker.tasks.sysuser import get_system_service_user_id
+from packages.common.secret_files import read_secret
 
 
 async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -96,7 +97,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
     s3_repo = S3Repository(
         endpoint_url=s3_endpoint,
         access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
         bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
         region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
     )
@@ -322,7 +323,7 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
     s3_repo = S3Repository(
         endpoint_url=s3_endpoint,
         access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
         bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
         region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
     )

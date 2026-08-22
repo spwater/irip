@@ -33,6 +33,7 @@ from packages.auth.passwords import hash_password
 from packages.auth.permissions import BUILTIN_ROLES
 from packages.common.ids import new_id
 from packages.common.s3_repository import S3Repository
+from packages.common.secret_files import read_secret
 
 logger = logging.getLogger(__name__)
 
@@ -551,7 +552,7 @@ class _UsersPort:
         Returns:
             UUID: 管理员用户 ID。
         """
-        password = os.getenv(password_from_env, "")
+        password = read_secret(password_from_env, required=False) or ""
         if not password:
             raise RuntimeError(
                 f"Environment variable {password_from_env} is required for bootstrap"
@@ -595,7 +596,7 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
         container: 应用 DI 容器。
     """
     # F-12: 确保有可用的 master key（envelope encryption）
-    master_key = os.getenv("IRIP_MASTER_KEY", "")
+    master_key = read_secret("IRIP_MASTER_KEY", required=False) or ""
     if not master_key:
         from packages.common.crypto import generate_master_key
 
@@ -703,7 +704,7 @@ def _build_container() -> ApplicationContainer:
     s3_repo = S3Repository(
         endpoint_url=endpoint,
         access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
         bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
         region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
     )

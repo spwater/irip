@@ -54,6 +54,7 @@ from deployments.compose.backup_manifest import (
 )
 from packages.common.ids import new_id
 from packages.common.s3_repository import S3Repository
+from packages.common.secret_files import read_secret
 
 logger = logging.getLogger(__name__)
 
@@ -941,7 +942,7 @@ def build_backup_config_from_env(output_dir: Path | None = None) -> BackupConfig
         db_url=db_url,
         minio_endpoint=endpoint,
         minio_access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        minio_secret_key=os.getenv("IRIP_MINIO_SECRET_KEY", "irip_dev_password"),
+        minio_secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
         minio_bucket=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
         minio_region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
         application_version=IRIP_APPLICATION_VERSION,
