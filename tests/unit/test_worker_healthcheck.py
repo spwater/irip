@@ -101,9 +101,12 @@ class TestWorkerProcessInitSignal:
         from apps.worker.celery_app import _start_healthcheck_on_worker_init
 
         # 模拟 run_worker_healthcheck_server 抛出 OSError
-        with patch(
-            "apps.worker.celery_app.run_worker_healthcheck_server",
-            side_effect=OSError("Address already in use"),
+        with (
+            patch("packages.ai.yaml_config.validate_ai_config"),
+            patch(
+                "apps.worker.celery_app.run_worker_healthcheck_server",
+                side_effect=OSError("Address already in use"),
+            ),
         ):
             # 不应抛出任何异常
             _start_healthcheck_on_worker_init()
@@ -118,9 +121,12 @@ class TestWorkerProcessInitSignal:
             nonlocal called
             called = True
 
-        with patch(
-            "apps.worker.celery_app.run_worker_healthcheck_server",
-            side_effect=mock_server,
+        with (
+            patch("packages.ai.yaml_config.validate_ai_config"),
+            patch(
+                "apps.worker.celery_app.run_worker_healthcheck_server",
+                side_effect=mock_server,
+            ),
         ):
             _start_healthcheck_on_worker_init()
 
@@ -231,7 +237,10 @@ class TestHealthcheckHandler:
         try:
             time.sleep(0.1)
             # 模拟第二个子进程尝试绑定同一端口
-            with patch.dict("os.environ", {"IRIP_WORKER_HEALTHCHECK_PORT": str(port)}):
+            with (
+                patch("packages.ai.yaml_config.validate_ai_config"),
+                patch.dict("os.environ", {"IRIP_WORKER_HEALTHCHECK_PORT": str(port)}),
+            ):
                 # signal handler 应捕获 OSError 并静默跳过
                 _start_healthcheck_on_worker_init()
                 # 如果到达这里，说明 OSError 被正确捕获
