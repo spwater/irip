@@ -91,6 +91,7 @@ wait_for_postgres() {
 #   → stop 应用 + postgres（PITR 清空 pgdata 前必须停 PG，否则损坏运行中库）
 #   → database（PG 已停，清空 + 解压 base.tar.gz + recovery.signal）
 #   → start postgres + wait（recovery 完成方可 verify）
+#   → migrate（PG promote 后：pg_restore / alembic 前向迁移）
 #   → objects（MinIO 恢复，不依赖 PG）
 #   → verify（PG 已启动，冒烟查询有效）
 #   → start 应用
