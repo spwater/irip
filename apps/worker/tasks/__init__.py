@@ -642,39 +642,104 @@ ROOT_DEPT_ENV: str = "IRIP_ROOT_DEPT_ID"
 #: System 哨兵部门 ID 环境变量名（Beat 敏感档产出挂 system）。
 SYSTEM_DEPT_ENV: str = "IRIP_SYSTEM_DEPT_ID"
 
-
-def get_root_dept_id() -> str:
-    """获取 root 哨兵部门 ID（从环境变量读取）。
-
-    Returns:
-        str: root 部门 UUID 字符串。
-    """
-    return os.getenv(ROOT_DEPT_ENV, "")
-
-
-def get_system_dept_id() -> str:
-    """获取 system 哨兵部门 ID（从环境变量读取）。
-
-    Returns:
-        str: system 部门 UUID 字符串。
-    """
-    return os.getenv(SYSTEM_DEPT_ENV, "")
-
-
 #: 系统服务用户 ID 环境变量名（Celery worker 无用户会话时作为 GUC actor）。
 SYSTEM_SERVICE_USER_ENV: str = "IRIP_SYSTEM_SERVICE_USER_ID"
 
+#: 系统服务用户邮箱（与 bootstrap 幂等创建时使用的常量一致）。
+SYSTEM_SERVICE_EMAIL: str = "system@irip.local"
+
+#: 哨兵记录 ID 解析缓存（按稳定键缓存，跨任务复用，避免每次任务重建连接）。
+_sentinel_id_cache: dict[str, str] = {}
+
+
+def _resolve_sentinel_from_db(key: str, sql: str) -> str:
+    """按稳定键从数据库解析哨兵记录 ID（同步、带缓存）。
+
+    Worker/Beat 部署时无法静态预知 bootstrap 幂等生成的随机哨兵 UUID，
+    因此环境变量未注入时回退到按稳定键（``department.code`` /
+    ``app_user.email``）查询。``department`` 表为全员可读（无 RLS），
+    ``app_user`` 表对 system 服务用户可见，查询无需设置 GUC 即可命中。
+
+    Args:
+        key: 缓存键（稳定标识，如 ``"root_dept"``）。
+        sql: 查询语句，必须返回单列 UUID 字符串。
+
+    Returns:
+        str: 哨兵记录 UUID 字符串；查询失败/未命中时返回空串（保持
+        fail-closed，由调用方按 None 处理）。
+    """
+    cached: str | None = _sentinel_id_cache.get(key)
+    if cached:
+        return cached
+
+    from sqlalchemy import create_engine, text
+
+    db_url: str = get_database_url("")
+    if not db_url:
+        return ""
+
+    engine = create_engine(db_url)
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(text(sql)).fetchone()
+            if row is not None and row[0] is not None:
+                resolved: str = str(row[0])
+                _sentinel_id_cache[key] = resolved
+                return resolved
+    except Exception:
+        # 回退失败时静默返回空串：保持 fail-closed，不让连接异常淹没业务日志。
+        _beat_logger.debug("Failed to resolve sentinel id key=%s from DB", key, exc_info=True)
+    finally:
+        engine.dispose()
+    return ""
+
+
+def get_root_dept_id() -> str:
+    """获取 root 哨兵部门 ID（环境变量优先，回退按 code 查库）。
+
+    Returns:
+        str: root 部门 UUID 字符串（未配置且查库失败时返回空串）。
+    """
+    env_value: str = os.getenv(ROOT_DEPT_ENV, "")
+    if env_value:
+        return env_value
+    return _resolve_sentinel_from_db(
+        "root_dept",
+        "SELECT id FROM department WHERE code = 'root' AND parent_id IS NULL LIMIT 1",
+    )
+
+
+def get_system_dept_id() -> str:
+    """获取 system 哨兵部门 ID（环境变量优先，回退按 code 查库）。
+
+    Returns:
+        str: system 部门 UUID 字符串（未配置且查库失败时返回空串）。
+    """
+    env_value: str = os.getenv(SYSTEM_DEPT_ENV, "")
+    if env_value:
+        return env_value
+    return _resolve_sentinel_from_db(
+        "system_dept",
+        "SELECT id FROM department WHERE code = 'system' LIMIT 1",
+    )
+
 
 def get_system_service_user_id() -> str:
-    """获取系统服务用户 ID（从环境变量读取）。
+    """获取系统服务用户 ID（环境变量优先，回退按 email 查库）。
 
     system_service 用户挂 system 哨兵部门（primary）+ root 哨兵部门（secondary，
     由迁移 0071 添加），设置 user GUC 后 current_visible_dept_ids() 返回全部门。
 
     Returns:
-        str: 系统服务用户 UUID 字符串。
+        str: 系统服务用户 UUID 字符串（未配置且查库失败时返回空串）。
     """
-    return os.getenv(SYSTEM_SERVICE_USER_ENV, "")
+    env_value: str = os.getenv(SYSTEM_SERVICE_USER_ENV, "")
+    if env_value:
+        return env_value
+    return _resolve_sentinel_from_db(
+        "system_service_user",
+        f"SELECT id FROM app_user WHERE email = '{SYSTEM_SERVICE_EMAIL}' LIMIT 1",
+    )
 
 
 def _parse_uuid_or_none(value: str) -> UUID | None:
@@ -690,11 +755,12 @@ def _parse_uuid_or_none(value: str) -> UUID | None:
 def get_system_guc() -> tuple[UUID | None, UUID | None]:
     """获取 Worker/Beat 默认 GUC 值（dept_id, user_id）。
 
-    从环境变量读取 system 哨兵部门 ID 和 system_service 用户 ID。
-    用于 Worker 无用户上下文时设置 RLS GUC。
+    解析 system 哨兵部门 ID 和 system_service 用户 ID（环境变量优先，
+    回退按稳定键查库）。用于 Worker 无用户上下文时设置 RLS GUC。
 
     Returns:
-        tuple[UUID | None, UUID | None]: (dept_id, user_id)。
+        tuple[UUID | None, UUID | None]: (dept_id, user_id)；解析失败时为
+        ``(None, None)``（调用方按 fail-closed 处理）。
     """
     dept_id = _parse_uuid_or_none(get_system_dept_id())
     user_id = _parse_uuid_or_none(get_system_service_user_id())
