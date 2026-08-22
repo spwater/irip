@@ -87,7 +87,7 @@ def assert_production_keys() -> None:
     2. IRIP_MASTER_KEY: 非空、非弱密钥
     3. IRIP_BOOTSTRAP_ADMIN_PASSWORD: 非弱密码
     4. IRIP_DATABASE_PASSWORD: 非弱密码
-    5. IRIP_REDIS_PASSWORD: 非空
+    5. IRIP_REDIS_URL: 必须含 requirepass 密码（从 URL 提取，回退 IRIP_REDIS_PASSWORD）
     6. IRIP_MINIO_SECRET_KEY: 非弱密钥
     7. IRIP_ALLOW_PRIVATE_NETWORK: 生产环境必须为 "0" 或未设置
 
@@ -162,8 +162,8 @@ def assert_production_keys() -> None:
             else:
                 _log_warning(f"{msg} (非生产环境，仅警告)")
 
-    # SSRF 防护检查
-    allow_private: str = read_secret("IRIP_ALLOW_PRIVATE_NETWORK", required=False) or "0"
+    # SSRF 防护检查（IRIP_ALLOW_PRIVATE_NETWORK 是 0/1 配置标志，非密钥，不走 file secret）
+    allow_private: str = os.getenv("IRIP_ALLOW_PRIVATE_NETWORK", "0")
     if is_production and allow_private == "1":
         errors.append("[IRIP_ALLOW_PRIVATE_NETWORK] 生产环境不能设为 1（禁用 SSRF 防护）")
 
