@@ -416,9 +416,9 @@ class TestBackupRestoreCycle:
         # 转同步 URL
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
-        elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql+psycopg://", 1)
+        elif sync_url.startswith("postgresql://"):
+            sync_url = sync_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):
@@ -468,9 +468,9 @@ class TestBackupRestoreCycle:
         db_url: str = _require_db()
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
-        elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql+psycopg://", 1)
+        elif sync_url.startswith("postgresql://"):
+            sync_url = sync_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):
@@ -542,9 +542,9 @@ class TestBackupRestoreCycle:
         db_url: str = _require_db()
         sync_url: str = db_url
         if sync_url.startswith("postgresql+psycopg_async://"):
-            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql://", 1)
-        elif sync_url.startswith("postgresql+psycopg://"):
-            sync_url = sync_url.replace("postgresql+psycopg://", "postgresql://", 1)
+            sync_url = sync_url.replace("postgresql+psycopg_async://", "postgresql+psycopg://", 1)
+        elif sync_url.startswith("postgresql://"):
+            sync_url = sync_url.replace("postgresql://", "postgresql+psycopg://", 1)
 
         endpoint: str = os.getenv("IRIP_MINIO_ENDPOINT", "localhost:59000")
         if not endpoint.startswith("http"):

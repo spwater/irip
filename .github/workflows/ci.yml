@@ -277,6 +277,8 @@ jobs:
           POSTGRES_USER: irip
           POSTGRES_PASSWORD: irip_dev_password
           POSTGRES_DB: irip_test
+          # pg_basebackup 需要 replication 连接，trust 认证允许 replication 条目
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 55432:5432
         options: >-
@@ -685,8 +687,9 @@ jobs:
           corepack enable pnpm
           pnpm install --frozen-lockfile
           # 使用官方 npm registry 进行 audit（npmmirror 不支持 audit endpoint）
-          # pnpm 不读 npm config，需通过 npm_config_registry 环境变量覆盖 .npmrc 中的 npmmirror
-          npm_config_registry=https://registry.npmjs.org/ pnpm audit --audit-level=high
+          # pnpm 的 audit 读取项目 .npmrc 中的 registry，需临时改为官方源
+          sed -i 's|registry=https://registry.npmmirror.com|registry=https://registry.npmjs.org/|' .npmrc
+          pnpm audit --audit-level=high
 
   # ---- 镜像漏洞扫描 (P1-T4: 独立硬门禁 job) ----
   container-scan:
@@ -785,8 +788,20 @@ jobs:
       - name: Start API in background
         run: |
           uvicorn apps.api.main:create_app --factory --host 0.0.0.0 --port 8000 &
-          sleep 5
-          curl -sf http://localhost:8000/api/v1/health/live || exit 1
+          # 等待 API 服务就绪（最多 60 秒）
+          ready=0
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/api/v1/health/live > /dev/null 2>&1; then
+              echo "API server is ready"
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "1" ]; then
+            echo "API server failed to start within 60 seconds"
+            exit 1
+          fi
       - name: Install k6
         run: |
           # 直接从 GitHub release 下载二进制，绕过不稳定的 hkp keyserver + apt 仓库
