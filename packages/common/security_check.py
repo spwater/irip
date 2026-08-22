@@ -163,8 +163,10 @@ def assert_production_keys() -> None:
                 _log_warning(f"{msg} (非生产环境，仅警告)")
 
     # SSRF 防护检查（IRIP_ALLOW_PRIVATE_NETWORK 是 0/1 配置标志，非密钥，不走 file secret）
+    # 本地伪 staging 环境（IRIP_STAGING=1）允许内网 LLM 网关，跳过此检查
     allow_private: str = os.getenv("IRIP_ALLOW_PRIVATE_NETWORK", "0")
-    if is_production and allow_private == "1":
+    is_staging: bool = os.getenv("IRIP_STAGING", "0") == "1"
+    if is_production and allow_private == "1" and not is_staging:
         errors.append("[IRIP_ALLOW_PRIVATE_NETWORK] 生产环境不能设为 1（禁用 SSRF 防护）")
 
     if errors:
