@@ -323,6 +323,31 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
+      # P1-T7: 安装恢复测试所需工具（pg16 client + mc + age），pin 版本+SHA256，
+      # 与 deployments/compose/ops.Dockerfile 保持一致。IRIP_REQUIRE_RECOVERY_TESTS=1
+      # 不变，check_recovery_tools.sh 在工具缺失时仍会 fail（不隐式 skip）。
+      - name: Install recovery tools
+        run: |
+          set -euo pipefail
+          # 1) PostgreSQL 16 client（pg_basebackup / pg_restore），官方 PGDG 仓库
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client-16
+          # 2) MinIO mc client（pin 版本 + SHA256）
+          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2024-11-17T19-35-25Z" -o /tmp/mc
+          echo "544d2d11c32cb4ed11b27338935a9cc434e15b692ff3d1529a624d341fe2ffc5  /tmp/mc" | sha256sum -c -
+          sudo install -m 0755 /tmp/mc /usr/local/bin/mc
+          # 3) age 加密工具（pin 版本 + SHA256）
+          curl -fsSL "https://github.com/FiloSottile/age/releases/download/v1.1.1/age-v1.1.1-linux-amd64.tar.gz" -o /tmp/age.tar.gz
+          echo "cf16cbb108fc56e2064b00ba2b65d9fb1b8d7002ca5e38260ee1cc34f6aaa8f9  /tmp/age.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/age.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/age/age /usr/local/bin/age
+          sudo install -m 0755 /tmp/age/age-keygen /usr/local/bin/age-keygen
       # P1-T7: 恢复测试硬门禁 -- 工具缺失即阻断
       - run: bash scripts/ci/check_recovery_tools.sh
       # H-10: 恢复测试独立执行，不加 marker 过滤
