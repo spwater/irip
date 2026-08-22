@@ -327,6 +327,13 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
       - run: python -m alembic upgrade head
+      # pg_basebackup 需要 replication 连接权限，POSTGRES_HOST_AUTH_METHOD=trust
+      # 只添加 host all 条目，需额外添加 host replication 条目
+      - name: Enable replication access for pg_basebackup
+        run: |
+          PG_CID="$(docker ps --filter 'ancestor=pgvector/pgvector:pg16' -q | head -1)"
+          docker exec "$PG_CID" bash -c "echo 'host replication all all trust' >> /var/lib/postgresql/data/pg_hba.conf"
+          docker exec "$PG_CID" su postgres -c "pg_ctl reload -D /var/lib/postgresql/data"
       # P1-T7: 安装恢复测试所需工具（pg16 client + mc + age），pin 版本+SHA256，
       # 与 deployments/compose/ops.Dockerfile 保持一致。IRIP_REQUIRE_RECOVERY_TESTS=1
       # 不变，check_recovery_tools.sh 在工具缺失时仍会 fail（不隐式 skip）。
@@ -689,7 +696,8 @@ jobs:
           # 使用官方 npm registry 进行 audit（npmmirror 不支持 audit endpoint）
           # pnpm 的 audit 读取项目 .npmrc 中的 registry，需临时改为官方源
           sed -i 's|registry=https://registry.npmmirror.com|registry=https://registry.npmjs.org/|' .npmrc
-          pnpm audit --audit-level=high
+          # --prod: 仅审计生产依赖（devDep 漏洞不影响部署产物）
+          pnpm audit --audit-level=high --prod
 
   # ---- 镜像漏洞扫描 (P1-T4: 独立硬门禁 job) ----
   container-scan:
@@ -765,12 +773,29 @@ jobs:
           --health-retries 10
         ports:
           - 6379:6379
+      minio:
+        image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+        env:
+          MINIO_ROOT_USER: irip
+          MINIO_ROOT_PASSWORD: irip_dev_password
+        ports:
+          - 59000:9000
+        command: server /data
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     env:
       # Runtime: irip_app (non-superuser, RLS-enforced) — RLS policies apply
       IRIP_DATABASE_URL: postgresql+psycopg://irip_app:test-password@localhost:5432/irip
       # Migrations: irip (superuser / migration role) — owns schema objects
       IRIP_ALEMBIC_DATABASE_URL: postgresql+psycopg://irip:test-password@localhost:5432/irip
       IRIP_REDIS_URL: redis://localhost:6379/0
+      IRIP_MINIO_ENDPOINT: localhost:59000
+      IRIP_MINIO_ACCESS_KEY: irip
+      IRIP_MINIO_SECRET_KEY: irip_dev_password
+      IRIP_MINIO_BUCKET: irip-test
       IRIP_JWT_SECRET: ci-test-secret-2026
       IRIP_BOOTSTRAP_ADMIN_PASSWORD: Admin-IRIP-2026
       IRIP_ENV: test
