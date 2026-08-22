@@ -211,11 +211,13 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9100/health || exit 1"]
-      interval: 10s
-      timeout: 5s
+      # 通过 broker ping worker 判活（celery inspect ping 需 worker 注册响应才返回 pong，
+      # 比依赖 9100 HTTP 线程更真实；worker 子进程显式 --pidfile 便于进程级判活）。
+      test: ["CMD-SHELL", "celery -A apps.worker.celery_app inspect ping --timeout=3 2>/dev/null | grep -q pong || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 40s
     restart: unless-stopped
 
   scheduler:
@@ -226,7 +228,7 @@ services:
     logging: *logging-base
     networks:
       - backend
-    command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule"]
+    command: ["celery", "-A", "apps.worker.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule", "--pidfile=/tmp/celerybeat.pid"]
     environment:
       # 运行时使用 irip_app（RLS 生效），不使用 superuser。
       # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
@@ -262,7 +264,10 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/celerybeat-schedule && find /tmp/celerybeat-schedule -mmin -2 | grep -q . || exit 1"]
+      # 旧启发式（schedule 文件 mtime）在 beat 启动 >2min 后误报 unhealthy，因
+      # persistent scheduler 仅在 schedule 变更时重写文件。改用 pidfile + kill -0
+      # 真实判活 beat 进程是否存在。
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\" 2>/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
