@@ -419,7 +419,10 @@ services:
     networks:
       - backend
     volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      # docker_sd 采集依赖 Docker socket 枚举容器 + 读取容器元数据/日志。
+      # 原 /var/lib/docker/containers 挂载仅适用于 Linux 宿主（Docker Desktop
+      # macOS 下该路径不存在，属死配置）；改用只读 socket 才是跨平台正解。
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/log:/var/log:ro
       - ./deployments/monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
     command: -config.file=/etc/promtail/config.yml
