@@ -1,0 +1,48 @@
+# IRIP Trivy 漏洞豁免清单 (.trivyignore)
+#
+# 机制：trivy image 扫描时，命中下列 CVE 不视为阻断（配合 --exit-code）。
+# 治理约定（与 scripts/security/check_vulnerability_allowlist.py 思路一致）：
+#   - 所有豁免必须带「原因 + 影响面」，定期复审（建议每季度）；
+#   - 一旦 Debian 上游 or python:3.12-slim-bookworm 基础镜像发布修复版本（FixedVersion 不再为空），
+#     应立即移除对应豁免并升级基础镜像，恢复阻断门禁。
+#
+# 根因说明（2026-08-22 扫描）：以下 CVE 全部位于 python:3.12-slim-bookworm
+# 基础镜像自带的 Debian 系统包（perl/util-linux/ncurses/curl/openssl/zlib/sqlite 等），
+# 无一来自 IRIP 的 pip/Python 依赖。且这些 CVE 的「修复版本」字段均为空 ——
+# 即 Debian bookworm 上游当前尚未 backport 修复（多为 2026 年新披露），apt-get upgrade 无法消除。
+# 换 trixie 基础镜像经实测不减反增（47 → 62），已证伪「换 Debian 发行版」路线。
+#
+# 分类：
+#   [类别1] IRIP 完全未使用的 Debian essential 系统包 —— 纯 Python 应用，不调用 perl/
+#           util-linux/ncurses/mount/login/gzip/libacl/libssh2/libldap；容器 read_only +
+#           no-new-privileges + 不挂载磁盘，相关提权/TOCTOU/整型溢出利用路径不可达。
+#   [类别2] IRIP 使用但上游未修 —— curl/openssl/zlib/sqlite 为运行时依赖，暂无官方修复版本，
+#           作为「临时豁免」跟踪，待上游修复后移除。
+
+# ============ 类别 1：IRIP 未使用的系统包（perl / util-linux / ncurses 等）============
+CVE-2026-13221   # perl-base CRITICAL - IRIP 不使用 perl
+CVE-2026-42496   # perl-base CRITICAL - IRIP 不使用 perl
+CVE-2026-57433   # perl-base CRITICAL - IRIP 不使用 perl
+CVE-2026-8376    # perl-base CRITICAL - IRIP 不使用 perl
+CVE-2026-42497   # perl-base HIGH
+CVE-2026-48962   # perl-base HIGH
+CVE-2026-57432   # perl-base HIGH
+CVE-2026-9538    # perl-base HIGH
+CVE-2026-53613   # util-linux/bsdutils/mount 系列 HIGH - IRIP 不挂载磁盘、read_only 容器
+CVE-2026-53615   # util-linux/bsdutils/mount 系列 HIGH - 同上
+CVE-2025-69720   # ncurses/libtinfo HIGH - IRIP 无交互终端
+CVE-2026-41992   # gzip HIGH - IRIP 运行时不用 gzip 命令
+CVE-2026-54369   # libacl1 HIGH - IRIP 不用 ACL
+CVE-2026-58050   # libssh2 HIGH - IRIP 不用 SSH
+CVE-2026-7598    # libssh2 HIGH - IRIP 不用 SSH
+CVE-2023-2953    # libldap HIGH - IRIP 不用 LDAP
+
+# ============ 类别 2：IRIP 使用但上游未修（临时豁免，跟踪上游修复）============
+CVE-2023-45853   # zlib1g CRITICAL - zlib zip 函数整型溢出；IRIP 用 zipfile 但该函数路径不触发，上游 will_not_fix（Debian 标记）
+CVE-2025-7458    # libsqlite3-0 CRITICAL - 上游未修
+CVE-2026-14456   # openssl/libssl3 HIGH - QUIC server 内存攻击，IRIP 不做 QUIC server，上游未修
+CVE-2026-12064   # curl/libcurl4 HIGH - 上游未修
+CVE-2026-6276    # curl/libcurl4 HIGH - 上游未修
+CVE-2026-8286    # curl/libcurl4 HIGH - 上游未修
+CVE-2026-8458    # curl/libcurl4 HIGH - 上游未修
+CVE-2026-8927    # curl/libcurl4 HIGH - 上游未修
