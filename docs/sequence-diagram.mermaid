@@ -1,0 +1,24 @@
+sequenceDiagram
+    participant M as apps/api/main.py
+    participant Y as yaml_config.py
+    participant FS as Filesystem
+    participant L as Logger
+
+    M->>M: lifespan() 开始
+    M->>Y: validate_ai_config()
+    Y->>FS: 读取 config/models.yaml
+    FS-->>Y: YAML 内容
+    Y->>FS: 读取 config/ai-usage.yaml
+    FS-->>Y: YAML 内容
+    Y->>Y: 校验 providers 非空 / name 唯一 / URL 合法
+    Y->>Y: 校验 5 场景齐全 / model 字段存在
+    Y->>Y: 交叉校验：每个 scenario.model 在 providers 中可解析
+    alt 校验失败
+        Y->>L: logger.error("配置校验失败: {detail}")
+        Y->>M: sys.exit(1)
+        M-->>M: 进程退出
+    else 校验通过
+        Y->>Y: load_config() 构建内存缓存
+        Y-->>M: 返回 None
+        M->>M: 继续初始化 DB / S3 / Redis / 路由
+    end

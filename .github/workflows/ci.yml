@@ -624,6 +624,10 @@ jobs:
         with:
           node-version: "22"
       - run: pip install -e ".[dev]"
+      # AI 配置：从 .example 模板创建实际配置文件（CI 环境没有 gitignored 的实际文件）
+      - run: |
+          cp config/models.yaml.example config/models.yaml
+          cp config/ai-usage.yaml.example config/ai-usage.yaml
       - run: python -m alembic upgrade head
       # 种子数据：创建哨兵部门 + 管理员用户（幂等，重复运行不报错）
       - run: "python -m deployments.compose.bootstrap || :"
@@ -811,6 +815,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
+      # AI 配置：从 .example 模板创建实际配置文件（CI 环境没有 gitignored 的实际文件）
+      - run: |
+          cp config/models.yaml.example config/models.yaml
+          cp config/ai-usage.yaml.example config/ai-usage.yaml
       # Bootstrap irip_app role (NOSUPERUSER NOBYPASSRLS) then run migrations as irip
       - name: Bootstrap limited database role & migrate
         run: bash scripts/ci/bootstrap_limited_database_role.sh "postgresql://irip:test-password@localhost:5432/irip" "test-password"

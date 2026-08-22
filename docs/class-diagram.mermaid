@@ -1,0 +1,74 @@
+classDiagram
+    class ScenarioConfig {
+        +str provider_name
+        +str base_url
+        +str api_key
+        +str model
+        +bool thinking_enabled
+    }
+
+    class ProviderConfig {
+        +str name
+        +str base_url
+        +str api_key
+        +list~str~ models
+    }
+
+    class ModelsYAML {
+        +list~ProviderConfig~ providers
+    }
+
+    class ScenarioYAML {
+        +str model
+        +bool thinking_enabled
+    }
+
+    class AIUsageYAML {
+        +dict~str, ScenarioYAML~ scenarios
+    }
+
+    class YAMLConfig {
+        -ModelsYAML _models_cache
+        -AIUsageYAML _usage_cache
+        -dict~str, ScenarioConfig~ _scenario_cache
+        +load_config() void
+        +validate_ai_config() void
+        +get_scenario_config(scenario_name) ScenarioConfig
+        +async_provider_wrapper(scenario_name) Callable
+        +list_available_models() list~str~
+        +find_provider_for_model(model_ref) ProviderConfig
+    }
+
+    class OpenAICompatibleProvider {
+        +str _api_key
+        +str _base_url
+        +str _model
+        +bool _thinking_enabled
+        +__init__(api_key, base_url, model, thinking_enabled)
+        +complete(request) AIResponse
+        +stream_complete(request) AsyncIterator
+    }
+
+    class ComponentContext {
+        +Any ai_config_provider
+    }
+
+    class MessagePersistence {
+        +Any _provider
+        +auto_generate_title(conversation_id, question, answer) void
+    }
+
+    class ConclusionBarService {
+        -async_sessionmaker _factory
+        +_summarize_title(assembled) str
+    }
+
+    YAMLConfig --> ScenarioConfig : creates
+    YAMLConfig --> ProviderConfig : manages
+    YAMLConfig --> ModelsYAML : parses
+    YAMLConfig --> AIUsageYAML : parses
+    AIUsageYAML --> ScenarioYAML : contains
+    ScenarioConfig --> OpenAICompatibleProvider : configures
+    ComponentContext --> YAMLConfig : via async_provider_wrapper
+    MessagePersistence --> YAMLConfig : get_scenario_config
+    ConclusionBarService --> YAMLConfig : get_scenario_config

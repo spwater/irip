@@ -61,10 +61,10 @@ REQUIRED_SCENARIOS: frozenset[str] = frozenset(
 )
 
 #: 模块级缓存：provider 列表（models.yaml 解析结果）。
-_PROVIDERS_CACHE: list[ProviderConfig] | None = None  # type: ignore[name-defined]
+_PROVIDERS_CACHE: list[ProviderConfig] | None = None
 
 #: 模块级缓存：场景配置字典（ai-usage.yaml + models.yaml 交叉解析结果）。
-_SCENARIO_CACHE: dict[str, ScenarioConfig] | None = None  # type: ignore[name-defined]
+_SCENARIO_CACHE: dict[str, ScenarioConfig] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def _read_yaml(path: Path) -> dict[str, Any]:
         data = yaml.safe_load(f)
     if data is None:
         data = {}
-    return data  # type: ignore[return-value]
+    return data  # type: ignore[no-any-return]
 
 
 def _parse_providers(models_data: dict[str, Any]) -> list[ProviderConfig]:

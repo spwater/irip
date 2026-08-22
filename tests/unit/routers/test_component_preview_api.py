@@ -82,7 +82,6 @@ class TestPromptRecommend:
         tmp_file = tmp_path / "test.csv"
         tmp_file.write_text("col1,col2\n1,2")
 
-
         from packages.ai.yaml_config import ScenarioConfig
 
         scenario_config = ScenarioConfig(
