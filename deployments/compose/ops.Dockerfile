@@ -46,12 +46,13 @@ RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debia
     rm -rf /var/lib/apt/lists/*
 
 # PostgreSQL 16 client（pg_dump / pg_restore / pg_basebackup，与 pgvector:pg16 服务端版本对齐）
-# 使用 PostgreSQL 官方 APT 仓库
+# 使用 PostgreSQL 官方 APT 仓库（signed-by 规范写法，与 CI .github/workflows/ci.yml 对齐）
 RUN . /etc/os-release && \
-    echo "deb https://apt.postgresql.org/pub/repos/apt/ ${VERSION_CODENAME}-pgdg main" \
-      > /etc/apt/sources.list.d/pgdg.list && \
+    install -d /usr/share/postgresql-common/pgdg && \
     curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-      | gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg && \
+      | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg && \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
       postgresql-client-16 && \

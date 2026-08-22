@@ -95,7 +95,7 @@ wait_for_postgres() {
 #   → verify（PG 已启动，冒烟查询有效）
 #   → start 应用
 echo "--- Phase: validate (PG 仍运行，manifest 校验不碰 data) ---"
-docker compose $COMPOSE_FLAGS run --rm restore \
+docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
     --phase validate --backup-dir "$BACKUP_DIR"
 
 echo ""
@@ -104,7 +104,7 @@ docker compose $COMPOSE_FLAGS stop api worker scheduler postgres
 
 echo ""
 echo "--- Phase: database (PG 已停，PITR 清空/恢复 pgdata 安全) ---"
-docker compose $COMPOSE_FLAGS run --rm restore \
+docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
     --phase database --backup-dir "$BACKUP_DIR"
 
 echo ""
@@ -114,12 +114,12 @@ wait_for_postgres
 
 echo ""
 echo "--- Phase: objects (MinIO 恢复，无 PG 依赖) ---"
-docker compose $COMPOSE_FLAGS run --rm restore \
+docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
     --phase objects --backup-dir "$BACKUP_DIR"
 
 echo ""
 echo "--- Phase: verify (PG 已启动，冒烟查询 + 引用完整性) ---"
-docker compose $COMPOSE_FLAGS run --rm restore \
+docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
     --phase verify --backup-dir "$BACKUP_DIR"
 
 echo ""
