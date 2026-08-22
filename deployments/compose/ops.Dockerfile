@@ -42,7 +42,7 @@ RUN sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list.d/debi
     sed -i 's|deb.debian.org|mirrors.ustc.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-      libpq5 curl ca-certificates gnupg && \
+      libpq5 curl ca-certificates gnupg age && \
     rm -rf /var/lib/apt/lists/*
 
 # PostgreSQL 16 client（pg_dump / pg_restore / pg_basebackup，与 pgvector:pg16 服务端版本对齐）
@@ -58,26 +58,16 @@ RUN . /etc/os-release && \
       postgresql-client-16 && \
     rm -rf /var/lib/apt/lists/*
 
-# MinIO mc 客户端（pin 版本 + SHA-256 校验）
-# mc.RELEASE.2024-11-17T19-35-25Z
-ARG MC_VERSION=RELEASE.2024-11-17T19-35-25Z
-ARG MC_SHA256=544d2d11c32cb4ed11b27338935a9cc434e15b692ff3d1529a624d341fe2ffc5
-RUN curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.${MC_VERSION}" \
-      -o /usr/local/bin/mc && \
-    echo "${MC_SHA256}  /usr/local/bin/mc" | sha256sum -c - && \
-    chmod +x /usr/local/bin/mc
+# MinIO mc 客户端 —— 从官方 minio/mc 镜像 COPY 二进制，绕过 dl.min.io 直接下载
+# （本地网络到 dl.min.io/GitHub 不可达）。用 latest（本地已缓存 RELEASE.2025-08-13）：
+# 具体 tag 在 DaoCloud 无缓存、需回源 Docker Hub 会卡死。版本 pin 在此让步给本地
+# 可达性；在 CI/有稳定外网的环境可改回 pin 具体 tag（如 RELEASE.2024-11-17T19-35-25Z）。
+COPY --from=docker.m.daocloud.io/minio/mc /usr/bin/mc /usr/local/bin/mc
+RUN chmod 0755 /usr/local/bin/mc
 
-# age 加密工具（pin 版本 + SHA-256 校验）
-# age v1.1.1
-ARG AGE_VERSION=1.1.1
-ARG AGE_SHA256=cf16cbb108fc56e2064b00ba2b65d9fb1b8d7002ca5e38260ee1cc34f6aaa8f9
-RUN curl -fsSL "https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz" \
-      -o /tmp/age.tar.gz && \
-    echo "${AGE_SHA256}  /tmp/age.tar.gz" | sha256sum -c - && \
-    tar -xzf /tmp/age.tar.gz -C /tmp && \
-    install -m 0755 /tmp/age/age /usr/local/bin/age && \
-    install -m 0755 /tmp/age/age-keygen /usr/local/bin/age-keygen && \
-    rm -rf /tmp/age /tmp/age.tar.gz
+# age 加密工具 —— 已并入上方 APT 安装（Debian bookworm 官方仓库 `age` 包，
+# 版本 1.1.1，走科大镜像源，绕过 GitHub release 下载）。提供
+# /usr/bin/age + /usr/bin/age-keygen。
 
 WORKDIR /app
 
