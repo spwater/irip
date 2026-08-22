@@ -61,6 +61,7 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 COPY migrations/ ./migrations/
 COPY schemas/ ./schemas/
+COPY config/ ./config/
 
 # 复制部署脚本（bootstrap 入口），放在拷贝依赖之后以利用层缓存
 COPY deployments/ ./deployments/

@@ -112,6 +112,10 @@ services:
       # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
       # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
       IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
+      # 导出 IRIP_REDIS_PASSWORD，供 assert_production_keys 校验（仅检查非空）。
+      # 之前仅拼进 IRIP_REDIS_URL，production 下启动校验必报 "Redis 密码不能为空"。
+      # 注：完整 file-backed 化（IRIP_REDIS_PASSWORD_FILE）属「密钥 file-backed 全覆盖」专项。
+      IRIP_REDIS_PASSWORD: ${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
@@ -209,6 +213,10 @@ services:
       # 阶段2 A1：完整连接串（含 irip_app 凭据）改走 file-backed secret，
       # 不再内联密码（见 compose.production.yaml 的 secret 挂载）。
       IRIP_DATABASE_URL_FILE: /run/secrets/database_app_url
+      # 导出 IRIP_REDIS_PASSWORD，供 assert_production_keys 校验（仅检查非空）。
+      # 之前仅拼进 IRIP_REDIS_URL，production 下启动校验必报 "Redis 密码不能为空"。
+      # 注：完整 file-backed 化（IRIP_REDIS_PASSWORD_FILE）属「密钥 file-backed 全覆盖」专项。
+      IRIP_REDIS_PASSWORD: ${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}
       IRIP_REDIS_URL: redis://:${IRIP_REDIS_PASSWORD:?IRIP_REDIS_PASSWORD is required}@redis:6379/0
       IRIP_CELERY_BROKER_URL: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/0
       IRIP_CELERY_RESULT_BACKEND: redis://:${IRIP_REDIS_PASSWORD}@redis:6379/1
