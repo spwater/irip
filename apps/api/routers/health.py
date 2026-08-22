@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from apps.api.schemas.common import StatusResponse
 from packages.common.redis_url import get_redis_url as _read_redis_url
 from packages.common.s3_repository import S3Repository
 
@@ -90,7 +91,7 @@ S3RepoDep = Annotated[S3Repository, Depends(get_s3_repo)]
 # ---- 端点 ----
 
 
-@health_router.get("/live")
+@health_router.get("/live", response_model=StatusResponse)
 async def liveness() -> dict[str, str]:
     """存活探针：始终返回 200，不检查任何依赖。
 

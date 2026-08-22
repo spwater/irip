@@ -192,6 +192,12 @@ class ProviderStatusResponse(BaseModel):
     candidate_tools: list[ToolInfoResponse]
 
 
+class CancelRequestResponse(BaseModel):
+    """取消 AI 请求响应。"""
+
+    cancelled: str
+
+
 # ---- 端点 ----
 
 
@@ -385,6 +391,7 @@ async def toggle_archive(
 
 @assistant_router.post(
     "/conversations/{conversation_id}/cancel",
+    response_model=CancelRequestResponse,
     status_code=200,
 )
 async def cancel_request(

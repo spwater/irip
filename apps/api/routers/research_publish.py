@@ -49,6 +49,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.schemas.common import StatusResponse
 from packages.research.products.catalog import ResearchCatalogImpl
 from packages.research.publication import PublicationService
 from packages.research.publication.search import ResultSearchService
@@ -173,6 +174,168 @@ class NewWorkspaceFromPublicationRequest(BaseModel):
     question_text: str = Field(..., min_length=1, max_length=4096)
 
 
+# ---- 响应模型 ----
+
+
+class VersionRefResponse(BaseModel):
+    """版本引用响应（对应 _version_ref_to_dict）。"""
+
+    result_id: str
+    version_number: int
+    title: str
+    status: str
+    published_at: str | None = None
+
+
+class ResultRefResponse(BaseModel):
+    """成果包引用响应（对应 _result_ref_to_dict）。"""
+
+    result_id: str
+    name: str
+    status: str
+    current_version: int
+    current_acl_type: str
+    workspace_id: str = ""
+
+
+class WorkspaceResultItemResponse(BaseModel):
+    """工作空间成果包列表项。"""
+
+    result_id: str
+    name: str
+    status: str
+    current_version: int
+    current_acl_type: str
+    created_at: str | None = None
+
+
+class VersionDetailResponse(BaseModel):
+    """版本详情响应（对应 _version_detail_to_dict）。"""
+
+    result_id: str
+    version_number: int
+    title: str
+    summary: Any = None
+    tags: list[str] = Field(default_factory=list)
+    release_notes: str = ""
+    dataset_version_refs: Any = None
+    view_version_refs: Any = None
+    insight_version_refs: Any = None
+    evidence_snapshot_ids: list[Any] = Field(default_factory=list)
+    analysis_run_ids: list[Any] = Field(default_factory=list)
+    source_run_statuses: Any = None
+    publisher: str = ""
+    published_at: str | None = None
+    content_hash: str = ""
+    published_permission_envelope: Any = None
+    status: str = ""
+
+
+class AclRevisionResponse(BaseModel):
+    """ACL 修订响应（对应 _acl_revision_to_dict）。"""
+
+    revision_number: int
+    acl_type: str
+    explicit_user_ids: list[Any] = Field(default_factory=list)
+    previous_acl_type: str | None = None
+    previous_explicit_user_ids: list[Any] | None = None
+    changed_by: str = ""
+    changed_at: str | None = None
+    change_reason: str | None = None
+    is_declassify: bool = False
+    declassify_reason: str | None = None
+
+
+class AclListResponse(BaseModel):
+    """ACL 列表响应。"""
+
+    revisions: list[AclRevisionResponse]
+
+
+class ResultDetailResponse(BaseModel):
+    """成果包详情响应（含版本和 ACL 历史）。"""
+
+    result: ResultRefResponse
+    current_version: VersionDetailResponse | None = None
+    version_history: list[VersionRefResponse] = Field(default_factory=list)
+    acl_revisions: list[AclRevisionResponse] = Field(default_factory=list)
+    is_favorited: bool = False
+
+
+class PublicationSearchItemResponse(BaseModel):
+    """已发布成果包搜索结果项（对应 _search_item_to_dict）。"""
+
+    result_id: str
+    name: str
+    title: str = ""
+    summary: str = ""
+    tags: list[str] = Field(default_factory=list)
+    publisher: str = ""
+    published_at: str | None = None
+    current_version: int = 0
+    current_acl_type: str = ""
+    dataset_count: int = 0
+    view_count: int = 0
+    insight_count: int = 0
+    workspace_id: str = ""
+
+
+class PublicationSearchResponse(BaseModel):
+    """已发布成果包搜索响应。"""
+
+    items: list[PublicationSearchItemResponse]
+    total: int = 0
+    page: int = 1
+    page_size: int = 20
+
+
+class PublicationProvenanceResponse(BaseModel):
+    """成果包来源信息响应。"""
+
+    result_id: str
+    name: str
+    current_version: int
+    evidence_snapshot_ids: list[str] = Field(default_factory=list)
+    evidence_snapshot_labels: list[dict[str, Any]] = Field(default_factory=list)
+    analysis_run_ids: list[str] = Field(default_factory=list)
+    analysis_run_labels: list[dict[str, Any]] = Field(default_factory=list)
+    source_run_statuses: Any = None
+    publisher: Any = None
+    published_at: str | None = None
+
+
+class AddEvidenceResponse(BaseModel):
+    """从已发布成果添加证据响应。"""
+
+    ref_id: str
+    source_namespace: str = ""
+    source_id: str = ""
+    source_version: Any = None
+    source_name: str = ""
+    status: str = ""
+
+
+class NewWorkspaceResponse(BaseModel):
+    """基于已发布成果新建 Workspace 响应。"""
+
+    workspace_id: str
+    name: str
+    status: str
+
+
+class FavoritesListResponse(BaseModel):
+    """收藏列表响应。"""
+
+    items: list[PublicationSearchItemResponse]
+    total: int = 0
+
+
+class CatalogSearchPublishedResponse(BaseModel):
+    """已发布 DerivedDataset 搜索响应。"""
+
+    items: list[Any] = Field(default_factory=list)
+
+
 # ---- 辅助函数 ----
 
 
@@ -257,7 +420,10 @@ def _search_item_to_dict(item: Any) -> dict[str, Any]:
 # ============================================================
 
 
-@research_publish_router.post("/workspaces/{workspace_id}/results")
+@research_publish_router.post(
+    "/workspaces/{workspace_id}/results",
+    response_model=VersionRefResponse,
+)
 async def publish_result(
     workspace_id: UUID,
     request: PublishResultRequest,
@@ -284,7 +450,10 @@ async def publish_result(
     return _version_ref_to_dict(ref)
 
 
-@research_publish_router.get("/workspaces/{workspace_id}/results")
+@research_publish_router.get(
+    "/workspaces/{workspace_id}/results",
+    response_model=list[WorkspaceResultItemResponse],
+)
 async def list_workspace_results(
     workspace_id: UUID,
     service: PublicationServiceDep,
@@ -309,7 +478,10 @@ async def list_workspace_results(
         ]
 
 
-@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}")
+@research_publish_router.get(
+    "/workspaces/{workspace_id}/results/{result_id}",
+    response_model=ResultDetailResponse,
+)
 async def get_workspace_result(
     workspace_id: UUID,
     result_id: UUID,
@@ -329,7 +501,10 @@ async def get_workspace_result(
     }
 
 
-@research_publish_router.patch("/workspaces/{workspace_id}/results/{result_id}")
+@research_publish_router.patch(
+    "/workspaces/{workspace_id}/results/{result_id}",
+    response_model=ResultRefResponse,
+)
 async def update_result_metadata(
     workspace_id: UUID,
     result_id: UUID,
@@ -342,7 +517,10 @@ async def update_result_metadata(
     return _result_ref_to_dict(ref)
 
 
-@research_publish_router.post("/workspaces/{workspace_id}/results/{result_id}/versions")
+@research_publish_router.post(
+    "/workspaces/{workspace_id}/results/{result_id}/versions",
+    response_model=VersionRefResponse,
+)
 async def publish_new_version(
     workspace_id: UUID,
     result_id: UUID,
@@ -370,7 +548,10 @@ async def publish_new_version(
     return _version_ref_to_dict(ref)
 
 
-@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}/versions")
+@research_publish_router.get(
+    "/workspaces/{workspace_id}/results/{result_id}/versions",
+    response_model=list[VersionRefResponse],
+)
 async def list_versions(
     workspace_id: UUID,
     result_id: UUID,
@@ -383,7 +564,8 @@ async def list_versions(
 
 
 @research_publish_router.get(
-    "/workspaces/{workspace_id}/results/{result_id}/versions/{version_number}"
+    "/workspaces/{workspace_id}/results/{result_id}/versions/{version_number}",
+    response_model=VersionDetailResponse,
 )
 async def get_version_detail(
     workspace_id: UUID,
@@ -403,7 +585,8 @@ async def get_version_detail(
 
 
 @research_publish_router.post(
-    "/workspaces/{workspace_id}/results/{result_id}/versions/{version_number}/withdraw"
+    "/workspaces/{workspace_id}/results/{result_id}/versions/{version_number}/withdraw",
+    response_model=StatusResponse,
 )
 async def withdraw_version(
     workspace_id: UUID,
@@ -418,7 +601,10 @@ async def withdraw_version(
     return {"status": "withdrawn"}
 
 
-@research_publish_router.patch("/publications/{result_id}/withdraw")
+@research_publish_router.patch(
+    "/publications/{result_id}/withdraw",
+    response_model=StatusResponse,
+)
 async def withdraw_publication(
     result_id: UUID,
     request: WithdrawVersionRequest,
@@ -435,7 +621,10 @@ async def withdraw_publication(
 # ============================================================
 
 
-@research_publish_router.get("/workspaces/{workspace_id}/results/{result_id}/acl")
+@research_publish_router.get(
+    "/workspaces/{workspace_id}/results/{result_id}/acl",
+    response_model=AclListResponse,
+)
 async def get_acl(
     workspace_id: UUID,
     result_id: UUID,
@@ -449,7 +638,10 @@ async def get_acl(
     }
 
 
-@research_publish_router.put("/workspaces/{workspace_id}/results/{result_id}/acl")
+@research_publish_router.put(
+    "/workspaces/{workspace_id}/results/{result_id}/acl",
+    response_model=AclRevisionResponse,
+)
 async def update_acl(
     workspace_id: UUID,
     result_id: UUID,
@@ -469,7 +661,10 @@ async def update_acl(
     return _acl_revision_to_dict(ref)
 
 
-@research_publish_router.post("/workspaces/{workspace_id}/results/{result_id}/declassify")
+@research_publish_router.post(
+    "/workspaces/{workspace_id}/results/{result_id}/declassify",
+    response_model=AclRevisionResponse,
+)
 async def declassify(
     workspace_id: UUID,
     result_id: UUID,
@@ -494,7 +689,10 @@ async def declassify(
 # ============================================================
 
 
-@research_publish_router.get("/publications")
+@research_publish_router.get(
+    "/publications",
+    response_model=PublicationSearchResponse,
+)
 async def search_publications(
     service: SearchServiceDep,
     user: ResearchUserDep,
@@ -539,7 +737,10 @@ async def search_publications(
     }
 
 
-@research_publish_router.get("/publications/{result_id}")
+@research_publish_router.get(
+    "/publications/{result_id}",
+    response_model=ResultDetailResponse,
+)
 async def get_publication_detail(
     result_id: UUID,
     service: PublicationServiceDep,
@@ -558,7 +759,10 @@ async def get_publication_detail(
     }
 
 
-@research_publish_router.get("/publications/{result_id}/versions/{version_number}")
+@research_publish_router.get(
+    "/publications/{result_id}/versions/{version_number}",
+    response_model=VersionDetailResponse,
+)
 async def get_publication_version(
     result_id: UUID,
     version_number: int,
@@ -582,7 +786,10 @@ async def get_publication_item(
     return await service.get_result_internal_object(result_id, item_type, item_id)
 
 
-@research_publish_router.get("/publications/{result_id}/provenance")
+@research_publish_router.get(
+    "/publications/{result_id}/provenance",
+    response_model=PublicationProvenanceResponse,
+)
 async def get_publication_provenance(
     result_id: UUID,
     service: PublicationServiceDep,
@@ -648,7 +855,10 @@ async def get_publication_provenance(
 # ============================================================
 
 
-@research_publish_router.post("/workspaces/{workspace_id}/evidence/from-publication")
+@research_publish_router.post(
+    "/workspaces/{workspace_id}/evidence/from-publication",
+    response_model=AddEvidenceResponse,
+)
 async def add_evidence_from_publication(
     workspace_id: UUID,
     request: AddFromPublicationRequest,
@@ -672,7 +882,10 @@ async def add_evidence_from_publication(
     }
 
 
-@research_publish_router.post("/workspaces/from-publication/{result_id}")
+@research_publish_router.post(
+    "/workspaces/from-publication/{result_id}",
+    response_model=NewWorkspaceResponse,
+)
 async def new_workspace_from_publication(
     result_id: UUID,
     request: NewWorkspaceFromPublicationRequest,
@@ -697,7 +910,10 @@ async def new_workspace_from_publication(
 # ============================================================
 
 
-@research_publish_router.post("/publications/{result_id}/favorite")
+@research_publish_router.post(
+    "/publications/{result_id}/favorite",
+    response_model=StatusResponse,
+)
 async def add_favorite(
     result_id: UUID,
     service: PublicationServiceDep,
@@ -708,7 +924,10 @@ async def add_favorite(
     return {"status": "favorited"}
 
 
-@research_publish_router.delete("/publications/{result_id}/favorite")
+@research_publish_router.delete(
+    "/publications/{result_id}/favorite",
+    response_model=StatusResponse,
+)
 async def remove_favorite(
     result_id: UUID,
     service: PublicationServiceDep,
@@ -719,7 +938,10 @@ async def remove_favorite(
     return {"status": "unfavorited"}
 
 
-@research_publish_router.get("/publications/favorites")
+@research_publish_router.get(
+    "/publications/favorites",
+    response_model=FavoritesListResponse,
+)
 async def list_favorites(
     service: SearchServiceDep,
     user: ResearchUserDep,
@@ -741,7 +963,10 @@ async def list_favorites(
 # ============================================================
 
 
-@research_publish_router.get("/catalog/search-published")
+@research_publish_router.get(
+    "/catalog/search-published",
+    response_model=CatalogSearchPublishedResponse,
+)
 async def search_published_catalog(
     catalog: PublishCatalogDep,
     user: ResearchUserDep,

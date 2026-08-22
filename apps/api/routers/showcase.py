@@ -60,6 +60,12 @@ class ReorderShowcaseRequest(BaseModel):
     item_ids: list[str] = Field(..., min_length=1, description="按新顺序排列的卡片 ID 列表")
 
 
+class ReorderShowcaseResponse(BaseModel):
+    """重排序响应。"""
+
+    reordered: str
+
+
 class ShowcaseItemResponse(BaseModel):
     """橱窗卡片响应。"""
 
@@ -247,6 +253,7 @@ async def delete_showcase_item(
 
 @showcase_router.patch(
     "/conversations/{conversation_id}/showcase/reorder",
+    response_model=ReorderShowcaseResponse,
     status_code=200,
 )
 async def reorder_showcase_items(

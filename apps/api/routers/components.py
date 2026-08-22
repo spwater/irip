@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
+from apps.api.schemas.common import StatusResponse
 from packages.common.errors import AppError
 from packages.components.manifest import ManifestValidator
 from packages.components.registry import ComponentRegistryService
@@ -430,7 +431,10 @@ async def list_component_versions(
 # ---- 端点：归档 / 恢复 / 删除 ----
 
 
-@components_router.patch("/{component_id}/archive")
+@components_router.patch(
+    "/{component_id}/archive",
+    response_model=StatusResponse,
+)
 async def archive_component(
     component_id: UUID,
     current_user: ManageUserDep,
@@ -451,7 +455,10 @@ async def archive_component(
     return {"status": "deprecated"}
 
 
-@components_router.patch("/{component_id}/restore")
+@components_router.patch(
+    "/{component_id}/restore",
+    response_model=StatusResponse,
+)
 async def restore_component(
     component_id: UUID,
     current_user: ManageUserDep,
@@ -472,7 +479,10 @@ async def restore_component(
     return {"status": "published"}
 
 
-@components_router.post("/{component_id}/activate")
+@components_router.post(
+    "/{component_id}/activate",
+    response_model=StatusResponse,
+)
 async def activate_version(
     component_id: UUID,
     current_user: ManageUserDep,
@@ -492,7 +502,10 @@ async def activate_version(
     return {"status": "activated"}
 
 
-@components_router.patch("/{component_id}")
+@components_router.patch(
+    "/{component_id}",
+    response_model=StatusResponse,
+)
 async def update_component(
     component_id: UUID,
     body: UpdateComponentRequest,
@@ -529,7 +542,10 @@ async def update_component(
     return {"status": "updated"}
 
 
-@components_router.delete("/{component_id}")
+@components_router.delete(
+    "/{component_id}",
+    response_model=StatusResponse,
+)
 async def delete_component(
     component_id: UUID,
     current_user: ManageUserDep,

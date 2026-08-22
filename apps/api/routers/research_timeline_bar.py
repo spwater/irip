@@ -19,6 +19,7 @@ from apps.api.routers.research_timeline import (
     research_timeline_router,
 )
 from apps.api.routers.timeline_dependencies import ConclusionBarServiceDep
+from apps.api.schemas.common import OkResponse
 from packages.research.timeline.contracts import (
     AssembleFinalConclusionCommand,
     PushBarItemCommand,
@@ -283,6 +284,7 @@ async def get_result_detail(
 
 @research_timeline_router.patch(
     "/workspaces/{workspace_id}/conclusion-results/{result_id}/withdraw",
+    response_model=OkResponse,
 )
 async def withdraw_result(
     workspace_id: UUID,
@@ -297,6 +299,7 @@ async def withdraw_result(
 
 @research_timeline_router.patch(
     "/workspaces/{workspace_id}/conclusion-results/{result_id}/publish",
+    response_model=OkResponse,
 )
 async def republish_result(
     workspace_id: UUID,
@@ -311,6 +314,7 @@ async def republish_result(
 
 @research_timeline_router.delete(
     "/workspaces/{workspace_id}/conclusion-results/{result_id}",
+    response_model=OkResponse,
 )
 async def delete_result(
     workspace_id: UUID,

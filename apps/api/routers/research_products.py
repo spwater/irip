@@ -55,16 +55,31 @@ from fastapi.responses import Response
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
 from apps.api.schemas.research_products import (
+    CandidateDetailResponse,
+    CandidateListResponse,
     CreateDatasetRequest,
     CreateViewRequest,
+    DatasetDetailResponse,
+    DatasetListResponse,
     DatasetResponse,
+    DatasetVersionDetailResponse,
+    DatasetVersionListResponse,
+    InsightCandidateListResponse,
+    InsightDetailResponse,
+    InsightListResponse,
     InsightResponse,
+    InsightVersionListResponse,
     ModifyCandidateRequest,
+    ProductListResponse,
     RejectCandidateRequest,
     UpdateDatasetMetadataRequest,
     UpdateInsightMetadataRequest,
     UpdateViewMetadataRequest,
+    ViewDetailResponse,
+    ViewListResponse,
     ViewResponse,
+    ViewVersionDetailResponse,
+    ViewVersionListResponse,
 )
 from packages.research.products import ProductService
 from packages.research.products.candidates import CandidateService
@@ -118,6 +133,7 @@ research_products_router = APIRouter(prefix="/api/v1/research", tags=["research-
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/runs/{run_id}/candidates",
+    response_model=CandidateListResponse,
 )
 async def list_candidates(
     workspace_id: UUID,
@@ -148,6 +164,7 @@ async def list_candidates(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/runs/{run_id}/candidates/{candidate_id}",
+    response_model=CandidateDetailResponse,
 )
 async def get_candidate(
     workspace_id: UUID,
@@ -201,6 +218,7 @@ async def create_dataset(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/derived-datasets",
+    response_model=DatasetListResponse,
 )
 async def list_datasets(
     workspace_id: UUID,
@@ -225,6 +243,7 @@ async def list_datasets(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/derived-datasets/{dataset_id}",
+    response_model=DatasetDetailResponse,
 )
 async def get_dataset(
     workspace_id: UUID,
@@ -277,6 +296,7 @@ async def update_dataset(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/derived-datasets/{dataset_id}/versions",
+    response_model=DatasetVersionListResponse,
 )
 async def list_dataset_versions(
     workspace_id: UUID,
@@ -302,6 +322,7 @@ async def list_dataset_versions(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/derived-datasets/{dataset_id}/versions/{version_number}",
+    response_model=DatasetVersionDetailResponse,
 )
 async def get_dataset_version(
     workspace_id: UUID,
@@ -363,6 +384,7 @@ async def create_view(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/views",
+    response_model=ViewListResponse,
 )
 async def list_views(
     workspace_id: UUID,
@@ -388,6 +410,7 @@ async def list_views(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/views/{view_id}",
+    response_model=ViewDetailResponse,
 )
 async def get_view(
     workspace_id: UUID,
@@ -440,6 +463,7 @@ async def update_view(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/views/{view_id}/versions",
+    response_model=ViewVersionListResponse,
 )
 async def list_view_versions(
     workspace_id: UUID,
@@ -466,6 +490,7 @@ async def list_view_versions(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/views/{view_id}/versions/{version_number}",
+    response_model=ViewVersionDetailResponse,
 )
 async def get_view_version(
     workspace_id: UUID,
@@ -529,6 +554,7 @@ async def download_view_image(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/insights",
+    response_model=InsightListResponse,
 )
 async def list_insights(
     workspace_id: UUID,
@@ -552,6 +578,7 @@ async def list_insights(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/insights/{insight_id}",
+    response_model=InsightDetailResponse,
 )
 async def get_insight(
     workspace_id: UUID,
@@ -647,6 +674,7 @@ async def delete_view(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/insights/{insight_id}/versions",
+    response_model=InsightVersionListResponse,
 )
 async def list_insight_versions(
     workspace_id: UUID,
@@ -677,6 +705,7 @@ async def list_insight_versions(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/runs/{run_id}/insight-candidates",
+    response_model=InsightCandidateListResponse,
 )
 async def list_insight_candidates(
     workspace_id: UUID,
@@ -704,6 +733,7 @@ async def list_insight_candidates(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/runs/{run_id}/insight-candidates/{candidate_id}",
+    response_model=CandidateDetailResponse,
 )
 async def get_insight_candidate(
     workspace_id: UUID,
@@ -839,6 +869,7 @@ async def reject_insight_candidate(
 
 @research_products_router.get(
     "/workspaces/{workspace_id}/products",
+    response_model=ProductListResponse,
 )
 async def list_products(
     workspace_id: UUID,

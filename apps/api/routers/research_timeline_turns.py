@@ -25,10 +25,36 @@ from apps.api.routers.timeline_dependencies import (
     TimelineQueryDep,
     TurnServiceDep,
 )
+from apps.api.schemas.common import OkResponse
 
 logger = logging.getLogger(__name__)
 
 ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:use"))]
+
+
+# ---- Response models ----
+
+
+class StartPlanningResponse(BaseModel):
+    """开始计划生成的响应。"""
+
+    turn_id: str
+    status: str
+
+
+class ConfirmPlanResponse(BaseModel):
+    """确认计划响应。"""
+
+    plan_id: str
+    turn_id: str
+    version_number: int
+    status: str
+
+
+class ExtractTextResponse(BaseModel):
+    """提取文本响应。"""
+
+    text: str
 
 
 # ---- Turn detail + plan + conclusion + analysis endpoints ----
@@ -36,6 +62,7 @@ ResearchUserDep = Annotated[CurrentUser, Depends(require_permission("research:us
 
 @research_timeline_router.delete(
     "/workspaces/{workspace_id}/turns/{turn_id}",
+    response_model=OkResponse,
 )
 async def delete_turn(
     workspace_id: UUID,
@@ -63,6 +90,7 @@ async def get_turn_detail(
 
 @research_timeline_router.post(
     "/workspaces/{workspace_id}/turns/{turn_id}/plan",
+    response_model=StartPlanningResponse,
 )
 async def start_planning(
     workspace_id: UUID,
@@ -83,6 +111,7 @@ class ConfirmPlanRequest(BaseModel):
 
 @research_timeline_router.post(
     "/workspaces/{workspace_id}/turns/{turn_id}/confirm-plan",
+    response_model=ConfirmPlanResponse,
 )
 async def confirm_plan(
     workspace_id: UUID,
@@ -101,7 +130,10 @@ async def confirm_plan(
     }
 
 
-@research_timeline_router.post("/extract-text")
+@research_timeline_router.post(
+    "/extract-text",
+    response_model=ExtractTextResponse,
+)
 async def extract_text_from_file(
     current_user: ResearchUserDep,
     file: Annotated[bytes, fastapi.Form()],
