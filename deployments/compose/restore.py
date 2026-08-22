@@ -7,8 +7,11 @@
 脚本（``scripts/ops/restore.sh``）负责，恢复容器仅执行纯数据操作。
 
 阶段划分（``--phase``）：
-  - ``validate``: 读取并校验 manifest、版本、目标环境完整性；
-  - ``database``: 解密 + 恢复数据库（pg_restore 或 PITR）；
+  - ``validate``: 读取并校验 manifest、版本、目标环境完整性（PG 仍运行，纯校验）；
+  - ``database``: PG 停止期的纯文件恢复（v2 PITR：清空 pgdata → 解压 base.tar.gz →
+    recovery.signal；v1 无纯文件步骤，此处 no-op）；
+  - ``migrate``: 需活 PG 的逻辑恢复 + 前向迁移（v1 pg_restore 无条件 + alembic；
+    v2 仅 alembic），由宿主编排在 PG promote 完成后调用；
   - ``objects``: 恢复 MinIO 对象（S3Repository 或 mc mirror）；
   - ``verify``: 校验行数、对象数、审计链（冒烟查询 + 引用完整性）。
 
@@ -72,8 +75,10 @@ SMOKE_QUERIES: list[tuple[str, str]] = [
     ("alembic_version", "SELECT count(*) FROM alembic_version"),
 ]
 
-#: 有效阶段列表。
-VALID_PHASES: tuple[str, ...] = ("validate", "database", "objects", "verify")
+#: 有效阶段列表。database=migrate 拆分：database 只做 PG 停止期的纯文件步骤，
+#: migrate 承载「需活 PG」的 pg_restore（v1）/ alembic 迁移（v1+v2），由宿主编排
+#: 在 PG promote 之后调用。
+VALID_PHASES: tuple[str, ...] = ("validate", "database", "migrate", "objects", "verify")
 
 
 def _to_sync_url(url: str) -> str:
@@ -274,11 +279,12 @@ class RestoreService:
         return manifest
 
     async def phase_database(self) -> BackupManifest:
-        """阶段 database: 解密 + 恢复数据库。
+        """阶段 database: PG 停止期的纯文件步骤（不连接 PG）。
 
-        - v1: pg_restore 恢复 database.dump
         - v2: PITR 物理恢复（清空 pgdata → 解压 base.tar.gz → recovery.signal →
-          postgresql.auto.conf）。PG 容器的 stop/start 由宿主编排负责。
+          postgresql.auto.conf）。PG 容器的 stop/start 由宿主编排负责，本阶段假定 PG 已停。
+        - v1: 逻辑恢复（pg_restore）需要活 PG，无纯文件步骤 → 此处 no-op；
+          其逻辑恢复与迁移统一落在 ``phase_migrate``。
 
         Returns:
             BackupManifest: 恢复使用的备份清单。
@@ -289,27 +295,7 @@ class RestoreService:
         manifest: BackupManifest = self._load_and_cache_manifest()
         backup_dir: Path = self._config.backup_dir
 
-        if manifest.format_version == 1:
-            logger.info(
-                "Restore %s: restoring PostgreSQL database (pg_restore) ...",
-                manifest.backup_id,
-            )
-            self._restore_database(backup_dir / DATABASE_DUMP_FILENAME)
-
-            # 前向兼容迁移
-            if not self._config.skip_migrations:
-                logger.info(
-                    "Restore %s: applying forward-compatible migrations ...",
-                    manifest.backup_id,
-                )
-                self._apply_forward_migrations(manifest.migration_version)
-            else:
-                logger.info(
-                    "Restore %s: skipping migrations (as requested)",
-                    manifest.backup_id,
-                )
-
-        elif manifest.format_version == 2:
+        if manifest.format_version == 2:
             recovery_target_time: str = self._config.recovery_target_time or ""
             if not recovery_target_time:
                 recovery_target_time = str(
@@ -324,21 +310,55 @@ class RestoreService:
             self._pitr_restore(
                 backup_dir / PG_BASEBACKUP_DIRNAME, recovery_target_time
             )
-
-            # 前向兼容迁移
-            if not self._config.skip_migrations:
-                logger.info(
-                    "Restore %s: applying forward-compatible migrations ...",
-                    manifest.backup_id,
-                )
-                self._apply_forward_migrations(manifest.migration_version)
-            else:
-                logger.info(
-                    "Restore %s: skipping migrations (as requested)",
-                    manifest.backup_id,
-                )
+        else:
+            logger.info(
+                "Restore %s: v1 logical restore (pg_restore) deferred to migrate phase",
+                manifest.backup_id,
+            )
 
         logger.info("Restore %s: database phase complete", manifest.backup_id)
+        return manifest
+
+    async def phase_migrate(self) -> BackupManifest:
+        """阶段 migrate: 需活 PG 的逻辑恢复 + 前向迁移（PG 已启动并 promote）。
+
+        - v1: ``_restore_database``（pg_restore 导入 database.dump，**无条件执行**，
+          非"迁移"，skip_migrations 不跳过它）+ 前向兼容迁移（若未 skip）。
+        - v2: 仅前向兼容迁移（若未 skip）；PITR 物理恢复已在 ``phase_database`` 完成。
+
+        必须在宿主编排 ``up -d postgres`` 并等待 healthy（recovery + promote 完成）
+        之后调用，否则 pg_restore / alembic 连接 ``postgres`` 会 connection refused。
+
+        Returns:
+            BackupManifest: 恢复使用的备份清单。
+
+        Raises:
+            RuntimeError: pg_restore 或 alembic 失败时。
+        """
+        manifest: BackupManifest = self._load_and_cache_manifest()
+        backup_dir: Path = self._config.backup_dir
+
+        if manifest.format_version == 1:
+            logger.info(
+                "Restore %s: restoring PostgreSQL database (pg_restore) ...",
+                manifest.backup_id,
+            )
+            self._restore_database(backup_dir / DATABASE_DUMP_FILENAME)
+
+        # 前向兼容迁移（v1/v2 均适用；skip 只跳过 alembic，不跳过 v1 的 pg_restore）
+        if not self._config.skip_migrations:
+            logger.info(
+                "Restore %s: applying forward-compatible migrations ...",
+                manifest.backup_id,
+            )
+            self._apply_forward_migrations(manifest.migration_version)
+        else:
+            logger.info(
+                "Restore %s: skipping migrations (as requested)",
+                manifest.backup_id,
+            )
+
+        logger.info("Restore %s: migrate phase complete", manifest.backup_id)
         return manifest
 
     async def phase_objects(self) -> BackupManifest:
@@ -1116,7 +1136,7 @@ async def run_restore_phase(
     """执行单个恢复阶段（便捷入口）。
 
     Args:
-        phase: 阶段名称（validate / database / objects / verify）。
+        phase: 阶段名称（validate / database / migrate / objects / verify）。
         backup_dir: 备份目录路径。
         recovery_target_time: PITR 恢复目标时间（ISO 8601，None 表示恢复到备份时间点）。
 
@@ -1147,6 +1167,8 @@ async def run_restore_phase(
         return await service.phase_validate()
     elif phase == "database":
         return await service.phase_database()
+    elif phase == "migrate":
+        return await service.phase_migrate()
     elif phase == "objects":
         return await service.phase_objects()
     elif phase == "verify":
@@ -1186,6 +1208,7 @@ async def run_restore(
     service: RestoreService = RestoreService(config)
     await service.phase_validate()
     await service.phase_database()
+    await service.phase_migrate()
     await service.phase_objects()
     return await service.phase_verify()
 
@@ -1210,7 +1233,7 @@ def main() -> None:
         type=str,
         default=None,
         choices=list(VALID_PHASES),
-        help="恢复阶段（validate / database / objects / verify）。"
+        help="恢复阶段（validate / database / migrate / objects / verify）。"
         "不指定时依次运行所有阶段。",
     )
     parser.add_argument(
@@ -1261,12 +1284,15 @@ def main() -> None:
             # 依次运行所有阶段
             await service.phase_validate()
             await service.phase_database()
+            await service.phase_migrate()
             await service.phase_objects()
             return await service.phase_verify()
         elif phase == "validate":
             return await service.phase_validate()
         elif phase == "database":
             return await service.phase_database()
+        elif phase == "migrate":
+            return await service.phase_migrate()
         elif phase == "objects":
             return await service.phase_objects()
         elif phase == "verify":

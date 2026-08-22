@@ -113,6 +113,11 @@ docker compose $COMPOSE_FLAGS up -d postgres
 wait_for_postgres
 
 echo ""
+echo "--- Phase: migrate (PG 已 promote，pg_restore / alembic forward migrations) ---"
+docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
+    --phase migrate --backup-dir "$BACKUP_DIR"
+
+echo ""
 echo "--- Phase: objects (MinIO 恢复，无 PG 依赖) ---"
 docker compose $COMPOSE_FLAGS run --rm --no-deps restore \
     --phase objects --backup-dir "$BACKUP_DIR"
