@@ -12,6 +12,16 @@ import pytest
 
 from packages.research.timeline.fact_data_loader import FactDataLoader
 
+#: apps.api.main imports packages.common.metrics which requires prometheus_client.
+#: test_success_builds_provider monkeypatches apps.api.main._build_s3_repo, triggering
+#: the full import chain. Skip when prometheus_client is unavailable.
+try:
+    import prometheus_client  # noqa: F401
+
+    _HAS_PROMETHEUS = True
+except ImportError:
+    _HAS_PROMETHEUS = False
+
 
 def _make_ref(source_name: str, source_id: uuid4 | None = None) -> SimpleNamespace:
     return SimpleNamespace(source_name=source_name, source_id=source_id or uuid4())
@@ -47,6 +57,10 @@ class TestBuildFactProvider:
         monkeypatch.setattr(builtins, "__import__", fake_import)
         assert loader._build_fact_provider() is None
 
+    @pytest.mark.skipif(
+        not _HAS_PROMETHEUS,
+        reason="apps.api.main requires prometheus_client",
+    )
     def test_success_builds_provider(self, monkeypatch: pytest.MonkeyPatch) -> None:
         loader = _make_loader()
         s3_repo = MagicMock()
