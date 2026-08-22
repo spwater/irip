@@ -54,6 +54,9 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - pgrun:/var/run/postgresql
+      # PITR: pg_basebackup 的 replication 连接需 pg_hba 显式放行容器网络
+      # （官方镜像默认只对 localhost 开放 replication），首次初始化时追加规则。
+      - ./deployments/compose/pg-initdb:/docker-entrypoint-initdb.d:ro
       # PITR: WAL 归档目录（archive_command 写入此处）
       - ${IRIP_WAL_ARCHIVE_HOST_DIR:-./backups/wal_archive}:/backups/wal_archive
       # PITR: 备份目录（PG 容器需访问 basebackup 产物 + WAL 归档）
