@@ -1,0 +1,14 @@
+# A5 破坏恢复演练专用覆盖（本地伪 staging 的 drill 环境）。
+#
+# 与 development.yaml 不同：不暴露 postgres/redis（A5 脚本用 docker compose exec 访问），
+# 仅 minio 暴露高位端口 19000 供宿主机 mc CLI（避开 dev 环境占用的 9000）。
+#
+# 用法（配合 run-recovery-drill.sh）：
+#   IRIP_COMPOSE_FILES="compose.base.yaml compose.drill.yaml" \
+#   IRIP_MINIO_ENDPOINT="http://localhost:19000" \
+#   IRIP_DATABASE_PASSWORD=irip_dev_password \
+#   scripts/ops/run-recovery-drill.sh --environment sandbox
+services:
+  minio:
+    ports:
+      - "19000:9000"

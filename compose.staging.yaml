@@ -1,0 +1,20 @@
+# IRIP 预生产（staging）覆盖：本地伪 staging，用于真实同构部署 + k6 压测 + 破坏恢复演练。
+#
+# 用法：docker compose -f compose.base.yaml -f compose.production.yaml \
+#          -f compose.staging.yaml -p irip-staging up -d
+#
+# 设计要点（与生产完全同构）：
+# - 复用 base + production 的 file-backed secret 机制、IRIP_ENV=production、
+#   backend(internal) 网络拓扑 —— 后端存储(postgres/redis/minio/api)一律不暴露，
+#   只有 web 的 frontend 网络对外，与生产一致。
+# - 唯一本地化差异：
+#   1. web 暴露高位端口 18080（避免与本机 80 冲突），k6 压测打 http://localhost:18080；
+#   2. web 用 nginx-http.conf（无 TLS），避免本地自签名证书告警（生产用 nginx-tls.conf + 443）。
+# - seed / psql / mc 等运维操作一律用 `docker compose exec` 进容器，不暴露后端端口。
+# - 通过 -p irip-staging 隔离命名卷（irip-staging_pgdata 等），绝不碰 dev/test/drill 数据。
+services:
+  web:
+    environment:
+      NGINX_CONF: "nginx-http.conf"
+    ports:
+      - "18080:80"
