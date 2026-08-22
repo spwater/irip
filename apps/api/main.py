@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from apps.api.routers.account import account_router
-from apps.api.routers.ai_config import ai_config_router
 from apps.api.routers.ai_tools import ai_tools_router
 from apps.api.routers.assistant import assistant_router
 from apps.api.routers.audit import audit_router
@@ -99,7 +98,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       4. JWT 密钥；
       5. 通过 composition provider 模块设置全部依赖覆盖。
     """
-    # ---- 0. 生产环境密钥安全校验 ----
+    # ---- 0. AI 配置 YAML 校验（必须在其他初始化之前） ----
+    from packages.ai.yaml_config import validate_ai_config
+
+    validate_ai_config()
+
+    # ---- 0b. 生产环境密钥安全校验 ----
     from packages.common.security_check import assert_production_keys
 
     assert_production_keys()
@@ -360,7 +364,6 @@ def create_app() -> FastAPI:
     app.include_router(backups_router)
     app.include_router(assistant_router)
     app.include_router(showcase_router)
-    app.include_router(ai_config_router)
     app.include_router(ai_tools_router)
     app.include_router(files_router)
     app.include_router(component_preview_router)

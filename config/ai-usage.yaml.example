@@ -1,0 +1,29 @@
+# ai-usage.yaml — AI 场景模型选择配置模板
+#
+# 复制本文件为 ai-usage.yaml 并填入真实值。
+# ai-usage.yaml 被 .gitignore 排除，不会提交到 Git。
+#
+# 校验规则：
+#   - scenarios 下必须包含 5 个内置场景键：
+#     data_extraction / assistant / research / conclusion / title_generation
+#   - 每个场景必须有 model（str）和 thinking_enabled（bool）
+#   - model 值必须能在 models.yaml 中找到对应 provider + model
+#   - 模型名消歧格式：provider/model（如 deepseek/Qwen），
+#     无歧义时可省略 provider 前缀
+
+scenarios:
+  data_extraction:
+    model: "DeepSeek"
+    thinking_enabled: false
+  assistant:
+    model: "Qwen"
+    thinking_enabled: true
+  research:
+    model: "DeepSeek"
+    thinking_enabled: true
+  conclusion:
+    model: "Qwen-Flash"
+    thinking_enabled: false
+  title_generation:
+    model: "Qwen-Flash"
+    thinking_enabled: false

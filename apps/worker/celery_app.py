@@ -594,6 +594,11 @@ def _start_healthcheck_on_worker_init(**kwargs: object) -> None:
     第一个子进程成功绑定端口；后续子进程端口冲突时静默跳过，
     因为只需要一个进程对外提供健康检查端点即可。
     """
+    # AI 配置 YAML 校验（必须在其他初始化之前）
+    from packages.ai.yaml_config import validate_ai_config
+
+    validate_ai_config()
+
     # 安全断言：拒绝 superuser/bypassrls 运行时连接
     _assert_not_superuser()
     try:

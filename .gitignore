@@ -64,6 +64,10 @@ secrets/
 credentials*
 *.secret
 
+## ===== AI 配置（含明文 API key，仅提交 .example 模板）=====
+config/models.yaml
+config/ai-usage.yaml
+
 ## ===== Docker / 本地覆盖 =====
 compose.override.yml
 docker-compose.override.yml
