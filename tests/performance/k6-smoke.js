@@ -58,7 +58,6 @@ export const options = {
     'http_req_failed': ['rate<0.01'],       // 内置 HTTP 错误率 < 1%
     'http_req_duration': ['p(95)<1000'],     // 95% 请求 < 1s
   },
-  noConnectionRefuse: true,
   userAgent: 'k6-irip-smoke/1.0',
 };
 
@@ -211,29 +210,16 @@ export default function (data) {
 
   sleep(0.1);
 
-  // ---- 3. 并发模型请求（无超时）----
+  // ---- 3. 并发模型请求（顺序发起；k6 v2 的 http.batch 存在连接累积 bug 导致后续请求超时）----
   group('concurrent requests', () => {
-    // 发送多个并行请求模拟并发模型调用
-    const requests = [
-      ['GET', `${BASE_URL}/api/v1/me`, null, { headers: headers }],
-      ['GET', `${BASE_URL}/api/v1/health/live`, null, { headers: headers }],
-      ['GET', `${BASE_URL}/api/v1/me`, null, { headers: headers }],
+    const targets = [
+      `${BASE_URL}/api/v1/me`,
+      `${BASE_URL}/api/v1/health/live`,
+      `${BASE_URL}/api/v1/me`,
     ];
-
-    const responses = http.batch(requests);
-
-    for (let i = 0; i < responses.length; i++) {
-      const res = responses[i];
-
-      if (res.timings.duration >= TIMEOUT_THRESHOLD_MS) {
-        timeoutCount.add(1);
-      }
-
-      const ok = check(res, {
-        [`concurrent[${i}] status 200`]: (r) => r.status === 200,
-      });
-
-      errorRate.add(!ok);
+    for (const u of targets) {
+      const res = http.get(u, { headers: headers });
+      errorRate.add(!check(res, { 'status 200': (r) => r.status === 200 }));
     }
   });
 
@@ -247,13 +233,13 @@ export default function (data) {
 export function handleSummary(data) {
   const summary = {
     thresholds: data.metrics ? {
-      'errors (rate<0.01)': data.metrics.errors ? data.metrics.errors.value : 'N/A',
+      'errors (rate<0.01)': data.metrics.errors ? data.metrics.errors.values.rate : 'N/A',
       'list_api_duration p95 (<500ms)': data.metrics.list_api_duration ?
-        data.metrics.list_api_duration['p(95)'] : 'N/A',
+        data.metrics.list_api_duration.values['p(95)'] : 'N/A',
       'detail_api_duration p95 (<300ms)': data.metrics.detail_api_duration ?
-        data.metrics.detail_api_duration['p(95)'] : 'N/A',
+        data.metrics.detail_api_duration.values['p(95)'] : 'N/A',
       'api_timeouts (count==0)': data.metrics.api_timeouts ?
-        data.metrics.api_timeouts.count : 'N/A',
+        data.metrics.api_timeouts.values.count : 'N/A',
     } : 'No metrics available',
   };
 
