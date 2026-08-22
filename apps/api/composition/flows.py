@@ -25,7 +25,7 @@ def register(ctx: CompositionContext) -> None:
         ctx: 组合根共享上下文。
     """
     from apps.api.dependencies.dept_scope import get_rls_dept_id
-    from apps.api.routers.ai_config import get_active_ai_config
+    from packages.ai.yaml_config import async_provider_wrapper
     from packages.common.artifacts import ArtifactService
     from packages.components.builtin import register_builtin_components
     from packages.components.flow.flow_runtime import FlowRuntimeService
@@ -90,7 +90,7 @@ def register(ctx: CompositionContext) -> None:
             runner=_flow_runner,  # type: ignore[arg-type]
             job_service=job_svc,
             artifact_service=art_svc,
-            ai_config_provider=get_active_ai_config,
+            ai_config_provider=async_provider_wrapper("data_extraction"),
         )
         if rls_dept_id is not None:
             flow_svc.set_rls_override(rls_dept_id)

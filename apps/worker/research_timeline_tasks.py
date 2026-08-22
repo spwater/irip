@@ -43,35 +43,18 @@ def _scoped_session(
     return scoped_session(factory, department_id, actor_id)
 
 
-async def _load_ai_config(
-    factory: async_sessionmaker[AsyncSession],
-) -> dict[str, Any] | None:
-    """Load active AI configuration from the database."""
-    import sqlalchemy as sa
+def _get_research_scenario_config() -> Any:
+    """Get the research scenario config from YAML (sync read).
 
-    async with factory() as session:
-        result = await session.execute(
-            sa.text(
-                "SELECT base_url, api_key, model_name, "
-                "research_model_name, research_thinking_enabled "
-                "FROM ai_config WHERE enabled = true "
-                "ORDER BY updated_at DESC LIMIT 1"
-            )
-        )
-        row = result.first()
-        if row is None:
-            return None
-        from packages.common.crypto import EnvelopeCrypto
+    Returns:
+        ScenarioConfig for the "research" scenario.
 
-        crypto = EnvelopeCrypto.from_env()
-        decrypted_key = crypto.decrypt(row[1])
-        return {
-            "base_url": row[0],
-            "api_key": decrypted_key,
-            "model_name": row[2],
-            "research_model_name": row[3],
-            "research_thinking_enabled": row[4],
-        }
+    Raises:
+        KeyError, FileNotFoundError, ValueError if config unavailable.
+    """
+    from packages.ai.yaml_config import get_scenario_config
+
+    return get_scenario_config("research")
 
 
 async def _build_plan_service(
@@ -85,8 +68,9 @@ async def _build_plan_service(
     ``execute_analysis_run`` / ``extract_candidates`` so plan generation uses
     the same identity-aware ModelGateway + FactProvider stack.
     """
-    ai_config = await _load_ai_config(factory)
-    if not ai_config:
+    try:
+        config = _get_research_scenario_config()
+    except (KeyError, FileNotFoundError, ValueError):
         return None
 
     from packages.ai.openai_compatible import OpenAICompatibleProvider
@@ -98,11 +82,11 @@ async def _build_plan_service(
     from packages.research.planning.model_gateway import ModelGateway
     from packages.research.planning.plan_core import PlanService
 
-    research_model_name = ai_config.get("research_model_name") or ai_config.get("model_name", "")
-    thinking = ai_config.get("research_thinking_enabled", False)
+    research_model_name = config.model
+    thinking = config.thinking_enabled
     ai_provider = OpenAICompatibleProvider(
-        api_key=ai_config["api_key"],
-        base_url=ai_config["base_url"],
+        api_key=config.api_key,
+        base_url=config.base_url,
         model=research_model_name,
         thinking_enabled=thinking,
     )
@@ -489,8 +473,9 @@ def execute_analysis_run(
             snapshot_id = run.snapshot_id
 
         # 2. Load AI config and build PlanService
-        ai_config = await _load_ai_config(factory)
-        if not ai_config:
+        try:
+            config = _get_research_scenario_config()
+        except (KeyError, FileNotFoundError, ValueError):
             fail_result = await finalizer.fail(
                 run_id=run_uuid,
                 turn_id=turn_id,
@@ -507,13 +492,11 @@ def execute_analysis_run(
         from packages.research.planning.model_gateway import ModelGateway
         from packages.research.planning.plan_core import PlanService
 
-        research_model_name = ai_config.get("research_model_name") or ai_config.get(
-            "model_name", ""
-        )
-        thinking = ai_config.get("research_thinking_enabled", False)
+        research_model_name = config.model
+        thinking = config.thinking_enabled
         ai_provider = OpenAICompatibleProvider(
-            api_key=ai_config["api_key"],
-            base_url=ai_config["base_url"],
+            api_key=config.api_key,
+            base_url=config.base_url,
             model=research_model_name,
             thinking_enabled=thinking,
         )
@@ -714,8 +697,9 @@ def extract_candidates(
             plan_version_id = plan.id
 
         # Load AI config and build PlanService
-        ai_config = await _load_ai_config(factory)
-        if not ai_config:
+        try:
+            config = _get_research_scenario_config()
+        except (KeyError, FileNotFoundError, ValueError):
             async with _scoped_session(
                 factory, actor_id=actor_uuid, department_id=dept_uuid
             ) as session:
@@ -743,14 +727,12 @@ def extract_candidates(
         from packages.research.planning.model_gateway import ModelGateway
         from packages.research.planning.plan_core import PlanService
 
-        research_model_name = ai_config.get("research_model_name") or ai_config.get(
-            "model_name", ""
-        )
+        research_model_name = config.model
         ai_provider = OpenAICompatibleProvider(
-            api_key=ai_config["api_key"],
-            base_url=ai_config["base_url"],
+            api_key=config.api_key,
+            base_url=config.base_url,
             model=research_model_name,
-            thinking_enabled=ai_config.get("research_thinking_enabled", False),
+            thinking_enabled=config.thinking_enabled,
         )
         model_registry = {
             task: ModelConfig(

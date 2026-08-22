@@ -71,97 +71,56 @@ class TestSimpleGatewayCall:
 
 class TestBuildGatewayFromConfig:
     async def test_no_config_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """When get_scenario_config raises, build_gateway_from_config returns None."""
         monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(return_value=None),
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(side_effect=KeyError("scenario not found")),
         )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
 
         result = await build_gateway_from_config()
         assert result is None
 
-    async def test_missing_base_url_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(return_value={"api_key": "sk", "model_name": "m"}),
-        )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
-
-        assert await build_gateway_from_config() is None
-
-    async def test_missing_api_key_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(return_value={"base_url": "http://x", "model_name": "m"}),
-        )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
-
-        assert await build_gateway_from_config() is None
-
     async def test_full_config_builds_gateway(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(
-                return_value={
-                    "base_url": "http://x/v1",
-                    "api_key": "sk",
-                    "research_model_name": "research-model",
-                    "thinking_enabled": "false",
-                }
-            ),
+        """Valid config builds a SimpleGateway."""
+        from packages.ai.yaml_config import ScenarioConfig
+
+        config = ScenarioConfig(
+            provider_name="test",
+            base_url="http://x/v1",
+            api_key="sk",
+            model="research-model",
+            thinking_enabled=False,
         )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(return_value=config),
+        )
 
         gateway = await build_gateway_from_config()
         assert isinstance(gateway, SimpleGateway)
 
-    async def test_model_fallback_and_thinking_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_thinking_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Thinking enabled is passed through from config."""
         provider_cls = MagicMock()
         monkeypatch.setattr(
             "packages.research.timeline.simple_gateway.OpenAICompatibleProvider", provider_cls
         )
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(
-                return_value={
-                    "base_url": "http://x/v1",
-                    "api_key": "sk",
-                    "model_name": "fallback-model",
-                    "thinking_enabled": "on",
-                }
-            ),
+        from packages.ai.yaml_config import ScenarioConfig
+
+        config = ScenarioConfig(
+            provider_name="test",
+            base_url="http://x/v1",
+            api_key="sk",
+            model="fallback-model",
+            thinking_enabled=True,
         )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(return_value=config),
+        )
 
         gateway = await build_gateway_from_config()
         assert gateway is not None
         kwargs = provider_cls.call_args.kwargs
         assert kwargs["model"] == "fallback-model"
         assert kwargs["thinking_enabled"] is True
-
-    async def test_thinking_numeric_true(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        provider_cls = MagicMock()
-        monkeypatch.setattr(
-            "packages.research.timeline.simple_gateway.OpenAICompatibleProvider", provider_cls
-        )
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.get_active_ai_config",
-            AsyncMock(
-                return_value={
-                    "base_url": "http://x",
-                    "api_key": "sk",
-                    "model_name": "m",
-                    "thinking_enabled": "1",
-                }
-            ),
-        )
-        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
-        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
-
-        await build_gateway_from_config()
-        assert provider_cls.call_args.kwargs["thinking_enabled"] is True

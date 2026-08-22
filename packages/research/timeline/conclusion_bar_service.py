@@ -19,7 +19,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -29,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.audit.events import AuditEventData
 from packages.audit.repository import AuditRecorder
-from packages.common.database import ScopedSessionMixin, build_session_factory
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.research.entities import ResearchResult, ResearchResultVersion
 from packages.research.repository.result import ResultRepository
@@ -676,22 +675,20 @@ class ConclusionBarService(ScopedSessionMixin):
         )
 
         try:
-            ai_config = await self._load_ai_config()
-            if not ai_config:
-                logger.warning("_summarize_title: no ai_config, using fallback")
-                return fallback
-
             from packages.ai.openai_compatible import OpenAICompatibleProvider
             from packages.ai.providers import AIRequest
+            from packages.ai.yaml_config import get_scenario_config
 
-            model_name = ai_config.get("model_name") or ai_config.get("research_model_name", "")
+            config = get_scenario_config("conclusion")
             logger.info(
-                "_summarize_title: calling LLM model=%s, prompt_len=%d", model_name, len(prompt)
+                "_summarize_title: calling LLM model=%s, prompt_len=%d",
+                config.model,
+                len(prompt),
             )
             provider = OpenAICompatibleProvider(
-                api_key=ai_config["api_key"],
-                base_url=ai_config["base_url"],
-                model=model_name,
+                api_key=config.api_key,
+                base_url=config.base_url,
+                model=config.model,
                 thinking_enabled=False,
             )
             request = AIRequest(
@@ -719,37 +716,6 @@ class ConclusionBarService(ScopedSessionMixin):
             logger.warning("LLM summarize title failed: %s", e, exc_info=True)
             logger.warning("LLM summarize title failed, using fallback")
             return fallback
-
-    async def _load_ai_config(self) -> dict[str, Any] | None:
-        """Load AI config from database."""
-        db_url = os.environ.get(
-            "IRIP_DATABASE_URL",
-            "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip",
-        )
-        factory = build_session_factory(db_url)
-        async with factory() as session:
-            result = await session.execute(
-                sa.text(
-                    "SELECT base_url, api_key, model_name, "
-                    "research_model_name, research_thinking_enabled "
-                    "FROM ai_config WHERE enabled = true "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                )
-            )
-            row = result.first()
-            if row is None:
-                return None
-            from packages.common.crypto import EnvelopeCrypto
-
-            crypto = EnvelopeCrypto.from_env()
-            decrypted_key = crypto.decrypt(row[1])
-            return {
-                "base_url": row[0],
-                "api_key": decrypted_key,
-                "model_name": row[2],
-                "research_model_name": row[3],
-                "research_thinking_enabled": row[4],
-            }
 
     @staticmethod
     def _to_ref(item: ResearchConclusionBarItem) -> BarItemRef:

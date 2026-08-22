@@ -277,13 +277,22 @@ class MessagePersistence:
             question: 用户问题。
             answer: AI 回答。
         """
-        # 从 provider 提取 API 配置
-        api_key = getattr(self._provider, "_api_key", None)
-        base_url = getattr(self._provider, "_base_url", None)
-        model = getattr(self._provider, "_model", None)
+        # 从 YAML 配置读取 title_generation 场景配置
+        api_key = None
+        base_url = None
+        model = None
+        try:
+            from packages.ai.yaml_config import get_scenario_config
+
+            config = get_scenario_config("title_generation")
+            api_key = config.api_key
+            base_url = config.base_url
+            model = config.model
+        except Exception:
+            pass
 
         if not api_key or not base_url or not model:
-            # 离线模式或其他无 API 配置的 provider，用问题前 30 字做标题
+            # 无 API 配置，用问题前 30 字做标题
             title = question[:30].strip()
             if not title:
                 return

@@ -7,12 +7,12 @@
 - redact_credentials 处理空字符串；
 - redact_credentials 处理混合内容（凭据 + 正常文本共存）；
 - redact_credentials bearer 小写同样脱敏；
-- auto_generate_title 离线模式回退到问题前 30 字。
+- auto_generate_title 无配置时回退到问题前 30 字。
 """
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -73,22 +73,14 @@ class TestRedactCredentials:
 
 
 class TestAutoGenerateTitleOffline:
-    """MessagePersistence.auto_generate_title 离线模式测试。"""
-
-    def _make_offline_provider(self) -> MagicMock:
-        """构建无 API 配置的离线 provider mock。"""
-        provider = MagicMock()
-        provider._api_key = None
-        provider._base_url = None
-        provider._model = None
-        return provider
+    """MessagePersistence.auto_generate_title 无配置模式测试。"""
 
     async def test_offline_title_triggers_db_update(self) -> None:
-        """离线 provider 用问题前 30 字做标题并执行 UPDATE。"""
+        """无 YAML 配置时用问题前 30 字做标题并执行 UPDATE。"""
         persistence = MessagePersistence(
             session_factory=MagicMock(),
             clock=FixedClock(datetime.now(UTC)),
-            provider=self._make_offline_provider(),
+            provider=MagicMock(),
         )
         mock_session = AsyncMock()
         original_scoped = persist_mod.scoped_session
@@ -99,19 +91,23 @@ class TestAutoGenerateTitleOffline:
 
         try:
             persist_mod.scoped_session = fake_scoped_session  # type: ignore[assignment]
-            question = "请帮我分析一下最新的实验数据趋势和异常点"
-            await persistence.auto_generate_title(uuid4(), question, "answer text")
+            with patch(
+                "packages.ai.yaml_config.get_scenario_config",
+                side_effect=FileNotFoundError("no config"),
+            ):
+                question = "请帮我分析一下最新的实验数据趋势和异常点"
+                await persistence.auto_generate_title(uuid4(), question, "answer text")
         finally:
             persist_mod.scoped_session = original_scoped  # type: ignore[assignment]
 
         mock_session.execute.assert_awaited_once()
 
     async def test_offline_empty_question_skips_title(self) -> None:
-        """离线模式下空问题跳过标题更新（不执行 UPDATE）。"""
+        """无配置模式下空问题跳过标题更新（不执行 UPDATE）。"""
         persistence = MessagePersistence(
             session_factory=MagicMock(),
             clock=FixedClock(datetime.now(UTC)),
-            provider=self._make_offline_provider(),
+            provider=MagicMock(),
         )
         mock_session = AsyncMock()
         original_scoped = persist_mod.scoped_session
@@ -122,7 +118,11 @@ class TestAutoGenerateTitleOffline:
 
         try:
             persist_mod.scoped_session = fake_scoped_session  # type: ignore[assignment]
-            await persistence.auto_generate_title(uuid4(), "   ", "answer")
+            with patch(
+                "packages.ai.yaml_config.get_scenario_config",
+                side_effect=FileNotFoundError("no config"),
+            ):
+                await persistence.auto_generate_title(uuid4(), "   ", "answer")
         finally:
             persist_mod.scoped_session = original_scoped  # type: ignore[assignment]
 

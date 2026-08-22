@@ -60,39 +60,27 @@ def _build_orchestrator() -> Any:
     redis_url = get_redis_url()
     redis_client = redis_lib.from_url(redis_url)
 
-    # 从 ai_config 表读取研发助手模型配置，构建真实 AI provider
+    # 从 YAML 配置读取研发助手模型配置，构建真实 AI provider
+    from packages.ai.openai_compatible import OpenAICompatibleProvider
+    from packages.ai.yaml_config import get_scenario_config
+
     ai_provider = None
     research_model_name = None
     try:
-        from apps.api.routers.ai_config import get_active_ai_config, set_session_factory
-
-        set_session_factory(factory)
-
-        async def _load_ai_config() -> Any:
-            return await get_active_ai_config()
-
-        ai_config = asyncio.run(_load_ai_config())
-        if ai_config and ai_config.get("base_url") and ai_config.get("api_key"):
-            from packages.ai.openai_compatible import OpenAICompatibleProvider
-
-            research_model_name = ai_config.get("research_model_name") or ai_config.get(
-                "model_name", ""
-            )
-            _thinking = ai_config.get("thinking_enabled", False)
-            ai_provider = OpenAICompatibleProvider(
-                api_key=ai_config["api_key"],
-                base_url=ai_config["base_url"],
-                model=research_model_name,
-                thinking_enabled=_thinking,
-            )
-            logger.info(
-                "AI provider initialized: model=%s, base_url=%s, thinking=%s",
-                research_model_name,
-                ai_config["base_url"],
-                _thinking,
-            )
-        else:
-            logger.warning("No active AI config found, using mock provider")
+        config = get_scenario_config("research")
+        research_model_name = config.model
+        ai_provider = OpenAICompatibleProvider(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=research_model_name,
+            thinking_enabled=config.thinking_enabled,
+        )
+        logger.info(
+            "AI provider initialized: model=%s, base_url=%s, thinking=%s",
+            research_model_name,
+            config.base_url,
+            config.thinking_enabled,
+        )
     except Exception as exc:
         logger.warning("Failed to load AI config: %s, using mock provider", exc)
 

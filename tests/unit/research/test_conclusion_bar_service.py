@@ -489,7 +489,10 @@ class TestSummarizeTitle:
 
     async def test_no_ai_config_returns_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         svc = ConclusionBarService(MagicMock(), uuid4(), uuid4())
-        monkeypatch.setattr(svc, "_load_ai_config", AsyncMock(return_value=None))
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(side_effect=FileNotFoundError("no config")),
+        )
         assembled = {
             "metadata": {"analysis_questions": ["问题"], "summary": "摘要"},
             "_tracing": [{"title": "区块"}],
@@ -497,11 +500,19 @@ class TestSummarizeTitle:
         assert await svc._summarize_title(assembled) == "最终结论"
 
     async def test_success_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from packages.ai.yaml_config import ScenarioConfig
+
         svc = ConclusionBarService(MagicMock(), uuid4(), uuid4())
+        config = ScenarioConfig(
+            provider_name="test",
+            base_url="http://x",
+            api_key="k",
+            model="m",
+            thinking_enabled=False,
+        )
         monkeypatch.setattr(
-            svc,
-            "_load_ai_config",
-            AsyncMock(return_value={"model_name": "m", "api_key": "k", "base_url": "http://x"}),
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(return_value=config),
         )
         provider = MagicMock()
         provider.complete = AsyncMock(return_value=AIResponse(answer="概栆标题。"))
@@ -515,24 +526,9 @@ class TestSummarizeTitle:
 
     async def test_exception_returns_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         svc = ConclusionBarService(MagicMock(), uuid4(), uuid4())
-        monkeypatch.setattr(svc, "_load_ai_config", AsyncMock(side_effect=RuntimeError("x")))
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(side_effect=RuntimeError("x")),
+        )
         assembled = {"metadata": {"analysis_questions": ["问题"]}}
         assert await svc._summarize_title(assembled) == "最终结论"
-
-
-class TestLoadAIConfig:
-    async def test_no_row(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        svc = ConclusionBarService(MagicMock(), uuid4(), uuid4())
-        factory = MagicMock()
-        fm = MagicMock()
-        fm.__aenter__ = AsyncMock(return_value=MagicMock())
-        fm.__aexit__ = AsyncMock(return_value=False)
-        factory.return_value = fm
-        monkeypatch.setattr(mod, "build_session_factory", MagicMock(return_value=factory))
-
-        session = fm.__aenter__.return_value
-        result = MagicMock()
-        result.first.return_value = None
-        session.execute = AsyncMock(return_value=result)
-
-        assert await svc._load_ai_config() is None

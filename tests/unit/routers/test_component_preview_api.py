@@ -3,7 +3,7 @@
 测试策略：
 - 使用 FastAPI TestClient + dependency_overrides 注入 mock 依赖
 - 覆盖 get_current_user 和 get_artifact_service
-- patch get_active_ai_config、_download_artifact、_extract_file_content、_call_llm
+- patch get_scenario_config、_download_artifact、_extract_file_content、_call_llm
 - 验证 HTTP 状态码、响应体字段
 """
 
@@ -82,23 +82,21 @@ class TestPromptRecommend:
         tmp_file = tmp_path / "test.csv"
         tmp_file.write_text("col1,col2\n1,2")
 
-        config = {
-            "base_url": "https://api.openai.com/v1",
-            "api_key": "sk-test",
-            "model_name": "gpt-4o",
-        }
-        ai_config_with_meta = {
-            "base_url": "https://api.openai.com/v1",
-            "api_key": "sk-test",
-            "model_name": "gpt-4o",
-            "meta_prompt": "系统提示词",
-        }
+
+        from packages.ai.yaml_config import ScenarioConfig
+
+        scenario_config = ScenarioConfig(
+            provider_name="test",
+            base_url="https://api.openai.com/v1",
+            api_key="sk-test",
+            model="gpt-4o",
+            thinking_enabled=False,
+        )
 
         with (
             patch(
-                "apps.api.routers.component_preview.get_active_ai_config",
-                new_callable=AsyncMock,
-                side_effect=[config, ai_config_with_meta],
+                "apps.api.routers.component_preview.get_scenario_config",
+                return_value=scenario_config,
             ),
             patch(
                 "apps.api.routers.component_preview._download_artifact",
@@ -135,9 +133,8 @@ class TestPromptRecommend:
     def test_recommend_ai_not_configured_422(self, tmp_path):
         """AI 未配置 → 422"""
         with patch(
-            "apps.api.routers.component_preview.get_active_ai_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "apps.api.routers.component_preview.get_scenario_config",
+            side_effect=KeyError("scenario not found"),
         ):
             app = _make_app()
             client = TestClient(app)
@@ -166,20 +163,23 @@ class TestExtractPreview:
         tmp_file = tmp_path / "test.csv"
         tmp_file.write_text("col1,col2\n1,2")
 
-        config = {
-            "base_url": "https://api.openai.com/v1",
-            "api_key": "sk-test",
-            "model_name": "gpt-4o",
-        }
+        from packages.ai.yaml_config import ScenarioConfig
+
+        scenario_config = ScenarioConfig(
+            provider_name="test",
+            base_url="https://api.openai.com/v1",
+            api_key="sk-test",
+            model="gpt-4o",
+            thinking_enabled=False,
+        )
 
         mock_converter = MagicMock()
         mock_converter.execute = AsyncMock(return_value={"col1": "1", "col2": "2"})
 
         with (
             patch(
-                "apps.api.routers.component_preview.get_active_ai_config",
-                new_callable=AsyncMock,
-                return_value=config,
+                "apps.api.routers.component_preview.get_scenario_config",
+                return_value=scenario_config,
             ),
             patch(
                 "apps.api.routers.component_preview._download_artifact",

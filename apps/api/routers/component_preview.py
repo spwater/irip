@@ -7,7 +7,7 @@
 工作流：
   1. 从 MinIO 下载预加载的 artifact 文件到临时目录
   2. 根据文件后缀自动提取文本/图片（复用 ez_scan_extractor 的 _extract_text）
-  3. 调用大模型（复用 ai_config 的 get_active_ai_config）
+  3. 调用大模型（从 YAML 配置读取 data_extraction 场景配置）
   4. 返回结果
 """
 
@@ -22,8 +22,8 @@ from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.authorization import require_permission
-from apps.api.routers.ai_config import get_active_ai_config
 from apps.api.routers.uploads import get_artifact_service
+from packages.ai.yaml_config import get_scenario_config
 from packages.common.artifacts import ArtifactService
 from packages.common.errors import AppError
 from packages.common.safe_http import SafeHTTPClient
@@ -177,13 +177,14 @@ async def recommend_prompt(
 
     下载文件 → 提取文本 → 让大模型分析文件内容并生成最优提取提示词。
     """
-    config = await get_active_ai_config()
-    if config is None or not config.get("base_url") or not config.get("api_key"):
+    try:
+        config = get_scenario_config("data_extraction")
+    except Exception:
         raise AppError(
             code="ai_not_configured",
-            message="AI 大模型未配置，请先在治理 → AI 配置中开启",
+            message="AI 大模型未配置，请检查 config/ai-usage.yaml",
             retryable=False,
-        )
+        ) from None
 
     # 下载文件
     file_path = await _download_artifact(artifact_service, body.artifact_id, body.filename)
@@ -194,25 +195,19 @@ async def recommend_prompt(
 
     # 构建大模型请求：让 AI 分析文件并生成提示词（纯文本模式，不使用多模态）
 
-    # 从 YAML 加载默认 meta_prompt（含 {filename} 模板变量）
+    # 从 YAML 加载 meta_prompt（含 {filename} 模板变量）
     from packages.ai.prompt_store import get_prompt
 
-    _default_meta_prompt = get_prompt("converter_meta_prompt.system_prompt").replace(
+    meta_prompt = get_prompt("converter_meta_prompt.system_prompt").replace(
         "{filename}", body.filename
     )
 
-    # 从数据库读自定义 meta_prompt（优先级高于 YAML 默认）
-    meta_prompt = _default_meta_prompt
-    try:
-        ai_cfg = await get_active_ai_config()
-        if ai_cfg and ai_cfg.get("meta_prompt"):
-            meta_prompt = ai_cfg["meta_prompt"].replace("{filename}", body.filename)
-    except Exception:
-        import logging
-
-        logging.getLogger(__name__).warning(
-            "读取自定义 meta_prompt 失败，使用内置默认", exc_info=True
-        )  # noqa: E501
+    # 转换为 dict 格式供 _call_llm 使用
+    config_dict: dict[str, str] = {
+        "base_url": config.base_url,
+        "api_key": config.api_key,
+        "model_name": config.model,
+    }
 
     messages = [
         {
@@ -221,7 +216,7 @@ async def recommend_prompt(
         }
     ]
 
-    answer = await _call_llm(config, messages)
+    answer = await _call_llm(config_dict, messages)
     return PromptRecommendResponse(prompt=answer)
 
 
@@ -247,14 +242,12 @@ async def extract_preview(
         # 获取 AI 配置（llm_converter 需要）
         ai_config: dict[str, Any] | None = None
         if body.tool_type == "llm_converter":
-            config = await get_active_ai_config()
-            if config is None or not config.get("base_url") or not config.get("api_key"):
-                raise AppError(
-                    code="ai_not_configured",
-                    message="AI 大模型未配置，请先在治理 → AI 配置中开启",
-                    retryable=False,
-                )
-            ai_config = config
+            scenario_config = get_scenario_config("data_extraction")
+            ai_config = {
+                "base_url": scenario_config.base_url,
+                "api_key": scenario_config.api_key,
+                "model_name": scenario_config.model,
+            }
 
         # 通过插件注册表调用解析器
         converter = plugin_registry.get(body.tool_type)

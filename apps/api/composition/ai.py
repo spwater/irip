@@ -1,8 +1,7 @@
 """AI 助手服务依赖覆盖 provider（F-20）。
 
 注册：
-- AIService（AI 助手服务，优先从配置读取真实模型，未配置时用离线模式）；
-- ai_config 会话工厂；
+- AIService（AI 助手服务，从 YAML 配置读取模型配置）；
 - assistant 会话工厂。
 """
 
@@ -10,12 +9,6 @@ from apps.api.composition import CompositionContext
 from apps.api.routers.account import (
     get_account_session_factory,
     get_s3_repo,
-)
-from apps.api.routers.ai_config import (
-    get_active_ai_config,
-)
-from apps.api.routers.ai_config import (
-    set_session_factory as set_ai_config_session_factory,
 )
 from apps.api.routers.ai_tools import (
     set_session_factory as set_ai_tools_session_factory,
@@ -40,27 +33,23 @@ def register(ctx: CompositionContext) -> None:
     Args:
         ctx: 组合根共享上下文。
     """
-    from packages.ai.offline_provider import OfflineProvider
     from packages.ai.openai_compatible import OpenAICompatibleProvider
     from packages.ai.service import AIService
     from packages.ai.tools import ToolRegistry
+    from packages.ai.yaml_config import get_scenario_config
 
-    set_ai_config_session_factory(ctx.session_factory)
     set_assistant_session_factory(ctx.session_factory)
     set_ai_tools_session_factory(ctx.session_factory)
     set_object_types_session_factory(ctx.session_factory)
 
     async def _get_ai_service_dep() -> AIService:
-        config = await get_active_ai_config()
-        if config and config.get("base_url") and config.get("api_key"):
-            provider = OpenAICompatibleProvider(
-                api_key=config["api_key"],
-                base_url=config["base_url"],
-                model=config.get("assistant_model_name") or config["model_name"],
-                thinking_enabled=config.get("assistant_thinking_enabled", False),  # type: ignore[arg-type]
-            )
-        else:
-            provider = OfflineProvider()  # type: ignore[assignment]
+        config = get_scenario_config("assistant")
+        provider = OpenAICompatibleProvider(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=config.model,
+            thinking_enabled=config.thinking_enabled,
+        )
         tool_registry = ToolRegistry()
 
         # 构建 NumericToolFacade（注入 session_factory、Fact 查询能力、限制配置）

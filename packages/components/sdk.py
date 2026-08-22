@@ -55,7 +55,8 @@ class ComponentContext:
     - cancel_event: 取消信号（编排器设置后组件应尽快退出）；
     - secrets: 密钥字典（仅含组件声明的 secret key，值已解密）；
     - workdir: 组件专属临时工作目录（执行结束后清理）；
-    - ai_config_provider: AI 配置提供函数（返回 dict | None），
+    - ai_config_provider: AI 配置异步提供函数（返回 dict | None），
+      由 ``packages.ai.yaml_config.async_provider_wrapper(scenario)`` 生成，
       消除 packages→apps 反向依赖（T3-3）。
 
     Attributes:
@@ -67,7 +68,8 @@ class ComponentContext:
         cancel_event: 取消事件（asyncio.Event）。
         secrets: 密钥字典。
         workdir: 临时工作目录路径。
-        ai_config_provider: AI 配置异步提供函数（可选）。
+        ai_config_provider: AI 配置异步提供函数（可选，由
+            ``async_provider_wrapper`` 生成的 async callable）。
     """
 
     department_id: UUID

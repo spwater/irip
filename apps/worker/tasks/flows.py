@@ -57,17 +57,6 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
 
     factory = build_session_factory(async_url)
 
-    # 设置 AI 配置的 session factory + 提供器，使 LLM 组件能查询数据库获取 AI 配置
-    # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
-    from apps.api.routers.ai_config import (
-        get_active_ai_config,
-    )
-    from apps.api.routers.ai_config import (
-        set_session_factory as set_ai_config_session_factory,
-    )
-
-    set_ai_config_session_factory(factory)
-
     department_id = UUID(str(payload["department_id"]))
 
     # 系统服务用户 ID：worker 无用户会话，用 system_service 用户作为
@@ -106,6 +95,8 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
         uploaded_by=sys_user_id,
     )
 
+    from packages.ai.yaml_config import async_provider_wrapper
+
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
@@ -115,7 +106,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
         job_service=job_service,
         clock=SystemClock(),
         artifact_service=art_svc,
-        ai_config_provider=get_active_ai_config,
+        ai_config_provider=async_provider_wrapper("data_extraction"),
     )
 
     run_uuid = UUID(run_id)
@@ -279,17 +270,6 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
 
     factory = build_session_factory(async_url)
 
-    # 设置 AI 配置的 session factory + 提供器，使 LLM 组件能查询数据库获取 AI 配置
-    # 通过 context.ai_config_provider 注入，消除 packages→apps 反向依赖（T3-3）
-    from apps.api.routers.ai_config import (
-        get_active_ai_config,
-    )
-    from apps.api.routers.ai_config import (
-        set_session_factory as set_ai_config_session_factory,
-    )
-
-    set_ai_config_session_factory(factory)
-
     department_id = UUID(str(payload["department_id"]))
 
     # 系统服务用户 ID：worker 无用户会话，用 system_service 用户作为
@@ -328,6 +308,8 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
         uploaded_by=sys_user_id,
     )
 
+    from packages.ai.yaml_config import async_provider_wrapper
+
     service = FlowRuntimeService(
         session_factory=factory,
         department_id=department_id,
@@ -337,7 +319,7 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
         job_service=job_service,
         clock=SystemClock(),
         artifact_service=art_svc,
-        ai_config_provider=get_active_ai_config,
+        ai_config_provider=async_provider_wrapper("data_extraction"),
     )
 
     run_uuid = UUID(run_id)

@@ -207,28 +207,15 @@ class AnalysisService(ScopedSessionMixin):
                 "status": "queued",
             }
 
-    async def _load_ai_config(self) -> dict[str, Any] | None:
-        """Load the active AI configuration from the database (scoped session)."""
-        async with self._scoped_session() as session:
-            result = await session.execute(
-                sa.text(
-                    "SELECT base_url, api_key, model_name, "
-                    "research_model_name, research_thinking_enabled "
-                    "FROM ai_config WHERE enabled = true "
-                    "ORDER BY updated_at DESC LIMIT 1"
-                )
-            )
-            row = result.first()
-            if row is None:
-                return None
-            from packages.common.crypto import EnvelopeCrypto
+    def _get_research_config(self) -> Any:
+        """Get the research scenario config from YAML (sync read).
 
-            crypto = EnvelopeCrypto.from_env()
-            decrypted_key = crypto.decrypt(row[1])
-            return {
-                "base_url": row[0],
-                "api_key": decrypted_key,
-                "model_name": row[2],
-                "research_model_name": row[3],
-                "research_thinking_enabled": row[4],
-            }
+        Returns:
+            ScenarioConfig for the "research" scenario.
+
+        Raises:
+            KeyError, FileNotFoundError, ValueError if config unavailable.
+        """
+        from packages.ai.yaml_config import get_scenario_config
+
+        return get_scenario_config("research")

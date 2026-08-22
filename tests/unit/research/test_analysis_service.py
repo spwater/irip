@@ -1,4 +1,4 @@
-"""Tests for AnalysisService: run submission orchestration and AI config load."""
+"""Tests for AnalysisService: run submission orchestration and research config."""
 
 from __future__ import annotations
 
@@ -139,35 +139,36 @@ class TestSubmitRun:
         assert turn.status == "queued"
 
 
-class TestLoadAIConfig:
-    async def test_no_row_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        session = MagicMock()
-        result = MagicMock()
-        result.first.return_value = None
-        session.execute = AsyncMock(return_value=result)
-        service = _make_service(monkeypatch, session)
+class TestGetResearchConfig:
+    """Test _get_research_config reads from YAML config."""
 
-        assert await service._load_ai_config() is None
+    def test_returns_scenario_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_get_research_config returns ScenarioConfig from YAML."""
+        from packages.ai.yaml_config import ScenarioConfig
 
-    async def test_row_decrypts_and_maps(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        session = MagicMock()
-        result = MagicMock()
-        result.first.return_value = ("http://x", "encrypted-key", "m", "rm", True)
-        session.execute = AsyncMock(return_value=result)
-        service = _make_service(monkeypatch, session)
-
-        crypto = MagicMock()
-        crypto.decrypt = MagicMock(return_value="decrypted-key")
-        monkeypatch.setattr(
-            "packages.common.crypto.EnvelopeCrypto.from_env",
-            classmethod(lambda cls: crypto),
+        expected = ScenarioConfig(
+            provider_name="test",
+            base_url="http://x/v1",
+            api_key="sk-test",
+            model="DeepSeek",
+            thinking_enabled=True,
         )
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(return_value=expected),
+        )
+        service = _make_service(monkeypatch, MagicMock())
 
-        config = await service._load_ai_config()
-        assert config == {
-            "base_url": "http://x",
-            "api_key": "decrypted-key",
-            "model_name": "m",
-            "research_model_name": "rm",
-            "research_thinking_enabled": True,
-        }
+        config = service._get_research_config()
+        assert config is expected
+
+    def test_raises_when_config_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_get_research_config raises when YAML config not found."""
+        monkeypatch.setattr(
+            "packages.ai.yaml_config.get_scenario_config",
+            MagicMock(side_effect=FileNotFoundError("no config")),
+        )
+        service = _make_service(monkeypatch, MagicMock())
+
+        with pytest.raises(FileNotFoundError):
+            service._get_research_config()

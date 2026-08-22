@@ -50,55 +50,30 @@ def register(ctx: CompositionContext) -> None:
     context_router = ContextRouter()
     scheduler = ResearchScheduler(redis_client=redis_client)
 
-    # 从 ai_config 表读取研发助手模型配置，构建真实 AI provider
-    # 注意：api_key 在数据库中是加密存储的，必须通过 get_active_ai_config 解密
+    # 从 YAML 配置读取研发助手模型配置，构建真实 AI provider
     import logging as _logging
 
     _logger = _logging.getLogger(__name__)
+    from packages.ai.openai_compatible import OpenAICompatibleProvider
+    from packages.ai.yaml_config import get_scenario_config
+
     ai_provider = None
     research_model_name = None
     try:
-        import asyncio as _asyncio
-
-        from apps.api.routers.ai_config import get_active_ai_config, set_session_factory
-
-        set_session_factory(ctx.session_factory)
-
-        async def _load_config() -> None:
-            return await get_active_ai_config()  # type: ignore[return-value]
-
-        # 在新事件循环中运行（composition register 在 uvicorn lifespan 中，可能已有 loop）
-        try:
-            _loop = _asyncio.get_running_loop()
-            # 已在事件循环中，用 ensure_future + 同步等待
-            import concurrent.futures as _cf
-
-            with _cf.ThreadPoolExecutor(max_workers=1) as _pool:
-                _ai_config = _pool.submit(_asyncio.run, _load_config()).result(timeout=10)
-        except RuntimeError:
-            _ai_config = _asyncio.run(_load_config())
-
-        if _ai_config and _ai_config.get("base_url") and _ai_config.get("api_key"):
-            from packages.ai.openai_compatible import OpenAICompatibleProvider
-
-            research_model_name = _ai_config.get("research_model_name") or _ai_config.get(
-                "model_name", ""
-            )
-            _thinking = _ai_config.get("thinking_enabled", False)
-            ai_provider = OpenAICompatibleProvider(
-                api_key=_ai_config["api_key"],
-                base_url=_ai_config["base_url"],
-                model=research_model_name,
-                thinking_enabled=_thinking,
-            )
-            _logger.info(
-                "API AI provider initialized: model=%s, base_url=%s, thinking=%s",
-                research_model_name,
-                _ai_config["base_url"],
-                _thinking,
-            )
-        else:
-            _logger.warning("No active AI config found, PlanService will use mock provider")
+        config = get_scenario_config("research")
+        research_model_name = config.model
+        ai_provider = OpenAICompatibleProvider(
+            api_key=config.api_key,
+            base_url=config.base_url,
+            model=research_model_name,
+            thinking_enabled=config.thinking_enabled,
+        )
+        _logger.info(
+            "API AI provider initialized: model=%s, base_url=%s, thinking=%s",
+            research_model_name,
+            config.base_url,
+            config.thinking_enabled,
+        )
     except Exception as exc:
         _logger.warning("Failed to load AI config for API PlanService: %s", exc)
 
