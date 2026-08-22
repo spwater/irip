@@ -168,11 +168,26 @@ OPS_ADMIN_URL="$(build_ops_admin_url)"
 
 run_ops() {
     # $@ = service + args（backup / restore --phase ...）
+    # 密钥整改后 backup/restore 容器改用 *_FILE secret，但 drill 环境（base + drill
+    # overlay）无 production secret 挂载，故这里把 secret 相关 env 显式置空并内联回退，
+    # 使 backup/restore 在 drill 下用与 postgres/minio server 一致的 dev 凭据。
     docker compose $COMPOSE_FLAGS run --rm --no-deps \
         -e IRIP_DATABASE_ADMIN_URL_FILE= \
         -e "IRIP_DATABASE_ADMIN_URL=$OPS_ADMIN_URL" \
+        -e IRIP_REDIS_URL_FILE= \
+        -e "IRIP_REDIS_URL=${IRIP_REDIS_URL:-redis://:irip_dev_password@redis:6379/0}" \
+        -e IRIP_MINIO_SECRET_KEY_FILE= \
+        -e "IRIP_MINIO_SECRET_KEY=$MINIO_SECRET_KEY" \
         -e "IRIP_ENV=drill" \
         "$@"
+}
+
+# restore 服务有固定 command（python -m deployments.compose.restore）且无 entrypoint，
+# 而 `docker compose run SERVICE ARGS` 会用 ARGS 覆盖 command，导致 `--phase` 被当作
+# 可执行文件（exec: "--phase": not found）。故显式补回 python 命令，把 --phase 等
+# 作为参数追加（而非覆盖 service command）。
+run_restore() {
+    run_ops restore python -m deployments.compose.restore "$@"
 }
 
 # 在 postgres 容器内执行 psql 查询（-tAc：仅数值 / 单值输出）
@@ -301,26 +316,26 @@ log "destroyed at t1=$T1"
 log "=== phase 4/6: restore (T2 measured after) ==="
 
 log "--- restore phase: validate ---"
-run_ops restore --phase validate --backup-dir "$CONTAINER_BACKUP_DIR"
+run_restore --phase validate --backup-dir "$CONTAINER_BACKUP_DIR"
 
 log "stopping postgres (PITR clear/pgdata requires stopped PG) ..."
 docker compose $COMPOSE_FLAGS stop postgres >/dev/null
 
 log "--- restore phase: database (PITR) ---"
-run_ops restore --phase database --backup-dir "$CONTAINER_BACKUP_DIR"
+run_restore --phase database --backup-dir "$CONTAINER_BACKUP_DIR"
 
 log "starting postgres (recovery mode → WAL replay → promote) ..."
 docker compose $COMPOSE_FLAGS up -d postgres >/dev/null
 wait_for_postgres
 
 log "--- restore phase: migrate ---"
-run_ops restore --phase migrate --backup-dir "$CONTAINER_BACKUP_DIR"
+run_restore --phase migrate --backup-dir "$CONTAINER_BACKUP_DIR"
 
 log "--- restore phase: objects ---"
-run_ops restore --phase objects --backup-dir "$CONTAINER_BACKUP_DIR"
+run_restore --phase objects --backup-dir "$CONTAINER_BACKUP_DIR"
 
 log "--- restore phase: verify ---"
-run_ops restore --phase verify --backup-dir "$CONTAINER_BACKUP_DIR"
+run_restore --phase verify --backup-dir "$CONTAINER_BACKUP_DIR"
 
 T2="$(now_epoch)"
 log "restore complete at t2=$T2"

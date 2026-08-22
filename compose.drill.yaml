@@ -1,0 +1,37 @@
+# A5 破坏恢复演练专用覆盖（本地伪 staging 的 drill 环境）。
+#
+# 与 development.yaml 不同：不暴露 postgres/redis 端口（A5 脚本用 docker compose exec
+# 访问），仅 minio 暴露高位端口 19000 供宿主机 mc CLI（避开 dev 环境占用的 9000）。
+#
+# 密钥整改后 server 密码改走 *_FILE secret，但 drill 环境（base + 本 overlay，不含
+# production overlay）无 secret 文件，故在此注入 infra 凭据 env 回退（与
+# development.yaml 同策略）：
+#   - postgres: POSTGRES_PASSWORD env + 显式置空 POSTGRES_PASSWORD_FILE（互斥语义）
+#   - minio: MINIO_ROOT_PASSWORD env（minio env 优先于 _FILE）
+#   - redis: IRIP_REDIS_PASSWORD env（entrypoint shim 回退）
+#
+# 用法（配合 run-recovery-drill.sh）：
+#   IRIP_COMPOSE_FILES="compose.base.yaml compose.drill.yaml" \
+#   IRIP_MINIO_ENDPOINT="http://localhost:19000" \
+#   IRIP_DATABASE_PASSWORD=irip_dev_password \
+#   scripts/ops/run-recovery-drill.sh --environment sandbox
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: ${IRIP_DATABASE_PASSWORD:?IRIP_DATABASE_PASSWORD is required}
+      POSTGRES_PASSWORD_FILE: ""
+
+  redis:
+    environment:
+      IRIP_REDIS_PASSWORD: ${IRIP_REDIS_PASSWORD:-irip_dev_password}
+
+  minio:
+    # 宿主机 mc 需要访问 minio，但 backend 是 internal 网络（禁止端口发布），
+    # 故额外接入非 internal 的 frontend 网络才能暴露 19000 端口。
+    networks:
+      - backend
+      - frontend
+    ports:
+      - "19000:9000"
+    environment:
+      MINIO_ROOT_PASSWORD: ${IRIP_MINIO_SECRET_KEY:-irip_dev_password}
