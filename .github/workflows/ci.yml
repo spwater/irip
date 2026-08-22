@@ -421,6 +421,39 @@ jobs:
       - run: python -m alembic upgrade head
       - run: python -m pytest tests/acceptance -v
 
+  # P2-C4 后续: 性能预算测试独立 job（query budget 依赖 DB；upload memory 为纯单测）
+  # 只配 postgres service：test_upload_memory.py 用 mock S3 不依赖 MinIO，
+  # test_timeline_query_budget.py 的 fixture（root conftest sync_engine/test_user）
+  # 仅需 postgres，不触碰 redis。tests/performance/ 下的 k6-*.js 不会被 pytest 拾取。
+  test-performance:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: irip
+          POSTGRES_PASSWORD: irip_dev_password
+          POSTGRES_DB: irip_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U irip -d irip_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      IRIP_TEST_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+      IRIP_DATABASE_URL: postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -m alembic upgrade head
+      - run: python -m pytest tests/performance/ -q
+
   web-test:
     name: Web Unit Tests
     runs-on: ubuntu-latest
@@ -774,6 +807,7 @@ jobs:
       - test-security
       - test-recovery
       - test-acceptance
+      - test-performance
       - web-test
       - web-build
       - test-e2e
