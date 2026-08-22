@@ -171,7 +171,7 @@ class EnvelopeCrypto:
         old_keys: dict[int, bytes] = {}
         for version in range(1, 10):
             env_name = f"IRIP_MASTER_KEY_OLD_v{version}"
-            old_raw = os.getenv(env_name, "")
+            old_raw = read_secret(env_name, required=False) or ""
             if not old_raw:
                 break
             try:
