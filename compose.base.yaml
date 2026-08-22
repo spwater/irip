@@ -446,6 +446,10 @@ services:
       - -c
       - 'DB_PASSWORD=$(cat /run/secrets/database_app_password); export DB_PASSWORD; exec /entrypoint.sh "$@"'
       - pgbouncer-shim
+    # 显式声明 command：Docker Compose 覆盖 entrypoint（list 形式）时会丢弃镜像 CMD，
+    # 导致 shim 的 "$@" 为空、pgbouncer 进程无法启动（容器退出码 0 后 restart 循环）。
+    # 此处显式透传镜像默认 CMD（edoburu/pgbouncer 镜像是 /usr/bin/pgbouncer + config 路径）。
+    command: ["/usr/bin/pgbouncer", "/etc/pgbouncer/pgbouncer.ini"]
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
