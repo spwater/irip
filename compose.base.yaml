@@ -309,6 +309,9 @@ services:
       IRIP_JWT_SECRET_FILE: /run/secrets/jwt_secret
       IRIP_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_admin_password
       IRIP_MASTER_KEY_FILE: /run/secrets/master_key
+      # 运行时角色密码：bootstrap 用该 secret 重设 irip_app 密码（覆盖迁移 0071
+      # 硬编码弱密钥）；api/worker/scheduler 用 database_app_url 中的同值密码连接。
+      IRIP_DATABASE_APP_PASSWORD_FILE: /run/secrets/database_app_password
     depends_on:
       postgres:
         condition: service_healthy

@@ -7,7 +7,8 @@
   2. 创建 root 哨兵部门（code='root', parent_id=NULL）+ system 哨兵部门（code='system', parent_id=root.id）；
   3. 创建管理员用户（admin@irip.local，密码从环境变量读，挂 root 部门）；
   4. 确保 MinIO bucket 存在；
-  5. 赋予 irip 用户 REPLICATION 权限。
+  5. 赋予 irip 用户 REPLICATION 权限；
+  6. 按 secret 重设 irip_app 运行时角色密码（覆盖迁移 0071 硬编码弱密钥）。
 
 全部操作幂等：重复运行不报错、不重复创建。
 
@@ -27,6 +28,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 import sqlalchemy as sa
+from psycopg import sql as psql_sql
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.auth.passwords import hash_password
@@ -621,6 +623,12 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     await container.roles.ensure_builtin_roles()
     logger.info("Bootstrap: roles ready")
 
+    logger.info("Bootstrap: normalizing irip_app runtime role password from secret ...")
+    async with container._factory() as session:
+        async with session.begin():
+            await ensure_runtime_role_password(session)
+    logger.info("Bootstrap: irip_app runtime role password ready")
+
     logger.info("Bootstrap: ensuring admin user %s (department=root) ...", ADMIN_EMAIL)
     await container.users.get_or_create_admin(
         department_id=root_dept.id,
@@ -660,6 +668,58 @@ async def bootstrap_platform(container: ApplicationContainer) -> None:
     )
 
     logger.info("Bootstrap complete.")
+
+
+def _render_alter_role_password(password: str) -> str:
+    """Render a safely-quoted ``ALTER ROLE ... PASSWORD`` statement.
+
+    PostgreSQL 的 ``ALTER ROLE`` 是 utility 语句，其 ``PASSWORD`` 子句只接受
+    字符串字面量、不接受绑定参数（服务端在解析期即拒绝 ``:pwd``）。因此这里用
+    psycopg 官方 ``sql.Literal`` 对密码做数据库感知的安全转义（单引号加倍、
+    含反斜杠时自动切换为 ``E'...'`` 转义字面量），再内联到语句中 —— 而非
+    f-string 裸拼密码，从而规避 SQL 注入与特殊字符问题。
+
+    Args:
+        password: irip_app 的明文密码（来自 secret）。
+
+    Returns:
+        str: 已安全转义、可直接执行的 ALTER ROLE 语句。
+    """
+    return "ALTER ROLE irip_app LOGIN PASSWORD " + psql_sql.Literal(
+        password
+    ).as_string(None)
+
+
+async def ensure_runtime_role_password(session: AsyncSession) -> None:
+    """按 secret 重设 irip_app 运行时角色密码（幂等）。
+
+    迁移 0071 将 irip_app 初始密码硬编码为开发弱密钥 ``irip_dev_password``；
+    已 apply 的历史迁移不可变，故在 bootstrap（superuser/irip 连接，具备
+    ALTER ROLE 权限）阶段用 secret 密码覆盖，根治「密钥 file-backed 全覆盖」
+    漏项。
+
+    一致性约定：``database_app_url`` secret 里的 irip_app 密码，必须与
+    ``database_app_password`` secret 一致 —— bootstrap 用后者 ALTER ROLE，
+    api/worker/scheduler 用前者连接。
+
+    行为：
+    - 密码非空：执行 ``ALTER ROLE irip_app LOGIN PASSWORD ...``（经 psycopg
+      ``sql.Literal`` 数据库感知安全转义，严禁 f-string 拼密码）；
+    - 密码为空：fail-open 跳过（保持向后兼容），仅写 warning 日志、不静默；
+    - 幂等：每次 bootstrap 把密码 normalize 到 secret 值，重复执行无副作用。
+      不涉及 RLS/权限变更，仅用 superuser 改 irip_app 自身密码。
+
+    Args:
+        session: 异步数据库会话（superuser 连接）。
+    """
+    password = read_secret("IRIP_DATABASE_APP_PASSWORD", required=False) or ""
+    if not password:
+        logger.warning(
+            "IRIP_DATABASE_APP_PASSWORD not configured; skipping irip_app "
+            "password reset (role keeps the migration-set initial value)"
+        )
+        return
+    await session.execute(sa.text(_render_alter_role_password(password)))
 
 
 async def _grant_replication_permission(container: ApplicationContainer) -> None:

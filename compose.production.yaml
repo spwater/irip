@@ -89,6 +89,8 @@ services:
         target: master_key
       - source: irip_database_admin_url
         target: database_admin_url
+      - source: irip_database_app_password
+        target: database_app_password
       - source: irip_redis_url
         target: redis_url
       - source: irip_minio_secret_key
