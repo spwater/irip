@@ -334,7 +334,7 @@ jobs:
           # 1) PostgreSQL 16 client（pg_basebackup / pg_restore），官方 PGDG 仓库
           sudo install -d /usr/share/postgresql-common/pgdg
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo gpg --batch --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+            | sudo gpg --batch --yes --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
@@ -685,8 +685,8 @@ jobs:
           corepack enable pnpm
           pnpm install --frozen-lockfile
           # 使用官方 npm registry 进行 audit（npmmirror 不支持 audit endpoint）
-          npm config set registry https://registry.npmjs.org/
-          pnpm audit --audit-level=high
+          # pnpm 不读 npm config，需通过 npm_config_registry 环境变量覆盖 .npmrc 中的 npmmirror
+          npm_config_registry=https://registry.npmjs.org/ pnpm audit --audit-level=high
 
   # ---- 镜像漏洞扫描 (P1-T4: 独立硬门禁 job) ----
   container-scan:
@@ -696,8 +696,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Container image scan (trivy)
         run: |
-          # 安装 trivy
-          TRIVY_VERSION=v0.55.0
+          # 安装 trivy（v0.55.0 无二进制 release asset，改用 v0.74.0）
+          TRIVY_VERSION=v0.74.0
           curl -fsSL --retry 3 "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz
           tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
           sudo install -m 0755 /tmp/trivy /usr/local/bin/trivy

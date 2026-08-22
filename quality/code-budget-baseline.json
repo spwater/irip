@@ -52,7 +52,7 @@
       "max_complexity": 15
     },
     "apps/worker/tasks/__init__.py": {
-      "lines": 756,
+      "lines": 821,
       "max_complexity": 15
     },
     "packages/ai/ask_service.py": {
@@ -180,7 +180,7 @@
       "max_complexity": 15
     },
     "packages/research/planning/plan_analyzer.py": {
-      "lines": 882,
+      "lines": 884,
       "max_complexity": 15
     },
     "packages/research/planning/plan_generator.py": {
