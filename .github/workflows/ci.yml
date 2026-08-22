@@ -350,9 +350,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16
           # 2) MinIO mc client（pin 版本 + SHA256）
-          curl -fsSL --retry 3 "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2024-11-17T19-35-25Z" -o /tmp/mc
-          echo "544d2d11c32cb4ed11b27338935a9cc434e15b692ff3d1529a624d341fe2ffc5  /tmp/mc" | sha256sum -c -
-          sudo install -m 0755 /tmp/mc /usr/local/bin/mc
+          curl -fsSL --retry 3 "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2024-11-17T19-35-25Z" -o /tmp/mc-bin
+          echo "544d2d11c32cb4ed11b27338935a9cc434e15b692ff3d1529a624d341fe2ffc5  /tmp/mc-bin" | sha256sum -c -
+          sudo install -m 0755 /tmp/mc-bin /usr/local/bin/mc
+          rm -f /tmp/mc-bin
           # 3) age 加密工具（pin 版本 + SHA256）
           curl -fsSL "https://github.com/FiloSottile/age/releases/download/v1.1.1/age-v1.1.1-linux-amd64.tar.gz" -o /tmp/age.tar.gz
           echo "cf16cbb108fc56e2064b00ba2b65d9fb1b8d7002ca5e38260ee1cc34f6aaa8f9  /tmp/age.tar.gz" | sha256sum -c -
