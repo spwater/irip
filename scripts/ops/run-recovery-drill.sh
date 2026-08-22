@@ -125,7 +125,10 @@ export IRIP_BACKUP_HOST_DIR="$DRILL_BACKUP_HOST"
 export IRIP_WAL_ARCHIVE_HOST_DIR="$DRILL_WAL_ARCHIVE_HOST"
 
 cleanup() {
-    rm -rf "$WORK_DIR"
+    # backup/restore 容器以 uid 1000（irip）写 backups/wal_archive 文件，
+    # 宿主机用户可能无删除权限，故用一次性容器以 root 清理，兜底忽略失败。
+    docker run --rm -v "$WORK_DIR:/work:rw" alpine sh -c 'rm -rf /work/* /work/.[!.]* /work/..?*' 2>/dev/null || true
+    rmdir "$WORK_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
