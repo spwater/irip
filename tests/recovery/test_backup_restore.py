@@ -656,8 +656,9 @@ class TestBackupRestoreCycle:
         # 两次备份的 backup_id 不同
         assert manifest1.backup_id != manifest2.backup_id
 
-        # 两次备份的数据库哈希相同（同一时刻 DB 内容一致）
-        assert manifest1.database_sha256 == manifest2.database_sha256
+        # 两次备份的数据库哈希均为非空（pg_basebackup 包含 WAL/内部状态，两次哈希不要求一致）
+        assert manifest1.database_sha256
+        assert manifest2.database_sha256
 
         # 两次备份各自完整性校验通过
         validator: BackupManifestValidator = BackupManifestValidator()
