@@ -69,7 +69,7 @@ BACKUP_TAR_AGE_FILENAME: str = "backup.tar.age"
 #: 冒烟查询列表（核心表存在性 + 行数校验）。
 SMOKE_QUERIES: list[tuple[str, str]] = [
     ("app_user", "SELECT count(*) FROM app_user"),
-    ("organization", "SELECT count(*) FROM organization"),
+    ("department", "SELECT count(*) FROM department"),
     ("role", "SELECT count(*) FROM role"),
     ("artifact_blob", "SELECT count(*) FROM artifact_blob"),
     ("job", "SELECT count(*) FROM job"),
