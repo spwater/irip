@@ -13,6 +13,15 @@
 # - seed / psql / mc 等运维操作一律用 `docker compose exec` 进容器，不暴露后端端口。
 # - 通过 -p irip-staging 隔离命名卷（irip-staging_pgdata 等），绝不碰 dev/test/drill 数据。
 services:
+  api:
+    environment:
+      IRIP_STAGING: "1"
+  worker:
+    environment:
+      IRIP_STAGING: "1"
+  scheduler:
+    environment:
+      IRIP_STAGING: "1"
   web:
     environment:
       NGINX_CONF: "nginx-http.conf"
