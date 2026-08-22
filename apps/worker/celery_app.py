@@ -226,9 +226,7 @@ def reap_expired_leases() -> int:
     from packages.common.database import build_session_factory
     from packages.jobs.worker import WorkerLeaseManager
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -269,9 +267,7 @@ def retry_wait_jobs() -> int:
     from packages.jobs.entities import Job, JobStatus
     from packages.jobs.outbox import OutboxEvent
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -348,9 +344,7 @@ def daily_backup() -> str:
     from packages.jobs.entities import Job, JobStatus
     from packages.jobs.outbox import OutboxDispatcher
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -461,9 +455,7 @@ def retention_cleanup() -> int:
     from packages.backups.service import BackupRecordService
     from packages.common.database import build_session_factory
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:

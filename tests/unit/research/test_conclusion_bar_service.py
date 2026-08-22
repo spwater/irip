@@ -160,9 +160,7 @@ class TestExtractStructured:
         assert out["metadata"]["note"] == '{"foo": "bar"}'
 
     def test_fallback_raw(self) -> None:
-        out = self._svc()._extract_structured(
-            _item("unknown", {"custom": 1})
-        )
+        out = self._svc()._extract_structured(_item("unknown", {"custom": 1}))
         assert out["metadata"]["raw"] == {"custom": 1}
 
 
@@ -343,9 +341,7 @@ class TestPublishConclusion:
 
     async def test_no_revision(self, monkeypatch: pytest.MonkeyPatch) -> None:
         session = _make_session()
-        concl = SimpleNamespace(
-            id=uuid4(), workspace_id=uuid4(), current_revision_id=None
-        )
+        concl = SimpleNamespace(id=uuid4(), workspace_id=uuid4(), current_revision_id=None)
         session.get = AsyncMock(return_value=concl)
         service = _make_service(monkeypatch, session)
         _patch_repos(monkeypatch)
@@ -360,16 +356,12 @@ class TestPublishConclusion:
         service = _make_service(monkeypatch, session)
         _, _, audit = _patch_repos(monkeypatch)
 
-        out = await service.publish_conclusion(
-            concl.workspace_id, concl.id, None, "k"
-        )
+        out = await service.publish_conclusion(concl.workspace_id, concl.id, None, "k")
         assert out["version_number"] == 1
         assert "result_id" in out
         audit.record.assert_awaited_once()
 
-    async def test_success_non_json_and_title_param(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_success_non_json_and_title_param(self, monkeypatch: pytest.MonkeyPatch) -> None:
         session = _make_session()
         concl = SimpleNamespace(id=uuid4(), workspace_id=uuid4(), current_revision_id=uuid4())
         revision = SimpleNamespace(id=uuid4(), statement="纯文本")
@@ -377,9 +369,7 @@ class TestPublishConclusion:
         service = _make_service(monkeypatch, session)
         _, _, _ = _patch_repos(monkeypatch)
 
-        out = await service.publish_conclusion(
-            concl.workspace_id, concl.id, "自定义标题", "k"
-        )
+        out = await service.publish_conclusion(concl.workspace_id, concl.id, "自定义标题", "k")
         assert out["version_number"] == 1
 
 

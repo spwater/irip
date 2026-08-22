@@ -91,12 +91,8 @@ def test_digest_mismatch_breaks_audit_chain(tmp_path):
 
     backup_dir = tmp_path / "backup"
     restore_dir = tmp_path / "restore"
-    _write_manifest(
-        backup_dir, row_count=10, object_count=3, database_sha256="a" * 64
-    )
-    _write_manifest(
-        restore_dir, row_count=10, object_count=3, database_sha256="c" * 64
-    )
+    _write_manifest(backup_dir, row_count=10, object_count=3, database_sha256="a" * 64)
+    _write_manifest(restore_dir, row_count=10, object_count=3, database_sha256="c" * 64)
 
     evidence = verify_recovery(str(backup_dir), str(restore_dir))
 

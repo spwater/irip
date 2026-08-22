@@ -459,9 +459,7 @@ class TestConfirmPlan:
             "packages.research.timeline.access.require_owned_turn",
             AsyncMock(return_value=turn),
         )
-        plan = SimpleNamespace(
-            id=uuid4(), turn_id=turn.id, status="confirmed", version_number=1
-        )
+        plan = SimpleNamespace(id=uuid4(), turn_id=turn.id, status="confirmed", version_number=1)
         session = _make_session()
         session._plan = plan  # type: ignore[attr-defined]
 

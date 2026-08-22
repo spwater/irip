@@ -107,13 +107,9 @@ def _get_entry_sync_chunks(index_html: str) -> list[str]:
     module entry script plus any statically ``<link rel="modulepreload">`` chunks.
     Returns an empty list when the entry script cannot be located.
     """
-    entry_match = re.search(
-        r'<script[^>]+type="module"[^>]+src="(/assets/[^"]+\.js)"', index_html
-    )
+    entry_match = re.search(r'<script[^>]+type="module"[^>]+src="(/assets/[^"]+\.js)"', index_html)
     entry_src = entry_match.group(1) if entry_match else None
-    preloads = re.findall(
-        r'<link rel="modulepreload"[^>]+href="(/assets/[^"]+\.js)"', index_html
-    )
+    preloads = re.findall(r'<link rel="modulepreload"[^>]+href="(/assets/[^"]+\.js)"', index_html)
     sync_srcs = ([entry_src] if entry_src else []) + preloads
     return [Path(src).name for src in sync_srcs]
 

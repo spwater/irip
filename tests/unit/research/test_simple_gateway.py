@@ -55,9 +55,7 @@ class TestSimpleGatewayCall:
     async def test_call_returns_provider_answer(self) -> None:
         gateway = SimpleGateway(api_key="k", base_url="http://x", model="m")
         gateway._provider = MagicMock()
-        gateway._provider.complete = AsyncMock(
-            return_value=AIResponse(answer="hello world")
-        )
+        gateway._provider.complete = AsyncMock(return_value=AIResponse(answer="hello world"))
 
         result = await gateway.call("system prompt", "user prompt")
 
@@ -77,19 +75,13 @@ class TestBuildGatewayFromConfig:
             "apps.api.routers.ai_config.get_active_ai_config",
             AsyncMock(return_value=None),
         )
-        monkeypatch.setattr(
-            "apps.api.routers.ai_config.set_session_factory", MagicMock()
-        )
-        monkeypatch.setattr(
-            "packages.common.database.build_session_factory", MagicMock()
-        )
+        monkeypatch.setattr("apps.api.routers.ai_config.set_session_factory", MagicMock())
+        monkeypatch.setattr("packages.common.database.build_session_factory", MagicMock())
 
         result = await build_gateway_from_config()
         assert result is None
 
-    async def test_missing_base_url_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_base_url_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "apps.api.routers.ai_config.get_active_ai_config",
             AsyncMock(return_value={"api_key": "sk", "model_name": "m"}),
@@ -99,9 +91,7 @@ class TestBuildGatewayFromConfig:
 
         assert await build_gateway_from_config() is None
 
-    async def test_missing_api_key_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_api_key_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             "apps.api.routers.ai_config.get_active_ai_config",
             AsyncMock(return_value={"base_url": "http://x", "model_name": "m"}),
@@ -129,9 +119,7 @@ class TestBuildGatewayFromConfig:
         gateway = await build_gateway_from_config()
         assert isinstance(gateway, SimpleGateway)
 
-    async def test_model_fallback_and_thinking_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_model_fallback_and_thinking_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
         provider_cls = MagicMock()
         monkeypatch.setattr(
             "packages.research.timeline.simple_gateway.OpenAICompatibleProvider", provider_cls

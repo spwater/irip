@@ -49,9 +49,7 @@ async def _execute_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str,
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -193,9 +191,7 @@ async def _mark_job_failed(job_id: str, error: str) -> None:
     from packages.common.database import build_session_factory, get_database_url, session_scope
     from packages.jobs.entities import Job, JobStatus
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:
@@ -275,9 +271,7 @@ async def _resume_flow_async(run_id: str, payload: dict[str, Any]) -> dict[str, 
     from packages.components.runner import PythonComponentRunner
     from packages.jobs.service import JobService
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         async_url = db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     else:

@@ -35,9 +35,7 @@ class TestGeneratePlanForTurn:
 
     async def test_turn_cannot_plan(self, monkeypatch: pytest.MonkeyPatch) -> None:
         turn = _make_turn(status="running")
-        monkeypatch.setattr(
-            mod.TimelineRepository, "get_turn", AsyncMock(return_value=turn)
-        )
+        monkeypatch.setattr(mod.TimelineRepository, "get_turn", AsyncMock(return_value=turn))
         with pytest.raises(AppError) as exc_info:
             await generate_plan_for_turn(MagicMock(), turn.id, MagicMock())
         assert exc_info.value.code == "state_conflict"

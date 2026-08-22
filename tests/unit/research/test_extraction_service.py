@@ -37,9 +37,7 @@ def _make_service(session: MagicMock, gateway: object | None = None) -> Candidat
 
 
 def _fake_job(status: str = "queued", turn_id: uuid4 | None = None) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=uuid4(), status=status, turn_id=turn_id or uuid4(), run_id=uuid4()
-    )
+    return SimpleNamespace(id=uuid4(), status=status, turn_id=turn_id or uuid4(), run_id=uuid4())
 
 
 class TestEnqueueForCompletedRun:
@@ -47,7 +45,8 @@ class TestEnqueueForCompletedRun:
         session = MagicMock()
         existing = _fake_job(status="succeeded")
         with patch.object(
-            mod.TimelineRepository, "get_extraction_by_run",
+            mod.TimelineRepository,
+            "get_extraction_by_run",
             new=AsyncMock(return_value=existing),
         ) as get_ext:
             ref = await CandidateExtractionService.enqueue_for_completed_run(session, uuid4())
@@ -95,11 +94,13 @@ class TestEnqueueForCompletedRun:
         session.get = AsyncMock(return_value=run)
         with (
             patch.object(
-                mod.TimelineRepository, "get_extraction_by_run",
+                mod.TimelineRepository,
+                "get_extraction_by_run",
                 new=AsyncMock(return_value=None),
             ),
             patch.object(
-                mod.TimelineRepository, "insert_extraction_job",
+                mod.TimelineRepository,
+                "insert_extraction_job",
                 new=AsyncMock(return_value=job),
             ) as insert,
         ):
@@ -142,7 +143,8 @@ class TestExecute:
                 mod.TimelineRepository, "get_extraction_job", new=AsyncMock(return_value=job)
             ),
             patch.object(
-                mod.TimelineRepository, "update_extraction_status",
+                mod.TimelineRepository,
+                "update_extraction_status",
                 new=AsyncMock(side_effect=AppError(code="x", message="conflict")),
             ),
         ):
@@ -161,7 +163,8 @@ class TestExecute:
             patch.object(mod.TimelineRepository, "update_extraction_status", new=AsyncMock()),
             patch.object(mod.TimelineRepository, "update_heartbeat", new=AsyncMock()),
             patch.object(
-                mod.TimelineRepository, "get_turn_result",
+                mod.TimelineRepository,
+                "get_turn_result",
                 new=AsyncMock(return_value=SimpleNamespace(summary=None)),
             ),
         ):
@@ -185,7 +188,8 @@ class TestExecute:
             patch.object(mod.TimelineRepository, "update_extraction_status", new=AsyncMock()),
             patch.object(mod.TimelineRepository, "update_heartbeat", new=AsyncMock()),
             patch.object(
-                mod.TimelineRepository, "get_turn_result",
+                mod.TimelineRepository,
+                "get_turn_result",
                 new=AsyncMock(return_value=SimpleNamespace(summary="s")),
             ),
             patch.object(mod.CandidateRepository, "insert_candidates", new=AsyncMock()) as insert,
@@ -209,7 +213,8 @@ class TestExecute:
             patch.object(mod.TimelineRepository, "update_extraction_status", new=AsyncMock()),
             patch.object(mod.TimelineRepository, "update_heartbeat", new=AsyncMock()),
             patch.object(
-                mod.TimelineRepository, "get_turn_result",
+                mod.TimelineRepository,
+                "get_turn_result",
                 new=AsyncMock(return_value=SimpleNamespace(summary=None)),
             ),
             patch.object(mod.CandidateRepository, "insert_candidates", new=AsyncMock()),
@@ -222,9 +227,7 @@ class TestExecute:
         session.commit = AsyncMock()
         job = _fake_job(status="queued")
         gateway = MagicMock()
-        gateway.call = AsyncMock(
-            return_value=SimpleNamespace(content="{\"candidates\": []}")
-        )
+        gateway.call = AsyncMock(return_value=SimpleNamespace(content='{"candidates": []}'))
         service = _make_service(session, gateway=gateway)
         with (
             patch.object(

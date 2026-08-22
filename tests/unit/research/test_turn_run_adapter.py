@@ -56,9 +56,7 @@ class TestSubmitRunForTurn:
             turn_run_adapter.TimelineRepository, "get_turn", AsyncMock(return_value=turn)
         )
         with pytest.raises(AppError) as exc_info:
-            await submit_run_for_turn(
-                MagicMock(), turn.workspace_id, turn.id, uuid4(), "key"
-            )
+            await submit_run_for_turn(MagicMock(), turn.workspace_id, turn.id, uuid4(), "key")
         assert exc_info.value.code == "state_conflict"
 
     async def test_active_run_conflict(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -69,9 +67,7 @@ class TestSubmitRunForTurn:
         monkeypatch.setattr(turn_run_adapter, "TimelineRepository", repo)
 
         with pytest.raises(AppError) as exc_info:
-            await submit_run_for_turn(
-                MagicMock(), turn.workspace_id, turn.id, uuid4(), "key"
-            )
+            await submit_run_for_turn(MagicMock(), turn.workspace_id, turn.id, uuid4(), "key")
         assert exc_info.value.code == "analysis_busy"
 
     async def test_plan_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,9 +81,7 @@ class TestSubmitRunForTurn:
         session.get = AsyncMock(return_value=None)
 
         with pytest.raises(AppError) as exc_info:
-            await submit_run_for_turn(
-                session, turn.workspace_id, turn.id, uuid4(), "key"
-            )
+            await submit_run_for_turn(session, turn.workspace_id, turn.id, uuid4(), "key")
         assert exc_info.value.code == "not_found"
 
     async def test_plan_not_for_turn(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,9 +96,7 @@ class TestSubmitRunForTurn:
         session.get = AsyncMock(return_value=plan)
 
         with pytest.raises(AppError) as exc_info:
-            await submit_run_for_turn(
-                session, turn.workspace_id, turn.id, plan.id, "key"
-            )
+            await submit_run_for_turn(session, turn.workspace_id, turn.id, plan.id, "key")
         assert exc_info.value.code == "not_found"
 
     async def test_plan_not_confirmed(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,9 +111,7 @@ class TestSubmitRunForTurn:
         session.get = AsyncMock(return_value=plan)
 
         with pytest.raises(AppError) as exc_info:
-            await submit_run_for_turn(
-                session, turn.workspace_id, turn.id, plan.id, "key"
-            )
+            await submit_run_for_turn(session, turn.workspace_id, turn.id, plan.id, "key")
         assert exc_info.value.code == "state_conflict"
 
     async def test_success_from_plan_confirmed(self, monkeypatch: pytest.MonkeyPatch) -> None:

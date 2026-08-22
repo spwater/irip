@@ -19,9 +19,7 @@ def test_extract_vuln_ids_from_real_allowlist() -> None:
     """从项目真实 allowlist 提取 PYSEC-2026-1845。"""
     from pathlib import Path
 
-    allowlist = (
-        Path(__file__).parents[3] / "security" / "vulnerability-allowlist.yaml"
-    )
+    allowlist = Path(__file__).parents[3] / "security" / "vulnerability-allowlist.yaml"
     ids = extract_vuln_ids(allowlist)
     assert ids == ["PYSEC-2026-1845"]
 

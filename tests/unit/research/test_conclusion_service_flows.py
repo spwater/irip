@@ -262,9 +262,7 @@ class TestRevise:
         session = MagicMock()
         service = _make_service(monkeypatch, session)
         _, concl_repo, _ = _patch_repos(monkeypatch)
-        concl_repo.get_conclusion = AsyncMock(
-            return_value=_conclusion(workspace_id=uuid4())
-        )
+        concl_repo.get_conclusion = AsyncMock(return_value=_conclusion(workspace_id=uuid4()))
         cmd = ReviseConclusionCommand(
             workspace_id=uuid4(),
             conclusion_id=uuid4(),
@@ -390,8 +388,11 @@ class TestListConclusions:
         session = MagicMock()
         rev = SimpleNamespace(revision_number=5, statement="s")
         concl = SimpleNamespace(
-            id=uuid4(), workspace_id=uuid4(), source_type="manual",
-            evidence_status="manual_unverified", status="active",
+            id=uuid4(),
+            workspace_id=uuid4(),
+            source_type="manual",
+            evidence_status="manual_unverified",
+            status="active",
             current_revision_id=uuid4(),
         )
         result = MagicMock()

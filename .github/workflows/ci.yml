@@ -334,14 +334,14 @@ jobs:
           # 1) PostgreSQL 16 client（pg_basebackup / pg_restore），官方 PGDG 仓库
           sudo install -d /usr/share/postgresql-common/pgdg
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+            | sudo gpg --batch --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
           . /etc/os-release
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends postgresql-client-16
           # 2) MinIO mc client（pin 版本 + SHA256）
-          curl -fsSL "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2024-11-17T19-35-25Z" -o /tmp/mc
+          curl -fsSL --retry 3 "https://dl.min.io/client/mc/release/linux-amd64/archive/mc.RELEASE.2024-11-17T19-35-25Z" -o /tmp/mc
           echo "544d2d11c32cb4ed11b27338935a9cc434e15b692ff3d1529a624d341fe2ffc5  /tmp/mc" | sha256sum -c -
           sudo install -m 0755 /tmp/mc /usr/local/bin/mc
           # 3) age 加密工具（pin 版本 + SHA256）
@@ -684,6 +684,8 @@ jobs:
         run: |
           corepack enable pnpm
           pnpm install --frozen-lockfile
+          # 使用官方 npm registry 进行 audit（npmmirror 不支持 audit endpoint）
+          npm config set registry https://registry.npmjs.org/
           pnpm audit --audit-level=high
 
   # ---- 镜像漏洞扫描 (P1-T4: 独立硬门禁 job) ----
@@ -694,6 +696,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       - name: Container image scan (trivy)
         run: |
+          # 安装 trivy
+          TRIVY_VERSION=v0.55.0
+          curl -fsSL --retry 3 "https://github.com/aquasecurity/trivy/releases/download/${TRIVY_VERSION}/trivy_${TRIVY_VERSION#v}_Linux-64bit.tar.gz" -o /tmp/trivy.tar.gz
+          tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
+          sudo install -m 0755 /tmp/trivy /usr/local/bin/trivy
           # 扫描 Docker 镜像中的已知漏洞 -- 失败即阻断
           docker build -f deployments/compose/api.Dockerfile -t irip-api:scan .
           trivy image --severity HIGH,CRITICAL --exit-code 1 irip-api:scan

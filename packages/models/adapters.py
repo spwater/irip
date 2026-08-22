@@ -938,15 +938,11 @@ def build_adapter(contract: ModelContract) -> OnnxModelAdapter:
         enforce_security: bool = bool(executor.get("enforce_security", True))
         raw_publishers = executor.get("allowed_publishers")
         allowed_publishers: frozenset[str] | None = (
-            frozenset(str(p) for p in raw_publishers)
-            if isinstance(raw_publishers, list)
-            else None
+            frozenset(str(p) for p in raw_publishers) if isinstance(raw_publishers, list) else None
         )
         raw_op_types = executor.get("allowed_op_types")
         allowed_op_types: frozenset[str] | None = (
-            frozenset(str(op) for op in raw_op_types)
-            if isinstance(raw_op_types, list)
-            else None
+            frozenset(str(op) for op in raw_op_types) if isinstance(raw_op_types, list) else None
         )
         return OnnxModelAdapter(
             timeout_seconds=timeout_seconds,

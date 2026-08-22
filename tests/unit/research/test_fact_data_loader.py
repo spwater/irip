@@ -55,9 +55,7 @@ class TestBuildFactProvider:
         fact_query_cls = MagicMock()
         monkeypatch.setattr("packages.facts.query_service.FactQueryService", fact_query_cls)
         core_cls = MagicMock()
-        monkeypatch.setattr(
-            "packages.research.lineage.core_adapter.CoreFactProviderImpl", core_cls
-        )
+        monkeypatch.setattr("packages.research.lineage.core_adapter.CoreFactProviderImpl", core_cls)
 
         provider = loader._build_fact_provider()
 

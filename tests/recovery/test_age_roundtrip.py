@@ -52,9 +52,7 @@ def _require_age() -> None:
     本地已通过 brew 安装、CI 的 test-recovery job 已装 age v1.1.1，
     因此二者均会真实执行 round-trip，不会被隐式跳过。
     """
-    missing: list[str] = [
-        tool for tool in ("age", "age-keygen") if shutil.which(tool) is None
-    ]
+    missing: list[str] = [tool for tool in ("age", "age-keygen") if shutil.which(tool) is None]
     if missing:
         pytest.skip(f"age tool(s) missing: {', '.join(missing)}")
 
@@ -128,9 +126,7 @@ def _prepare_plaintext_staging(tmp_path: Path) -> tuple[Path, bytes]:
     """创建含 database.dump 的明文 staging 目录，返回目录与明文内容。"""
     staging_dir: Path = tmp_path / "staging"
     staging_dir.mkdir()
-    plaintext: bytes = (
-        b"IRIP backup payload -- age round-trip verification -- " * 4096
-    )
+    plaintext: bytes = b"IRIP backup payload -- age round-trip verification -- " * 4096
     (staging_dir / DATABASE_DUMP_FILENAME).write_bytes(plaintext)
     return staging_dir, plaintext
 
@@ -176,9 +172,10 @@ class TestAgeRoundTrip:
         # 解密解压后的内容与原始明文一致
         restored_dump: Path = restore_dir / DATABASE_DUMP_FILENAME
         assert restored_dump.exists()
-        assert hashlib.sha256(restored_dump.read_bytes()).digest() == hashlib.sha256(
-            plaintext
-        ).digest()
+        assert (
+            hashlib.sha256(restored_dump.read_bytes()).digest()
+            == hashlib.sha256(plaintext).digest()
+        )
 
     def test_wrong_identity_decrypt_fails(self, tmp_path: Path) -> None:
         """用错误 identity（另一把私钥）解密应失败，证明加密非摆设。"""
@@ -188,9 +185,7 @@ class TestAgeRoundTrip:
 
         staging_dir, _ = _prepare_plaintext_staging(tmp_path)
 
-        backup: BackupService = BackupService(
-            _build_backup_config(tmp_path, recipient_a)
-        )
+        backup: BackupService = BackupService(_build_backup_config(tmp_path, recipient_a))
         tar_path: Path = tmp_path / BACKUP_TAR_FILENAME
         backup._create_tar(staging_dir, tar_path)
         encrypted_path: Path = tmp_path / BACKUP_TAR_AGE_FILENAME

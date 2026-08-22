@@ -84,9 +84,7 @@ class TestComplete:
 
         with monkeypatch.context() as m:
             enqueue = AsyncMock()
-            m.setattr(
-                "packages.research.timeline.run_finalizer.OutboxDispatcher.enqueue", enqueue
-            )
+            m.setattr("packages.research.timeline.run_finalizer.OutboxDispatcher.enqueue", enqueue)
             result = await finalizer.complete(run_id, workspace_id, turn_id, "analysis")
 
         assert result["status"] == "succeeded"
@@ -149,9 +147,7 @@ class TestComplete:
         assert kwargs["aggregate_id"] == extraction_job.id
         assert kwargs["aggregate_type"] == "research_candidate_extraction"
 
-    async def test_existing_result_skips_insert(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_existing_result_skips_insert(self, monkeypatch: pytest.MonkeyPatch) -> None:
         run_id, workspace_id, turn_id = uuid4(), uuid4(), uuid4()
         run = SimpleNamespace(id=run_id, status="running")
         turn = SimpleNamespace(id=turn_id, status="running")
@@ -255,9 +251,7 @@ class TestFail:
         result = await finalizer.fail(run_id, turn_id, "err")
         assert result["status"] == "failed"
 
-    async def test_fail_run_already_succeeded_noop(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_fail_run_already_succeeded_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         run_id, turn_id = uuid4(), uuid4()
         run = SimpleNamespace(id=run_id, status="succeeded", error_summary=None)
         turn = SimpleNamespace(id=turn_id, status="running")
@@ -268,9 +262,7 @@ class TestFail:
         assert run.status == "succeeded"
         assert run.error_summary is None
 
-    async def test_fail_turn_already_run_failed_noop(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_fail_turn_already_run_failed_noop(self, monkeypatch: pytest.MonkeyPatch) -> None:
         run_id, turn_id = uuid4(), uuid4()
         run = SimpleNamespace(id=run_id, status="running")
         turn = SimpleNamespace(id=turn_id, status="run_failed")

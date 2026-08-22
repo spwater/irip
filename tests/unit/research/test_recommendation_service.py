@@ -625,12 +625,8 @@ class TestRecommendationServiceMethods:
             mock.patch.object(
                 TimelineRepository,
                 "update_batch_status",
-                new=mock.AsyncMock(
-                    side_effect=AppError(code="state_conflict", message="conflict")
-                ),
+                new=mock.AsyncMock(side_effect=AppError(code="state_conflict", message="conflict")),
             ),
         ):
             ref = await svc.execute_batch(bid)
         assert ref.status == "queued"
-
-

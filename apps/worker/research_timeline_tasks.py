@@ -18,9 +18,7 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Build a session factory from env vars."""
     from packages.common.database import build_session_factory, get_database_url
 
-    db_url = get_database_url(
-        "postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip")
     return build_session_factory(db_url)
 
 

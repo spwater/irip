@@ -65,7 +65,8 @@ class TestSubmitRun:
     async def test_turn_cannot_run(self, monkeypatch: pytest.MonkeyPatch) -> None:
         turn = SimpleNamespace(id=uuid4(), status="question_draft")
         monkeypatch.setattr(
-            mod, "require_owned_turn",
+            mod,
+            "require_owned_turn",
             AsyncMock(return_value=turn),
         )
         service = _make_service(monkeypatch, _make_session())
@@ -77,7 +78,8 @@ class TestSubmitRun:
     async def test_no_confirmed_plan(self, monkeypatch: pytest.MonkeyPatch) -> None:
         turn = SimpleNamespace(id=uuid4(), status="plan_confirmed")
         monkeypatch.setattr(
-            mod, "require_owned_turn",
+            mod,
+            "require_owned_turn",
             AsyncMock(return_value=turn),
         )
         service = _make_service(monkeypatch, _make_session(plan=None))
@@ -91,7 +93,8 @@ class TestSubmitRun:
         plan = SimpleNamespace(id=uuid4())
         active_run = SimpleNamespace(id=uuid4())
         monkeypatch.setattr(
-            mod, "require_owned_turn",
+            mod,
+            "require_owned_turn",
             AsyncMock(return_value=turn),
         )
         monkeypatch.setattr(
@@ -105,13 +108,12 @@ class TestSubmitRun:
         assert exc_info.value.code == "analysis_busy"
 
     async def test_submit_success(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        turn = SimpleNamespace(
-            id=uuid4(), status="plan_confirmed", evidence_snapshot_id=uuid4()
-        )
+        turn = SimpleNamespace(id=uuid4(), status="plan_confirmed", evidence_snapshot_id=uuid4())
         plan = SimpleNamespace(id=uuid4())
         run_id = uuid4()
         monkeypatch.setattr(
-            mod, "require_owned_turn",
+            mod,
+            "require_owned_turn",
             AsyncMock(return_value=turn),
         )
         monkeypatch.setattr(

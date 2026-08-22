@@ -42,9 +42,7 @@ def _async_db_url() -> str:
     Returns:
         str: 异步数据库连接字符串。
     """
-    db_url = get_database_url(
-        "postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip"
-    )
+    db_url = get_database_url("postgresql+psycopg://irip:irip_dev_password@localhost:55432/irip")
     if db_url.startswith("postgresql+psycopg://"):
         return db_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
     return db_url
