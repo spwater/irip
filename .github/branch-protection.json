@@ -1,0 +1,45 @@
+{
+  "_comment": [
+    "本文件需人工导入 GitHub 分支保护设置（gh api 或 Web UI 的 Settings → Branches → Add rule）。",
+    "它不是 CI 自动读取的配置，而是供运维/管理员导入的 status check 清单，用于让 required contexts",
+    "与 .github/workflows/ci.yml 中各 job 实际生成的 status check 名称一一对齐。",
+    "",
+    "对齐规则：GitHub 的 required status check key = job 的 name 字段；",
+    "使用 matrix 的 job 会在 name 后追加括号内矩阵值（如 \"Unit Tests (3.12)\"）。",
+    "ci.yml 共 19 个 job，其中 lint 与 test-unit 使用 python-version 矩阵 [3.12, 3.13]，",
+    "各展开为 2 个 check，故实际 status check 总数为 21（17 个单值 + 2×2 矩阵）。",
+    "",
+    "导入：",
+    "  gh api repos/{owner}/{repo}/branches/main/protection \\",
+    "    -X PUT -H 'Accept: application/vnd.github+json' \\",
+    "    --input .github/branch-protection.json",
+    "（或按本文件 required_status_checks.contexts 在 Web UI 逐个勾选。）"
+  ],
+  "branch": "main",
+  "required_status_checks": {
+    "strict": false,
+    "contexts": [
+      "Ruff Lint + Format Check (3.12)",
+      "Ruff Lint + Format Check (3.13)",
+      "Error Code Exhaustiveness",
+      "Mypy Type Check",
+      "Unit Tests (3.12)",
+      "Unit Tests (3.13)",
+      "Contract Tests",
+      "Integration Tests",
+      "Security Tests",
+      "Recovery Tests",
+      "Acceptance Tests",
+      "Web Unit Tests",
+      "Web Build",
+      "Generate SBOM",
+      "E2E Tests",
+      "Dependency Vulnerability Scan",
+      "Container Image Scan (Trivy)",
+      "SAST (Bandit + Semgrep)",
+      "Secret Scan (gitleaks)",
+      "Load Test (k6 smoke)",
+      "Generate Stats & Acceptance Report"
+    ]
+  }
+}
