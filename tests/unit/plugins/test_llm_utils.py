@@ -233,7 +233,7 @@ class TestCallLlmForStructuredLlmCall:
     async def test_llm_returns_partial_json(self) -> None:
         """LLM 返回部分 JSON 时提取有效部分。"""
         llm_content = (
-            'Here is the data:\n```json\n'
+            "Here is the data:\n```json\n"
             '{"metadata": {"a": 1}, "points": [], "series": []}\n```\nDone.'
         )
         mock_resp = MagicMock()
