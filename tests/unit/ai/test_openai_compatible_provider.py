@@ -6,9 +6,10 @@
 - _build_headers：Authorization + Content-Type；
 - _parse_response：正常回答 + tool_calls 解析 + 空 choices 报错 + args JSON 解析失败；
 - complete：成功路径 + 非 200 状态码 + cancel_event 取消；
+- stream_complete：文本增量 + tool_calls 组装 + 错误状态码 + 取消 + [DONE] 标记；
 - thinking_enabled 属性读写。
 
-使用 Mock SafeHTTPClient，不发起真实 HTTP 请求。
+部分 ``complete`` / ``stream_complete`` 测试使用 ``respx`` 模拟 HTTP 调用。
 """
 
 import asyncio
@@ -18,6 +19,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import respx
 
 from packages.ai.openai_compatible import OpenAICompatibleProvider
 from packages.ai.providers import AIRequest, AIResponse
@@ -422,3 +424,392 @@ class TestComplete:
             with pytest.raises(AppError) as exc_info:
                 await provider.complete(_make_request(), cancel_event=cancel_event)
         assert exc_info.value.code == "ai_cancelled"
+
+
+# ============================================================
+# stream_complete (respx-mocked)
+# ============================================================
+
+
+def _sse_lines(*events: str) -> bytes:
+    """Build SSE-formatted bytes from individual ``data:`` payloads."""
+    return b"\n".join(f"data: {e}".encode() for e in events) + b"\n\n"
+
+
+class TestStreamComplete:
+    """``stream_complete`` 方法测试（使用 respx 模拟 HTTP 流式响应）。"""
+
+    @respx.mock
+    async def test_stream_text_chunks(self) -> None:
+        """流式返回文本增量 + done 事件。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps({"choices": [{"delta": {"content": "Hello"}}]}),
+            json.dumps({"choices": [{"delta": {"content": " world"}}]}),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        chunks = [e for e in events if e["type"] == "chunk"]
+        done = [e for e in events if e["type"] == "done"]
+        assert len(chunks) == 2
+        assert chunks[0]["content"] == "Hello"
+        assert chunks[1]["content"] == " world"
+        assert len(done) == 1
+        assert done[0]["tool_calls"] == []
+
+    @respx.mock
+    async def test_stream_tool_calls_assembled(self) -> None:
+        """流式 tool_calls fragments 被组装为完整 tool_calls。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        # Two fragments for index 0: id+name in first, arguments in second
+        sse_body = _sse_lines(
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-1",
+                                        "function": {"name": "search_facts", "arguments": ""},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": '{"query": "temp"}'},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        done = [e for e in events if e["type"] == "done"]
+        assert len(done) == 1
+        tc = done[0]["tool_calls"]
+        assert len(tc) == 1
+        assert tc[0]["id"] == "call-1"
+        assert tc[0]["tool"] == "search_facts"
+        assert tc[0]["args"] == {"query": "temp"}
+        assert "调用工具 search_facts" in tc[0]["summary"]
+
+    @respx.mock
+    async def test_stream_error_status_code(self) -> None:
+        """非 200 状态码产生 error 事件。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            status_code=500,
+            content=b'{"error": "server error"}',
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        errors = [e for e in events if e["type"] == "error"]
+        assert len(errors) == 1
+        assert "500" in errors[0]["message"]
+
+    @respx.mock
+    async def test_stream_cancel_event(self) -> None:
+        """cancel_event 被设置时产生 error 事件并终止流。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps({"choices": [{"delta": {"content": "chunk1"}}]}),
+            json.dumps({"choices": [{"delta": {"content": "chunk2"}}]}),
+            json.dumps({"choices": [{"delta": {"content": "chunk3"}}]}),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        cancel_event = asyncio.Event()
+        events: list[dict[str, Any]] = []
+
+        async for ev in provider.stream_complete(_make_request(), cancel_event=cancel_event):
+            events.append(ev)
+            # Set cancel after first chunk
+            if ev["type"] == "chunk":
+                cancel_event.set()
+
+        types = [e["type"] for e in events]
+        # Should have at least one chunk and an error
+        assert "error" in types
+        error_ev = [e for e in events if e["type"] == "error"]
+        assert "取消" in error_ev[0]["message"]
+
+    @respx.mock
+    async def test_stream_invalid_json_line_skipped(self) -> None:
+        """非法 JSON 行被跳过，不中断流。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            "not-valid-json",
+            json.dumps({"choices": [{"delta": {"content": "valid"}}]}),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        chunks = [e for e in events if e["type"] == "chunk"]
+        assert len(chunks) == 1
+        assert chunks[0]["content"] == "valid"
+
+    @respx.mock
+    async def test_stream_empty_choices_skipped(self) -> None:
+        """空 choices 的 chunk 被跳过。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps({"choices": []}),
+            json.dumps({"choices": [{"delta": {"content": "data"}}]}),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        chunks = [e for e in events if e["type"] == "chunk"]
+        assert len(chunks) == 1
+        assert chunks[0]["content"] == "data"
+
+    @respx.mock
+    async def test_stream_tool_calls_invalid_args_json(self) -> None:
+        """tool_calls arguments 非法 JSON 时回退为空 dict。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "tc-x",
+                                        "function": {"name": "calc", "arguments": "not-json"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        done = [e for e in events if e["type"] == "done"]
+        assert len(done) == 1
+        tc = done[0]["tool_calls"]
+        assert tc[0]["args"] == {}
+
+    @respx.mock
+    async def test_stream_multiple_tool_calls_by_index(self) -> None:
+        """多个 tool_calls 按各自 index 独立组装。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "tc-0",
+                                        "function": {"name": "tool_a", "arguments": "{}"},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            json.dumps(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 1,
+                                        "id": "tc-1",
+                                        "function": {"name": "tool_b", "arguments": '{"x": 1}'},
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ),
+            "[DONE]",
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        done = [e for e in events if e["type"] == "done"]
+        assert len(done) == 1
+        tc_list = done[0]["tool_calls"]
+        assert len(tc_list) == 2
+        assert tc_list[0]["tool"] == "tool_a"
+        assert tc_list[0]["args"] == {}
+        assert tc_list[1]["tool"] == "tool_b"
+        assert tc_list[1]["args"] == {"x": 1}
+
+    @respx.mock
+    async def test_stream_no_done_marker(self) -> None:
+        """无 [DONE] 标记也能正常结束（流结束后产出 done 事件）。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        sse_body = _sse_lines(
+            json.dumps({"choices": [{"delta": {"content": "end"}}]}),
+        )
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            content=sse_body,
+            headers={"content-type": "text/event-stream"},
+        )
+
+        events: list[dict[str, Any]] = []
+        async for ev in provider.stream_complete(_make_request()):
+            events.append(ev)
+
+        done = [e for e in events if e["type"] == "done"]
+        assert len(done) == 1
+
+
+# ============================================================
+# complete with respx (integration-level unit tests)
+# ============================================================
+
+
+class TestCompleteWithRespx:
+    """``complete`` 方法使用 respx 模拟 HTTP 的测试。"""
+
+    @respx.mock
+    async def test_complete_success_via_respx(self) -> None:
+        """respx 模拟成功调用返回 AIResponse。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            json={
+                "choices": [{"message": {"content": "respx response"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            }
+        )
+
+        resp = await provider.complete(_make_request())
+        assert isinstance(resp, AIResponse)
+        assert resp.answer == "respx response"
+        assert resp.provider_mode == "openai_compatible"
+
+    @respx.mock
+    async def test_complete_tool_calls_via_respx(self) -> None:
+        """respx 模拟返回 tool_calls。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "tc-1",
+                                    "function": {
+                                        "name": "search_facts",
+                                        "arguments": '{"query": "XRD"}',
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+        )
+
+        resp = await provider.complete(_make_request())
+        assert len(resp.tool_calls) == 1
+        assert resp.tool_calls[0]["tool"] == "search_facts"
+        assert resp.tool_calls[0]["args"] == {"query": "XRD"}
+
+    @respx.mock
+    async def test_complete_4xx_via_respx(self) -> None:
+        """respx 模拟 4xx 状态码抛 ai_provider_error (retryable=False)。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            status_code=403,
+            json={"error": "forbidden"},
+        )
+
+        with pytest.raises(AppError) as exc_info:
+            await provider.complete(_make_request())
+        assert exc_info.value.code == "ai_provider_error"
+        assert exc_info.value.retryable is False
+
+    @respx.mock
+    async def test_complete_5xx_via_respx(self) -> None:
+        """respx 模拟 5xx 状态码抛 ai_provider_error (retryable=True)。"""
+        provider = _make_provider(base_url="http://test-llm:8000/v1")
+        respx.post("http://test-llm:8000/v1/chat/completions").respond(
+            status_code=500,
+            json={"error": "internal"},
+        )
+
+        with pytest.raises(AppError) as exc_info:
+            await provider.complete(_make_request())
+        assert exc_info.value.code == "ai_provider_error"
+        assert exc_info.value.retryable is True

@@ -8,10 +8,18 @@
 - _require_numeric_tools 未配置时抛 AppError；
 - _build_numeric_principal 从 user 构造 NumericPrincipal；
 - execute_tool 分派到对应 handler（search_standards / extract_data）；
-- execute_tool 未知工具返回未实现提示。
+- execute_tool 未知工具返回未实现提示；
+- search_facts handler 通过 fact_service 搜索 / 空结果 / 截断到 20 条；
+- search_parameters handler 通过 parameter_service 搜索 / 服务异常；
+- explain_provenance handler 通过 provenance_service / 未配置 / 异常；
+- compare_experiments handler 通过 fact_service / 异常 / 未配置；
+- run_published_model handler 通过 model_service / 异常 / 未配置 / inputs 强制转换；
+- draft_report handler 无 factory / 默认标题；
+- extract_data handler 长路径截断 / 长 prompt 截断；
+- evaluate_expression / describe_series 分派到 numeric_tools。
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -179,3 +187,423 @@ class TestExecuteToolDispatch:
         )
         assert "至少 2" in result["summary"]
         assert "error" in result["data"]
+
+
+# ============================================================
+# Handler tests with mocked services
+# ============================================================
+
+
+class TestSearchFactsHandler:
+    """search_facts handler 测试。"""
+
+    async def test_search_facts_with_service(self) -> None:
+        """fact_service 可用时通过 service 搜索。"""
+        fact_service = AsyncMock()
+        fact_service.search = AsyncMock(
+            return_value=[
+                {
+                    "id": "fact-1",
+                    "subject_id": "sample-1",
+                    "fact_type": "measurement",
+                    "data_summary": "温度=25°C",
+                },
+                {
+                    "id": "fact-2",
+                    "subject_id": "sample-2",
+                    "fact_type": "measurement",
+                    "data_summary": "湿度=60%",
+                },
+            ]
+        )
+        executor = ToolExecutor(ToolRegistry(), fact_service=fact_service)
+        org_id = uuid4()
+
+        result = await executor.execute_tool(
+            "search_facts",
+            {"query": "温度", "fact_type": "measurement"},
+            _make_user(["lab_member"]),
+            org_id,
+        )
+
+        assert "搜索到 2 条事实" in result["summary"]
+        assert result["data"]["count"] == 2
+        assert result["data"]["results"][0]["id"] == "fact-1"
+        fact_service.search.assert_awaited_once()
+        call_kwargs = fact_service.search.call_args
+        assert call_kwargs.kwargs["query"] == "温度"
+        assert call_kwargs.kwargs["fact_type"] == "measurement"
+        assert call_kwargs.kwargs["department_id"] == org_id
+
+    async def test_search_facts_service_empty_results(self) -> None:
+        """fact_service 返回空列表。"""
+        fact_service = AsyncMock()
+        fact_service.search = AsyncMock(return_value=[])
+        executor = ToolExecutor(ToolRegistry(), fact_service=fact_service)
+
+        result = await executor.execute_tool(
+            "search_facts", {"query": "nonexistent"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "搜索到 0 条事实" in result["summary"]
+        assert result["data"]["count"] == 0
+
+    async def test_search_facts_truncates_to_20(self) -> None:
+        """fact_service 返回超过 20 条时截断。"""
+        fact_service = AsyncMock()
+        fact_service.search = AsyncMock(
+            return_value=[
+                {"id": f"f-{i}", "subject_id": f"s-{i}", "fact_type": "t", "data_summary": ""}
+                for i in range(25)
+            ]
+        )
+        executor = ToolExecutor(ToolRegistry(), fact_service=fact_service)
+
+        result = await executor.execute_tool(
+            "search_facts", {"query": "all"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert result["data"]["count"] == 20
+
+
+class TestSearchParametersHandler:
+    """search_parameters handler 测试。"""
+
+    async def test_search_parameters_with_service(self) -> None:
+        """parameter_service 可用时通过 service 搜索。"""
+        param_service = AsyncMock()
+        param_service.search_by_variable = AsyncMock(
+            return_value=[
+                {"id": "p-1", "variable_code": "TEMP", "value": "25", "status": "approved"},
+            ]
+        )
+        executor = ToolExecutor(ToolRegistry(), parameter_service=param_service)
+
+        result = await executor.execute_tool(
+            "search_parameters", {"variable_code": "TEMP"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "搜索到 1 个参数" in result["summary"]
+        assert result["data"]["results"][0]["variable_code"] == "TEMP"
+
+    async def test_search_parameters_service_error(self) -> None:
+        """parameter_service 抛异常时返回错误信息。"""
+        param_service = AsyncMock()
+        param_service.search_by_variable = AsyncMock(side_effect=RuntimeError("DB down"))
+        executor = ToolExecutor(ToolRegistry(), parameter_service=param_service)
+
+        result = await executor.execute_tool(
+            "search_parameters", {"variable_code": "X"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "参数搜索失败" in result["summary"]
+        assert "DB down" in result["data"]["error"]
+
+
+class TestExplainProvenanceHandler:
+    """explain_provenance handler 测试。"""
+
+    async def test_explain_provenance_with_service(self) -> None:
+        """provenance_service 可用时返回溯源链路。"""
+        prov_service = AsyncMock()
+        prov_service.explain = AsyncMock(
+            return_value={"steps": [{"step": 1}, {"step": 2}, {"step": 3}]}
+        )
+        executor = ToolExecutor(ToolRegistry(), provenance_service=prov_service)
+
+        result = await executor.execute_tool(
+            "explain_provenance", {"parameter_id": "p-1"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "3 个步骤" in result["summary"]
+        assert len(result["data"]["steps"]) == 3
+
+    async def test_explain_provenance_without_service(self) -> None:
+        """provenance_service 未配置时返回不可用。"""
+        executor = ToolExecutor(ToolRegistry())
+
+        result = await executor.execute_tool(
+            "explain_provenance", {"parameter_id": "p-1"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "溯源服务不可用" in result["summary"]
+
+    async def test_explain_provenance_service_error(self) -> None:
+        """provenance_service 抛异常时返回错误信息。"""
+        prov_service = AsyncMock()
+        prov_service.explain = AsyncMock(side_effect=ValueError("not found"))
+        executor = ToolExecutor(ToolRegistry(), provenance_service=prov_service)
+
+        result = await executor.execute_tool(
+            "explain_provenance", {"parameter_id": "x"}, _make_user(["lab_member"]), uuid4()
+        )
+
+        assert "溯源查询失败" in result["summary"]
+
+
+class TestCompareExperimentsHandler:
+    """compare_experiments handler 测试。"""
+
+    async def test_compare_experiments_with_service(self) -> None:
+        """fact_service 可用时对比实验。"""
+        fid1 = str(uuid4())
+        fid2 = str(uuid4())
+        fact_service = AsyncMock()
+        fact_service.get = AsyncMock(
+            return_value={
+                "id": "f-1",
+                "subject_id": "s-1",
+                "fact_type": "measurement",
+                "data_summary": "data",
+            }
+        )
+        executor = ToolExecutor(ToolRegistry(), fact_service=fact_service)
+
+        result = await executor.execute_tool(
+            "compare_experiments",
+            {"fact_ids": [fid1, fid2]},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "对比了" in result["summary"]
+        assert fact_service.get.await_count == 2
+
+    async def test_compare_experiments_service_error(self) -> None:
+        """fact_service.get 抛异常时返回错误。"""
+        fact_service = AsyncMock()
+        fact_service.get = AsyncMock(side_effect=RuntimeError("DB error"))
+        executor = ToolExecutor(ToolRegistry(), fact_service=fact_service)
+
+        result = await executor.execute_tool(
+            "compare_experiments",
+            {"fact_ids": [str(uuid4()), str(uuid4())]},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "实验对比失败" in result["summary"]
+
+    async def test_compare_experiments_without_service(self) -> None:
+        """fact_service 未配置时返回不可用。"""
+        executor = ToolExecutor(ToolRegistry())
+
+        result = await executor.execute_tool(
+            "compare_experiments",
+            {"fact_ids": [str(uuid4()), str(uuid4())]},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "事实服务不可用" in result["summary"]
+
+
+class TestRunModelHandler:
+    """run_published_model handler 测试。"""
+
+    async def test_run_model_with_service(self) -> None:
+        """model_service 可用时运行模型预测。"""
+        model_service = AsyncMock()
+        model_service.predict = AsyncMock(
+            return_value=MagicMock(
+                version="v1.0",
+                model_id=uuid4(),
+                model_version_id=uuid4(),
+                predictions={"output": 42},
+                fact_id=None,
+            )
+        )
+        executor = ToolExecutor(ToolRegistry(), model_service=model_service)
+
+        result = await executor.execute_tool(
+            "run_published_model",
+            {"model_id": str(uuid4()), "inputs": {"x": 1}},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "模型预测完成" in result["summary"]
+        assert result["data"]["version"] == "v1.0"
+        assert result["data"]["predictions"] == {"output": 42}
+
+    async def test_run_model_service_error(self) -> None:
+        """model_service 抛异常时返回错误。"""
+        model_service = AsyncMock()
+        model_service.predict = AsyncMock(side_effect=RuntimeError("model not found"))
+        executor = ToolExecutor(ToolRegistry(), model_service=model_service)
+
+        result = await executor.execute_tool(
+            "run_published_model",
+            {"model_id": str(uuid4()), "inputs": {}},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "模型预测失败" in result["summary"]
+
+    async def test_run_model_without_service(self) -> None:
+        """model_service 未配置时返回不可用。"""
+        executor = ToolExecutor(ToolRegistry())
+
+        result = await executor.execute_tool(
+            "run_published_model",
+            {"model_id": str(uuid4()), "inputs": {}},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "模型服务不可用" in result["summary"]
+
+    async def test_run_model_invalid_inputs_coerced_to_dict(self) -> None:
+        """inputs 非 dict 时被强制转为空 dict。"""
+        model_service = AsyncMock()
+        model_service.predict = AsyncMock(
+            return_value=MagicMock(
+                version="v",
+                model_id=uuid4(),
+                model_version_id=uuid4(),
+                predictions={},
+                fact_id=None,
+            )
+        )
+        executor = ToolExecutor(ToolRegistry(), model_service=model_service)
+
+        await executor.execute_tool(
+            "run_published_model",
+            {"model_id": str(uuid4()), "inputs": "not-a-dict"},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        # predict should receive {} as inputs
+        call_kwargs = model_service.predict.call_args
+        assert call_kwargs.kwargs["inputs"] == {}
+
+
+class TestDraftReportHandler:
+    """draft_report handler 测试。"""
+
+    async def test_draft_report_without_factory(self) -> None:
+        """无 factory 时返回空事实摘要的草稿。"""
+        executor = ToolExecutor(ToolRegistry())
+
+        result = await executor.execute_tool(
+            "draft_report",
+            {"title": "测试报告", "fact_ids": []},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert "报告草稿已生成" in result["summary"]
+        assert result["data"]["title"] == "测试报告"
+        assert result["data"]["referenced_facts"] == []
+
+    async def test_draft_report_default_title(self) -> None:
+        """无 title 时使用默认标题。"""
+        executor = ToolExecutor(ToolRegistry())
+
+        result = await executor.execute_tool(
+            "draft_report",
+            {"fact_ids": []},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert result["data"]["title"] == "未命名报告"
+
+
+class TestExtractDataHandler:
+    """extract_data handler 测试。"""
+
+    async def test_extract_data_truncates_long_path(self) -> None:
+        """path 超过 100 字符时在 summary 中截断。"""
+        executor = ToolExecutor(ToolRegistry())
+        long_path = "/" + "a" * 200
+
+        result = await executor.execute_tool(
+            "extract_data",
+            {"path": long_path, "prompt": "extract"},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert len(result["summary"]) < len(f"数据提取请求已记录（路径: {long_path}）")
+
+    async def test_extract_data_truncates_data_path(self) -> None:
+        """path 在 data 中被截断到 200 字符。"""
+        executor = ToolExecutor(ToolRegistry())
+        long_path = "/" + "b" * 250
+
+        result = await executor.execute_tool(
+            "extract_data",
+            {"path": long_path, "prompt": "x"},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert len(result["data"]["path"]) <= 200
+
+    async def test_extract_data_truncates_prompt(self) -> None:
+        """prompt 在 data 中被截断到 500 字符。"""
+        executor = ToolExecutor(ToolRegistry())
+        long_prompt = "p" * 600
+
+        result = await executor.execute_tool(
+            "extract_data",
+            {"path": "/data", "prompt": long_prompt},
+            _make_user(["lab_member"]),
+            uuid4(),
+        )
+
+        assert len(result["data"]["prompt"]) <= 500
+
+
+class TestNumericToolDispatch:
+    """evaluate_expression / describe_series 分派测试。"""
+
+    async def test_evaluate_expression_dispatches_to_numeric(self) -> None:
+        """evaluate_expression 分派到 numeric_tools.evaluate_expression。"""
+        numeric_mock = MagicMock()
+        numeric_mock.evaluate_expression = AsyncMock(
+            return_value=MagicMock(
+                summary="计算结果",
+                llm_data={"value": 8},
+                audit_data={"expr": "3+5"},
+                citation_params={},
+            )
+        )
+        executor = ToolExecutor(ToolRegistry(), numeric_tools=numeric_mock)
+        user = _make_user(["lab_member"])
+
+        result = await executor.execute_tool("evaluate_expression", {"expr": "3+5"}, user, uuid4())
+
+        assert result["summary"] == "计算结果"
+        assert result["data"] == {"value": 8}
+        assert "audit" in result
+
+    async def test_describe_series_dispatches_to_numeric(self) -> None:
+        """describe_series 分派到 numeric_tools.describe_series。"""
+        numeric_mock = MagicMock()
+        numeric_mock.describe_series = AsyncMock(
+            return_value=MagicMock(
+                summary="统计描述",
+                llm_data={"mean": 25.5},
+                audit_data={},
+                citation_params={},
+            )
+        )
+        executor = ToolExecutor(ToolRegistry(), numeric_tools=numeric_mock)
+        user = _make_user(["lab_member"])
+
+        result = await executor.execute_tool("describe_series", {"series_id": "s-1"}, user, uuid4())
+
+        assert result["summary"] == "统计描述"
+        assert result["data"] == {"mean": 25.5}
+
+    async def test_evaluate_expression_without_numeric_raises(self) -> None:
+        """numeric_tools 未配置时 evaluate_expression 抛 AppError。"""
+        executor = ToolExecutor(ToolRegistry())
+        user = _make_user(["lab_member"])
+
+        with pytest.raises(AppError, match="numeric tools not configured"):
+            await executor.execute_tool("evaluate_expression", {"expr": "1+1"}, user, uuid4())
