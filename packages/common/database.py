@@ -215,10 +215,6 @@ class ScopedSessionMixin:
     默认，RLS fail-closed），确保无身份上下文的调用不会泄露跨租户数据。
     """
 
-    _factory: async_sessionmaker[AsyncSession]
-    _dept_id: UUID | None
-    _actor_id: UUID | None
-
     @asynccontextmanager
     async def _scoped_session(self) -> AsyncIterator[AsyncSession]:
         """带 GUC 的事务会话上下文，用 ``_rls_dept_id`` / ``_dept_id`` / ``_actor_id`` 自动设 GUC。
@@ -238,7 +234,7 @@ class ScopedSessionMixin:
             rls_dept_id if rls_dept_id is not None else getattr(self, "_dept_id", None)
         )
         user_id: UUID | None = getattr(self, "_actor_id", None)
-        async with scoped_session(self._factory, dept_id, user_id) as session:
+        async with scoped_session(self._factory, dept_id, user_id) as session:  # type: ignore[attr-defined]
             yield session
 
     def set_rls_override(self, dept_id: UUID | None) -> None:

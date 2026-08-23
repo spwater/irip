@@ -472,9 +472,9 @@ class FactQueryService(ScopedSessionMixin):
             data_bytes: bytes | None = None
             json_error: str | None = None
             try:
-                data_bytes = await artifact_svc.get_bytes(art_record.id)
+                data_bytes = await artifact_svc.get_bytes(art_record.id)  # type: ignore[attr-defined]
             except Exception as exc:
-                _logger.warning("JSON artifact 下载失败: %s — %s", art_record.id, exc)
+                _logger.warning("JSON artifact 下载失败: %s — %s", art_record.id, exc)  # type: ignore[attr-defined]
                 json_error = str(exc)[:200]
 
             if data_bytes is not None:
@@ -500,9 +500,9 @@ class FactQueryService(ScopedSessionMixin):
                 pdf_artifact = await FactRepository.find_source_file_artifact(session, fact_id)
                 if pdf_artifact:
                     result_data["source_file"] = {
-                        "filename": pdf_artifact.filename or "原始文件",
-                        "media_type": pdf_artifact.media_type,
-                        "artifact_id": str(pdf_artifact.id),
+                        "filename": pdf_artifact.filename or "原始文件",  # type: ignore[attr-defined]
+                        "media_type": pdf_artifact.media_type,  # type: ignore[attr-defined]
+                        "artifact_id": str(pdf_artifact.id),  # type: ignore[attr-defined]
                     }
             except Exception:
                 _logger.warning("查找原始文件失败", exc_info=True)
@@ -546,7 +546,7 @@ class FactQueryService(ScopedSessionMixin):
         if art_record is None:
             return None
 
-        data_bytes = await artifact_service.get_bytes(art_record.id)
+        data_bytes = await artifact_service.get_bytes(art_record.id)  # type: ignore[attr-defined]
         parsed = json.loads(data_bytes.decode("utf-8"))
         pts = parsed.get("points", [])
         srs = parsed.get("series", [])

@@ -119,11 +119,11 @@ class CoreFactProviderImpl:
         """
         from packages.facts.entities import Fact
 
-        rls_dept_id: UUID | None = getattr(self._query_service, "_rls_dept_id", None)
+        rls_dept_id: object | None = getattr(self._query_service, "_rls_dept_id", None)
         dept_id = rls_dept_id if rls_dept_id is not None else self._query_service._dept_id
         user_id = self._query_service._actor_id
 
-        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:
+        async with scoped_session(self._query_service._factory, dept_id, user_id) as session:  # type: ignore[arg-type]
             effective_size = min(max(page_size, 1), 100)
             fetch_limit = effective_size + 1
 

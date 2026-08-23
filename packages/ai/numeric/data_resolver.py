@@ -507,7 +507,7 @@ class NumericDataResolver:
             async with fact_service._scoped_session() as session:
                 art_record = await FactRepository.find_json_artifact(session, fact_id)
                 if art_record is not None:
-                    return art_record.id, art_record.sha256
+                    return art_record.id, art_record.sha256  # type: ignore[attr-defined]
         except Exception:
             logging.getLogger(__name__).warning("unexpected error", exc_info=True)
         return None, None
