@@ -12,7 +12,7 @@
       "max_complexity": 15
     },
     "apps/api/routers/components.py": {
-      "lines": 577,
+      "lines": 580,
       "max_complexity": 15
     },
     "apps/api/routers/flows.py": {
@@ -32,7 +32,7 @@
       "max_complexity": 15
     },
     "apps/api/routers/research_products.py": {
-      "lines": 914,
+      "lines": 923,
       "max_complexity": 15
     },
     "apps/api/routers/research_publish.py": {
@@ -76,7 +76,7 @@
       "max_complexity": 15
     },
     "packages/ai/numeric/expression_funcs.py": {
-      "lines": 753,
+      "lines": 755,
       "max_complexity": 15
     },
     "packages/ai/numeric/service.py": {
@@ -100,7 +100,7 @@
       "max_complexity": 15
     },
     "packages/common/artifacts.py": {
-      "lines": 696,
+      "lines": 699,
       "max_complexity": 15
     },
     "packages/components/flow/definition_service.py": {
@@ -132,7 +132,7 @@
       "max_complexity": 15
     },
     "packages/facts/repository.py": {
-      "lines": 808,
+      "lines": 813,
       "max_complexity": 15
     },
     "packages/governance/governance_service.py": {
