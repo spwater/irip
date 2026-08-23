@@ -107,7 +107,7 @@ async def _process_derivation_async(
             await session.execute(
                 sa.update(Job)
                 .values(
-                    status=JobStatus.COMPLETED.value,  # type: ignore[attr-defined]
+                    status=JobStatus.SUCCEEDED.value,
                     result=summary,
                     updated_at=sa.func.now(),
                     lock_version=Job.lock_version + 1,

@@ -11,11 +11,13 @@ FactRepository 封装所有事实相关的数据库操作：
 session_scope 事务上下文管理提交。
 """
 
+from __future__ import annotations
+
 import base64
 import binascii
 import json
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -25,6 +27,9 @@ from packages.common.errors import AppError
 from packages.common.ids import new_id
 from packages.facts.entities import Fact, FactDataIndex
 from packages.facts.observations import FactMeta, FactSnapshotRow
+
+if TYPE_CHECKING:
+    from packages.common.artifacts import Artifact
 
 
 def _encode_cursor(created_at: datetime, entity_id: UUID) -> str:
@@ -708,7 +713,7 @@ class FactRepository:
     async def find_json_artifact(
         session: AsyncSession,
         fact_id: UUID,
-    ) -> object | None:
+    ) -> Artifact | None:
         """查找 JSON Artifact（source_artifact_id 优先，fallback extract_{flow_run_id}.json）。
 
         Args:
@@ -756,7 +761,7 @@ class FactRepository:
     async def find_source_file_artifact(
         session: AsyncSession,
         fact_id: UUID,
-    ) -> object | None:
+    ) -> Artifact | None:
         """查找非 JSON 原始文件 artifact（PDF 等）。
 
         Args:
