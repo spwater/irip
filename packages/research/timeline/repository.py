@@ -338,7 +338,7 @@ class TimelineRepository:
             .limit(1)
         )
         row = result.scalar_one_or_none()
-        return row[0] if row else None
+        return row if row else None
 
     # --- Recommendation batch ---
 
@@ -605,9 +605,9 @@ class TimelineRepository:
         heartbeat_timeout_minutes: int = 10,
     ) -> list[CandidateExtractionJob]:
         """Find running extractions whose heartbeat is stale."""
-        from datetime import timedelta
+        from datetime import UTC, timedelta
 
-        cutoff = datetime.utcnow() - timedelta(minutes=heartbeat_timeout_minutes)
+        cutoff = datetime.now(UTC) - timedelta(minutes=heartbeat_timeout_minutes)
         result = await session.execute(
             sa.select(CandidateExtractionJob).where(
                 CandidateExtractionJob.status == "running",
@@ -625,9 +625,9 @@ class TimelineRepository:
         stale_minutes: int = 2,
     ) -> list[CandidateExtractionJob]:
         """Find queued extractions that may not have been delivered to a worker."""
-        from datetime import timedelta
+        from datetime import UTC, timedelta
 
-        cutoff = datetime.utcnow() - timedelta(minutes=stale_minutes)
+        cutoff = datetime.now(UTC) - timedelta(minutes=stale_minutes)
         result = await session.execute(
             sa.select(CandidateExtractionJob).where(
                 CandidateExtractionJob.status == "queued",

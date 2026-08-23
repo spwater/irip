@@ -613,7 +613,7 @@ class TestTimelineRepositoryListTurns:
     async def test_get_active_run_status_running(self) -> None:
         session = _mock_session()
         result_mock = MagicMock()
-        result_mock.scalar_one_or_none.return_value = ("running",)
+        result_mock.scalar_one_or_none.return_value = "running"
         session.execute = AsyncMock(return_value=result_mock)
         status = await TimelineRepository.get_active_run_status(session, uuid4())
         assert status == "running"
