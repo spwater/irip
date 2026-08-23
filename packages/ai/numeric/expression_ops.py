@@ -249,8 +249,9 @@ class _OpsMixin(_InterpreterBase):
             null_mask = self._combine_null_masks(left, right, shape)
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
+        assert null_mask is not None
 
-        non_null = ~null_mask  # type: ignore[operator]
+        non_null = ~null_mask
 
         if check_div_zero:
             self._check_div_zero_vector(b, non_null, op_name)
@@ -263,7 +264,7 @@ class _OpsMixin(_InterpreterBase):
             result[non_null] = op(a[non_null], b[non_null])
             self._check_finite_vector(result, non_null, op_name)
 
-        return _EvalValue.vector_val(result, null_mask, unit)  # type: ignore[arg-type]
+        return _EvalValue.vector_val(result, null_mask, unit)
 
     # ---- 比较运算 ----
 
@@ -302,9 +303,10 @@ class _OpsMixin(_InterpreterBase):
             null_mask = self._combine_null_masks(left, right, shape)
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
+        assert null_mask is not None
 
         vec_result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask  # type: ignore[operator]
+        non_null = ~null_mask
         if np.any(non_null):
             cmp_result = self._compare_vector(a, b, op_str, non_null)
             vec_result[non_null] = cmp_result

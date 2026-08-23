@@ -130,7 +130,7 @@ class AIConversationService(ScopedSessionMixin):
                     research_context=conversation_context,
                 )
                 ai_answer = response.answer if hasattr(response, "answer") else str(response)
-                code_blocks = []  # type: ignore[var-annotated]
+                code_blocks: list[Any] = []
                 list(response.tool_calls) if hasattr(response, "tool_calls") else []
             except Exception as exc:
                 logger.warning("AI conversation call failed: %s", exc)

@@ -470,8 +470,11 @@ class ArtifactService(ScopedSessionMixin):
         return self._s3.presigned_put(object_key, expires)
 
     def presign_upload_for_key(
-        self, object_key: str, expires: int = 3600, endpoint_override: str | None = None
-    ) -> str:  # noqa: E501
+        self,
+        object_key: str,
+        expires: int = 3600,
+        endpoint_override: str | None = None,
+    ) -> str:
         """生成预签名上传 URL（基于任意 key）。
 
         用于预签名上传流程：客户端先上传到临时 key，

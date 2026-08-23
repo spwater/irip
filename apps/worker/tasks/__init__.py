@@ -626,7 +626,7 @@ def _do_execute_job(job_id: str) -> str:
 import logging as _logging  # noqa: E402
 
 from apps.worker.tasks.flows import execute_flow_job, resume_flow_job  # noqa: E402, F401
-from apps.worker.tasks.models import (  # noqa: E402, F401
+from apps.worker.tasks.models import (  # noqa: E402
     predict_model_job,
     publish_model_job,
     train_model_job,

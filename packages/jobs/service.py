@@ -258,7 +258,7 @@ class JobService(ScopedSessionMixin):
             stage = job.last_error.get("stage", "") if job.last_error else ""
             progress = (
                 100 if status in TERMINAL_STATUSES else (50 if status == JobStatus.RUNNING else 0)
-            )  # noqa: E501
+            )
             return JobRef(
                 job_id=job.id,
                 status=status,
@@ -336,7 +336,7 @@ class JobService(ScopedSessionMixin):
                 .outerjoin(
                     FlowDefinitionVersionORM,
                     FlowDefinitionVersionORM.id == FlowRunORM.flow_version_id,
-                )  # noqa: E501
+                )
                 .outerjoin(FlowDefORM, FlowDefORM.id == FlowDefinitionVersionORM.flow_definition_id)
                 .outerjoin(Department, Department.id == FlowDefORM.department_id)
                 .where(*conditions)

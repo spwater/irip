@@ -60,7 +60,7 @@ class ExtractPreviewRequest(BaseModel):
     artifact_id: str = Field(..., description="预加载文件的 artifact ID")
     filename: str = Field(..., description="原始文件名（用于推断后缀）")
     prompt: str = Field("", description="当前 LLM 提示词（xrd_converter 模式下可空）")
-    tool_type: str = Field(  # noqa: E501
+    tool_type: str = Field(
         "llm_converter",
         description="解析工具类型：llm_converter 或 xrd_converter",
     )

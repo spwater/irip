@@ -327,7 +327,7 @@ class OpenAICompatibleProvider:
         # 如果有用户传入的系统上下文（如实验数据），拼到 system 消息
         system_context = (
             request.user_context.get("system_context") if request.user_context else None
-        )  # noqa: E501
+        )
         if system_context:
             system_content += "\n\n" + system_context
             # 日志：确认 system_context 传到了

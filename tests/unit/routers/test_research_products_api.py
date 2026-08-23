@@ -433,7 +433,7 @@ class TestDataset:
         assert response.status_code == 200
         assert response.json()["version_number"] == 1
 
-    def test_delete_dataset_200(self):
+    def test_delete_dataset_204(self):
         service = _make_product_service()
         service.delete_dataset = AsyncMock(return_value=None)
 
@@ -444,7 +444,7 @@ class TestDataset:
             f"/api/v1/research/workspaces/{uuid4()}/derived-datasets/{uuid4()}"
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 204
 
     def test_get_dataset_not_found_404(self):
         service = _make_product_service()
@@ -577,7 +577,7 @@ class TestView:
         assert response.status_code == 200
         assert response.headers.get("content-type") == "image/png"
 
-    def test_delete_view_200(self):
+    def test_delete_view_204(self):
         service = _make_product_service()
         service.delete_view = AsyncMock(return_value=None)
 
@@ -586,7 +586,7 @@ class TestView:
 
         response = client.delete(f"/api/v1/research/workspaces/{uuid4()}/views/{uuid4()}")
 
-        assert response.status_code == 200
+        assert response.status_code == 204
 
 
 # ===========================================================================

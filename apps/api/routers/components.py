@@ -327,8 +327,10 @@ async def list_components(
                 version=ver.version,
                 kind=comp.kind,
                 runtime=ver.runtime,
-                experimental_object_code=ver.experimental_object_code
-                or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
+                experimental_object_code=(
+                    ver.experimental_object_code
+                    or _parse_experimental_object_code(ver.manifest_yaml)
+                ),
                 equipment_id=str(ver.equipment_id) if ver.equipment_id else None,
                 department_id=str(comp.department_id) if comp.department_id else None,
                 status=comp.status,
@@ -372,8 +374,9 @@ async def get_component(
         runtime=ver.runtime,
         status=comp.status,
         active_version_id=str(comp.active_version_id) if comp.active_version_id else None,
-        experimental_object_code=ver.experimental_object_code
-        or _parse_experimental_object_code(ver.manifest_yaml),  # noqa: E501
+        experimental_object_code=(
+            ver.experimental_object_code or _parse_experimental_object_code(ver.manifest_yaml)
+        ),
         equipment_id=str(ver.equipment_id) if ver.equipment_id else None,
         department_id=str(comp.department_id) if comp.department_id else None,
         visible_departments=list(comp.visible_departments or []),

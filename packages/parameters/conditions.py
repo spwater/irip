@@ -109,7 +109,7 @@ class ConditionBranch:
 
 
 #: 条件 AST 节点（叶子或分支）。
-ConditionNode = ConditionLeaf | ConditionBranch  # noqa: UP007
+ConditionNode = ConditionLeaf | ConditionBranch
 
 
 class ConditionEngine:

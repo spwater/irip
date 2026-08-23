@@ -836,9 +836,7 @@ class PersistFactRequest(BaseModel):
     """写入事实请求。"""
 
     object_id: UUID
-    custom_data: dict[str, Any] | None = (
-        None  # 可选：编辑后的自定义数据 {metadata: {...}, points: [...], series: [...]}  # noqa: E501
-    )
+    custom_data: dict[str, Any] | None = None  # 编辑后的自定义数据
 
 
 class PersistFactResponse(BaseModel):

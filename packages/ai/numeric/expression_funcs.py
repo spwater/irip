@@ -215,16 +215,17 @@ class _FuncsMixin(_InterpreterBase):
             null_mask = self._combine_null_masks(y, x, shape)
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
+        assert null_mask is not None
 
         vec_result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask  # type: ignore[operator]
+        non_null = ~null_mask
         if np.any(non_null):
             vec_result[non_null] = np.arctan2(yv[non_null], xv[non_null])
             if self._options.angle_unit == "degree":
                 vec_result[non_null] = np.degrees(vec_result[non_null])
             self._check_finite_vector(vec_result, non_null, "atan2")
 
-        return _EvalValue.vector_val(vec_result, null_mask, unit)  # type: ignore[arg-type]
+        return _EvalValue.vector_val(vec_result, null_mask, unit)
 
     def _call_round(self, args: list[_EvalValue]) -> _EvalValue:
         x = args[0]
@@ -348,9 +349,10 @@ class _FuncsMixin(_InterpreterBase):
             null_mask = self._combine_null_masks(a, b, shape)
         else:
             null_mask = np.zeros(shape[0], dtype=np.bool_)
+        assert null_mask is not None
 
         vec_result = np.zeros(shape[0], dtype=np.float64)
-        non_null = ~null_mask  # type: ignore[operator]
+        non_null = ~null_mask
         if np.any(non_null):
             if is_min:
                 vec_result[non_null] = np.minimum(av[non_null], bv[non_null])
@@ -358,7 +360,7 @@ class _FuncsMixin(_InterpreterBase):
                 vec_result[non_null] = np.maximum(av[non_null], bv[non_null])
             self._check_finite_vector(vec_result, non_null, name)
 
-        return _EvalValue.vector_val(vec_result, null_mask, unit)  # type: ignore[arg-type]
+        return _EvalValue.vector_val(vec_result, null_mask, unit)
 
     def _call_clip(self, args: list[_EvalValue]) -> _EvalValue:
         x = args[0]
@@ -429,7 +431,7 @@ class _FuncsMixin(_InterpreterBase):
         if cond.kind == "scalar" and a.kind == "scalar" and b.kind == "scalar":
             if cond.is_null_scalar or a.is_null_scalar or b.is_null_scalar:
                 return _EvalValue.null_scalar(unit)
-            return _EvalValue.scalar_val(a.scalar if cond.scalar else b.scalar, unit)  # type: ignore[arg-type]
+            return _EvalValue.scalar_val(a.sval if cond.scalar else b.sval, unit)
 
         # 至少一个是向量
         shape = self._broadcast(a, b)

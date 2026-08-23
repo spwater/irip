@@ -269,7 +269,7 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 # 清洗 echarts
                 import re as _re
 
-                def _clean_echarts_block(match: Any) -> None:
+                def _clean_echarts_block(match: Any) -> str:
                     block = match.group(1)
                     block = _re.sub(
                         r'"formatter"\s*:\s*function\s*\([^)]*\)\s*\{[^}]*(?:\{[^}]*\}[^}]*)*\}',
@@ -281,11 +281,11 @@ class PlanAnalyzerMixin(PlanServiceBase):
                         '"formatter": "{b}: {c}"',
                         block,
                     )
-                    return "```echarts\n" + block + "\n```"  # type: ignore[return-value]
+                    return "```echarts\n" + block + "\n```"
 
                 analysis_result = _re.sub(
                     r"```echarts\n([\s\S]*?)```",
-                    _clean_echarts_block,  # type: ignore[arg-type]
+                    _clean_echarts_block,
                     analysis_result,
                 )
             except Exception as exc:

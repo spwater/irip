@@ -209,7 +209,7 @@ class RobustParameterEstimator:
         if bootstrap_medians and abs(point_estimate) > 1e-10:
             bs_std: float = (
                 statistics.stdev(bootstrap_medians) if len(bootstrap_medians) > 1 else 0.0
-            )  # noqa: E501
+            )
             cv: float = bs_std / abs(point_estimate)
             confidence: float = max(0.0, min(1.0, 1.0 - cv))
         elif bootstrap_medians:

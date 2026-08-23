@@ -109,20 +109,20 @@ class DerivedDatasetMixin(ProductServiceBase):
                 )
 
             # 3. 校验三段式数据
-            result = ThreeSegmentValidator.validate(artifact_content.content)
-            if not result.valid:
+            validation = ThreeSegmentValidator.validate(artifact_content.content)
+            if not validation.valid:
                 raise AppError(
                     code="validation_failed",
-                    message="三段式数据校验失败: " + "; ".join(result.errors),
+                    message="三段式数据校验失败: " + "; ".join(validation.errors),
                     retryable=False,
                     fields={"artifact_id": str(artifact_id)},
                 )
 
-            assert result.data is not None
-            metadata_content = result.data.metadata
-            points_content = result.data.points
-            series_content = result.data.series
-            field_manifest = result.field_manifest
+            assert validation.data is not None
+            metadata_content = validation.data.metadata
+            points_content = validation.data.points
+            series_content = validation.data.series
+            field_manifest = validation.field_manifest
 
             # 4. 计算 content_hash
             content_hash = ThreeSegmentValidator.compute_content_hash(
@@ -193,7 +193,7 @@ class DerivedDatasetMixin(ProductServiceBase):
                 ),
             )
 
-            result = DerivedDatasetRef(  # type: ignore[assignment]
+            result = DerivedDatasetRef(
                 dataset_id=dataset.id,
                 name=name,
                 status="confirmed",
@@ -215,7 +215,7 @@ class DerivedDatasetMixin(ProductServiceBase):
             except Exception as exc:
                 logger.warning("on_product_confirmed hook failed: %s", exc)
 
-        return result  # type: ignore[return-value]
+        return result
 
     async def list_datasets(self, workspace_id: UUID) -> list[DerivedDatasetRef]:
         """列出工作空间内的 DerivedDataset。

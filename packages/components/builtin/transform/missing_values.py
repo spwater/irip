@@ -84,7 +84,11 @@ class MissingValues:
         )
         return ComponentResult(
             outputs={"observations": result_table},
-            summary=f"缺失值处理（{strategy}）: 输入 {table.row_count()} 行 → 输出 {result_table.row_count()} 行",  # noqa: E501
+            summary=(
+                f"缺失值处理（{strategy}）: "
+                f"输入 {table.row_count()} 行 → "
+                f"输出 {result_table.row_count()} 行"
+            ),
             metadata={
                 "strategy": strategy,
                 "input_rows": table.row_count(),

@@ -289,8 +289,11 @@ class S3Repository:
         )
 
     def presigned_put(
-        self, key: str, expires: int = 3600, endpoint_override: str | None = None
-    ) -> str:  # noqa: E501
+        self,
+        key: str,
+        expires: int = 3600,
+        endpoint_override: str | None = None,
+    ) -> str:
         """生成预签名 PUT URL。
 
         Args:
@@ -310,8 +313,11 @@ class S3Repository:
         return url
 
     def presigned_get(
-        self, key: str, expires: int = 3600, endpoint_override: str | None = None
-    ) -> str:  # noqa: E501
+        self,
+        key: str,
+        expires: int = 3600,
+        endpoint_override: str | None = None,
+    ) -> str:
         """生成预签名 GET URL。
 
         Args:

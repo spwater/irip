@@ -448,12 +448,12 @@ class AskService:
 
         # 如果有工具被执行，进行第二轮 completion 获取最终回答
         if tool_result_messages:
-            assistant_tool_calls = []  # type: ignore[var-annotated]
+            assistant_tool_calls: list[dict[str, Any]] = []
             for tc in response.tool_calls:
                 tc_id = (
                     str(tc.get("id", ""))
                     or f"call_{tc.get('tool', 'unknown')}_{len(assistant_tool_calls)}"
-                )  # noqa: E501
+                )
                 assistant_tool_calls.append(
                     {
                         "id": tc_id,

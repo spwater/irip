@@ -192,6 +192,7 @@ async def get_candidate(
 @research_products_router.post(
     "/workspaces/{workspace_id}/derived-datasets",
     status_code=201,
+    response_model=DatasetResponse,
 )
 async def create_dataset(
     workspace_id: UUID,
@@ -269,6 +270,7 @@ async def get_dataset(
 
 @research_products_router.patch(
     "/workspaces/{workspace_id}/derived-datasets/{dataset_id}",
+    response_model=DatasetResponse,
 )
 async def update_dataset(
     workspace_id: UUID,
@@ -357,6 +359,7 @@ async def get_dataset_version(
 @research_products_router.post(
     "/workspaces/{workspace_id}/views",
     status_code=201,
+    response_model=ViewResponse,
 )
 async def create_view(
     workspace_id: UUID,
@@ -435,6 +438,7 @@ async def get_view(
 
 @research_products_router.patch(
     "/workspaces/{workspace_id}/views/{view_id}",
+    response_model=ViewResponse,
 )
 async def update_view(
     workspace_id: UUID,
@@ -601,6 +605,7 @@ async def get_insight(
 
 @research_products_router.patch(
     "/workspaces/{workspace_id}/insights/{insight_id}",
+    response_model=InsightResponse,
 )
 async def update_insight(
     workspace_id: UUID,
@@ -642,6 +647,7 @@ async def delete_insight(
 
 @research_products_router.delete(
     "/workspaces/{workspace_id}/derived-datasets/{dataset_id}",
+    status_code=204,
 )
 async def delete_dataset(
     workspace_id: UUID,
@@ -658,6 +664,7 @@ async def delete_dataset(
 
 @research_products_router.delete(
     "/workspaces/{workspace_id}/views/{view_id}",
+    status_code=204,
 )
 async def delete_view(
     workspace_id: UUID,
@@ -756,6 +763,7 @@ async def get_insight_candidate(
 @research_products_router.post(
     "/workspaces/{workspace_id}/runs/{run_id}/insight-candidates/{candidate_id}/accept",
     status_code=201,
+    response_model=InsightResponse,
 )
 async def accept_insight_candidate(
     workspace_id: UUID,
@@ -780,6 +788,7 @@ async def accept_insight_candidate(
 @research_products_router.post(
     "/workspaces/{workspace_id}/runs/{run_id}/insight-candidates/{candidate_id}/modify",
     status_code=201,
+    response_model=InsightResponse,
 )
 async def modify_insight_candidate(
     workspace_id: UUID,

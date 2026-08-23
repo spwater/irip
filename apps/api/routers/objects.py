@@ -176,8 +176,8 @@ async def list_objects(
     object_type: str | None = Query(
         None,
         alias="type",
-        description="对象类型过滤，逗号分隔支持多类型（如 material,sample,product）",
-    ),  # noqa: E501
+        description="对象类型过滤，逗号分隔支持多类型",
+    ),
     cursor: str | None = Query(None, description="分页游标"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
 ) -> ObjectListResponse:

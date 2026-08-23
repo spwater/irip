@@ -724,8 +724,8 @@ class FlowExecutionEngine(ScopedSessionMixin):
             }
 
         except Exception as exc:
-            now_end: datetime = self._clock.now()  # type: ignore[no-redef]
-            duration_ms: int = int((now_end - now_start).total_seconds() * 1000)  # type: ignore[no-redef]
+            now_end = self._clock.now()
+            duration_ms = int((now_end - now_start).total_seconds() * 1000)
 
             diagnostics: dict[str, Any] = {
                 "error_type": type(exc).__name__,

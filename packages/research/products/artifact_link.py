@@ -152,14 +152,14 @@ class ArtifactLinkMixin(ProductServiceBase):
             try:
                 import json as _json
 
-                result = await session.execute(
+                _dag_result = await session.execute(
                     sa.text(
                         "SELECT id, dag_structure FROM research_analysis_plan_version "
                         "WHERE workspace_id = :wid ORDER BY created_at DESC LIMIT 1"
                     ),
                     {"wid": str(workspace_id)},
                 )
-                row = result.fetchone()
+                row = _dag_result.fetchone()
                 if row and row[1]:
                     plan_id, dag = row[0], row[1]
                     steps = dag.get("steps", []) if isinstance(dag, dict) else []
@@ -185,7 +185,7 @@ class ArtifactLinkMixin(ProductServiceBase):
             except Exception as exc:
                 logger.warning("Failed to clear insight candidate from dag_structure: %s", exc)
 
-            result = InsightRef(  # type: ignore[assignment]
+            result = InsightRef(
                 insight_id=insight.id,
                 name=insight_name,
                 status="confirmed",
@@ -206,7 +206,7 @@ class ArtifactLinkMixin(ProductServiceBase):
             except Exception as exc:
                 logger.warning("on_product_confirmed hook failed: %s", exc)
 
-        return result  # type: ignore[return-value]
+        return result
 
     async def create_insight_from_modify(
         self,

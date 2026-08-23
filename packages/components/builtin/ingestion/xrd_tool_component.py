@@ -76,7 +76,11 @@ class XrdToolComponent:
 
             return ComponentResult(
                 outputs={"observations": table},
-                summary=f"XRD解析: {len(points)} 个指标, {len(series)} 组序列, metadata {len(header)} 项",  # noqa: E501
+                summary=(
+                    f"XRD解析: {len(points)} 个指标, "
+                    f"{len(series)} 组序列, "
+                    f"metadata {len(header)} 项"
+                ),
                 metadata={
                     "row_count": len(points),
                     "header": header,

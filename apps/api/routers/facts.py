@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 from apps.api.dependencies.auth import CurrentUser  # noqa: E402
 from apps.api.dependencies.authorization import require_permission  # noqa: E402
-from apps.api.schemas.facts import FactListResponse, FactResponse  # noqa: E402, F401
+from apps.api.schemas.facts import FactListResponse, FactResponse  # noqa: E402
 from packages.common.errors import AppError  # noqa: E402
 from packages.facts.observations import FactDetailRow, FactRef  # noqa: E402
 from packages.facts.query_service import FactQueryService  # noqa: E402

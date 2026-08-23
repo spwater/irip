@@ -143,10 +143,10 @@ class ResultSearchService(ScopedSessionMixin):
 
             # 5. 筛选器应用
             if filters:
-                results, versions_map = await self._apply_filters(  # type: ignore[assignment]
+                results, versions_map = await self._apply_filters(
                     session,
                     results,
-                    versions_map,  # type: ignore[arg-type]
+                    versions_map,
                     filters,
                 )
 
@@ -271,10 +271,10 @@ class ResultSearchService(ScopedSessionMixin):
     async def _apply_filters(
         self,
         session: AsyncSession,
-        results: list[Any],
-        versions_map: dict[str, Any],
+        results: list[ResearchResult],
+        versions_map: dict[UUID, ResearchResultVersion],
         filters: dict[str, Any],
-    ) -> tuple[list[Any], dict[str, Any]]:
+    ) -> tuple[list[ResearchResult], dict[UUID, ResearchResultVersion]]:
         """应用筛选器。
 
         支持的筛选条件：
@@ -294,8 +294,8 @@ class ResultSearchService(ScopedSessionMixin):
         Returns:
             tuple[list, dict]: (过滤后结果列表, 过滤后版本映射)。
         """
-        filtered_results: list[Any] = []
-        filtered_versions: dict[str, Any] = {}
+        filtered_results: list[ResearchResult] = []
+        filtered_versions: dict[UUID, ResearchResultVersion] = {}
 
         publisher = filters.get("publisher")
         date_from = filters.get("date_from")

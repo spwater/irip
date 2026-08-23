@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from packages.research.execution.models_trusted import (  # noqa: F401
+from packages.research.execution.models_trusted import (
     ModelConfig,
     ModelResponse,
     TaskType,
