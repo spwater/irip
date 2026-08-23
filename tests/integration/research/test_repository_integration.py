@@ -1576,19 +1576,22 @@ async def test_result_version_search(async_session_factory, test_user) -> None:
                 )
 
         async with async_session_factory() as session:
-            # No query: all active versions
+            # No query: all active versions (filter to our result to avoid cross-test data)
             all_v = await ResultRepository.search_result_versions(session, None)
-            assert len(all_v) == 2
+            our_versions = [v for v in all_v if v.result_id == result_id]
+            assert len(our_versions) == 2
 
             # Query "alpha" matches title
             alpha = await ResultRepository.search_result_versions(session, "Alpha")
-            assert len(alpha) == 1
-            assert alpha[0].title == "Alpha Report"
+            our_alpha = [v for v in alpha if v.result_id == result_id]
+            assert len(our_alpha) == 1
+            assert our_alpha[0].title == "Alpha Report"
 
             # Query "finance" matches tags
             finance = await ResultRepository.search_result_versions(session, "finance")
-            assert len(finance) == 1
-            assert finance[0].tags == ["finance"]
+            our_finance = [v for v in finance if v.result_id == result_id]
+            assert len(our_finance) == 1
+            assert our_finance[0].tags == ["finance"]
 
             # Filter by result_ids
             filtered = await ResultRepository.search_result_versions(
@@ -2098,25 +2101,28 @@ async def test_search_published_datasets(async_session_factory, test_user) -> No
                 )
 
         async with async_session_factory() as session:
-            # No filters: only active + published
+            # No filters: only active + published (filter to our result to avoid cross-test data)
             results = await SearchRepository.search_published_datasets(session)
-            assert len(results) == 1
-            rv, rr = results[0]
+            our_results = [(rv, rr) for rv, rr in results if rr.id == result_id]
+            assert len(our_results) == 1
+            rv, rr = our_results[0]
             assert rv.title == "Published Alpha"
             assert rr.id == result_id
             assert rr.status == "published"
 
             # Query by title
             by_title = await SearchRepository.search_published_datasets(session, query="Alpha")
-            assert len(by_title) == 1
-            assert by_title[0][0].title == "Published Alpha"
+            our_title = [(rv, rr) for rv, rr in by_title if rr.id == result_id]
+            assert len(our_title) == 1
+            assert our_title[0][0].title == "Published Alpha"
 
             # Query by summary
             by_summary = await SearchRepository.search_published_datasets(
                 session,
                 query="alpha metrics",
             )
-            assert len(by_summary) == 1
+            our_summary = [(rv, rr) for rv, rr in by_summary if rr.id == result_id]
+            assert len(our_summary) == 1
 
             # Query that doesn't match
             no_match = await SearchRepository.search_published_datasets(
