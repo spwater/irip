@@ -267,7 +267,7 @@ def check_run_heartbeat() -> int:
                         session,
                         run_id,
                         "failed",
-                        completed_at=sa.func.now(),  # type: ignore[arg-type]
+                        completed_at=sa.func.now(),
                         error_summary="心跳超时，Worker 可能崩溃",
                     )
                     count += 1
