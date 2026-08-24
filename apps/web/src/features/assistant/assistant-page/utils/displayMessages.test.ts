@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mergeDisplayMessages, extractFactLabels } from './displayMessages';
 import type { AssistantMessage } from '@/api/models-ai';
 
-function makeMsg(id: string, role: string, content: string): AssistantMessage {
+function makeMsg(id: string, role: 'user' | 'assistant' | 'tool', content: string): AssistantMessage {
   return {
     id,
     conversation_id: 'conv1',

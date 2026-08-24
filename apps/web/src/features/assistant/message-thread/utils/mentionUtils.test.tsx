@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderMentions } from './mentionUtils';
 import { render } from '@testing-library/react';
-import * as React from 'react';
 
 describe('renderMentions', () => {
   it('returns plain content when mentions is empty', () => {
