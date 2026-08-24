@@ -103,6 +103,7 @@ class TestWorkerProcessInitSignal:
         # 模拟 run_worker_healthcheck_server 抛出 OSError
         with (
             patch("packages.ai.yaml_config.validate_ai_config"),
+            patch("apps.worker.celery_app._assert_not_superuser"),
             patch(
                 "apps.worker.celery_app.run_worker_healthcheck_server",
                 side_effect=OSError("Address already in use"),
@@ -123,6 +124,7 @@ class TestWorkerProcessInitSignal:
 
         with (
             patch("packages.ai.yaml_config.validate_ai_config"),
+            patch("apps.worker.celery_app._assert_not_superuser"),
             patch(
                 "apps.worker.celery_app.run_worker_healthcheck_server",
                 side_effect=mock_server,
@@ -239,6 +241,7 @@ class TestHealthcheckHandler:
             # 模拟第二个子进程尝试绑定同一端口
             with (
                 patch("packages.ai.yaml_config.validate_ai_config"),
+                patch("apps.worker.celery_app._assert_not_superuser"),
                 patch.dict("os.environ", {"IRIP_WORKER_HEALTHCHECK_PORT": str(port)}),
             ):
                 # signal handler 应捕获 OSError 并静默跳过

@@ -862,6 +862,20 @@ class TestRLSAdminCrossDeptRead:
                     ),
                     {"uid": admin_user_id, "dept": root_dept_id},
                 )
+
+                # 插入测试设备数据（确保 RLS 查询有数据）
+                equip_id = uuid4()
+                conn.execute(
+                    sa.text(
+                        "INSERT INTO equipment "
+                        "(id, code, display_name, department_id, "
+                        "owner_user_id, status, lock_version) "
+                        "VALUES (:id, 'rls_test', 'RLS Test', :dept, "
+                        ":uid, 'active', 0) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": equip_id, "dept": root_dept_id, "uid": admin_user_id},
+                )
                 conn.commit()
 
                 try:
@@ -883,6 +897,10 @@ class TestRLSAdminCrossDeptRead:
                             f"platform_administrator 应可见 >0 个部门, 实际 {visible_count}"
                         )
                 finally:
+                    conn.execute(
+                        sa.text("DELETE FROM equipment WHERE id = :id"),
+                        {"id": equip_id},
+                    )
                     conn.execute(
                         sa.text("DELETE FROM app_user_department WHERE user_id = :uid"),
                         {"uid": admin_user_id},

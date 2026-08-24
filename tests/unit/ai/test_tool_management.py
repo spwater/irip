@@ -7,7 +7,7 @@
 - list_tools() 仍返回全部工具含禁用（供管理 API，任务 4）；
 - AIService._build_tool_schemas 仅含启用工具（任务 5）；
 - ToolRepository 乐观锁冲突逻辑（D-2，任务 2）—— 需 DB 环境；
-- seed_tools_if_empty 幂等性（任务 3）—— 需 DB 环境。
+- seed_missing_builtin_tools 幂等性（任务 3）—— 需 DB 环境。
 
 不需要 DB 环境的测试用 mock session；需要 DB 的测试用 pytest.mark.integrationdb 标注。
 """
@@ -644,12 +644,12 @@ class TestOptimisticLock:
 
 
 # ============================================================
-# 7. seed_tools_if_empty 幂等性（任务 3）—— 需 DB 环境
+# 7. seed_missing_builtin_tools 幂等性（任务 3）—— 需 DB 环境
 # ============================================================
 
 
 class TestSeedToolsIfEmpty:
-    """seed_tools_if_empty 幂等性验证。
+    """seed_missing_builtin_tools 幂等性验证。
 
     标注 @pytest.mark.integrationdb：需要真实 PostgreSQL 数据库环境运行。
     """
@@ -660,7 +660,7 @@ class TestSeedToolsIfEmpty:
         async_session_factory: Any,
     ) -> None:
         """表空时写入 14 条种子数据（12 AI + 2 插件）。"""
-        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.ai.tool_seeding import seed_missing_builtin_tools
         from packages.common.database import session_scope
 
         async with session_scope(async_session_factory) as session:
@@ -668,7 +668,7 @@ class TestSeedToolsIfEmpty:
             await session.commit()
         try:
             async with session_scope(async_session_factory) as session:
-                count = await seed_tools_if_empty(session)
+                count = await seed_missing_builtin_tools(session)
                 assert count == len(ALL_TOOLS)
                 all_rows = await ToolRepository.list_all(session)
                 assert len(all_rows) == len(ALL_TOOLS)
@@ -689,17 +689,18 @@ class TestSeedToolsIfEmpty:
         """表非空时不写入，返回 0。"""
         from uuid import uuid4
 
-        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.ai.tool_seeding import seed_missing_builtin_tools
         from packages.common.database import session_scope
 
         async with session_scope(async_session_factory) as session:
             await session.execute(sa_text("DELETE FROM ai_tool"))
             await session.commit()
+        # 插入一个 ALL_TOOLS 里的 name，使 seed 时该 tool 已存在
         async with session_scope(async_session_factory) as session:
             await ToolRepository.create(
                 session,
                 {
-                    "name": f"pre-existing-{uuid4().hex[:8]}",
+                    "name": ALL_TOOLS[0].name,
                     "display_name": "Pre",
                     "description": "pre-existing",
                     "required_permission": "standard:read",
@@ -707,10 +708,23 @@ class TestSeedToolsIfEmpty:
                 },
                 updated_by=uuid4(),
             )
+            # 插入所有剩余 tools，使 seed 无需插入任何工具
+            for spec in ALL_TOOLS[1:]:
+                await ToolRepository.create(
+                    session,
+                    {
+                        "name": spec.name,
+                        "display_name": spec.display_name,
+                        "description": spec.description,
+                        "required_permission": spec.required_permission,
+                        "parameters_schema": spec.parameters_schema,
+                    },
+                    updated_by=uuid4(),
+                )
             await session.commit()
         try:
             async with session_scope(async_session_factory) as session:
-                count = await seed_tools_if_empty(session)
+                count = await seed_missing_builtin_tools(session)
                 assert count == 0
                 await session.commit()
         finally:
@@ -724,7 +738,7 @@ class TestSeedToolsIfEmpty:
         async_session_factory: Any,
     ) -> None:
         """种子数据 enabled=True, lock_version=0。"""
-        from packages.ai.tool_seeding import seed_tools_if_empty
+        from packages.ai.tool_seeding import seed_missing_builtin_tools
         from packages.common.database import session_scope
 
         async with session_scope(async_session_factory) as session:
@@ -732,7 +746,7 @@ class TestSeedToolsIfEmpty:
             await session.commit()
         try:
             async with session_scope(async_session_factory) as session:
-                await seed_tools_if_empty(session)
+                await seed_missing_builtin_tools(session)
                 all_rows = await ToolRepository.list_all(session)
                 for row in all_rows:
                     assert row.enabled is True

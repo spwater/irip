@@ -317,13 +317,22 @@ async def test_member_count_aggregation(
             primary_department_id=None,
         )
 
-        result = await dept_service.list_all(limit=100)
-        dept_item = next(
-            (d for d, c, _, _ in result.items if d.code == "ud_count_lab"),
-            None,
-        )
+        # 直接 get 创建的部门验证 member_count（避免 list_all 分页限制）
+        dept_item = await dept_service.get(dept.id)
         assert dept_item is not None
-        count = next(c for d, c, _, _ in result.items if d.code == "ud_count_lab")
+        assert dept_item.code == "ud_count_lab"
+        # member_count 通过 list_all 查找（翻页找）
+        count = None
+        cursor = None
+        for _ in range(20):  # 最多翻 20 页
+            result = await dept_service.list_all(limit=100, cursor=cursor)
+            for d, c, _, _ in result.items:
+                if d.code == "ud_count_lab":
+                    count = c
+                    break
+            if count is not None or not result.has_more:
+                break
+            cursor = result.next_cursor
         assert count == 2
     finally:
         await _cleanup_test_user(async_session_factory, user1)
