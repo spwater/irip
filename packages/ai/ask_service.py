@@ -22,7 +22,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -33,11 +32,12 @@ from uuid import UUID
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from packages.ai.cancellation import CancellationRegistry
-from packages.ai.citation import CitationGenerator
-from packages.ai.citation_builder import (
-    _build_nav_citation,
+from packages.ai.ask_executor import (
+    _build_final_response,
+    _persist_ask_result,
+    _process_tool_calls,
 )
+from packages.ai.cancellation import CancellationRegistry
 from packages.ai.collaboration_entities import ConversationParticipant
 from packages.ai.conversation_service import ConversationService
 from packages.ai.entities import AIConversation
@@ -299,254 +299,32 @@ class AskService:
             AIResponse: 最终回答（含工具调用结果、引用、不确定性）。
         """
         # 执行工具调用（权限检查 + 白名单工具真实执行）
-        executed_tool_calls: list[dict[str, Any]] = []
-        tool_result_messages: list[dict[str, Any]] = []
-        all_citations: list[Any] = []
-
-        for tc in response.tool_calls:
-            tool_name = str(tc.get("tool", ""))
-            tool_args = tc.get("args", {})
-            if not isinstance(tool_args, dict):
-                tool_args = {}
-            tool_call_id = str(tc.get("id", "")) or f"call_{tool_name}_{len(executed_tool_calls)}"
-
-            # 验证工具在白名单中
-            try:
-                spec = self._tool_registry.validate(tool_name)
-            except AppError:
-                executed_tool_calls.append(
-                    {
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "summary": f"拒绝执行：未知工具 '{tool_name}'",
-                        "status": "rejected",
-                    }
-                )
-                tool_result_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            {"error": f"未知工具: {tool_name}"},
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-                continue
-
-            # 检查用户权限
-            has_perm = self._tool_executor.check_role_permission(user, spec.required_permission)
-            if not has_perm:
-                executed_tool_calls.append(
-                    {
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "summary": (f"拒绝执行：缺少权限 '{spec.required_permission}'"),
-                        "status": "forbidden",
-                    }
-                )
-                tool_result_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            {"error": f"权限不足: 需要 {spec.required_permission}"},
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-                continue
-
-            # 白名单工具真实执行
-            try:
-                _t_tool_start = time.monotonic()
-                tool_result = await self._tool_executor.execute_tool(
-                    tool_name, tool_args, user, ctx.org_id
-                )
-                _t_tool_end = time.monotonic()
-                logger.debug(
-                    "[TIMING] tool_exec: %s  duration=%.1fms",
-                    tool_name,
-                    (_t_tool_end - _t_tool_start) * 1000,
-                )
-                result_summary = str(tool_result.get("summary", ""))
-
-                # 工具结果归一化：检测数值工具的三路分流
-                has_numeric_audit = (
-                    isinstance(tool_result, dict)
-                    and "audit" in tool_result
-                    and "citation_params" in tool_result
-                )
-                if has_numeric_audit:
-                    llm_payload = tool_result.get("data", {})
-                    persisted_result = tool_result.get("audit", {})
-                    citation_payload = tool_result.get("citation_params", tool_args)
-                else:
-                    llm_payload = tool_result.get("data", tool_result)
-                    persisted_result = tool_result.get("data")
-                    citation_payload = tool_args
-
-                executed_tool_calls.append(
-                    {
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "summary": result_summary or f"已执行 {spec.display_name}",
-                        "status": "executed",
-                        "result": persisted_result,
-                    }
-                )
-                tool_result_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            llm_payload,
-                            ensure_ascii=False,
-                            default=str,
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-                # 生成结构化 citation（服务端签名，不可伪造）
-                citation_gen = CitationGenerator()
-                signed_citation = citation_gen.generate(
-                    tool_name=tool_name,
-                    query_params=citation_payload,
-                    result_summary=result_summary or "工具执行完成",
-                )
-                all_citations.append(signed_citation)
-
-                # 生成前端导航 citation（带 href 路由路径）
-                nav_citation = _build_nav_citation(
-                    tool_name, tool_args, tool_result, spec.display_name
-                )
-                if nav_citation is not None:
-                    all_citations.append(nav_citation)
-            except Exception as exc:
-                error_msg = f"工具执行失败: {exc}"
-                executed_tool_calls.append(
-                    {
-                        "tool": tool_name,
-                        "args": tool_args,
-                        "summary": error_msg,
-                        "status": "error",
-                    }
-                )
-                tool_result_messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": json.dumps(
-                            {"error": error_msg},
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-
-        # 如果有工具被执行，进行第二轮 completion 获取最终回答
-        if tool_result_messages:
-            assistant_tool_calls: list[dict[str, Any]] = []
-            for tc in response.tool_calls:
-                tc_id = (
-                    str(tc.get("id", ""))
-                    or f"call_{tc.get('tool', 'unknown')}_{len(assistant_tool_calls)}"
-                )
-                assistant_tool_calls.append(
-                    {
-                        "id": tc_id,
-                        "type": "function",
-                        "function": {
-                            "name": str(tc.get("tool", "")),
-                            "arguments": json.dumps(
-                                tc.get("args", {}),
-                                ensure_ascii=False,
-                                separators=(",", ":"),
-                            ),
-                        },
-                    }
-                )
-
-            second_messages: list[dict[str, Any]] = list(ctx.msg_list)
-            second_messages.append(
-                {
-                    "role": "assistant",
-                    "content": response.answer,
-                    "tool_calls": assistant_tool_calls,
-                }
-            )
-            second_messages.extend(tool_result_messages)
-
-            second_request = AIRequest(
-                messages=tuple(second_messages),
-                tools=ctx.tool_names,
-                tool_schemas=ctx.tool_schemas,
-                user_context=ctx.user_context,
-                provider_mode=ctx.provider_name,
-            )
-
-            if hasattr(self._provider, "thinking_enabled"):
-                self._provider.thinking_enabled = (
-                    ctx.thinking_enabled and ctx.config_thinking_enabled
-                )
-
-            try:
-                _t_r2_start = time.monotonic()
-                second_response: AIResponse = await self._provider.complete(  # type: ignore[call-arg]
-                    second_request, cancel_event=ctx.cancel_event
-                )
-                _t_r2_end = time.monotonic()
-                logger.debug("[TIMING] llm_round2=%.0fms", (_t_r2_end - _t_r2_start) * 1000)
-                final_answer = self._persistence.redact_credentials(second_response.answer)
-                final_uncertainty = second_response.uncertainty
-            except Exception:
-                # 第二轮失败时使用第一轮回答 + 工具结果摘要
-                tool_summaries = "\n".join(
-                    f"- {tc['tool']}: {tc.get('summary', '')}"
-                    for tc in executed_tool_calls
-                    if tc.get("status") == "executed"
-                )
-                final_answer = self._persistence.redact_credentials(
-                    response.answer
-                    + (f"\n\n工具执行结果：\n{tool_summaries}" if tool_summaries else "")
-                )
-                final_uncertainty = response.uncertainty
-        else:
-            final_answer = self._persistence.redact_credentials(response.answer)
-            final_uncertainty = response.uncertainty
-
-        # 构建最终响应
-        final_response = AIResponse(
-            answer=final_answer,
-            tool_calls=tuple(executed_tool_calls),
-            citations=tuple(all_citations),
-            uncertainty=final_uncertainty,
-            provider_mode=response.provider_mode,
+        executed_tool_calls, tool_result_messages, all_citations = await _process_tool_calls(
+            response=response,
+            user=user,
+            org_id=ctx.org_id,
+            tool_registry=self._tool_registry,
+            tool_executor=self._tool_executor,
         )
 
-        # 持久化消息
-        await self._persistence.persist_messages(
-            conversation_id=ctx.conversation_id,
-            user_id=ctx.user_id,
-            question=ctx.question,
-            response=final_response,
-            mentions=ctx.mentions,
-            sender_display_name=getattr(user, "email", None),
-            sender_avatar_url=None,
+        # 构建最终响应（含第二轮 completion 如有工具被调用）
+        final_response = await _build_final_response(
+            response=response,
+            ctx=ctx,
+            provider=self._provider,
+            tool_result_messages=tool_result_messages,
+            executed_tool_calls=executed_tool_calls,
+            all_citations=all_citations,
+            persistence=self._persistence,
         )
 
-        # 首次对话后自动生成标题
-        if not ctx.history_messages:
-            try:
-                await self._persistence.auto_generate_title(
-                    conversation_id=ctx.conversation_id,
-                    question=ctx.question,
-                    answer=final_response.answer,
-                )
-            except Exception:
-                logging.getLogger(__name__).warning("unexpected error", exc_info=True)
+        # 持久化消息 + 自动生成标题
+        await _persist_ask_result(
+            final_response=final_response,
+            ctx=ctx,
+            user=user,
+            persistence=self._persistence,
+        )
 
         return final_response
 
