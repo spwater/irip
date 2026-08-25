@@ -210,6 +210,9 @@ async def _build_final_response(
     executed_tool_calls: list[dict[str, Any]],
     all_citations: list[Any],
     persistence: MessagePersistence,
+    user: Any = None,
+    tool_registry: Any = None,
+    tool_executor: Any = None,
 ) -> AIResponse:
     """构建最终 AIResponse（含第二轮 completion 如有工具被调用）。
 
@@ -281,8 +284,62 @@ async def _build_final_response(
             )
             _t_r2_end = time.monotonic()
             logger.debug("[TIMING] llm_round2=%.0fms", (_t_r2_end - _t_r2_start) * 1000)
-            final_answer = persistence.redact_credentials(second_response.answer)
-            final_uncertainty = second_response.uncertainty
+
+            # 第二轮如果又产生了 tool_calls（如工具失败后 AI 决定拆分重试），
+            # 继续执行工具 + 第三轮 completion，最多再追加一轮
+            if second_response.tool_calls:
+                logger.info(
+                    "第二轮产生 %d 个 tool_calls，继续执行",
+                    len(second_response.tool_calls),
+                )
+                # 执行第二轮的工具调用
+                r2_executed, r2_tool_msgs, r2_citations = await _process_tool_calls(
+                    response=second_response,
+                    user=user,
+                    org_id=ctx.org_id,
+                    tool_registry=tool_registry,
+                    tool_executor=tool_executor,
+                )
+                # 补充工具上下文到已执行列表
+                executed_tool_calls.extend(r2_executed)
+                all_citations.extend(r2_citations)
+
+                if r2_tool_msgs:
+                    # 第三轮：基于第二轮工具结果生成最终回答
+                    r2_assistant_calls = []
+                    for tc in second_response.tool_calls:
+                        tc_id = str(tc.get("id", "")) or f"call_r2_{len(r2_assistant_calls)}"
+                        r2_assistant_calls.append({
+                            "id": tc_id,
+                            "type": "function",
+                            "function": {
+                                "name": str(tc.get("tool", "")),
+                                "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
+                            },
+                        })
+                    third_messages = second_messages + [
+                        {"role": "assistant", "content": second_response.answer, "tool_calls": r2_assistant_calls},
+                    ] + r2_tool_msgs
+                    third_request = AIRequest(
+                        messages=tuple(third_messages),
+                        tools=ctx.tool_names,
+                        tool_schemas=ctx.tool_schemas,
+                        user_context=ctx.user_context,
+                        provider_mode=ctx.provider_name,
+                    )
+                    try:
+                        third_response = await provider.complete(third_request, cancel_event=ctx.cancel_event)
+                        final_answer = persistence.redact_credentials(third_response.answer)
+                        final_uncertainty = third_response.uncertainty
+                    except Exception:
+                        final_answer = persistence.redact_credentials(second_response.answer)
+                        final_uncertainty = second_response.uncertainty
+                else:
+                    final_answer = persistence.redact_credentials(second_response.answer)
+                    final_uncertainty = second_response.uncertainty
+            else:
+                final_answer = persistence.redact_credentials(second_response.answer)
+                final_uncertainty = second_response.uncertainty
         except Exception:
             # 第二轮失败时使用第一轮回答 + 工具结果摘要
             tool_summaries = "\n".join(

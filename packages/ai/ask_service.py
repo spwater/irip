@@ -369,6 +369,9 @@ class AskService:
             executed_tool_calls=executed_tool_calls,
             all_citations=all_citations,
             persistence=self._persistence,
+            user=user,
+            tool_registry=self._tool_registry,
+            tool_executor=self._tool_executor,
         )
 
         # 持久化消息 + 自动生成标题
