@@ -68,7 +68,7 @@ class NumericLimits:
 
     max_expression_length: int = 512
     max_ast_nodes: int = 128
-    max_ast_depth: int = 64
+    max_ast_depth: int = 200
     max_variables: int = 16
     max_inline_series_length: int = 10_000
     max_platform_series_length: int = 100_000
