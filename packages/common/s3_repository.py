@@ -380,3 +380,42 @@ class S3Repository:
             "url": str(response["url"]),
             **{k: str(v) for k, v in response.get("fields", {}).items()},
         }
+
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+
+def build_s3_repo_from_env() -> "S3Repository":
+    """从环境变量构建 S3 客户端（API 和 Worker 共用的唯一入口）。
+
+    读取的环境变量：
+    - IRIP_MINIO_ENDPOINT: 内部端点（默认 http://localhost:9000）
+    - IRIP_MINIO_EXTERNAL_ENDPOINT: 外部端点（可选，用于预签名 URL）
+    - IRIP_MINIO_ACCESS_KEY: 访问密钥（默认 irip）
+    - IRIP_MINIO_SECRET_KEY / IRIP_MINIO_SECRET_KEY_FILE: 秘密密钥
+    - IRIP_MINIO_BUCKET: bucket 名（默认 irip-artifacts）
+    - IRIP_MINIO_REGION: 区域（默认 us-east-1）
+
+    Returns:
+        S3Repository: 已初始化的 S3 客户端（含 ensure_bucket）。
+    """
+    import os
+
+    from packages.common.secret_files import read_secret
+
+    endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
+    if not endpoint.startswith("http"):
+        endpoint = f"http://{endpoint}"
+    external_endpoint = os.getenv("IRIP_MINIO_EXTERNAL_ENDPOINT")
+    if external_endpoint and not external_endpoint.startswith("http"):
+        external_endpoint = f"http://{external_endpoint}"
+    return S3Repository(
+        endpoint_url=endpoint,
+        access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
+        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
+        bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
+        region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
+        external_endpoint_url=external_endpoint,
+    )

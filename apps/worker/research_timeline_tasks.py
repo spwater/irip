@@ -109,8 +109,8 @@ async def _build_plan_service(
     from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
     try:
-        from apps.api.main import _build_s3_repo
-        s3_repo = _build_s3_repo()
+        from packages.common.s3_repository import build_s3_repo_from_env
+        s3_repo = build_s3_repo_from_env()
     except Exception:
         s3_repo = None
 
@@ -584,8 +584,8 @@ def execute_analysis_run(
         from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
         try:
-            from apps.api.main import _build_s3_repo
-            s3_repo = _build_s3_repo()
+            from packages.common.s3_repository import build_s3_repo_from_env
+            s3_repo = build_s3_repo_from_env()
         except Exception:
             s3_repo = None
 
@@ -859,8 +859,8 @@ def extract_candidates(
         from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
         try:
-            from apps.api.main import _build_s3_repo
-            s3_repo = _build_s3_repo()
+            from packages.common.s3_repository import build_s3_repo_from_env
+            s3_repo = build_s3_repo_from_env()
         except Exception:
             s3_repo = None
 

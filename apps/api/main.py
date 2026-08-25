@@ -69,21 +69,14 @@ def _to_async_url(url: str) -> str:
 
 
 def _build_s3_repo() -> S3Repository:
-    """从环境变量构建 S3 客户端。"""
-    endpoint = os.getenv("IRIP_MINIO_ENDPOINT", "http://localhost:9000")
-    if not endpoint.startswith("http"):
-        endpoint = f"http://{endpoint}"
-    external_endpoint = os.getenv("IRIP_MINIO_EXTERNAL_ENDPOINT")
-    if external_endpoint and not external_endpoint.startswith("http"):
-        external_endpoint = f"http://{external_endpoint}"
-    return S3Repository(
-        endpoint_url=endpoint,
-        access_key=os.getenv("IRIP_MINIO_ACCESS_KEY", "irip"),
-        secret_key=read_secret("IRIP_MINIO_SECRET_KEY", required=False) or "irip_dev_password",
-        bucket_name=os.getenv("IRIP_MINIO_BUCKET", "irip-artifacts"),
-        region=os.getenv("IRIP_MINIO_REGION", "us-east-1"),
-        external_endpoint_url=external_endpoint,
-    )
+    """从环境变量构建 S3 客户端（委托到 packages.common.s3_repository.build_s3_repo_from_env）。
+
+    保留此函数作为 API 侧的向后兼容入口；worker 侧应直接调用
+    build_s3_repo_from_env()，不要逆向 import apps.api.main。
+    """
+    from packages.common.s3_repository import build_s3_repo_from_env
+
+    return build_s3_repo_from_env()
 
 
 @asynccontextmanager
