@@ -298,6 +298,45 @@ class AskService:
         Returns:
             AIResponse: 最终回答（含工具调用结果、引用、不确定性）。
         """
+        # 心算拦截：第一轮无 tool_calls 但回答含数值结果
+        # 仅记录日志用于监控（prompt 层面已强制约束，此处不重试避免延迟和不确定性）
+        import re
+
+        if (
+            response.answer
+            and not response.tool_calls
+            and re.search(r"=\s*\*{0,2}\s*\d+\.?\d*", response.answer)
+        ):
+            logger.warning(
+                "心算检测：AI 回答含数值但未调工具。answer_len=%d, answer_preview=%s",
+                len(response.answer),
+                response.answer[:80],
+            )
+            # 强制补救：从回答中提取算术表达式，自动构造 tool_call
+            # 匹配模式：数字 运算符 数字 ... = 结果
+            # 支持 × ÷ ✕ 等非 ASCII 运算符
+            expr_match = re.search(
+                r"([\d\s\+\-\*/\(\)\.×÷✕]+)\s*[=＝]",
+                response.answer,
+            )
+            if expr_match:
+                expr = expr_match.group(1).strip().replace("×", "*").replace("÷", "/")
+                logger.info("心算补救：自动构造 tool_call, expression=%s", expr)
+                response = AIResponse(
+                    answer="",
+                    tool_calls=(
+                        {
+                            "id": f"call_auto_{int(time.time())}",
+                            "tool": "evaluate_expression",
+                            "args": {"expression": expr, "variables": []},
+                            "summary": f"调用工具 evaluate_expression",
+                        },
+                    ),
+                    citations=(),
+                    uncertainty=None,
+                    provider_mode=response.provider_mode,
+                )
+
         # 执行工具调用（权限检查 + 白名单工具真实执行）
         executed_tool_calls, tool_result_messages, all_citations = await _process_tool_calls(
             response=response,

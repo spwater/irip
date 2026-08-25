@@ -377,6 +377,10 @@ class OpenAICompatibleProvider:
         if caller_system_content:
             system_content = caller_system_content
 
+        # 强制约束：在 system 消息末尾追加工具调用提醒
+        # 每次请求都生效，防止模型在多轮对话中"遗忘"规则
+        system_content += "\n\n[强制规则] 回答中任何涉及数字运算的结果，必须通过 evaluate_expression 或 describe_series 工具获得，禁止自行心算。违反此规则的回答将被视为无效。"
+
         messages: list[dict[str, Any]] = [{"role": "system", "content": system_content}]
         # 加入历史消息和当前问题（不含 system role）
         # 第二轮 completion 时，messages 中可能包含 assistant 的 tool_calls
