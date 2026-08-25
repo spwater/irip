@@ -218,7 +218,9 @@ class PlanGeneratorMixin(PlanServiceBase):
             try:
                 fields = await self._fact_provider.get_fact_fields(source_id)
             except Exception:
-                logger.warning("Failed to get fact fields for %s, skipping", source_id, exc_info=True)
+                logger.warning(
+                    "Failed to get fact fields for %s, skipping", source_id, exc_info=True
+                )
                 fields = []
             field_manifest[str(source_id)] = list(fields)
 

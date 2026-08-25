@@ -26,6 +26,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.common.ids import new_id
+from packages.research.entities import ResearchWorkspace
 from packages.research.execution.entities_trusted import (
     ResearchAiConversation,
     ResearchAnalysisPlanVersion,
@@ -34,7 +35,6 @@ from packages.research.execution.entities_trusted import (
     ResearchMemoryDocument,
     ResearchRunArtifact,
 )
-from packages.research.entities import ResearchWorkspace
 
 
 class ResearchRepositoryTrusted:
@@ -398,8 +398,9 @@ class ResearchRepositoryTrusted:
             .with_for_update()
         )
         result = await session.execute(
-            sa.select(sa.func.max(ResearchAnalysisRun.run_number))
-            .where(ResearchAnalysisRun.workspace_id == workspace_id)
+            sa.select(sa.func.max(ResearchAnalysisRun.run_number)).where(
+                ResearchAnalysisRun.workspace_id == workspace_id
+            )
         )
         max_num = result.scalar()
         return (int(max_num) + 1) if max_num is not None else 1

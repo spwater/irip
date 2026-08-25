@@ -46,7 +46,7 @@ import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from packages.common.clock import Clock, SystemClock
-from packages.common.database import ScopedSessionMixin, get_database_url
+from packages.common.database import ScopedSessionMixin
 from packages.common.errors import AppError
 from packages.common.pagination import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from packages.experiment_project.entities import (
@@ -534,7 +534,9 @@ class ExperimentProjectService(ScopedSessionMixin):
             _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_admin_url()
             if _alembic_url and fd_ids:
                 # 解析 superuser 用户名，用于 SET ROLE
-                _admin_user = _alembic_url.split("://")[1].split(":")[0] if "://" in _alembic_url else "irip"
+                _admin_user = (
+                    _alembic_url.split("://")[1].split(":")[0] if "://" in _alembic_url else "irip"
+                )
 
                 # 在当前 session 内临时切换到 superuser 角色
                 await session.execute(sa.text(f'SET ROLE "{_admin_user}"'))

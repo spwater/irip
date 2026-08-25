@@ -176,9 +176,7 @@ def _validate_assignable_roles(user: CurrentUser, roles: list[str]) -> None:
             )
 
 
-def _assert_not_self_modifying_roles(
-    user_id: UUID, current_user: CurrentUser
-) -> None:
+def _assert_not_self_modifying_roles(user_id: UUID, current_user: CurrentUser) -> None:
     """禁止用户修改自己的角色（给自己加/减角色均属提权或降权风险）。
 
     Args:

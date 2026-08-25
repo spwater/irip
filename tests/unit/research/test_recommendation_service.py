@@ -205,8 +205,21 @@ class _FakeSession:
         self.flush = mock.AsyncMock()
         self.execute = mock.AsyncMock(return_value=mock.MagicMock())
 
+    def begin(self) -> "_FakeBegin":
+        return _FakeBegin()
+
     async def __aenter__(self) -> "_FakeSession":
         return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        return None
+
+
+class _FakeBegin:
+    """模拟 session.begin() 返回的 async context manager。"""
+
+    async def __aenter__(self) -> None:
+        return None
 
     async def __aexit__(self, *exc: object) -> None:
         return None

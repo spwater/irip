@@ -127,7 +127,7 @@ class RecommendationService(ScopedSessionMixin):
             selected_revision_ids: Explicitly selected conclusion revisions.
             idempotency_key: Client-provided idempotency key.
         """
-        async with self._scoped_session() as session:
+        async with self._factory() as session:
             existing = await TimelineRepository.get_batch_by_idempotency(
                 session, workspace_id, idempotency_key
             )
@@ -190,7 +190,7 @@ class RecommendationService(ScopedSessionMixin):
             RECOMMENDATION_USER_TEMPLATE,
         )
 
-        async with self._scoped_session() as session:
+        async with self._factory() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
                 raise AppError(
@@ -421,7 +421,7 @@ class RecommendationService(ScopedSessionMixin):
         Returns:
             Updated RecommendationBatchRef.
         """
-        async with self._scoped_session() as session:
+        async with self._factory() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
                 raise AppError(
@@ -472,7 +472,7 @@ class RecommendationService(ScopedSessionMixin):
             ResearchRecommendationItem,
         )
 
-        async with self._scoped_session() as session:
+        async with self._factory() as session:
             result = await session.execute(
                 sa.select(ResearchRecommendationBatch)
                 .where(ResearchRecommendationBatch.workspace_id == workspace_id)

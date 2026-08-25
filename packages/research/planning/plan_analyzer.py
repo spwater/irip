@@ -113,25 +113,32 @@ class PlanAnalyzerMixin(PlanServiceBase):
                         )
                         _row = _result.fetchone()
                         if _row and _row[0]:
-                            import json as _json2
                             fact_data = json.loads(_row[0]) if isinstance(_row[0], str) else _row[0]
-                            compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
+                            compact = _json.dumps(
+                                fact_data, ensure_ascii=False, separators=(",", ":")
+                            )
                             sample_label = f"已发布数据集 {str(source_id)[:8]}"
                             compact_data_parts.append(
                                 f"### 样品: {sample_label}\n```json\n{compact}\n```"
                             )
                     except Exception:
-                        logger.warning("Failed to load published data for %s", source_id, exc_info=True)
+                        logger.warning(
+                            "Failed to load published data for %s", source_id, exc_info=True
+                        )
                 else:
                     get_data = getattr(self._fact_provider, "get_fact_data", None)
                     if get_data is not None:
                         try:
                             fact_data = await get_data(source_id)
                         except Exception:
-                            logger.warning("Failed to load fact data for %s", source_id, exc_info=True)
+                            logger.warning(
+                                "Failed to load fact data for %s", source_id, exc_info=True
+                            )
                             continue
                         if isinstance(fact_data, dict):
-                            compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
+                            compact = _json.dumps(
+                                fact_data, ensure_ascii=False, separators=(",", ":")
+                            )
                             sample_label = fact_name or f"source_{_idx + 1}"
                             compact_data_parts.append(
                                 f"### 样品: {sample_label}\n```json\n{compact}\n```"

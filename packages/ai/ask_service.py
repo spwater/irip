@@ -333,7 +333,7 @@ class AskService:
                             "id": f"call_auto_{int(time.time())}",
                             "tool": "evaluate_expression",
                             "args": {"expression": expr, "variables": []},
-                            "summary": f"调用工具 evaluate_expression",
+                            "summary": "调用工具 evaluate_expression",
                         },
                     ),
                     citations=(),

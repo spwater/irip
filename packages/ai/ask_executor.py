@@ -339,16 +339,26 @@ async def _build_final_response(
             r_assistant_calls: list[dict[str, Any]] = []
             for tc in round_response.tool_calls:
                 tc_id = str(tc.get("id", "")) or f"call_r{round_num}_{len(r_assistant_calls)}"
-                r_assistant_calls.append({
-                    "id": tc_id,
-                    "type": "function",
-                    "function": {
-                        "name": str(tc.get("tool", "")),
-                        "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
-                    },
-                })
+                r_assistant_calls.append(
+                    {
+                        "id": tc_id,
+                        "type": "function",
+                        "function": {
+                            "name": str(tc.get("tool", "")),
+                            "arguments": json.dumps(
+                                tc.get("args", {}),
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ),
+                        },
+                    }
+                )
             round_messages.append(
-                {"role": "assistant", "content": round_response.answer, "tool_calls": r_assistant_calls}
+                {
+                    "role": "assistant",
+                    "content": round_response.answer,
+                    "tool_calls": r_assistant_calls,
+                }
             )
             round_messages.extend(r_tool_msgs)
     else:
@@ -358,13 +368,10 @@ async def _build_final_response(
         if response.answer and not tool_result_messages:
             import re
 
-            has_numeric_result = bool(
-                re.search(r"=\s*\*{0,2}\s*\d+\.?\d*", response.answer)
-            )
+            has_numeric_result = bool(re.search(r"=\s*\*{0,2}\s*\d+\.?\d*", response.answer))
             if has_numeric_result:
                 logger.warning(
-                    "AI 回答包含数值结果但未调用任何工具（心算），"
-                    "answer_len=%d, model=%s",
+                    "AI 回答包含数值结果但未调用任何工具（心算），answer_len=%d, model=%s",
                     len(response.answer),
                     response.provider_mode,
                 )
