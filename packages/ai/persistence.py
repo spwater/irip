@@ -351,10 +351,14 @@ class MessagePersistence:
             return
 
         # 更新数据库（需要 RLS 上下文，否则 fail-closed 拦截 UPDATE）
+        # 只更新标题仍为默认格式（"对话 YYYY-MM-DD HH:MM"）的对话，避免覆盖已生成的标题
         now = self._clock.now()
         async with scoped_session(self._factory, dept_id, user_id) as session:
             await session.execute(
                 sa.update(AIConversation)
                 .values(title=title, updated_at=now)
-                .where(AIConversation.id == conversation_id)
+                .where(
+                    AIConversation.id == conversation_id,
+                    AIConversation.title.like("对话 ____-__-__ __:__"),
+                )
             )
