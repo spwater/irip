@@ -1,0 +1,13 @@
+scenarios:
+  data_extraction:
+    model: "DeepSeek"
+    thinking_enabled: false
+  assistant:
+    model: "DeepSeek"
+    thinking_enabled: true
+  research:
+    model: "DeepSeek"
+    thinking_enabled: true
+  title_generation:
+    model: "Qwen-Flash"
+    thinking_enabled: false

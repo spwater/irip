@@ -416,9 +416,23 @@ class OpenAICompatibleProvider:
         if request.tool_schemas:
             payload["tools"] = list(request.tool_schemas)
             payload["tool_choice"] = "auto"
-        # 思考模式：Qwen3 vLLM 通过 chat_template_kwargs 控制思考开关
-        # 顶层 enable_thinking 参数无效，只有 chat_template_kwargs 生效
-        payload["chat_template_kwargs"] = {"enable_thinking": self._thinking_enabled}
+        # 思考模式：不同模型族通过 chat_template_kwargs 控制思考开关
+        # - Qwen3: {"enable_thinking": true/false}
+        # - DeepSeek-V4: {"thinking": true/false, "reasoning_effort": "high"}
+        # LiteLLM 网关不识别这些参数，但会作为 extra_body 透传给 vLLM
+        if self._thinking_enabled:
+            if self._model.lower().startswith("deepseek"):
+                payload["chat_template_kwargs"] = {
+                    "thinking": True,
+                    "reasoning_effort": "high",
+                }
+            else:
+                payload["chat_template_kwargs"] = {"enable_thinking": True}
+        else:
+            if self._model.lower().startswith("deepseek"):
+                payload["chat_template_kwargs"] = {"thinking": False}
+            else:
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
         return payload
 
     def _parse_response(self, data: dict[str, Any], request: AIRequest) -> AIResponse:

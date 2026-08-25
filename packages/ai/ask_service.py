@@ -598,6 +598,29 @@ class AskService:
                     provider_mode=provider_name,
                 )
 
+                # 兜底：流式第一轮既无 content 也无 tool_calls
+                # （模型 thinking 只产出了 reasoning_content，未生成 content）
+                # 回退到非流式 complete() 重新获取回答
+                if not full_text and not streamed_tool_calls:
+                    logger.info(
+                        "stream_ask: first round empty (no content, no tools), "
+                        "falling back to non-stream complete()"
+                    )
+                    # 关闭 thinking 再试一次，避免思考再次耗尽 token
+                    if hasattr(self._provider, "thinking_enabled"):
+                        original_thinking = self._provider.thinking_enabled
+                        self._provider.thinking_enabled = False
+                    try:
+                        first_response = await self._provider.complete(  # type: ignore[call-arg]
+                            ctx.ai_request, cancel_event=ctx.cancel_event
+                        )
+                        # 透传回退得到的回答
+                        if first_response.answer:
+                            yield {"type": "chunk", "content": first_response.answer}
+                    finally:
+                        if hasattr(self._provider, "thinking_enabled"):
+                            self._provider.thinking_enabled = original_thinking
+
                 # 后置处理（工具执行 + 第二轮 + 持久化）
                 final_response = await self._execute_and_finalize(first_response, ctx, user)
 
