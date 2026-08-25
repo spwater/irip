@@ -1,5 +1,5 @@
 /**
- * MessageInputArea — 底部输入区域（思考开关 + 载入数据 + @人输入 + 发送/中断按钮）。
+ * MessageInputArea — 底部输入区域（载入数据 + @人输入 + 发送/中断按钮）。
  *
  * 从 AssistantPage.tsx 提取。
  */
@@ -7,7 +7,6 @@
 import {
   Button,
   Space,
-  Switch,
   Tooltip,
   Typography,
 } from 'antd';
@@ -23,8 +22,6 @@ export function MessageInputArea(props: MessageInputAreaProps): JSX.Element {
     mentions,
     setMentions,
     isSending,
-    thinkingEnabled,
-    setThinkingEnabled,
     factContext,
     factContextLabel,
     onOpenFactModal,
@@ -38,18 +35,6 @@ export function MessageInputArea(props: MessageInputAreaProps): JSX.Element {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-        <Tooltip title="开启后 AI 会先思考再回答。">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingBottom: 8, flexShrink: 0 }}>
-            <Switch
-              size="small"
-              checked={thinkingEnabled}
-              onChange={setThinkingEnabled}
-            />
-            <Text type="secondary" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
-              思考
-            </Text>
-          </div>
-        </Tooltip>
         <Button
           type={factContext ? 'primary' : 'default'}
           onClick={onOpenFactModal}

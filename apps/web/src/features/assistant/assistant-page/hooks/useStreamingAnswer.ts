@@ -211,8 +211,11 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
           setStreamingAnswer((prev) => (prev ?? '') + event.content);
         } else if (event.type === 'done') {
           // 设置最终 answer（含工具调用后的完整回答）
+          // 追加而非覆盖：第一轮流式输出的内容（如画图代码块）保留，
+          // 第二轮 completion 的回答追加在后面
           setIsThinking(false);
-          setStreamingAnswer(event.answer || '(无回答)');
+          const doneAnswer = event.answer || '(无回答)';
+          setStreamingAnswer((prev) => (prev ? prev + '\n\n' + doneAnswer : doneAnswer));
           // invalidate 拉取 DB 消息
           void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
           void queryClient.invalidateQueries({ queryKey: ['assistant-conversations'] });

@@ -113,8 +113,6 @@ export interface MessageInputAreaProps {
   mentions: string[];
   setMentions: (m: string[]) => void;
   isSending: boolean;
-  thinkingEnabled: boolean;
-  setThinkingEnabled: (v: boolean) => void;
   factContext: string | null;
   factContextLabel: string | null;
   onOpenFactModal: () => void;

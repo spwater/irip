@@ -34,7 +34,6 @@ export function AssistantPage(): JSX.Element {
   // ---- 页面级状态 ----
   const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [showcaseCollapsed, setShowcaseCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState<'private' | 'collaborative'>('private');
@@ -69,7 +68,7 @@ export function AssistantPage(): JSX.Element {
   const streaming = useStreamingAnswer({
     selectedConvId,
     setSelectedConvId,
-    thinkingEnabled,
+    thinkingEnabled: true,
     factContext,
     setFactContext,
     setFactContextLabel,
@@ -191,8 +190,6 @@ export function AssistantPage(): JSX.Element {
           mentions={streaming.mentions}
           setMentions={streaming.setMentions}
           isSending={streaming.isSending}
-          thinkingEnabled={thinkingEnabled}
-          setThinkingEnabled={setThinkingEnabled}
           factContext={factContext}
           factContextLabel={factContextLabel}
           onOpenFactModal={() => setFactModalOpen(true)}
