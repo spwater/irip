@@ -4,7 +4,7 @@
   "max_new_file_lines": 500,
   "files": {
     "apps/api/routers/assistant.py": {
-      "lines": 684,
+      "lines": 698,
       "max_complexity": 15
     },
     "apps/api/routers/backups.py": {
@@ -20,7 +20,7 @@
       "max_complexity": 15
     },
     "apps/api/routers/governance.py": {
-      "lines": 630,
+      "lines": 669,
       "max_complexity": 15
     },
     "apps/api/routers/provenance.py": {

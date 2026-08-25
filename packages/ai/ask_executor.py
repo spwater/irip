@@ -336,7 +336,7 @@ async def _build_final_response(
                 break
 
             # 追加 assistant + tool 结果到消息列表
-            r_assistant_calls = []
+            r_assistant_calls: list[dict[str, Any]] = []
             for tc in round_response.tool_calls:
                 tc_id = str(tc.get("id", "")) or f"call_r{round_num}_{len(r_assistant_calls)}"
                 r_assistant_calls.append({

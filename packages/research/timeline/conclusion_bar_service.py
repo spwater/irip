@@ -683,17 +683,17 @@ class ConclusionBarService(ScopedSessionMixin):
             if block_type in ("echarts", "chart_ref", "chart"):
                 if item_title and isinstance(item_title, str) and item_title.strip():
                     title = item_title.strip()
-                    return title[:20] if len(title) > 20 else title
+                    return str(title[:20]) if len(title) > 20 else str(title)
 
             # table 类型：优先用 preceding_text（表格前面的文字），回退到 question_text
             if block_type == "table":
                 preceding = t.get("preceding_text", "")
                 if preceding and isinstance(preceding, str) and preceding.strip():
                     title = preceding.strip()
-                    return title[:20] if len(title) > 20 else title
+                    return str(title[:20]) if len(title) > 20 else str(title)
                 if question_text and isinstance(question_text, str) and question_text.strip():
                     title = question_text.strip()
-                    return title[:20] if len(title) > 20 else title
+                    return str(title[:20]) if len(title) > 20 else str(title)
 
             # text 类型：用 content_snapshot 里的文本前 20 字
             if block_type == "text":
@@ -704,8 +704,8 @@ class ConclusionBarService(ScopedSessionMixin):
                     text_val = snapshot
                 if text_val and isinstance(text_val, str) and text_val.strip():
                     title = text_val.strip()
-                    return title[:20] if len(title) > 20 else title
-            return item_title
+                    return str(title[:20]) if len(title) > 20 else str(title)
+            return str(item_title)
 
         # 3. 用 analysis_questions 的第一个问题
         questions = meta.get("analysis_questions", [])
