@@ -232,6 +232,7 @@ async def _build_final_response(
         AIResponse: 最终回答（含工具调用结果、引用、不确定性）。
     """
     if tool_result_messages:
+        # 构建第一轮 assistant + tool 结果消息
         assistant_tool_calls: list[dict[str, Any]] = []
         for tc in response.tool_calls:
             tc_id = (
@@ -253,105 +254,103 @@ async def _build_final_response(
                 }
             )
 
-        second_messages: list[dict[str, Any]] = list(ctx.msg_list)
-        second_messages.append(
+        # 累积消息列表：历史 + 第一轮 assistant + tool 结果
+        round_messages: list[dict[str, Any]] = list(ctx.msg_list)
+        round_messages.append(
             {
                 "role": "assistant",
                 "content": response.answer,
                 "tool_calls": assistant_tool_calls,
             }
         )
-        second_messages.extend(tool_result_messages)
-
-        second_request = AIRequest(
-            messages=tuple(second_messages),
-            tools=ctx.tool_names,
-            tool_schemas=ctx.tool_schemas,
-            user_context=ctx.user_context,
-            provider_mode=ctx.provider_name,
-        )
+        round_messages.extend(tool_result_messages)
 
         if hasattr(provider, "thinking_enabled"):
-            # 第二轮（工具执行后）关闭思考模式：模型只需格式化工具结果生成回答，
-            # 不需要再消耗 token 预算做推理。否则 Qwen3 等模型的 thinking 会
-            # 耗尽 max_tokens，导致 content 为空、finish_reason="length"。
             provider.thinking_enabled = False
 
-        try:
-            _t_r2_start = time.monotonic()
-            second_response: AIResponse = await provider.complete(  # type: ignore[call-arg]
-                second_request, cancel_event=ctx.cancel_event
-            )
-            _t_r2_end = time.monotonic()
-            logger.debug("[TIMING] llm_round2=%.0fms", (_t_r2_end - _t_r2_start) * 1000)
+        # 循环执行：AI 产出 tool_calls → 执行工具 → 再 completion，直到无 tool_calls
+        # 安全上限 10 轮，防止死循环
+        MAX_ROUNDS = 10
+        current_response = response
+        final_answer = persistence.redact_credentials(response.answer)
+        final_uncertainty = response.uncertainty
 
-            # 第二轮如果又产生了 tool_calls（如工具失败后 AI 决定拆分重试），
-            # 继续执行工具 + 第三轮 completion，最多再追加一轮
-            if second_response.tool_calls:
-                logger.info(
-                    "第二轮产生 %d 个 tool_calls，继续执行",
-                    len(second_response.tool_calls),
+        for round_num in range(2, MAX_ROUNDS + 2):
+            round_request = AIRequest(
+                messages=tuple(round_messages),
+                tools=ctx.tool_names,
+                tool_schemas=ctx.tool_schemas,
+                user_context=ctx.user_context,
+                provider_mode=ctx.provider_name,
+            )
+            try:
+                _t_start = time.monotonic()
+                round_response = await provider.complete(  # type: ignore[call-arg]
+                    round_request, cancel_event=ctx.cancel_event
                 )
-                # 执行第二轮的工具调用
-                r2_executed, r2_tool_msgs, r2_citations = await _process_tool_calls(
-                    response=second_response,
-                    user=user,
-                    org_id=ctx.org_id,
-                    tool_registry=tool_registry,
-                    tool_executor=tool_executor,
+                _t_end = time.monotonic()
+                logger.debug("[TIMING] llm_round%d=%.0fms", round_num, (_t_end - _t_start) * 1000)
+            except Exception:
+                # completion 失败，用已有回答 + 工具摘要兜底
+                tool_summaries = "\n".join(
+                    f"- {tc['tool']}: {tc.get('summary', '')}"
+                    for tc in executed_tool_calls
+                    if tc.get("status") == "executed"
                 )
-                # 补充工具上下文到已执行列表
-                executed_tool_calls.extend(r2_executed)
-                all_citations.extend(r2_citations)
+                final_answer = persistence.redact_credentials(
+                    current_response.answer
+                    + (f"\n\n工具执行结果：\n{tool_summaries}" if tool_summaries else "")
+                )
+                final_uncertainty = current_response.uncertainty
+                break
 
-                if r2_tool_msgs:
-                    # 第三轮：基于第二轮工具结果生成最终回答
-                    r2_assistant_calls = []
-                    for tc in second_response.tool_calls:
-                        tc_id = str(tc.get("id", "")) or f"call_r2_{len(r2_assistant_calls)}"
-                        r2_assistant_calls.append({
-                            "id": tc_id,
-                            "type": "function",
-                            "function": {
-                                "name": str(tc.get("tool", "")),
-                                "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
-                            },
-                        })
-                    third_messages = second_messages + [
-                        {"role": "assistant", "content": second_response.answer, "tool_calls": r2_assistant_calls},
-                    ] + r2_tool_msgs
-                    third_request = AIRequest(
-                        messages=tuple(third_messages),
-                        tools=ctx.tool_names,
-                        tool_schemas=ctx.tool_schemas,
-                        user_context=ctx.user_context,
-                        provider_mode=ctx.provider_name,
-                    )
-                    try:
-                        third_response = await provider.complete(third_request, cancel_event=ctx.cancel_event)
-                        final_answer = persistence.redact_credentials(third_response.answer)
-                        final_uncertainty = third_response.uncertainty
-                    except Exception:
-                        final_answer = persistence.redact_credentials(second_response.answer)
-                        final_uncertainty = second_response.uncertainty
-                else:
-                    final_answer = persistence.redact_credentials(second_response.answer)
-                    final_uncertainty = second_response.uncertainty
-            else:
-                final_answer = persistence.redact_credentials(second_response.answer)
-                final_uncertainty = second_response.uncertainty
-        except Exception:
-            # 第二轮失败时使用第一轮回答 + 工具结果摘要
-            tool_summaries = "\n".join(
-                f"- {tc['tool']}: {tc.get('summary', '')}"
-                for tc in executed_tool_calls
-                if tc.get("status") == "executed"
+            final_answer = persistence.redact_credentials(round_response.answer)
+            final_uncertainty = round_response.uncertainty
+            current_response = round_response
+
+            if not round_response.tool_calls:
+                # AI 不再需要调工具，结束循环
+                break
+
+            if round_num > MAX_ROUNDS:
+                logger.warning("工具调用循环达到上限 %d 轮，强制停止", MAX_ROUNDS)
+                break
+
+            # AI 又产生了 tool_calls，执行它们
+            logger.info(
+                "第 %d 轮产生 %d 个 tool_calls，继续执行",
+                round_num,
+                len(round_response.tool_calls),
             )
-            final_answer = persistence.redact_credentials(
-                response.answer
-                + (f"\n\n工具执行结果：\n{tool_summaries}" if tool_summaries else "")
+            r_executed, r_tool_msgs, r_citations = await _process_tool_calls(
+                response=round_response,
+                user=user,
+                org_id=ctx.org_id,
+                tool_registry=tool_registry,
+                tool_executor=tool_executor,
             )
-            final_uncertainty = response.uncertainty
+            executed_tool_calls.extend(r_executed)
+            all_citations.extend(r_citations)
+
+            if not r_tool_msgs:
+                break
+
+            # 追加 assistant + tool 结果到消息列表
+            r_assistant_calls = []
+            for tc in round_response.tool_calls:
+                tc_id = str(tc.get("id", "")) or f"call_r{round_num}_{len(r_assistant_calls)}"
+                r_assistant_calls.append({
+                    "id": tc_id,
+                    "type": "function",
+                    "function": {
+                        "name": str(tc.get("tool", "")),
+                        "arguments": json.dumps(tc.get("args", {}), ensure_ascii=False, separators=(",", ":")),
+                    },
+                })
+            round_messages.append(
+                {"role": "assistant", "content": round_response.answer, "tool_calls": r_assistant_calls}
+            )
+            round_messages.extend(r_tool_msgs)
     else:
         final_answer = persistence.redact_credentials(response.answer)
         final_uncertainty = response.uncertainty
