@@ -266,6 +266,8 @@ class MessagePersistence:
         conversation_id: UUID,
         question: str,
         answer: str,
+        user_id: UUID | None = None,
+        dept_id: UUID | None = None,
     ) -> None:
         """首次对话后自动生成标题。
 
@@ -348,9 +350,9 @@ class MessagePersistence:
         if not title:
             return
 
-        # 更新数据库
+        # 更新数据库（需要 RLS 上下文，否则 fail-closed 拦截 UPDATE）
         now = self._clock.now()
-        async with scoped_session(self._factory, None, None) as session:
+        async with scoped_session(self._factory, dept_id, user_id) as session:
             await session.execute(
                 sa.update(AIConversation)
                 .values(title=title, updated_at=now)

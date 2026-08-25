@@ -353,6 +353,8 @@ async def _persist_ask_result(
                 conversation_id=ctx.conversation_id,
                 question=ctx.question,
                 answer=final_response.answer,
+                user_id=ctx.user_id,
+                dept_id=ctx.org_id,
             )
         except Exception:
             logging.getLogger(__name__).warning("unexpected error", exc_info=True)

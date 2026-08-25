@@ -447,6 +447,8 @@ class AskService:
                         conversation_id=ctx.conversation_id,
                         question=question,
                         answer=question[:60],
+                        user_id=ctx.user_id,
+                        dept_id=ctx.org_id,
                     )
                 except Exception:
                     logging.getLogger(__name__).warning("unexpected error", exc_info=True)
@@ -553,6 +555,8 @@ class AskService:
                         conversation_id=ctx.conversation_id,
                         question=question,
                         answer=question[:60],
+                        user_id=ctx.user_id,
+                        dept_id=ctx.org_id,
                     )
                 except Exception:
                     logging.getLogger(__name__).warning("unexpected error", exc_info=True)
