@@ -305,6 +305,32 @@ export function BlockifiedMarkdown({
           </BlockWrapper>
         );
       },
+      td: ({ children }: { children?: ReactNode }) => {
+        if (typeof children === 'string' && children.includes('MATH')) {
+          return <td>{replacePlaceholders(children)}</td>;
+        }
+        if (Array.isArray(children)) {
+          const hasMath = children.some(c => typeof c === 'string' && (c as string).includes('MATH'));
+          if (hasMath) {
+            return (
+              <td>
+                {children.map(c =>
+                  typeof c === 'string' && (c as string).includes('MATH')
+                    ? replacePlaceholders(c as string)
+                    : c,
+                )}
+              </td>
+            );
+          }
+        }
+        return <td>{children}</td>;
+      },
+      th: ({ children }: { children?: ReactNode }) => {
+        if (typeof children === 'string' && children.includes('MATH')) {
+          return <th>{replacePlaceholders(children)}</th>;
+        }
+        return <th>{children}</th>;
+      },
     };
   }, [mathMap, formulaMap, messageId, conversationId, systemContext, headingSections, tableSnapshots]);
 
