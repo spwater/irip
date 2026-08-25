@@ -4,10 +4,10 @@ scenarios:
     thinking_enabled: false
   assistant:
     model: "DeepSeek"
-    thinking_enabled: true
+    thinking_enabled: false
   research:
     model: "DeepSeek"
-    thinking_enabled: true
+    thinking_enabled: false
   title_generation:
     model: "Qwen-Flash"
     thinking_enabled: false

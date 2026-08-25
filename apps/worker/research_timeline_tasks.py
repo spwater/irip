@@ -123,6 +123,40 @@ async def _build_plan_service(
         )
     )
 
+    # Build NumericToolFacade for LLM tool calling (describe_series, evaluate_expression)
+    numeric_tools = None
+    try:
+        from packages.ai.numeric import (
+            NumericDataResolver,
+            NumericLimits,
+            NumericToolFacade,
+            SafeExpressionEngine,
+            SeriesStatisticsService,
+        )
+
+        _limits = NumericLimits()
+
+        def _fact_query_factory(principal: Any) -> Any:
+            return FactQueryService(
+                session_factory=factory,
+                department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
+                actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                s3_repo=s3_repo,
+            )
+
+        numeric_tools = NumericToolFacade(
+            data_resolver=NumericDataResolver(
+                fact_query_factory=_fact_query_factory,
+                limits=_limits,
+            ),
+            expression_engine=SafeExpressionEngine(_limits),
+            statistics_service=SeriesStatisticsService(_limits),
+            limits=_limits,
+            max_concurrent=4,
+        )
+    except Exception:
+        logger.warning("Failed to build NumericToolFacade", exc_info=True)
+
     return PlanService(
         session_factory=factory,
         department_id=dept_uuid,  # type: ignore[arg-type]
@@ -130,6 +164,7 @@ async def _build_plan_service(
         model_gateway=model_gateway,
         context_router=ContextRouter(),
         fact_provider=fact_provider,
+        numeric_tools=numeric_tools,
     )
 
 
@@ -413,8 +448,8 @@ def generate_plan(
     name="research.run.execute",
     bind=True,
     acks_late=True,
-    soft_time_limit=300,
-    time_limit=360,
+    soft_time_limit=600,
+    time_limit=660,
 )
 def execute_analysis_run(
     self: Any,
@@ -548,14 +583,54 @@ def execute_analysis_run(
         from packages.facts.query_service import FactQueryService
         from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
+        try:
+            from apps.api.main import _build_s3_repo
+            s3_repo = _build_s3_repo()
+        except Exception:
+            s3_repo = None
+
         fact_provider = CoreFactProviderImpl(
             query_service=FactQueryService(
                 session_factory=factory,
                 department_id=dept_uuid,  # type: ignore[arg-type]
                 actor_id=actor_uuid,
-                s3_repo=None,
+                s3_repo=s3_repo,
             )
         )
+
+        # Build NumericToolFacade for LLM tool calling
+        numeric_tools = None
+        try:
+            from packages.ai.numeric import (
+                NumericDataResolver,
+                NumericLimits,
+                NumericToolFacade,
+                SafeExpressionEngine,
+                SeriesStatisticsService,
+            )
+
+            _limits = NumericLimits()
+
+            def _fact_query_factory(principal: Any) -> Any:
+                return FactQueryService(
+                    session_factory=factory,
+                    department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
+                    actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                    s3_repo=s3_repo,
+                )
+
+            numeric_tools = NumericToolFacade(
+                data_resolver=NumericDataResolver(
+                    fact_query_factory=_fact_query_factory,
+                    limits=_limits,
+                ),
+                expression_engine=SafeExpressionEngine(_limits),
+                statistics_service=SeriesStatisticsService(_limits),
+                limits=_limits,
+                max_concurrent=4,
+            )
+        except Exception:
+            logger.warning("Failed to build NumericToolFacade", exc_info=True)
 
         plan_service = PlanService(
             session_factory=factory,
@@ -564,6 +639,7 @@ def execute_analysis_run(
             model_gateway=model_gateway,
             context_router=ContextRouter(),
             fact_provider=fact_provider,
+            numeric_tools=numeric_tools,
         )
 
         # 3. Execute analysis via PlanService.analyze_data
@@ -782,14 +858,54 @@ def extract_candidates(
         from packages.facts.query_service import FactQueryService
         from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
+        try:
+            from apps.api.main import _build_s3_repo
+            s3_repo = _build_s3_repo()
+        except Exception:
+            s3_repo = None
+
         fact_provider = CoreFactProviderImpl(
             query_service=FactQueryService(
                 session_factory=factory,
                 department_id=dept_uuid,  # type: ignore[arg-type]
                 actor_id=actor_uuid,
-                s3_repo=None,
+                s3_repo=s3_repo,
             )
         )
+
+        # Build NumericToolFacade for LLM tool calling
+        numeric_tools = None
+        try:
+            from packages.ai.numeric import (
+                NumericDataResolver,
+                NumericLimits,
+                NumericToolFacade,
+                SafeExpressionEngine,
+                SeriesStatisticsService,
+            )
+
+            _limits = NumericLimits()
+
+            def _fact_query_factory(principal: Any) -> Any:
+                return FactQueryService(
+                    session_factory=factory,
+                    department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
+                    actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                    s3_repo=s3_repo,
+                )
+
+            numeric_tools = NumericToolFacade(
+                data_resolver=NumericDataResolver(
+                    fact_query_factory=_fact_query_factory,
+                    limits=_limits,
+                ),
+                expression_engine=SafeExpressionEngine(_limits),
+                statistics_service=SeriesStatisticsService(_limits),
+                limits=_limits,
+                max_concurrent=4,
+            )
+        except Exception:
+            logger.warning("Failed to build NumericToolFacade", exc_info=True)
 
         plan_service = PlanService(
             session_factory=factory,
@@ -798,6 +914,7 @@ def extract_candidates(
             model_gateway=model_gateway,
             context_router=ContextRouter(),
             fact_provider=fact_provider,
+            numeric_tools=numeric_tools,
         )
 
         # Execute candidate extraction via PlanService.extract_insight
