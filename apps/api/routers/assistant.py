@@ -559,10 +559,17 @@ async def send_message_stream(
                     )
                     yield f"data: {data}\n\n"
                     yield "data: [DONE]\n\n"
-        except Exception:
-            logging.getLogger("api").exception("SSE stream error")
+        except Exception as exc:
+            # 对话不存在等已知错误返回友好提示，不暴露内部错误
+            from packages.common.errors import AppError
+
+            if isinstance(exc, AppError):
+                error_msg = exc.message
+            else:
+                logging.getLogger("api").exception("SSE stream error")
+                error_msg = "处理请求时发生内部错误"
             error_data = json.dumps(
-                {"type": "error", "message": "处理请求时发生内部错误"},
+                {"type": "error", "message": error_msg},
                 ensure_ascii=False,
             )
             yield f"data: {error_data}\n\n"
