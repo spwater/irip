@@ -108,12 +108,18 @@ async def _build_plan_service(
     from packages.facts.query_service import FactQueryService
     from packages.research.lineage.core_adapter import CoreFactProviderImpl
 
+    try:
+        from apps.api.main import _build_s3_repo
+        s3_repo = _build_s3_repo()
+    except Exception:
+        s3_repo = None
+
     fact_provider = CoreFactProviderImpl(
         query_service=FactQueryService(
             session_factory=factory,
             department_id=dept_uuid,  # type: ignore[arg-type]
             actor_id=actor_uuid,
-            s3_repo=None,
+            s3_repo=s3_repo,
         )
     )
 
