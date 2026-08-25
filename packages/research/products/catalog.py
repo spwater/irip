@@ -16,6 +16,8 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from packages.common.database import ScopedSessionMixin
+
 
 class ResearchCatalog(Protocol):
     """搜索已确认衍生数据的只读接口。
@@ -64,7 +66,7 @@ class ResearchCatalogStub:
         return []
 
 
-class ResearchCatalogImpl:
+class ResearchCatalogImpl(ScopedSessionMixin):
     """ResearchCatalog 实现：搜索当前用户已确认 DerivedDataset。
 
     从阶段 1 的空占位升级为可搜索（PRD P0-13）。
@@ -82,15 +84,11 @@ class ResearchCatalogImpl:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         actor_id: UUID,
+        dept_id: UUID | None = None,
     ) -> None:
-        """初始化 ResearchCatalog 实现。
-
-        Args:
-            session_factory: 异步会话工厂。
-            actor_id: 当前用户 ID（用于 owner_user_id 过滤）。
-        """
         self._factory = session_factory
         self._actor_id = actor_id
+        self._dept_id = dept_id
 
     async def search_derived_data(
         self,
@@ -131,7 +129,7 @@ class ResearchCatalogImpl:
                 except (ValueError, AttributeError):
                     pass
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             datasets = await ResearchRepository.search_derived_datasets(
                 session,
                 owner_user_id=self._actor_id,
@@ -187,7 +185,7 @@ class ResearchCatalogImpl:
                 except (ValueError, AttributeError):
                     pass
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             pairs = await ResearchRepository.search_published_datasets(
                 session,
                 query=query if query else None,
@@ -201,17 +199,36 @@ class ResearchCatalogImpl:
                     continue
 
                 # 解析 dataset_version_refs
-                for ref in version.dataset_version_refs or []:
-                    dataset_id = ref.get("dataset_id", "")
-                    dataset_version = ref.get("version_number", 0)
-                    dataset_name = ref.get("name", "")
+                refs = version.dataset_version_refs or []
+                if refs:
+                    for ref in refs:
+                        dataset_id = ref.get("dataset_id", "")
+                        dataset_version = ref.get("version_number", 0)
+                        dataset_name = ref.get("name", "")
+                        results.append(
+                            {
+                                "result_id": str(result_entity.id),
+                                "result_version_number": version.version_number,
+                                "dataset_id": dataset_id,
+                                "dataset_version_number": dataset_version,
+                                "dataset_name": dataset_name,
+                                "result_title": version.title,
+                                "publisher": str(version.publisher),
+                                "published_at": version.published_at.isoformat()
+                                if version.published_at
+                                else "",
+                                "current_acl_type": result_entity.current_acl_type,
+                            }
+                        )
+                else:
+                    # 没有关联 DerivedDataset 时，把成果本身作为数据项返回
                     results.append(
                         {
                             "result_id": str(result_entity.id),
                             "result_version_number": version.version_number,
-                            "dataset_id": dataset_id,
-                            "dataset_version_number": dataset_version,
-                            "dataset_name": dataset_name,
+                            "dataset_id": str(result_entity.id),
+                            "dataset_version_number": version.version_number,
+                            "dataset_name": result_entity.name,
                             "result_title": version.title,
                             "publisher": str(version.publisher),
                             "published_at": version.published_at.isoformat()

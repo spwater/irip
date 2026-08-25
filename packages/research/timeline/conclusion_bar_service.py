@@ -472,6 +472,7 @@ class ConclusionBarService(ScopedSessionMixin):
                         "name": r.name,
                         "status": r.status,
                         "current_version": r.current_version,
+                        "current_acl_type": r.current_acl_type,
                         "created_at": r.created_at.isoformat() if r.created_at else "",
                     }
                     for r in results
@@ -576,6 +577,7 @@ class ConclusionBarService(ScopedSessionMixin):
                 "name": result.name,
                 "status": result.status,
                 "current_version": result.current_version,
+                "current_acl_type": result.current_acl_type,
                 "created_at": result.created_at.isoformat() if result.created_at else "",
                 "source_facts": source_facts,
                 "version": {
@@ -639,83 +641,81 @@ class ConclusionBarService(ScopedSessionMixin):
     # ============================================================
 
     async def _summarize_title(self, assembled: dict[str, Any]) -> str:
-        """用 LLM 根据结构化数据概括一个简短标题。
+        """根据结构化数据直接生成简短标题（不调 LLM）。
+
+        规则：
+        - chart/echarts 类型：优先用 chart_title（ECharts option 里的 title.text）
+        - text 类型：用 content_snapshot 里的文本前 20 字
+        - 其他：用 item.title（推送到结论栏时的区块标题）
+        - 多个 item 时取第一个有意义的标题
 
         Args:
             assembled: 组装后的 {metadata, points, series, _tracing} dict。
 
         Returns:
-            简短标题字符串（≤ 30 字）。LLM 调用失败时回退到 metadata.title 或 "最终结论"。
+            简短标题字符串（≤ 20 字）。
         """
         fallback = assembled.get("metadata", {}).get("title", "") or "最终结论"
         if not isinstance(fallback, str):
             fallback = "最终结论"
 
-        # 提取关键信息供 LLM 概括
         meta = assembled.get("metadata", {})
-        questions = meta.get("analysis_questions", [])
-        summary = meta.get("summary", "")
         tracing = assembled.get("_tracing", [])
-        titles = [t.get("title", "") for t in tracing if isinstance(t, dict)]
 
-        # 构建简短 prompt
-        context_parts = []
-        if questions:
-            context_parts.append(f"分析问题: {'; '.join(questions[:3])}")
-        if summary:
-            context_parts.append(f"摘要: {summary}")
-        if titles:
-            context_parts.append(f"区块标题: {'; '.join(titles[:5])}")
-        if not context_parts:
-            return fallback
+        # 1. 优先用 chart_title（echarts option 里的 title.text）
+        chart_title = meta.get("chart_title", "")
+        if isinstance(chart_title, str) and chart_title.strip():
+            title = chart_title.strip()
+            if len(title) > 20:
+                title = title[:20]
+            return title
 
-        prompt = (
-            "请根据以下研究分析内容，概括一个简短的结论标题（不超过20个汉字，"
-            "不要加引号、不要加句号，直接输出标题文本）：\n\n" + "\n".join(context_parts)
-        )
+        # 2. 遍历 tracing 找第一个有意义的标题
+        for t in tracing:
+            if not isinstance(t, dict):
+                continue
+            block_type = t.get("block_type", "")
+            item_title = t.get("title", "")
+            question_text = t.get("question_text", "")
+            snapshot = t.get("content_snapshot", {})
 
-        try:
-            from packages.ai.openai_compatible import OpenAICompatibleProvider
-            from packages.ai.providers import AIRequest
-            from packages.ai.yaml_config import get_scenario_config
+            # chart 类型用 item_title（echarts 的 title 通常有意义）
+            if block_type in ("echarts", "chart_ref", "chart"):
+                if item_title and isinstance(item_title, str) and item_title.strip():
+                    title = item_title.strip()
+                    return title[:20] if len(title) > 20 else title
 
-            config = get_scenario_config("conclusion")
-            logger.info(
-                "_summarize_title: calling LLM model=%s, prompt_len=%d",
-                config.model,
-                len(prompt),
-            )
-            provider = OpenAICompatibleProvider(
-                api_key=config.api_key,
-                base_url=config.base_url,
-                model=config.model,
-                thinking_enabled=False,
-            )
-            request = AIRequest(
-                messages=(
-                    {
-                        "role": "system",
-                        "content": "你是一个标题概括助手，根据研究内容生成简短标题。",
-                    },
-                    {"role": "user", "content": prompt},
-                ),
-                tools=(),
-            )
-            response = await provider.complete(request)
-            title = response.answer.strip()
-            # 清理：去引号、去句号、限制长度
-            title = title.rstrip("。.")
-            title = title.strip("'")
-            title = title.strip('"')
-            title = title.strip("「")
-            title = title.strip("」")
-            if len(title) > 30:
-                title = title[:30]
-            return title or fallback
-        except Exception as e:
-            logger.warning("LLM summarize title failed: %s", e, exc_info=True)
-            logger.warning("LLM summarize title failed, using fallback")
-            return fallback
+            # table 类型：优先用 preceding_text（表格前面的文字），回退到 question_text
+            if block_type == "table":
+                preceding = t.get("preceding_text", "")
+                if preceding and isinstance(preceding, str) and preceding.strip():
+                    title = preceding.strip()
+                    return title[:20] if len(title) > 20 else title
+                if question_text and isinstance(question_text, str) and question_text.strip():
+                    title = question_text.strip()
+                    return title[:20] if len(title) > 20 else title
+
+            # text 类型：用 content_snapshot 里的文本前 20 字
+            if block_type == "text":
+                text_val = ""
+                if isinstance(snapshot, dict):
+                    text_val = snapshot.get("text", "")
+                elif isinstance(snapshot, str):
+                    text_val = snapshot
+                if text_val and isinstance(text_val, str) and text_val.strip():
+                    title = text_val.strip()
+                    return title[:20] if len(title) > 20 else title
+            return item_title
+
+        # 3. 用 analysis_questions 的第一个问题
+        questions = meta.get("analysis_questions", [])
+        if questions and isinstance(questions[0], str) and questions[0].strip():
+            q = questions[0].strip()
+            if len(q) > 20:
+                return q[:20]
+            return q
+
+        return fallback
 
     @staticmethod
     def _to_ref(item: ResearchConclusionBarItem) -> BarItemRef:
@@ -877,6 +877,9 @@ class ConclusionBarService(ScopedSessionMixin):
                     "turn_number": source.get("turn_number"),
                     "block_type": item.block_type,
                     "title": item.title,
+                    "question_text": source.get("question_text", ""),
+                    "preceding_text": source.get("preceding_text", ""),
+                    "content_snapshot": dict(item.content_snapshot or {}),
                 }
             )
 

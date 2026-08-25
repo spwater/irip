@@ -24,6 +24,7 @@ export type BarSourceInfo = {
   snapshot_number?: number | null;
   question_text?: string | null;
   block_index?: number | null;
+  preceding_text?: string | null;
 };
 
 /** 结论栏条目 */

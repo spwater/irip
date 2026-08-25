@@ -48,3 +48,12 @@ services:
       - "8080:80"
     environment:
       NGINX_CONF: "nginx-http.conf"
+
+# 开发环境覆盖：backend 网络关闭 internal。
+# base.yaml 的 backend internal:true 是生产安全设计（后端存储不暴露宿主机端口）。
+# 但开发环境 dev.sh 用宿主机 uvicorn/celery/vite 直连 localhost:5432/6379/9000，
+# 依赖这些基础设施容器的端口发布；internal 网络会阻断端口发布，故开发必须关闭。
+# 生产环境（compose.production.yaml）不覆盖此项，保持 internal 隔离不变。
+networks:
+  backend:
+    internal: false

@@ -16,6 +16,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from apps.api.dependencies.auth import CurrentUser
@@ -209,38 +210,36 @@ async def complete_upload(
     )
 
 
-@artifacts_router.get("/{artifact_id}/download", response_model=DownloadResponse)
+@artifacts_router.get("/{artifact_id}/download")
 async def download_artifact(
     artifact_id: UUID,
-    request: Request,
     current_user: DownloadUserDep,
     service: ArtifactServiceDep,
-) -> DownloadResponse:
-    """获取工件预签名下载 URL。
+) -> StreamingResponse:
+    """下载工件原始文件（API 代理，不走 MinIO 预签名 URL）。
 
-    从请求的 Host header 动态推导 MinIO 外部访问地址，
-    使预签名 URL 的 host 与浏览器访问的 host 一致，
-    无需硬编码部署 IP。
+    直接从 MinIO 读取文件内容并以 StreamingResponse 返回，
+    避免浏览器需要直接访问 MinIO（staging/生产中 MinIO 在内网）。
 
     Args:
         artifact_id: 工件 UUID。
-        request: FastAPI 请求对象（用于提取 Host）。
         current_user: 当前认证用户。
         service: 工件服务。
 
     Returns:
-        DownloadResponse: 预签名下载 URL。
+        StreamingResponse: 文件流响应。
 
     Raises:
         AppError: code="not_found"，当工件不存在时。
     """
-    # 从请求 Host header 构建外部端点（替换端口为 MinIO 的 9000）
-    host = request.headers.get("host", "localhost:9000")
-    # API 端口是 8000，MinIO 端口是 9000，替换端口部分
-    if ":" in host:
-        host_base = host.rsplit(":", 1)[0]
-    else:
-        host_base = host
-    minio_external = f"http://{host_base}:9000"
-    url = await service.presign_download(artifact_id, endpoint_override=minio_external)
-    return DownloadResponse(download_url=url)
+    # 获取工件元数据 + 文件内容
+    ref = await service.get_artifact(artifact_id)
+    file_data = await service.get_bytes(artifact_id)
+
+    return StreamingResponse(
+        iter([file_data]),
+        media_type=ref.media_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{ref.filename}"',
+        },
+    )

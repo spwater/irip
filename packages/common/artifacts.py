@@ -80,6 +80,7 @@ class ArtifactRef:
         sha256: 内容 SHA-256 摘要（hex 小写）。
         media_type: MIME 类型。
         size_bytes: 内容字节数。
+        filename: 原始文件名。
     """
 
     artifact_id: UUID
@@ -87,6 +88,7 @@ class ArtifactRef:
     sha256: str
     media_type: str
     size_bytes: int
+    filename: str
 
 
 class ArtifactBlob(Base):
@@ -298,6 +300,7 @@ class ArtifactService(ScopedSessionMixin):
                 sha256=sha256,
                 media_type=media_type,
                 size_bytes=size,
+                filename=filename,
             )
 
     async def verify(self, artifact_id: UUID) -> bool:
@@ -377,6 +380,7 @@ class ArtifactService(ScopedSessionMixin):
                 sha256=artifact.sha256,
                 media_type=artifact.media_type,
                 size_bytes=artifact.size_bytes,
+                filename=artifact.filename,
             )
 
     async def get_bytes(self, artifact_id: UUID) -> bytes:

@@ -83,30 +83,59 @@ class PlanAnalyzerMixin(PlanServiceBase):
                 source_id = UUID(str(ref.get("id"))) if ref.get("id") else None
                 if source_id is None:
                     continue
+                namespace = str(ref.get("namespace", ""))
                 fact_name = ""
-                try:
-                    _result = await session.execute(
-                        sa.text("SELECT task_name FROM fact WHERE id = :fid"),
-                        {"fid": str(source_id)},
-                    )
-                    _row = _result.fetchone()
-                    if _row:
-                        fact_name = _row[0] or ""
-                except SQLAlchemyError:
-                    logger.warning(
-                        "Failed to fetch fact name for source %s",
-                        source_id,
-                        exc_info=True,
-                    )
-                get_data = getattr(self._fact_provider, "get_fact_data", None)
-                if get_data is not None:
-                    fact_data = await get_data(source_id)
-                    if isinstance(fact_data, dict):
-                        compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
-                        sample_label = fact_name or f"source_{_idx + 1}"
-                        compact_data_parts.append(
-                            f"### 样品: {sample_label}\n```json\n{compact}\n```"
+                if not namespace.startswith("research:"):
+                    try:
+                        _result = await session.execute(
+                            sa.text("SELECT task_name FROM fact WHERE id = :fid"),
+                            {"fid": str(source_id)},
                         )
+                        _row = _result.fetchone()
+                        if _row:
+                            fact_name = _row[0] or ""
+                    except SQLAlchemyError:
+                        logger.warning(
+                            "Failed to fetch fact name for source %s",
+                            source_id,
+                            exc_info=True,
+                        )
+                # 获取数据：已发布数据直接从成果版本读取，不走 fact 表
+                if namespace.startswith("research:"):
+                    try:
+                        _result = await session.execute(
+                            sa.text(
+                                "SELECT summary FROM research_result_version "
+                                "WHERE result_id = :rid AND status = 'active' "
+                                "ORDER BY version_number DESC LIMIT 1"
+                            ),
+                            {"rid": str(source_id)},
+                        )
+                        _row = _result.fetchone()
+                        if _row and _row[0]:
+                            import json as _json2
+                            fact_data = json.loads(_row[0]) if isinstance(_row[0], str) else _row[0]
+                            compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
+                            sample_label = f"已发布数据集 {str(source_id)[:8]}"
+                            compact_data_parts.append(
+                                f"### 样品: {sample_label}\n```json\n{compact}\n```"
+                            )
+                    except Exception:
+                        logger.warning("Failed to load published data for %s", source_id, exc_info=True)
+                else:
+                    get_data = getattr(self._fact_provider, "get_fact_data", None)
+                    if get_data is not None:
+                        try:
+                            fact_data = await get_data(source_id)
+                        except Exception:
+                            logger.warning("Failed to load fact data for %s", source_id, exc_info=True)
+                            continue
+                        if isinstance(fact_data, dict):
+                            compact = _json.dumps(fact_data, ensure_ascii=False, separators=(",", ":"))
+                            sample_label = fact_name or f"source_{_idx + 1}"
+                            compact_data_parts.append(
+                                f"### 样品: {sample_label}\n```json\n{compact}\n```"
+                            )
 
             full_data_text = "\n\n".join(compact_data_parts)
 

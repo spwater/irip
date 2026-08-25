@@ -86,6 +86,7 @@ class ResultItemResponse(BaseModel):
     name: str
     status: str
     current_version: int
+    current_acl_type: str = "private"
     created_at: str
 
 
@@ -107,6 +108,7 @@ class ResultDetailResponse(BaseModel):
     name: str
     status: str
     current_version: int
+    current_acl_type: str = "private"
     created_at: str
     source_facts: list[dict[str, Any]] = Field(default_factory=list)
     version: ResultVersionResponse | None
@@ -276,6 +278,7 @@ async def get_result_detail(
         name=data["name"],
         status=data["status"],
         current_version=data["current_version"],
+        current_acl_type=data.get("current_acl_type", "private"),
         created_at=data["created_at"],
         source_facts=data.get("source_facts", []),
         version=version,

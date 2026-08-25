@@ -19,7 +19,6 @@ import {
   type Snapshot,
 } from '@/api/research';
 import { apiListFacts } from '@/api/facts-provenance';
-import { apiSearchCatalog, type CatalogSearchResult } from '@/api/researchProducts';
 import { apiSearchPublishedCatalog, type CatalogPublishedSearchResult } from '@/api/researchPublish';
 import type { FactSummary } from '@/api/types';
 // P2-C22: 辅助函数提取到 evidenceUtils.ts
@@ -50,10 +49,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
-  const [evidenceType, setEvidenceType] = useState<'fact' | 'derived' | 'published'>('fact');
-  const [derivedResults, setDerivedResults] = useState<CatalogSearchResult[]>([]);
-  const [selectedDerivedIds, setSelectedDerivedIds] = useState<string[]>([]);
-  const [loadingDerived, setLoadingDerived] = useState(false);
+  const [evidenceType, setEvidenceType] = useState<'fact' | 'published'>('fact');
   const [publishedResults, setPublishedResults] = useState<CatalogPublishedSearchResult[]>([]);
   const [selectedPublishedIds, setSelectedPublishedIds] = useState<string[]>([]);
   const [loadingPublished, setLoadingPublished] = useState(false);
@@ -89,7 +85,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
     setModalOpen(true);
     setEvidenceType('fact');
     setSelectedFactIds([]);
-    setSelectedDerivedIds([]);
     setSelectedPublishedIds([]);
     setLoadingFacts(true);
     try {
@@ -101,26 +96,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       setLoadingFacts(false);
     }
   };
-
-  // 搜索衍生数据
-  const handleSearchDerived = useCallback(async (query: string) => {
-    setLoadingDerived(true);
-    try {
-      const res = await apiSearchCatalog(query);
-      setDerivedResults(res?.items ?? []);
-    } catch {
-      message.error('搜索衍生数据失败');
-    } finally {
-      setLoadingDerived(false);
-    }
-  }, []);
-
-  // 切换证据类型时加载衍生数据
-  useEffect(() => {
-    if (evidenceType === 'derived' && derivedResults.length === 0) {
-      void handleSearchDerived('');
-    }
-  }, [evidenceType, derivedResults.length, handleSearchDerived]);
 
   // 搜索已发布成果包中的 DerivedDataset
   const handleSearchPublished = useCallback(async (query: string) => {
@@ -192,30 +167,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
       if (successCount > 0) message.success(`已加入 ${successCount} 条数据`);
       if (failCount > 0) message.warning(`${failCount} 条加入失败（可能已存在）`);
       setSelectedFactIds([]);
-    } else if (evidenceType === 'derived') {
-      // 衍生数据
-      if (selectedDerivedIds.length === 0) {
-        message.warning('请至少选择一个衍生数据集');
-        return;
-      }
-      setAdding(true);
-      let successCount = 0;
-      let failCount = 0;
-      for (const dsId of selectedDerivedIds) {
-        try {
-          await apiAddEvidence(workspaceId, {
-            source_namespace: 'research:derived',
-            source_id: dsId,
-          });
-          successCount++;
-        } catch {
-          failCount++;
-        }
-      }
-      setAdding(false);
-      if (successCount > 0) message.success(`已加入 ${successCount} 个衍生数据集`);
-      if (failCount > 0) message.warning(`${failCount} 个加入失败`);
-      setSelectedDerivedIds([]);
     } else {
       // 已发布成果包中的 DerivedDataset
       if (selectedPublishedIds.length === 0) {
@@ -378,9 +329,9 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
         title="添加数据"
         open={modalOpen}
         onOk={handleConfirmAdd}
-        onCancel={() => { setModalOpen(false); setSelectedFactIds([]); setSelectedDerivedIds([]); setSelectedPublishedIds([]); }}
+        onCancel={() => { setModalOpen(false); setSelectedFactIds([]); setSelectedPublishedIds([]); }}
         confirmLoading={adding}
-        okText={`添加 ${(evidenceType === 'fact' ? selectedFactIds.length : evidenceType === 'derived' ? selectedDerivedIds.length : selectedPublishedIds.length) > 0 ? `(${evidenceType === 'fact' ? selectedFactIds.length : evidenceType === 'derived' ? selectedDerivedIds.length : selectedPublishedIds.length})` : ''}`}
+        okText={`添加 ${(evidenceType === 'fact' ? selectedFactIds.length : selectedPublishedIds.length) > 0 ? `(${evidenceType === 'fact' ? selectedFactIds.length : selectedPublishedIds.length})` : ''}`}
         cancelText="取消"
         width={700}
         styles={{ body: { padding: 0 } }}
@@ -394,8 +345,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
               style={{ marginBottom: 8 }}
             >
               <Radio.Button value="fact">实验事实</Radio.Button>
-              <Radio.Button value="derived">衍生数据</Radio.Button>
-              <Radio.Button value="published">已发布</Radio.Button>
+              <Radio.Button value="published">已发布数据</Radio.Button>
             </Radio.Group>
 
             {evidenceType === 'fact' && (
@@ -420,21 +370,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                     已选 {selectedFactIds.length} 个
                   </Text>
                 </div>
-              </>
-            )}
-
-            {evidenceType === 'derived' && (
-              <>
-                <Input
-                  prefix={<SearchOutlined />}
-                  placeholder="搜索衍生数据集名称..."
-                  onChange={(e) => handleSearchDerived(e.target.value)}
-                  allowClear
-                  size="middle"
-                />
-                <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
-                  已选 {selectedDerivedIds.length} 个
-                </Text>
               </>
             )}
 
@@ -608,56 +543,6 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
                     </div>
                   );
                 })
-              )
-            ) : evidenceType === 'derived' ? (
-              // 衍生数据列表
-              loadingDerived ? (
-                <div style={{ textAlign: 'center', padding: 40 }}>
-                  <Spin />
-                </div>
-              ) : derivedResults.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--ocean-text-muted)' }}>
-                  <Text type="secondary">暂无已确认的衍生数据集</Text>
-                </div>
-              ) : (
-                <List
-                  size="small"
-                  dataSource={derivedResults}
-                  renderItem={(item) => (
-                    <List.Item
-                      style={{ cursor: 'pointer', background: selectedDerivedIds.includes(item.id) ? 'rgba(22, 134, 174, 0.10)' : 'transparent' }}
-                      onClick={() => {
-                        setSelectedDerivedIds((prev) =>
-                          prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
-                        );
-                      }}
-                    >
-                      <List.Item.Meta
-                        title={
-                          <Space>
-                            <Checkbox
-                              checked={selectedDerivedIds.includes(item.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={() => {
-                                setSelectedDerivedIds((prev) =>
-                                  prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id]
-                                );
-                              }}
-                            />
-                            <Text>衍生: {item.name}</Text>
-                            <Tag>v{item.current_version}</Tag>
-                          </Space>
-                        }
-                        description={
-                          <span style={{ fontSize: 12 }}>
-                            {item.summary || '无摘要'}
-                            {item.tags.length > 0 && ` | 标签: ${item.tags.join(', ')}`}
-                          </span>
-                        }
-                      />
-                    </List.Item>
-                  )}
-                />
               )
             ) : (
               // 已发布成果包中的 DerivedDataset 列表（跨用户 ACL 过滤）

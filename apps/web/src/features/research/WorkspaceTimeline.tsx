@@ -168,26 +168,19 @@ export function WorkspaceTimeline({ workspaceId, onTurnClick, onTurnChanged, onT
       {items.map((item) => (
         <div
           key={item.turn_id}
-          role="button"
-          tabIndex={0}
-          onClick={() => onTurnClick?.(item.turn_id)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onTurnClick?.(item.turn_id);
-            }
-          }}
           style={{
             padding: "12px 16px",
             marginBottom: 8,
             border: "1px solid #f0f0f0",
             borderRadius: 6,
-            cursor: onTurnClick ? "pointer" : "default",
             position: "relative",
           }}
           data-testid="research-turn-card"
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", cursor: onTurnClick ? "pointer" : "default" }}
+            onClick={() => onTurnClick?.(item.turn_id)}
+          >
             <Text strong style={{ flex: 1, minWidth: 0 }}>
               {"#"}{item.turn_number} {item.question_text}
             </Text>

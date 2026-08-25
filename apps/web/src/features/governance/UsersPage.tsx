@@ -199,9 +199,8 @@ export function UsersPage(): JSX.Element {
 
   const handleAssignOpen = async (record: UserListItem): Promise<void> => {
     setAssignTarget(record);
-    // lab_director 只能分配 lab_member / lab_viewer，预填充时过滤掉平台级角色
-    const assignableValues = assignableRoleOptions.map((o) => o.value);
-    const prefillRoles = (record.roles ?? []).filter((r) => assignableValues.includes(r));
+    // 预填用户当前的真实角色（不过滤，让用户看到完整角色状态）
+    const prefillRoles = record.roles ?? [];
 
     // 拉取用户已有的多部门关联
     let extraDeptIds: string[] = [];
@@ -546,7 +545,10 @@ export function UsersPage(): JSX.Element {
               mode="multiple"
               placeholder="选择角色（可多选）"
               style={{ width: '100%' }}
-              options={assignableRoleOptions}
+              options={isAdmin ? ROLE_OPTIONS : ROLE_OPTIONS.map((r) => ({
+                ...r,
+                disabled: !assignableRoleOptions.some((a) => a.value === r.value),
+              }))}
               optionFilterProp="label"
               showSearch
             />
@@ -554,11 +556,13 @@ export function UsersPage(): JSX.Element {
           <Form.Item
             name="department_id"
             label="主部门"
+            extra={!isAdmin ? '仅平台管理员可修改主部门' : undefined}
           >
             <Select
               placeholder="选择实验室（可选）"
               style={{ width: '100%' }}
               allowClear
+              disabled={!isAdmin}
               options={departments.map((d) => ({
                 value: d.id,
                 label: d.display_name,
@@ -571,12 +575,14 @@ export function UsersPage(): JSX.Element {
             name="extra_department_ids"
             label="额外部门"
             tooltip="额外部门的数据同样可见，但创建数据时默认归属主部门"
+            extra={!isAdmin ? '仅平台管理员可修改额外部门' : undefined}
           >
             <Select
               mode="multiple"
               placeholder="选择额外归属的实验室（可多选）"
               style={{ width: '100%' }}
               allowClear
+              disabled={!isAdmin}
               options={departments.map((d) => ({
                 value: d.id,
                 label: d.display_name,
@@ -647,11 +653,13 @@ export function UsersPage(): JSX.Element {
           <Form.Item
             name="department_id"
             label="主部门"
+            extra={!isAdmin ? '仅平台管理员可修改主部门' : undefined}
           >
             <Select
               placeholder="选择实验室（可选）"
               style={{ width: '100%' }}
               allowClear
+              disabled={!isAdmin}
               options={departments.map((d) => ({
                 value: d.id,
                 label: d.display_name,
@@ -664,12 +672,14 @@ export function UsersPage(): JSX.Element {
             name="extra_department_ids"
             label="额外部门"
             tooltip="额外部门的数据同样可见，但创建数据时默认归属主部门"
+            extra={!isAdmin ? '仅平台管理员可修改额外部门' : undefined}
           >
             <Select
               mode="multiple"
               placeholder="选择额外归属的实验室（可多选）"
               style={{ width: '100%' }}
               allowClear
+              disabled={!isAdmin}
               options={departments.map((d) => ({
                 value: d.id,
                 label: d.display_name,

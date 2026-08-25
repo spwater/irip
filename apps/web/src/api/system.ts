@@ -11,7 +11,7 @@ export {
   type UploadResponse,
   apiBrowseFiles,
   apiUploadFile,
-  apiGetArtifactDownloadUrl,
+  apiDownloadArtifact,
 } from './models-ai';
 
 export {

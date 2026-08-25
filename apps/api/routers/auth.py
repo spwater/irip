@@ -110,6 +110,9 @@ me_router = APIRouter(tags=["user"])
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
     """设置 HttpOnly refresh cookie。先清除可能存在的旧 cookie（多 path）。"""
     is_production: bool = os.getenv("IRIP_ENV") == "production"
+    # staging 环境用 HTTP，不能用 secure cookie（浏览器会丢弃）
+    is_staging: bool = bool(os.getenv("IRIP_STAGING"))
+    use_secure: bool = is_production and not is_staging
     # 清除可能残留的旧 cookie（不同 path 都试一次，避免同名 cookie 堆积）
     for p in ("/api/v1/auth", "/api/v1", "/"):
         response.delete_cookie(key=REFRESH_COOKIE_NAME, path=p)
@@ -118,7 +121,7 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         value=refresh_token,
         httponly=True,
         samesite="lax" if not is_production else "strict",
-        secure=is_production,
+        secure=use_secure,
         max_age=REFRESH_COOKIE_MAX_AGE,
         path="/api/v1/auth",
     )

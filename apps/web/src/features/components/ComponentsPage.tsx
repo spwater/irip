@@ -67,6 +67,7 @@ const { Text } = Typography;
 export function ComponentsPage({ editId, hideList }: { prefillObject?: string; editId?: string; hideList?: boolean }): JSX.Element {
   const queryClient = useQueryClient();
   const currentUser = useAuthStore((s) => s.user);
+  const isAdmin: boolean = currentUser?.roles?.includes('platform_administrator') ?? false;
   const [activeTab, setActiveTab] = useState<'modern' | 'archived'>('modern');
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
@@ -85,6 +86,13 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId]);
+
+  // 非管理员用户新建时预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (modalOpen && !isAdmin && currentUser?.departmentId) {
+      form.setFieldsValue({ department_id: currentUser.departmentId });
+    }
+  }, [modalOpen, isAdmin, currentUser?.departmentId, form]);
 
   // ---- 列表查询 ----
   const { data, isLoading } = useQuery({
@@ -571,7 +579,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="department_id" label="归属部门">
-                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} disabled={!isAdmin} />
               </Form.Item>
             </Col>
             <Col span={12}>
@@ -679,7 +687,7 @@ export function ComponentsPage({ editId, hideList }: { prefillObject?: string; e
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item name="department_id" label="归属部门">
-                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} />
+                <DepartmentSelector placeholder="默认取当前用户部门" allowRoot={true} disabled={!isAdmin} />
               </Form.Item>
             </Col>
             <Col span={12}>

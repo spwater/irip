@@ -9,11 +9,19 @@
 #   - base_url 为合法 http/https URL
 #   - api_key 非空
 #   - models 为非空字符串列表，同一 provider 下不可重复
+#
+# api_key 支持两种写法：
+#   1. 环境变量占位符（推荐，生产环境用，避免密钥明文留盘）：
+#      api_key: ${IRIP_LLM_HCRDI_API_KEY}
+#      启动前需在环境中注入：export IRIP_LLM_HCRDI_API_KEY=sk-...
+#      环境变量未设置或为空时，启动校验会 fail-fast 报错。
+#   2. 直接明文（仅限测试/本地直连，不要提交到 Git）：
+#      api_key: "your-api-key"
 
 providers:
   - name: deepseek
     base_url: "http://your-litellm-proxy:port/v1"
-    api_key: "your-api-key"
+    api_key: ${IRIP_LLM_HCRDI_API_KEY}
     models:
       - "DeepSeek"
       - "GLM"

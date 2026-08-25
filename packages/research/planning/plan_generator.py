@@ -208,25 +208,36 @@ class PlanGeneratorMixin(PlanServiceBase):
             source_id = UUID(str(ref.get("id"))) if ref.get("id") else None
             if source_id is None:
                 continue
+            namespace = str(ref.get("namespace", ""))
+            # 已发布数据不是 fact 表记录，跳过 fact 查询，用空字段列表
+            if namespace.startswith("research:"):
+                field_manifest[str(source_id)] = []
+                data_summary_parts.append(f"已发布数据集 {str(source_id)[:8]}")
+                continue
             # 获取字段清单
-            fields = await self._fact_provider.get_fact_fields(source_id)
+            try:
+                fields = await self._fact_provider.get_fact_fields(source_id)
+            except Exception:
+                logger.warning("Failed to get fact fields for %s, skipping", source_id, exc_info=True)
+                fields = []
             field_manifest[str(source_id)] = list(fields)
 
-            # 获取 Fact 名称（来源任务名）
+            # 获取 Fact 名称（来源任务名）— 已发布数据跳过
             fact_name = ""
-            try:
-                from sqlalchemy import text as _sql_text
+            if not namespace.startswith("research:"):
+                try:
+                    from sqlalchemy import text as _sql_text
 
-                async with self._factory() as _ns:
-                    _result = await _ns.execute(
-                        _sql_text("SELECT task_name FROM fact WHERE id = :fid"),
-                        {"fid": str(source_id)},
-                    )
-                    _row = _result.fetchone()
-                    if _row:
-                        fact_name = _row[0] or ""
-            except Exception:
-                logger.warning("unexpected error", exc_info=True)
+                    async with self._factory() as _ns:
+                        _result = await _ns.execute(
+                            _sql_text("SELECT task_name FROM fact WHERE id = :fid"),
+                            {"fid": str(source_id)},
+                        )
+                        _row = _result.fetchone()
+                        if _row:
+                            fact_name = _row[0] or ""
+                except Exception:
+                    logger.warning("unexpected error", exc_info=True)
 
             # 获取数据摘要
             get_data = getattr(self._fact_provider, "get_fact_data", None)

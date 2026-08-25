@@ -32,6 +32,7 @@ export type ResultItem = {
   name: string;
   status: string;
   current_version: number;
+  current_acl_type: string;
   created_at: string;
 };
 
@@ -68,6 +69,7 @@ export type ResultDetail = {
   name: string;
   status: string;
   current_version: number;
+  current_acl_type: string;
   created_at: string;
   source_facts: SourceFact[];
   version: ResultVersionDetail | null;

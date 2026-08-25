@@ -1,11 +1,12 @@
 import { Form, Input, Modal, Select, TreeSelect, message } from 'antd';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { apiCreateExperimentProject } from '@/api/experiment-projects';
 import { apiListDepartments } from '@/api/departments';
 import { apiListUsers } from '@/api/governance';
 import { buildDeptTree } from '@/shared/buildDeptTree';
 import { extractApiError } from '@/api/types';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 /**
  * 新建实验项目弹窗
@@ -22,6 +23,15 @@ export function CreateProjectModal({
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [form] = Form.useForm();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  // 非管理员用户预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (open && !isAdmin && user?.departmentId) {
+      form.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, isAdmin, user?.departmentId, form]);
 
   // 部门树数据（用于可见单位多选）
   const { data: deptData } = useQuery({
@@ -97,6 +107,7 @@ export function CreateProjectModal({
             placeholder="请选择所属单位"
             allowClear
             style={{ width: '100%' }}
+            disabled={!isAdmin}
           />
         </Form.Item>
         <Form.Item

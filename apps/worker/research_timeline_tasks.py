@@ -131,8 +131,8 @@ async def _build_plan_service(
     name="research.recommendations.generate",
     bind=True,
     acks_late=True,
-    soft_time_limit=120,
-    time_limit=180,
+    soft_time_limit=300,
+    time_limit=360,
 )
 def generate_recommendations(
     self: Any,

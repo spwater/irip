@@ -176,6 +176,27 @@ def _validate_assignable_roles(user: CurrentUser, roles: list[str]) -> None:
             )
 
 
+def _assert_not_self_modifying_roles(
+    user_id: UUID, current_user: CurrentUser
+) -> None:
+    """禁止用户修改自己的角色（给自己加/减角色均属提权或降权风险）。
+
+    Args:
+        user_id: 目标用户 UUID。
+        current_user: 当前认证用户。
+
+    Raises:
+        AppError: code="forbidden"，当 user_id == current_user.user_id 时。
+    """
+    if user_id == current_user.user_id:
+        raise AppError(
+            code="forbidden",
+            message="不能修改自己的角色",
+            retryable=False,
+            fields={},
+        )
+
+
 def _make_service(
     current_user: CurrentUser,
     session_factory: async_sessionmaker[AsyncSession],
@@ -328,6 +349,18 @@ async def update_user(
         if not _is_platform_admin(current_user):
             _validate_assignable_roles(current_user, body.roles)
 
+    # 安全-自我保护：禁止用户修改自己的所属实验室或角色（防提权/换实验室），
+    # 但允许修改自己的 display_name 和 password（非权限敏感字段）。
+    if user_id == current_user.user_id and (
+        body.department_id is not None or body.roles is not None
+    ):
+        raise AppError(
+            code="forbidden",
+            message="不能修改自己的所属实验室或角色",
+            retryable=False,
+            fields={},
+        )
+
     service = _make_service(current_user, session_factory)
 
     # lab_director 只能操作同 org 用户 — 需要先查用户再校验
@@ -389,6 +422,9 @@ async def assign_roles(
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, body.roles)
 
+    # 安全-自我保护：禁止用户给自己分配角色（防提权）。
+    _assert_not_self_modifying_roles(user_id, current_user)
+
     service = _make_service(current_user, session_factory)
 
     # lab_director 只能操作同 org 用户
@@ -443,6 +479,9 @@ async def remove_role(
     # irip-ai-collab: lab_director 只能移除 lab_member / lab_viewer 角色
     if not _is_platform_admin(current_user):
         _validate_assignable_roles(current_user, [role])
+
+    # 安全-自我保护：禁止用户移除自己的角色（防降权规避）。
+    _assert_not_self_modifying_roles(user_id, current_user)
 
     service = _make_service(current_user, session_factory)
 

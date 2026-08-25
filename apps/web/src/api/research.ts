@@ -430,11 +430,13 @@ export async function apiAnalyzeData(
   planId: string,
   snapshotId: string,
   editedAdvice?: string,
+  editedSteps?: PlanStep[],
 ): Promise<{ analysis_result: string; data_context?: string }> {
   const res = await http.post(`/research/workspaces/${workspaceId}/analyze-data`, {
     plan_id: planId,
     snapshot_id: snapshotId,
     edited_advice: editedAdvice || null,
+    edited_steps: editedSteps || null,
   });
   return res.data;
 }

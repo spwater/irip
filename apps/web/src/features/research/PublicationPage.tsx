@@ -43,6 +43,22 @@ export function PublicationPage(): JSX.Element {
   const [selectedDetail, setSelectedDetail] = useState<ResultDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [favSet, setFavSet] = useState<Set<string>>(new Set());
+  const [aclLoadingId, setAclLoadingId] = useState<string | null>(null);
+
+  const handleAclChange = useCallback(async (resultId: string, acl: string) => {
+    setAclLoadingId(resultId);
+    try {
+      const item = results.find(r => r.result_id === resultId);
+      if (!item) return;
+      const { apiUpdateAcl } = await import('@/api/researchPublish');
+      await apiUpdateAcl(item.workspace_id, resultId, { acl_type: acl });
+      setResults(prev => prev.map(r => r.result_id === resultId ? { ...r, current_acl_type: acl } : r));
+    } catch {
+      // ignore
+    } finally {
+      setAclLoadingId(null);
+    }
+  }, [results]);
 
   const fetchResults = useCallback(async () => {
     setLoading(true);
@@ -232,6 +248,8 @@ export function PublicationPage(): JSX.Element {
                   isFavorited={favSet.has(item.result_id)}
                   onClick={() => handleResultClick(item.result_id)}
                   onFavoriteToggle={() => handleFavoriteToggle(item.result_id)}
+                  onAclChange={handleAclChange}
+                  aclLoading={aclLoadingId === item.result_id}
                 />
               </Col>
             ))}

@@ -16,14 +16,40 @@ services:
   api:
     environment:
       IRIP_STAGING: "1"
+      # AI 网关 key 走环境变量注入（models.yaml 用 ${IRIP_LLM_HCRDI_API_KEY} 占位符）
+      IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
+      # superuser 连接串（删除项目时需 DISABLE TRIGGER，irip_app 无权操作）
+      IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
+      # 开启研究分析功能（staging 试用需要）
+      RESEARCH_ANALYSIS_ENABLED: "true"
+    secrets:
+      - source: irip_database_admin_url
+        target: database_admin_url
   worker:
     environment:
       IRIP_STAGING: "1"
+      IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
+      IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
+    secrets:
+      - source: irip_database_admin_url
+        target: database_admin_url
+    # worker 需要访问外部 LLM 网关（10.1.2.1:18881），但 backend 网络 internal:true
+    # 禁止外网访问。加 frontend 网络让 worker 能出网（不暴露端口，仅做出站路由）。
+    networks:
+      - backend
+      - frontend
   scheduler:
     environment:
       IRIP_STAGING: "1"
+      IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
   web:
     environment:
       NGINX_CONF: "nginx-http.conf"
     ports:
       - "18080:80"
+  # bootstrap 是一次性运维容器，仅在首次部署时需要。
+  # 加 profile 防止 `docker compose restart/up` 时自动拉起（restart 不尊重 depends_on
+  # 时序，会导致 PG 还在重启就连接，报 password auth failed）。
+  # 显式运行：docker compose ... --profile ops up bootstrap
+  bootstrap:
+    profiles: ["ops"]

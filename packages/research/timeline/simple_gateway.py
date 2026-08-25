@@ -63,10 +63,11 @@ async def build_gateway_from_config() -> SimpleGateway | None:
     """
     from packages.ai.yaml_config import get_scenario_config
 
+    # 推荐问题生成用 data_extraction 场景（thinking_enabled=false，快速出结果）
     try:
-        config = get_scenario_config("research")
+        config = get_scenario_config("data_extraction")
     except (KeyError, FileNotFoundError, ValueError) as exc:
-        logger.warning("Failed to load research AI config: %s", exc)
+        logger.warning("Failed to load data_extraction AI config: %s", exc)
         return None
 
     logger.info(

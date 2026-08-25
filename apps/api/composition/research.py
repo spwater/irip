@@ -68,6 +68,7 @@ def register(ctx: CompositionContext) -> None:
         research_catalog = ResearchCatalogImpl(
             session_factory=ctx.session_factory,
             actor_id=current_user.user_id,
+            dept_id=dept_id,
         )
         service = WorkspaceService(
             session_factory=ctx.session_factory,

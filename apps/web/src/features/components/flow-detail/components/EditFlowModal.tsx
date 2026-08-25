@@ -7,6 +7,7 @@
 import { Form, Input, Select, Space, Button, Modal } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 export interface EditFlowModalProps {
   open: boolean;
@@ -20,6 +21,9 @@ export interface EditFlowModalProps {
 
 export function EditFlowModal(props: EditFlowModalProps): JSX.Element {
   const { open, onOk, onCancel, confirmLoading, editForm, objectOptions, onNewObject } = props;
+
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
 
   return (
     <Modal
@@ -40,7 +44,7 @@ export function EditFlowModal(props: EditFlowModalProps): JSX.Element {
           <Input placeholder="请输入任务名称" maxLength={200} />
         </Form.Item>
         <Form.Item name="department_id" label="所属单位">
-          <DepartmentSelector placeholder="请选择所属单位" allowRoot={true} />
+          <DepartmentSelector placeholder="请选择所属单位" allowRoot={true} disabled={!isAdmin} />
         </Form.Item>
         <Form.Item
           name="operator"

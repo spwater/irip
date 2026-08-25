@@ -3,7 +3,7 @@
  *
  * 显示标题/摘要/发布者/时间/版本号/产物数量/权限标识
  */
-import { Card, Tag, Space, Typography } from 'antd';
+import { Card, Tag, Space, Typography, Button, Popconfirm } from 'antd';
 import {
   DatabaseOutlined,
   BarChartOutlined,
@@ -24,6 +24,8 @@ export type ResultCardProps = {
   isFavorited?: boolean;
   onClick: () => void;
   onFavoriteToggle?: () => void;
+  onAclChange?: (resultId: string, acl: string) => void;
+  aclLoading?: boolean;
 };
 
 const ACL_LABELS: Record<string, { label: string; color: string; icon: JSX.Element }> = {
@@ -48,6 +50,8 @@ export function ResultCard({
   isFavorited,
   onClick,
   onFavoriteToggle,
+  onAclChange,
+  aclLoading,
 }: ResultCardProps): JSX.Element {
   const aclInfo = ACL_LABELS[item.current_acl_type] ?? ACL_LABELS.private;
 
@@ -80,6 +84,23 @@ export function ResultCard({
           <Tag color={aclInfo.color} style={{ margin: 0, fontSize: 11 }}>
             {aclInfo.icon} {aclInfo.label}
           </Tag>
+          {onAclChange && (
+            <Popconfirm
+              title={item.current_acl_type === 'all' ? '确认设为私有？' : '确认设为公开？'}
+              description={item.current_acl_type === 'all' ? '设为私有后仅自己可见。' : '公开后所有用户可查看此成果。'}
+              onConfirm={() => onAclChange(item.result_id, item.current_acl_type === 'all' ? 'private' : 'all')}
+              okText="确认"
+              cancelText="取消"
+            >
+              <Button
+                size="small"
+                type="text"
+                icon={item.current_acl_type === 'all' ? <LockOutlined /> : <GlobalOutlined />}
+                loading={aclLoading}
+                style={{ fontSize: 12, padding: '0 4px', color: item.current_acl_type === 'all' ? '#8c8c8c' : '#1890ff' }}
+              />
+            </Popconfirm>
+          )}
           {onFavoriteToggle && (
             <span
               role="button"

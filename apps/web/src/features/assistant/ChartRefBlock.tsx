@@ -390,7 +390,7 @@ export function ChartRefBlock({
         onClick={handleExportPNG}
         disabled={exporting}
         style={{
-          position: 'absolute', right: 0, top: -4, zIndex: 10,
+          position: 'absolute', right: 0, bottom: 0, zIndex: 10,
           background: 'rgba(255,255,255,0.9)', border: '1px solid #d9d9d9',
           borderRadius: 4, padding: '2px 8px', fontSize: 12,
           cursor: 'pointer', opacity: 0.7, transition: 'opacity 0.2s',

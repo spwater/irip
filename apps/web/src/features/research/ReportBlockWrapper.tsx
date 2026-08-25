@@ -56,6 +56,8 @@ interface Props {
   lang?: string;
   /** 区块标题（默认用 BLOCK_TYPE_LABELS） */
   title?: string;
+  /** 表格前面的文字（用于生成结论标题） */
+  precedingText?: string;
   /** 预构建的 content_snapshot（用于 table 等非 code 块，优先于 codeStr 构建） */
   snapshotOverride?: Record<string, unknown>;
   /** 区块内容 */
@@ -70,6 +72,7 @@ export function ReportBlockWrapper({
   sampleData,
   lang,
   title,
+  precedingText,
   snapshotOverride,
   children,
 }: Props): JSX.Element {
@@ -108,6 +111,7 @@ export function ReportBlockWrapper({
           snapshot_number: turnInfo.snapshotNumber,
           question_text: turnInfo.questionText,
           block_index: blockIndex,
+          preceding_text: precedingText ?? '',
         },
       });
     },

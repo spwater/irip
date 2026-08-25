@@ -36,6 +36,7 @@ import { extractApiError } from '@/api/types';
 import { DataTableShell } from '@/shared/ui';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
 import { buildDeptTree } from '@/shared/buildDeptTree';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 /**
  * 设备仪器管理页面
@@ -55,6 +56,8 @@ export function EquipmentPage({
   onPresetDeptIdConsumed?: () => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [deptFilter, setDeptFilter] = useState<string | undefined>(undefined);
   const [modalOpen, setModalOpen] = useState(false);
@@ -74,6 +77,13 @@ export function EquipmentPage({
       onPresetDeptIdConsumed?.();
     }
   }, [presetDeptId]);
+
+  // 非管理员用户新建时预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (modalOpen && !editingItem && !isAdmin && user?.departmentId) {
+      form.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [modalOpen, editingItem, isAdmin, user?.departmentId, form]);
 
   // ---- 数据查询：设备列表 ----
   const { data, isLoading } = useQuery({
@@ -472,6 +482,7 @@ export function EquipmentPage({
             <DepartmentSelector
               placeholder="选择所属机构"
               allowRoot={true}
+              disabled={!isAdmin}
             />
           </Form.Item>
           <Form.Item

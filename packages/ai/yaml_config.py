@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -55,7 +56,6 @@ REQUIRED_SCENARIOS: frozenset[str] = frozenset(
         "data_extraction",
         "assistant",
         "research",
-        "conclusion",
         "title_generation",
     }
 )
@@ -68,6 +68,9 @@ _SCENARIO_CACHE: dict[str, ScenarioConfig] | None = None
 
 #: 模块级缓存：配置文件 mtime（用于热重载检测）。
 _CACHE_MTIMES: dict[str, float] | None = None
+
+#: 匹配 `${VAR}` 形式的环境变量占位符（仅限整串完全匹配，避免误伤明文中的 ``$``）。
+_ENV_VAR_PLACEHOLDER_RE: re.Pattern[str] = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$")
 
 
 # ---------------------------------------------------------------------------
@@ -211,6 +214,42 @@ def _read_yaml(path: Path) -> dict[str, Any]:
     return data  # type: ignore[no-any-return]
 
 
+def _resolve_api_key(raw_api_key: str, provider_index: int) -> str:
+    """解析 api_key，支持 ``${VAR}`` 环境变量占位符展开。
+
+    若 ``api_key`` 形如 ``${IRIP_LLM_HCRDI_API_KEY}``，则从 ``os.environ``
+    读取同名环境变量替换之；若环境变量未设置或为空，fail-fast 抛
+    ``ValueError``（错误信息只回显变量名，绝不回显任何密钥值）。
+
+    若 ``api_key`` 不是占位符（例如测试用明文），保持原样返回，向后兼容。
+
+    Args:
+        raw_api_key: models.yaml 中的原始 api_key 字符串（已通过非空校验）。
+        provider_index: provider 在列表中的索引（用于错误信息定位）。
+
+    Returns:
+        str: 展开后的 api_key。
+
+    Raises:
+        ValueError: 占位符对应的环境变量未设置或为空。
+    """
+    match = _ENV_VAR_PLACEHOLDER_RE.fullmatch(raw_api_key)
+    if match is None:
+        # 非占位符，保持明文原样（向后兼容，测试/本地直连场景仍可用）。
+        return raw_api_key
+
+    var_name = match.group(1)
+    resolved = os.environ.get(var_name)
+    if not resolved or not resolved.strip():
+        # 注意：错误信息只出现变量名，绝不拼接任何密钥值，避免密钥二次泄露。
+        raise ValueError(
+            f"models.yaml: providers[{provider_index}].api_key 使用了环境变量"
+            f"占位符 ${{{var_name}}}，但环境变量 {var_name} 未设置或为空。"
+            f"请在启动前通过 `export {var_name}=...` 注入真实密钥。"
+        )
+    return resolved
+
+
 def _parse_providers(models_data: dict[str, Any]) -> list[ProviderConfig]:
     """解析 models.yaml 数据为 ProviderConfig 列表。
 
@@ -243,6 +282,9 @@ def _parse_providers(models_data: dict[str, Any]) -> list[ProviderConfig]:
         api_key = item.get("api_key")
         if not isinstance(api_key, str) or not api_key.strip():
             raise ValueError(f"models.yaml: providers[{i}].api_key 必须是非空字符串")
+
+        # 展开 ${VAR} 占位符；非占位符明文保持原样（向后兼容）。
+        api_key = _resolve_api_key(api_key, i)
 
         raw_models = item.get("models")
         if not isinstance(raw_models, list) or not raw_models:

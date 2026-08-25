@@ -11,11 +11,12 @@
  */
 import { useState } from 'react';
 import { Button, Card, Empty, Popconfirm, Spin, Tabs, Tag, Typography, message } from 'antd';
-import { DeleteOutlined, SendOutlined, UndoOutlined } from '@ant-design/icons';
+import { DeleteOutlined, SendOutlined, UndoOutlined, GlobalOutlined, LockOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ConclusionBar } from './ConclusionBar';
 import { ResultDetailModal } from './ResultDetailModal';
 import { apiDeleteResult, apiListResults, apiRepublishResult, apiWithdrawResult } from '@/api/researchResults';
+import { apiUpdateAcl } from '@/api/researchPublish';
 
 const { Text } = Typography;
 
@@ -74,8 +75,15 @@ export function ConclusionBarPanel({
 
   const deleteMutation = useMutation({
     mutationFn: (resultId: string) => apiDeleteResult(workspaceId, resultId),
-    onSuccess: () => { message.success('已删除'); refresh(); },
+    onSuccess: () => { message.success('已删除'); setDetailOpen(false); refresh(); },
     onError: () => message.error('删除失败'),
+  });
+
+  const aclMutation = useMutation({
+    mutationFn: (params: { resultId: string; acl: string }) =>
+      apiUpdateAcl(workspaceId, params.resultId, { acl_type: params.acl }),
+    onSuccess: () => { message.success('权限已更新'); refresh(); },
+    onError: () => message.error('操作失败'),
   });
 
 
@@ -106,22 +114,64 @@ export function ConclusionBarPanel({
               key={r.id}
               size="small"
               hoverable
-              onClick={() => handleOpenDetail(r.id)}
-              style={{ marginBottom: 8, cursor: 'pointer' }}
+              style={{ marginBottom: 8 }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+                  onClick={() => handleOpenDetail(r.id)}
+                >
                   <Text strong>{r.name}</Text>
-                  <div style={{ marginTop: 4, fontSize: 12 }}>
+                  <div style={{ marginTop: 4, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Tag color={r.status === 'published' ? 'green' : 'default'}>
                       {r.status === 'published' ? '已发布' : '已撤回'}
                     </Tag>
-                    <Text type="secondary" style={{ marginLeft: 8 }}>
+                    {r.current_acl_type === 'all' ? (
+                      <Tag color="green" style={{ margin: 0, fontSize: 11 }} icon={<GlobalOutlined />}>公开</Tag>
+                    ) : (
+                      <Tag color="default" style={{ margin: 0, fontSize: 11 }} icon={<LockOutlined />}>私有</Tag>
+                    )}
+                    <Text type="secondary" style={{ marginLeft: 4 }}>
                       {fmtTime(r.created_at)}
                     </Text>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                  {r.current_acl_type !== 'all' ? (
+                    <Popconfirm
+                      title="确认设为公开？"
+                      description="公开后所有用户可在载入数据时查看此成果。"
+                      onConfirm={() => aclMutation.mutate({ resultId: r.id, acl: 'all' })}
+                      okText="确认"
+                      cancelText="取消"
+                    >
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<GlobalOutlined />}
+                        loading={aclMutation.isPending && aclMutation.variables?.resultId === r.id}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: '#1890ff' }}
+                      />
+                    </Popconfirm>
+                  ) : (
+                    <Popconfirm
+                      title="确认设为私有？"
+                      description="设为私有后仅自己可见。"
+                      onConfirm={() => aclMutation.mutate({ resultId: r.id, acl: 'private' })}
+                      okText="确认"
+                      cancelText="取消"
+                    >
+                      <Button
+                        size="small"
+                        type="text"
+                        icon={<LockOutlined />}
+                        loading={aclMutation.isPending && aclMutation.variables?.resultId === r.id}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: '#8c8c8c' }}
+                      />
+                    </Popconfirm>
+                  )}
                   {r.status === 'withdrawn' && (
                     <Button
                       size="small"

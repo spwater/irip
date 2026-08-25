@@ -5,10 +5,12 @@
  * 创建与编辑共用同一弹窗，通过 editingItem 区分。
  */
 
+import { useEffect } from 'react';
 import type { FormInstance } from 'antd';
 import { Button, Form, Input, Modal, Popconfirm, Select, Space, TreeSelect } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import type { IndustrialObject } from '@/api/types';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 export interface ObjectFormModalProps {
   open: boolean;
@@ -44,6 +46,16 @@ export function ObjectFormModal(props: ObjectFormModalProps): JSX.Element {
     deletePending,
     onNewComponent,
   } = props;
+
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  // 非管理员用户新建时预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (open && !editingItem && !isAdmin && user?.departmentId) {
+      form.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, editingItem, isAdmin, user?.departmentId, form]);
 
   return (
     <Modal
@@ -119,6 +131,7 @@ export function ObjectFormModal(props: ObjectFormModalProps): JSX.Element {
             showSearch
             optionFilterProp="label"
             options={allDeptOptions}
+            disabled={!isAdmin}
           />
         </Form.Item>
         <Form.Item

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
 import { apiGetFact, apiGetFactData } from '@/api/facts-provenance';
-import { apiGetArtifactDownloadUrl } from '@/api/models-ai';
+import { apiDownloadArtifact } from '@/api/models-ai';
 import { FactDetail } from './FactDetail';
 
 vi.mock('@/api/facts-provenance', () => ({
@@ -13,7 +13,7 @@ vi.mock('@/api/facts-provenance', () => ({
 }));
 
 vi.mock('@/api/models-ai', () => ({
-  apiGetArtifactDownloadUrl: vi.fn(),
+  apiDownloadArtifact: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -68,7 +68,7 @@ describe('FactDetail', () => {
     vi.clearAllMocks();
     vi.mocked(apiGetFact).mockResolvedValue(mockFact);
     vi.mocked(apiGetFactData).mockResolvedValue(mockFactData as never);
-    vi.mocked(apiGetArtifactDownloadUrl).mockResolvedValue('http://example.com/download');
+    vi.mocked(apiDownloadArtifact).mockResolvedValue(new Blob(['test']));
   });
 
   it('renders 事实详情 page title', async () => {

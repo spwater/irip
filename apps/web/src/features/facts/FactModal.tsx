@@ -7,7 +7,7 @@
  * - 提交时 department_id 必填，visibility_scope 随勾选设 private/tree，
  *   owner_user_id 自动填当前用户
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Select, message } from 'antd';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
 import { PublishPrivateToggle } from '@/shared/PublishPrivateToggle';
@@ -36,6 +36,14 @@ export function FactModal({ open, onClose, onSuccess, factId }: FactModalProps):
   const [isPrivate, setIsPrivate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  // 非管理员用户新建时预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (open && !factId && !isAdmin && user?.departmentId) {
+      form.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, factId, isAdmin, user?.departmentId, form]);
 
   const handleSubmit = async (): Promise<void> => {
     try {
@@ -101,6 +109,7 @@ export function FactModal({ open, onClose, onSuccess, factId }: FactModalProps):
           <DepartmentSelector
             allowRoot={(user?.roles ?? []).includes('platform_administrator')}
             placeholder="选择归属部门"
+            disabled={!isAdmin}
           />
         </Form.Item>
 

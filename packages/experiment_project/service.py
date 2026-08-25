@@ -513,31 +513,40 @@ class ExperimentProjectService(ScopedSessionMixin):
                     )
                     fr_ids = [row[0] for row in fr_ids_result]
                     if fr_ids:
+                        # 删 fact（flow_run_id 关联的事实数据）
+                        await session.execute(
+                            sa.text(
+                                f"DELETE FROM fact WHERE flow_run_id = "
+                                f"ANY(ARRAY[{','.join(repr(str(v)) for v in fr_ids)}]::uuid[])"
+                            )
+                        )
                         # 删 node_execution
                         await session.execute(sa.delete(FNE).where(FNE.flow_run_id.in_(fr_ids)))
                         # 删 flow_run
                         await session.execute(sa.delete(FR).where(FR.id.in_(fr_ids)))
             # 用 superuser 连接删除 versions + flow_definition（绕过不可变触发器）
+            # 修复：在同一个 session 内用 SET ROLE 切换到 superuser，避免创建新 async engine
+            # 导致事件循环死锁（外层 session 持锁阻塞内层 session）。
             import os as _os
 
-            from sqlalchemy.ext.asyncio import async_sessionmaker as _asm
-            from sqlalchemy.ext.asyncio import create_async_engine as _cae
+            from packages.common.database import get_database_admin_url
 
-            _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_url()
+            _alembic_url = _os.getenv("IRIP_ALEMBIC_DATABASE_URL", "") or get_database_admin_url()
             if _alembic_url and fd_ids:
-                _eng = _cae(
-                    _alembic_url.replace("postgresql+psycopg://", "postgresql+psycopg_async://", 1)
-                )
-                _fac = _asm(_eng, expire_on_commit=False)
-                async with _fac() as _sess:
-                    await _sess.execute(
+                # 解析 superuser 用户名，用于 SET ROLE
+                _admin_user = _alembic_url.split("://")[1].split(":")[0] if "://" in _alembic_url else "irip"
+
+                # 在当前 session 内临时切换到 superuser 角色
+                await session.execute(sa.text(f'SET ROLE "{_admin_user}"'))
+                try:
+                    await session.execute(
                         sa.text(
                             "ALTER TABLE flow_definition_version "
                             "DISABLE TRIGGER prevent_modify_flow_version"
                         )
                     )
                     # 删 versions
-                    await _sess.execute(
+                    await session.execute(
                         sa.text(
                             f"DELETE FROM flow_definition_version "
                             f"WHERE flow_definition_id = "
@@ -545,20 +554,20 @@ class ExperimentProjectService(ScopedSessionMixin):
                         )
                     )
                     # 删 flow_definition
-                    await _sess.execute(
+                    await session.execute(
                         sa.text(
                             f"DELETE FROM flow_definition WHERE id = "
                             f"ANY(ARRAY[{','.join(repr(str(v)) for v in fd_ids)}]::uuid[])"
                         )
                     )
-                    await _sess.execute(
+                    await session.execute(
                         sa.text(
                             "ALTER TABLE flow_definition_version "
                             "ENABLE TRIGGER prevent_modify_flow_version"
                         )
                     )
-                    await _sess.commit()
-                await _eng.dispose()
+                finally:
+                    await session.execute(sa.text("RESET ROLE"))
             await ExperimentProjectRepository.delete(session, project_id)
 
 

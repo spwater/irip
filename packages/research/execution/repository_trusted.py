@@ -34,6 +34,7 @@ from packages.research.execution.entities_trusted import (
     ResearchMemoryDocument,
     ResearchRunArtifact,
 )
+from packages.research.entities import ResearchWorkspace
 
 
 class ResearchRepositoryTrusted:
@@ -390,10 +391,15 @@ class ResearchRepositoryTrusted:
         Returns:
             int: 下一个 Run 编号（从 1 开始）。
         """
+        # 先锁 workspace 行（防止并发 run_number 冲突），再查 max
+        await session.execute(
+            sa.select(ResearchWorkspace.id)
+            .where(ResearchWorkspace.id == workspace_id)
+            .with_for_update()
+        )
         result = await session.execute(
             sa.select(sa.func.max(ResearchAnalysisRun.run_number))
             .where(ResearchAnalysisRun.workspace_id == workspace_id)
-            .with_for_update()
         )
         max_num = result.scalar()
         return (int(max_num) + 1) if max_num is not None else 1

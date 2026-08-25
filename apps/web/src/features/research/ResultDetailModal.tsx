@@ -8,23 +8,28 @@
  *   - points 用 Table 展示
  *   - series 每个 as Card + Table
  */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
+  Button,
   Card,
   Col,
   Descriptions,
   Modal,
+  Popconfirm,
   Row,
   Spin,
   Table,
   Tabs,
   Tag,
   Typography,
+  message,
 } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGetResultDetail } from '@/api/researchResults';
+import { apiUpdateAcl } from '@/api/researchPublish';
 import { DetailSection } from '@/shared/ui';
+import { GlobalOutlined, LockOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;
 
@@ -49,6 +54,8 @@ export function ResultDetailModal({
   open,
   onClose,
 }: Props): JSX.Element {
+  const queryClient = useQueryClient();
+  const [changingAcl, setChangingAcl] = useState(false);
   const { data: detail, isLoading } = useQuery({
     queryKey: ['research-result-detail', workspaceId, resultId],
     queryFn: () => apiGetResultDetail(workspaceId, resultId!),
@@ -117,6 +124,36 @@ export function ResultDetailModal({
                   <Tag color={detail.status === 'published' ? 'green' : 'default'}>
                     {detail.status}
                   </Tag>
+                  {' '}
+                  {detail.current_acl_type === 'all' ? (
+                    <Tag color="green" icon={<GlobalOutlined />}>公开</Tag>
+                  ) : (
+                    <Tag color="default" icon={<LockOutlined />}>私有</Tag>
+                  )}
+                  <Popconfirm
+                    title={detail.current_acl_type === 'all' ? '确认设为私有？' : '确认设为公开？'}
+                    description={detail.current_acl_type === 'all' ? '设为私有后仅自己可见。' : '公开后所有用户可在载入数据时查看此成果。'}
+                    onConfirm={async () => {
+                      setChangingAcl(true);
+                      try {
+                        await apiUpdateAcl(workspaceId, detail.id, {
+                          acl_type: detail.current_acl_type === 'all' ? 'private' : 'all',
+                        });
+                        message.success('权限已更新');
+                        await queryClient.invalidateQueries({ queryKey: ['research-result-detail', workspaceId, resultId] });
+                      } catch {
+                        message.error('操作失败');
+                      } finally {
+                        setChangingAcl(false);
+                      }
+                    }}
+                    okText="确认"
+                    cancelText="取消"
+                  >
+                    <Button size="small" type="link" loading={changingAcl}>
+                      {detail.current_acl_type === 'all' ? '设为私有' : '设为公开'}
+                    </Button>
+                  </Popconfirm>
                 </Descriptions.Item>
                 <Descriptions.Item label="分析问题">
                   {analysisQuestions.length > 0 ? (

@@ -284,7 +284,7 @@ export function WorkspaceDetail({ workspaceId, onBack }: WorkspaceDetailProps): 
             centered
             destroyOnHidden
             title={'研究分析报告'}
-            styles={{ body: { maxHeight: '76vh', overflowY: 'auto', paddingTop: 8 } }}
+            styles={{ body: { maxHeight: '160vh', overflowY: 'auto', paddingTop: 8 } }}
           >
             {selectedTurnId && (
               <TurnDetailPanel

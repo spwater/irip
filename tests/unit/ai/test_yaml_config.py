@@ -519,6 +519,119 @@ class TestAsyncProviderWrapper:
 
 
 # ---------------------------------------------------------------------------
+# api_key ${VAR} 占位符展开
+# ---------------------------------------------------------------------------
+
+
+class TestApiKeyPlaceholder:
+    """测试 api_key 的 ${VAR} 环境变量占位符展开。"""
+
+    _PLACEHOLDER_MODELS = """
+providers:
+  - name: hcrdi
+    base_url: "http://10.1.2.1:18881/v1"
+    api_key: "${IRIP_LLM_HCRDI_API_KEY}"
+    models:
+      - "DeepSeek"
+  - name: deepseek
+    base_url: "http://10.1.2.1:18881/v1"
+    api_key: "plaintext-key-for-test"
+    models:
+      - "GLM"
+"""
+
+    _PLACEHOLDER_USAGE = """
+scenarios:
+  data_extraction:
+    model: "DeepSeek"
+    thinking_enabled: false
+  assistant:
+    model: "hcrdi/DeepSeek"
+    thinking_enabled: true
+  research:
+    model: "GLM"
+    thinking_enabled: true
+  conclusion:
+    model: "GLM"
+    thinking_enabled: false
+  title_generation:
+    model: "GLM"
+    thinking_enabled: false
+"""
+
+    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """写入含占位符的配置并设置 IRIP_CONFIG_DIR。"""
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        _write_config(config_dir, self._PLACEHOLDER_MODELS, self._PLACEHOLDER_USAGE)
+        monkeypatch.setenv("IRIP_CONFIG_DIR", str(config_dir))
+
+    def test_placeholder_expands_from_env(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """${VAR} 占位符从环境变量正确展开为真实密钥。"""
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.setenv("IRIP_LLM_HCRDI_API_KEY", "sk-resolved-secret")
+
+        load_config()
+        config = get_scenario_config("data_extraction")
+
+        assert config.provider_name == "hcrdi"
+        assert config.api_key == "sk-resolved-secret"
+
+    def test_placeholder_missing_env_fails_fast(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """环境变量未设置时 fail-fast，错误信息含变量名。"""
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.delenv("IRIP_LLM_HCRDI_API_KEY", raising=False)
+
+        with pytest.raises(ValueError) as excinfo:
+            load_config()
+
+        assert "IRIP_LLM_HCRDI_API_KEY" in str(excinfo.value)
+
+    def test_placeholder_empty_env_fails_fast(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """环境变量为空字符串时 fail-fast，错误信息含变量名。"""
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.setenv("IRIP_LLM_HCRDI_API_KEY", "")
+
+        with pytest.raises(ValueError) as excinfo:
+            load_config()
+
+        assert "IRIP_LLM_HCRDI_API_KEY" in str(excinfo.value)
+
+    def test_placeholder_error_does_not_leak_key(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """错误信息绝不包含密钥值（仅变量名）。"""
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.delenv("IRIP_LLM_HCRDI_API_KEY", raising=False)
+
+        with pytest.raises(ValueError) as excinfo:
+            load_config()
+
+        msg = str(excinfo.value)
+        assert "IRIP_LLM_HCRDI_API_KEY" in msg
+        assert "sk-" not in msg
+
+    def test_plaintext_api_key_still_parses(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """非占位符明文 api_key 仍可解析（向后兼容）。"""
+        self._setup(tmp_path, monkeypatch)
+        monkeypatch.setenv("IRIP_LLM_HCRDI_API_KEY", "sk-resolved-secret")
+
+        load_config()
+        config = get_scenario_config("research")
+
+        assert config.provider_name == "deepseek"
+        assert config.api_key == "plaintext-key-for-test"
+
+
+# ---------------------------------------------------------------------------
 # _find_provider_for_model
 # ---------------------------------------------------------------------------
 

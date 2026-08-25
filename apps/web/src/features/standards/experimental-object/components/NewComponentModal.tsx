@@ -6,10 +6,12 @@
  * 通过 props 传递 form 实例、数据和回调。
  */
 
+import { useEffect } from 'react';
 import type { FormInstance } from 'antd';
 import { Form, Input, Modal, Select, Space, Switch, TreeSelect, Typography } from 'antd';
 import { buildManifestYaml } from '@/shared/component-utils';
 import { ComponentFormFields } from '@/features/components/ComponentFormFields';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 const { Text } = Typography;
 
@@ -39,6 +41,16 @@ export function NewComponentModal(props: NewComponentModalProps): JSX.Element {
     deptOptions,
     deptTreeData,
   } = props;
+
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  // 非管理员用户预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (open && !isAdmin && user?.departmentId) {
+      compForm.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, isAdmin, user?.departmentId, compForm]);
 
   return (
     <Modal
@@ -99,6 +111,7 @@ export function NewComponentModal(props: NewComponentModalProps): JSX.Element {
             showSearch
             optionFilterProp="label"
             options={deptOptions}
+            disabled={!isAdmin}
           />
         </Form.Item>
         <Form.Item

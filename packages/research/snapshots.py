@@ -262,7 +262,13 @@ class EvidenceSnapshotService(ScopedSessionMixin):
                     aggregate_type="research_recommendation_batch",
                     aggregate_id=batch.id,
                     event_type="research.recommendation.requested",
-                    payload={"batch_id": str(batch.id), "mode": "initial"},
+                    payload={
+                        "batch_id": str(batch.id),
+                        "mode": "initial",
+                        "actor_id": str(actor_id),
+                        "department_id": str(self._dept_id),
+                        "workspace_id": str(workspace_id),
+                    },
                 )
                 logger.info(
                     "enqueued initial recommendation batch %s for snapshot %s",

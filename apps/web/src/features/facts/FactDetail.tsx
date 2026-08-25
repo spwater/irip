@@ -18,7 +18,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { apiGetFact, apiGetFactData } from '@/api/facts-provenance';
-import { apiGetArtifactDownloadUrl } from '@/api/models-ai';
+import { apiDownloadArtifact } from '@/api/models-ai';
 import { PrivateBadge } from '@/shared/PrivateBadge';
 import { PageIntro, DetailSection, FeedbackState } from '@/shared/ui';
 
@@ -220,8 +220,15 @@ export function FactDetail(): JSX.Element {
                     onClick={async (e) => {
                       e.preventDefault();
                       try {
-                        const url = await apiGetArtifactDownloadUrl(sourceFile.artifact_id);
-                        window.open(url, '_blank');
+                        const blob = await apiDownloadArtifact(sourceFile.artifact_id);
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = sourceFile.filename || `artifact-${sourceFile.artifact_id.slice(0, 8)}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
                       } catch {
                         message.error('下载失败');
                       }

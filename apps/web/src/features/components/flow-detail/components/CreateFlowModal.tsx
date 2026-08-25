@@ -6,7 +6,9 @@
 
 import { Col, Form, Input, Row, Select, Space, Button, Modal } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
+import { useEffect } from 'react';
 import { DepartmentSelector } from '@/shared/DepartmentSelector';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 export interface CreateFlowModalProps {
   open: boolean;
@@ -36,6 +38,15 @@ export function CreateFlowModal(props: CreateFlowModalProps): JSX.Element {
     objMap: _objMap,
     onNewObject,
   } = props;
+
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  useEffect(() => {
+    if (open && !isAdmin && user?.departmentId) {
+      createForm.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, isAdmin, user?.departmentId, createForm]);
 
   return (
     <Modal
@@ -90,7 +101,7 @@ export function CreateFlowModal(props: CreateFlowModalProps): JSX.Element {
           label="所属单位"
           rules={[{ required: true, message: '请选择所属单位' }]}
         >
-          <DepartmentSelector placeholder="请选择所属单位" allowRoot={true} />
+          <DepartmentSelector placeholder="请选择所属单位" allowRoot={true} disabled={!isAdmin} />
         </Form.Item>
         <Form.Item
           name="display_name"

@@ -23,7 +23,7 @@ import {
 } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { PlanDetail } from '../../api/research';
+import type { PlanDetail, PlanStep } from '../../api/research';
 import { apiAnalyzeData } from '../../api/research';
 
 const MODE_LABELS: Record<string, string> = {
@@ -55,8 +55,12 @@ export function PlanReviewCard({
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [executing, setExecuting] = useState(false);
+  const [editedSteps, setEditedSteps] = useState<PlanStep[]>(
+    () => (plan.dag_structure?.steps || []).map((s) => ({ ...s })),
+  );
 
   const steps = plan.dag_structure?.steps || [];
+  const displaySteps = editedSteps.length > 0 ? editedSteps : steps;
   const originalAdvice = steps.length > 0 ? (steps[0].expected_output || steps[0].question || '') : '';
   const currentAdvice = editText || originalAdvice;
   const preview = currentAdvice.slice(0, 120) + (currentAdvice.length > 120 ? '...' : '');
@@ -79,6 +83,14 @@ export function PlanReviewCard({
     setEditText('');
   };
 
+  const handleStepChange = (index: number, field: 'question' | 'expected_output', value: string) => {
+    setEditedSteps((prev) => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
   const handleExecute = async () => {
     if (!snapshotId) return;
     setExecuting(true);
@@ -88,6 +100,7 @@ export function PlanReviewCard({
         plan.plan_id,
         snapshotId,
         editText || undefined,
+        editedSteps.length > 0 ? editedSteps : undefined,
       );
       message.success('分析完成');
       if (onAnalysisComplete) {
@@ -169,9 +182,9 @@ export function PlanReviewCard({
         </div>
       )}
 
-      {/* Step summaries */}
+      {/* Step summaries / editable steps */}
       <div style={{ marginBottom: 12 }}>
-        {steps.map((step) => (
+        {displaySteps.map((step, index) => (
           <div
             key={step.step_key}
             style={{
@@ -181,9 +194,29 @@ export function PlanReviewCard({
             }}
           >
             <Typography.Text strong>{step.step_key}</Typography.Text>
-            <span style={{ marginLeft: 8, color: '#8c8c8c' }}>
-              {step.question}
-            </span>
+            {expanded && !isConfirmed ? (
+              <div style={{ marginTop: 4, marginLeft: 8 }}>
+                <Input
+                  value={step.question}
+                  onChange={(e) => handleStepChange(index, 'question', e.target.value)}
+                  placeholder="分析问题"
+                  size="small"
+                  style={{ marginBottom: 4, fontSize: 13 }}
+                />
+                <Input.TextArea
+                  value={step.expected_output}
+                  onChange={(e) => handleStepChange(index, 'expected_output', e.target.value)}
+                  placeholder="预期输出"
+                  size="small"
+                  rows={2}
+                  style={{ fontSize: 13 }}
+                />
+              </div>
+            ) : (
+              <span style={{ marginLeft: 8, color: '#8c8c8c' }}>
+                {step.question}
+              </span>
+            )}
           </div>
         ))}
       </div>

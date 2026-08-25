@@ -53,7 +53,7 @@ mkdir -p "$PID_DIR"
 
 start_infra() {
     log "启动 Docker 基础设施（PG/Redis/MinIO）..."
-    docker compose -f compose.yaml up -d postgres redis minio
+    docker compose -f compose.base.yaml -f compose.development.yaml up -d postgres redis minio
     
     # 等待 PG healthy
     log "等待 PostgreSQL 就绪..."
@@ -84,12 +84,12 @@ start_infra() {
 
 run_migrations() {
     log "检查迁移版本..."
-    CURRENT=$(.venv/bin/alembic current 2>/dev/null | grep 'revision:' | sed 's/.*revision: //' | tr -d ' ' || echo "")
-    if [ "$CURRENT" = "" ]; then
+    CURRENT=$(.venv/bin/alembic current 2>/dev/null | grep -oE '^[0-9]+' | tail -1 || true)
+    if [ -z "${CURRENT}" ]; then
         log "全新数据库，执行迁移..."
         .venv/bin/alembic upgrade head 2>&1 | tail -5
     else
-        log "当前迁移版本: $CURRENT（跳过迁移）"
+        log "当前迁移版本: ${CURRENT}（跳过迁移）"
     fi
 }
 
@@ -189,7 +189,7 @@ stop_all() {
     pkill -f "celery.*apps.worker.celery_app" 2>/dev/null || true
     pkill -f "vite --port 5173" 2>/dev/null || true
     
-    docker compose -f compose.yaml stop 2>/dev/null || true
+    docker compose -f compose.base.yaml -f compose.development.yaml stop 2>/dev/null || true
     log "全部停止 ✅"
 }
 
@@ -236,8 +236,9 @@ show_status() {
     done
     
     # 迁移版本
-    CURRENT=$(.venv/bin/alembic current 2>/dev/null | grep 'revision:' | sed 's/.*revision: //' | tr -d ' ' || echo "未知")
-    echo -e "\n  迁移版本: ${CYAN}$CURRENT${NC}"
+    CURRENT=$(.venv/bin/alembic current 2>/dev/null | grep -oE '^[0-9]+' | tail -1 || true)
+    CURRENT=${CURRENT:-未知}
+    echo -e "\n  迁移版本: ${CYAN}${CURRENT}${NC}"
     
     # 心跳
     HB=$(docker exec irip-redis-1 redis-cli -a "$IRIP_REDIS_PASSWORD" GET irip:worker:heartbeat 2>/dev/null | tail -1 || echo "")

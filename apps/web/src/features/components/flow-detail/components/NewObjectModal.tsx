@@ -4,8 +4,10 @@
  * 从 FlowDetail.tsx 提取。通过 props 传递 open/onClose/回调。
  */
 
+import { useEffect } from 'react';
 import { Form, Input, Select, TreeSelect, Button, Space, Modal } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
+import { useAuthStore } from '@/features/auth/AuthProvider';
 
 export interface NewObjectModalProps {
   open: boolean;
@@ -36,6 +38,16 @@ export function NewObjectModal(props: NewObjectModalProps): JSX.Element {
     onNewComponent,
   } = props;
 
+  const user = useAuthStore((s) => s.user);
+  const isAdmin: boolean = user?.roles?.includes('platform_administrator') ?? false;
+
+  // 非管理员用户预填主部门（disabled 不可改，但需要看到自己的部门）
+  useEffect(() => {
+    if (open && !isAdmin && user?.departmentId) {
+      newObjectForm.setFieldsValue({ department_id: user.departmentId });
+    }
+  }, [open, isAdmin, user?.departmentId, newObjectForm]);
+
   return (
     <Modal
       title="新建实验对象"
@@ -63,7 +75,7 @@ export function NewObjectModal(props: NewObjectModalProps): JSX.Element {
           <Input.TextArea placeholder="对象描述（可选）" rows={3} maxLength={2000} />
         </Form.Item>
         <Form.Item name="department_id" label="所属单位" rules={[{ required: true, message: '请选择所属单位' }]}>
-          <Select placeholder="选择所属单位" showSearch optionFilterProp="label" options={deptOptions} />
+          <Select placeholder="选择所属单位" showSearch optionFilterProp="label" options={deptOptions} disabled={!isAdmin} />
         </Form.Item>
         <Form.Item
           name="visible_departments"

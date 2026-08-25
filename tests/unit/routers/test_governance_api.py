@@ -44,6 +44,20 @@ def _make_current_user(
     )
 
 
+def _make_lab_director_user(
+    user_id: UUID | None = None,
+    department_id: UUID | None = None,
+) -> CurrentUser:
+    """构造 lab_director 当前用户（拥有 role:assign 权限）。"""
+    return CurrentUser(
+        user_id=user_id or uuid4(),
+        email="director@irip.local",
+        roles=["lab_director"],
+        department_id=department_id or uuid4(),
+        is_root_member=False,
+    )
+
+
 def _make_user(
     user_id: UUID | None = None,
     email: str = "user@irip.local",
@@ -310,6 +324,80 @@ class TestUpdateUser:
 
         assert response.status_code == 404
 
+    # ---- 安全-自我保护：禁止修改自己的所属实验室或角色 ----
+
+    def test_update_self_department_id_403(self):
+        """lab_director 修改自己的 department_id → 403 forbidden"""
+        my_id = uuid4()
+        my_dept = uuid4()
+        mock_service = _make_mock_service()
+        director = _make_lab_director_user(user_id=my_id, department_id=my_dept)
+        app = _make_app(mock_service, mock_user=director)
+        client = TestClient(app)
+
+        response = client.patch(
+            f"/api/v1/governance/users/{my_id}",
+            json={"department_id": str(uuid4())},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "forbidden"
+        assert "不能修改自己的所属实验室或角色" in response.json()["error"]["message"]
+        # service 不应被调用
+        mock_service.update_user.assert_not_called()
+
+    def test_update_self_roles_403(self):
+        """lab_director 修改自己的 roles → 403 forbidden"""
+        my_id = uuid4()
+        my_dept = uuid4()
+        mock_service = _make_mock_service()
+        director = _make_lab_director_user(user_id=my_id, department_id=my_dept)
+        app = _make_app(mock_service, mock_user=director)
+        client = TestClient(app)
+
+        # 用 lab_director 可分配的角色（lab_member），确保通过可分配范围校验后
+        # 仍被自我保护校验拦截
+        response = client.patch(
+            f"/api/v1/governance/users/{my_id}",
+            json={"roles": ["lab_member"]},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "forbidden"
+        assert "不能修改自己的所属实验室或角色" in response.json()["error"]["message"]
+        mock_service.update_user.assert_not_called()
+
+    def test_update_self_display_name_200(self):
+        """lab_director 修改自己的 display_name（不碰 department_id/roles）→ 200 成功"""
+        my_id = uuid4()
+        my_dept = uuid4()
+        mock_service = _make_mock_service()
+        updated_user = _make_user(user_id=my_id, department_id=my_dept, display_name="新名称")
+        mock_service.update_user = AsyncMock(return_value=updated_user)
+
+        director = _make_lab_director_user(user_id=my_id, department_id=my_dept)
+        app = _make_app(mock_service, mock_user=director)
+
+        # lab_director 路径会走同 org 校验，需要 mock session 返回同部门用户
+        target_user = _make_user(user_id=my_id, department_id=my_dept)
+        mock_session = MagicMock()
+        mock_session.get = AsyncMock(return_value=target_user)
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session_factory.return_value.__aexit__ = AsyncMock(return_value=None)
+        app.dependency_overrides[get_governance_session_factory] = lambda: mock_session_factory
+
+        client = TestClient(app)
+
+        response = client.patch(
+            f"/api/v1/governance/users/{my_id}",
+            json={"display_name": "新名称"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["display_name"] == "新名称"
+        mock_service.update_user.assert_called_once()
+
 
 # ===========================================================================
 # 4. POST /api/v1/governance/users/{id}/roles — 分配角色
@@ -349,6 +437,27 @@ class TestAssignRoles:
 
         assert response.status_code == 422
 
+    # ---- 安全-自我保护：禁止给自己分配角色 ----
+
+    def test_assign_roles_self_403(self):
+        """lab_director 给自己分配角色 → 403 forbidden"""
+        my_id = uuid4()
+        my_dept = uuid4()
+        mock_service = _make_mock_service()
+        director = _make_lab_director_user(user_id=my_id, department_id=my_dept)
+        app = _make_app(mock_service, mock_user=director)
+        client = TestClient(app)
+
+        response = client.post(
+            f"/api/v1/governance/users/{my_id}/roles",
+            json={"roles": ["lab_member"]},
+        )
+
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "forbidden"
+        assert "不能修改自己的角色" in response.json()["error"]["message"]
+        mock_service.assign_roles.assert_not_called()
+
 
 # ===========================================================================
 # 5. DELETE /api/v1/governance/users/{id}/roles/{role} — 移除角色
@@ -370,6 +479,24 @@ class TestRemoveRole:
         response = client.delete(f"/api/v1/governance/users/{user.id}/roles/lab_viewer")
 
         assert response.status_code == 200
+
+    # ---- 安全-自我保护：禁止移除自己的角色 ----
+
+    def test_remove_role_self_403(self):
+        """lab_director 移除自己的角色 → 403 forbidden"""
+        my_id = uuid4()
+        my_dept = uuid4()
+        mock_service = _make_mock_service()
+        director = _make_lab_director_user(user_id=my_id, department_id=my_dept)
+        app = _make_app(mock_service, mock_user=director)
+        client = TestClient(app)
+
+        response = client.delete(f"/api/v1/governance/users/{my_id}/roles/lab_member")
+
+        assert response.status_code == 403
+        assert response.json()["error"]["code"] == "forbidden"
+        assert "不能修改自己的角色" in response.json()["error"]["message"]
+        mock_service.remove_role.assert_not_called()
 
 
 # ===========================================================================

@@ -7,10 +7,11 @@
  */
 
 import { useState, useCallback, useEffect, useRef, type ReactNode, type ReactElement } from 'react';
-import { Tag, Typography, Spin, message, Empty, Button, Collapse, Table } from 'antd';
+import { Tag, Typography, Spin, message, Empty, Button, Collapse, Table, Input } from 'antd';
 import { SaveOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { normalizeLatexMath, preprocessMath } from '@/features/assistant/message-thread/utils/mathUtils';
 import { ChartRefBlock } from '@/features/assistant/ChartRefBlock';
 import { ChartBlock } from '@/features/assistant/message-thread/components/ChartBlock';
 import { http } from '@/api/client';
@@ -82,10 +83,14 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
     setConfirming(true);
     try {
       await confirmPlan(workspaceId, turnId, detail.plan.plan_id);
-      message.success('计划已确认');
+      message.success('计划已确认，正在执行分析...');
       await fetchDetail();
+      // 确认后直接执行分析
+      await submitRun(workspaceId, turnId);
+      await fetchDetail();
+      message.success('分析已启动');
     } catch (err) {
-      message.error(err instanceof Error ? err.message : '确认计划失败');
+      message.error(err instanceof Error ? err.message : '操作失败');
     } finally {
       setConfirming(false);
     }
@@ -315,10 +320,52 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
       )}
 
       {/* Result — render as Markdown */}
-      {result && (
+      {result && (() => {
+        const rawMarkdown = String((result.structured_output as Record<string, unknown>)?.analysis_markdown ?? result.summary ?? '');
+        const normalized = normalizeLatexMath(rawMarkdown);
+        const { html: preprocessed, mathMap } = preprocessMath(normalized);
+
+        // 预处理：提取每个表格前面的文字（方案 A）
+        const tablePrecedingTexts = new Map<number, string>();
+        const lines = normalized.split('\n');
+        let tableIdx = 0;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].trim().startsWith('|')) {
+            // 往上找最近的非空、非表格行
+            let precedingText = '';
+            for (let j = i - 1; j >= 0; j--) {
+              const line = lines[j].trim();
+              if (!line) continue;
+              if (line.startsWith('|')) continue;
+              precedingText = line.replace(/^#+\s*/, '').replace(/\*+/g, '').trim();
+              break;
+            }
+            tablePrecedingTexts.set(tableIdx, precedingText);
+            tableIdx++;
+            while (i < lines.length && lines[i].trim().startsWith('|')) i++;
+            i--;
+          }
+        }
+
+        return (
         <div style={{ marginTop: 12 }}>
           <Text strong style={{ display: 'block', marginBottom: 8 }}>{'分析结果'}</Text>
-          <div className="research-markdown" style={{ fontSize: 14, lineHeight: 1.8 }}>
+          <div className="research-markdown" style={{ fontSize: 14, lineHeight: 1.8 }} ref={(el) => {
+            if (!el) return;
+            mathMap.forEach((html, placeholder) => {
+              const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+              const nodes: Text[] = [];
+              let node;
+              while ((node = walker.nextNode())) {
+                if (node.textContent?.includes(placeholder)) nodes.push(node as Text);
+              }
+              nodes.forEach((n) => {
+                const span = document.createElement('span');
+                span.innerHTML = n.textContent!.replace(placeholder, html);
+                n.replaceWith(span);
+              });
+            });
+          }}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -359,6 +406,7 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                 table({ children }) {
                   const blockIndex = blockIndexRef.current++;
                   const { columns, rows } = extractTableFromChildren(children);
+                  const precedingText = tablePrecedingTexts.get(blockIndex) ?? '';
                   return (
                     <ReportBlockWrapper
                       key={`block-${blockIndex}`}
@@ -368,6 +416,7 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                       turnInfo={turnInfo}
                       snapshotOverride={buildTableSnapshot(columns, rows)}
                       title="数据表格"
+                      precedingText={precedingText}
                     >
                       <table>{children}</table>
                     </ReportBlockWrapper>
@@ -375,11 +424,12 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
                 },
               }}
             >
-              {String((result.structured_output as Record<string, unknown>)?.analysis_markdown ?? result.summary ?? '')}
+              {preprocessed}
             </ReactMarkdown>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Candidates */}
       {candidates.length > 0 && (
@@ -414,29 +464,42 @@ export function TurnDetailPanel({ workspaceId, turnId, onConclusionSaved }: Prop
 /** Render the plan steps and the first step's advice text for review. */
 function PlanPreview({ plan }: { plan: NonNullable<TurnDetail['plan']> }) {
   const steps = plan.dag_structure?.steps ?? [];
-  const advice = steps.length > 0 ? (steps[0].expected_output ?? steps[0].question ?? '') : '';
+  const [editedSteps, setEditedSteps] = useState(steps.map(s => ({ ...s })));
+
+  const handleStepChange = (index: number, value: string) => {
+    setEditedSteps(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], expected_output: value };
+      return next;
+    });
+  };
+
+  const isConfirmed = plan.status === 'confirmed';
+  const displaySteps = isConfirmed ? steps : editedSteps;
 
   return (
     <div style={{ fontSize: 13 }}>
-      {steps.length > 0 && (
+      {displaySteps.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          {steps.map((s) => (
+          {displaySteps.map((s, index) => (
             <div
               key={s.step_key}
-              style={{ padding: '2px 0', borderBottom: '1px solid #f0f0f0' }}
+              style={{ padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}
             >
-              <Text strong>{s.step_key}</Text>
-              <span style={{ marginLeft: 8, color: '#8c8c8c' }}>{s.question}</span>
+              {!isConfirmed && (
+                <Input.TextArea
+                  value={s.expected_output ?? ''}
+                  onChange={(e) => handleStepChange(index, e.target.value)}
+                  placeholder="计划内容（预期输出）"
+                  rows={25}
+                  style={{ marginTop: 4, fontSize: 13, resize: 'vertical' }}
+                />
+              )}
+              {isConfirmed && s.expected_output && (
+                <div style={{ marginTop: 4, color: '#595959' }}>{s.expected_output}</div>
+              )}
             </div>
           ))}
-        </div>
-      )}
-      {advice && (
-        <div
-          className="research-markdown"
-          style={{ fontSize: 13, lineHeight: 1.7, color: '#595959' }}
-        >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{advice}</ReactMarkdown>
         </div>
       )}
     </div>

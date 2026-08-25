@@ -86,6 +86,7 @@ def register(ctx: CompositionContext) -> None:
         catalog = ResearchCatalogImpl(
             session_factory=ctx.session_factory,
             actor_id=current_user.user_id,
+            dept_id=current_user.department_id,
         )
         return catalog
 
