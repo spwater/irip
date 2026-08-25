@@ -18,8 +18,8 @@ from numpy.typing import NDArray
 #: 数值引擎版本，写入审计和 citation_params。
 NUMERIC_ENGINE_VERSION = "numeric-v1"
 
-#: 变量名合法字符正则。
-VARIABLE_NAME_PATTERN = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+#: 变量名合法字符正则。允许英文字母、数字、下划线以及中文（CJK 统一表意文字）。
+VARIABLE_NAME_PATTERN = r"^[A-Za-z_\u4e00-\u9fff][A-Za-z0-9_\u4e00-\u9fff]{0,63}$"
 
 #: describe_series 默认统计项（服务端固定顺序）。
 DEFAULT_STATISTICS: tuple[str, ...] = (
@@ -427,7 +427,7 @@ _VARIABLE_SOURCE_SCHEMA: dict[str, Any] = {
         "name": {
             "type": "string",
             "pattern": VARIABLE_NAME_PATTERN,
-            "description": "变量名，匹配 ^[A-Za-z_][A-Za-z0-9_]{0,63}$",
+            "description": "变量名，允许英文、数字、下划线及中文",
         },
         "source_type": {
             "type": "string",

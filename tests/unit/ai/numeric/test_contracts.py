@@ -215,6 +215,9 @@ class TestVariableNamePattern:
             "UPPER",
             "lower",
             "Mixed_Case",
+            "氧化钙",
+            "生料成分",
+            "Na2O含量",
         ],
     )
     def test_valid_names(self, valid_name: str) -> None:
