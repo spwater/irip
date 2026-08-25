@@ -425,16 +425,26 @@ class OpenAICompatibleProvider:
         # - DeepSeek-V4: {"thinking": true/false, "reasoning_effort": "low/medium/high"}
         # LiteLLM 网关不识别这些参数，但会作为 extra_body 透传给 vLLM
         # 注意：system_context（实验数据）很大时，thinking 会大幅消耗 token 预算，
-        # 可能导致 finish_reason=length 且 content 为空。此时降低 reasoning_effort。
+        # 可能导致 finish_reason=length 且 content 为空。此时降低或关闭 reasoning_effort。
         if self._thinking_enabled:
             if self._model.lower().startswith("deepseek"):
-                # 检查 system_context 大小，大 context 时降低 reasoning_effort
+                # 检查 system_context 大小，大 context 时降级
                 sys_ctx = request.user_context.get("system_context", "") if request.user_context else ""
-                effort = "low" if len(sys_ctx) > 2000 else "high"
-                payload["chat_template_kwargs"] = {
-                    "thinking": True,
-                    "reasoning_effort": effort,
-                }
+                ctx_len = len(sys_ctx)
+                if ctx_len > 10000:
+                    # 超大 context（如 XRD 全谱数据）：关闭 thinking 避免 token 耗尽
+                    payload["chat_template_kwargs"] = {"thinking": False}
+                elif ctx_len > 2000:
+                    # 中等 context：降低 reasoning_effort
+                    payload["chat_template_kwargs"] = {
+                        "thinking": True,
+                        "reasoning_effort": "low",
+                    }
+                else:
+                    payload["chat_template_kwargs"] = {
+                        "thinking": True,
+                        "reasoning_effort": "high",
+                    }
             else:
                 payload["chat_template_kwargs"] = {"enable_thinking": True}
         else:

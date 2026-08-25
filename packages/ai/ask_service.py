@@ -299,22 +299,26 @@ class AskService:
             AIResponse: 最终回答（含工具调用结果、引用、不确定性）。
         """
         # 心算拦截：第一轮无 tool_calls 但回答含数值结果
-        # 仅记录日志用于监控（prompt 层面已强制约束，此处不重试避免延迟和不确定性）
         import re
+
+        # 检测用户问题是否为纯算术表达式（如 "5+3", "100*5"）
+        # 仅对这类问题触发心算补救，避免对数据分析等复杂回答误触发
+        is_arithmetic_question = bool(
+            re.match(r"^\s*[\d\s\+\-\*/\(\)\.×÷✕]+\s*[=?？]?\s*$", ctx.question)
+        )
 
         if (
             response.answer
             and not response.tool_calls
+            and is_arithmetic_question
             and re.search(r"=\s*\*{0,2}\s*\d+\.?\d*", response.answer)
         ):
             logger.warning(
-                "心算检测：AI 回答含数值但未调工具。answer_len=%d, answer_preview=%s",
+                "心算检测：算术问题 AI 未调工具。question=%s, answer_len=%d",
+                ctx.question,
                 len(response.answer),
-                response.answer[:80],
             )
-            # 强制补救：从回答中提取算术表达式，自动构造 tool_call
-            # 匹配模式：数字 运算符 数字 ... = 结果
-            # 支持 × ÷ ✕ 等非 ASCII 运算符
+            # 从回答中提取算术表达式，自动构造 tool_call
             expr_match = re.search(
                 r"([\d\s\+\-\*/\(\)\.×÷✕]+)\s*[=＝]",
                 response.answer,
@@ -336,6 +340,16 @@ class AskService:
                     uncertainty=None,
                     provider_mode=response.provider_mode,
                 )
+        elif (
+            response.answer
+            and not response.tool_calls
+            and re.search(r"=\s*\*{0,2}\s*\d+\.?\d*", response.answer)
+        ):
+            # 非算术问题但有数值结果：仅记录日志，不触发补救
+            logger.warning(
+                "AI 回答含数值但未调工具（非算术问题，不补救）。answer_len=%d",
+                len(response.answer),
+            )
 
         # 执行工具调用（权限检查 + 白名单工具真实执行）
         executed_tool_calls, tool_result_messages, all_citations = await _process_tool_calls(
