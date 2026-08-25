@@ -236,10 +236,15 @@ async def download_artifact(
     ref = await service.get_artifact(artifact_id)
     file_data = await service.get_bytes(artifact_id)
 
+    # RFC 5987: 中文文件名需用 filename* 编码（latin-1 无法编码非 ASCII 字符）
+    from urllib.parse import quote
+    encoded_filename = quote(ref.filename)
+    disposition = f"attachment; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}"
+
     return StreamingResponse(
         iter([file_data]),
         media_type=ref.media_type or "application/octet-stream",
         headers={
-            "Content-Disposition": f'attachment; filename="{ref.filename}"',
+            "Content-Disposition": disposition,
         },
     )
