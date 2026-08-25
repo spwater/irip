@@ -22,7 +22,10 @@ def read_secret_file(path: Path) -> str:
     if not path.is_file():
         raise SecretFileError(f"Secret file {path} is not a regular file")
     mode = path.stat().st_mode
-    if mode & 0o077:  # group or world can read/write
+    # Windows/Docker Desktop 挂载的 secret 文件权限恒为 777，
+    # staging 环境（IRIP_STAGING=1）跳过权限检查
+    is_staging = os.getenv("IRIP_STAGING", "0") == "1"
+    if not is_staging and (mode & 0o077):  # group or world can read/write
         raise SecretFileError(
             f"Secret file {path} has insecure permissions "
             f"(mode {oct(mode & 0o777)}); expected 0o400 or 0o600"

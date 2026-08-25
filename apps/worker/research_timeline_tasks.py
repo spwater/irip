@@ -18,7 +18,7 @@ def _get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Build a session factory from env vars."""
     from packages.common.database import build_session_factory, get_database_url
 
-    db_url = get_database_url("postgresql+psycopg://irip_app:irip_dev_password@localhost:5432/irip")
+    db_url = get_database_url("")
     return build_session_factory(db_url)
 
 
@@ -180,27 +180,51 @@ def generate_recommendations(
         if resolved_actor is None or resolved_dept is None:
             import sqlalchemy as sa
 
-            async with _scoped_session(
-                factory,
-                actor_id=resolved_actor,
-                department_id=resolved_dept,
-            ) as session:
-                row = await session.execute(
-                    sa.text(
-                        "SELECT w.owner_user_id, w.department_id "
-                        "FROM research_recommendation_batch b "
-                        "JOIN research_workspace w ON w.id = b.workspace_id "
-                        "WHERE b.id = :bid"
-                    ),
-                    {"bid": batch_id},
-                )
-                owner_row = row.first()
-                if owner_row is None:
-                    return {"batch_id": batch_id, "status": "not_found", "item_count": 0}
-                if resolved_actor is None:
-                    resolved_actor = owner_row[0]
-                if resolved_dept is None:
-                    resolved_dept = owner_row[1]
+            # Use admin URL to bypass RLS for owner resolution (chicken-and-egg:
+            # we need the owner to set RLS context, but RLS blocks the query
+            # without the owner's identity).
+            from packages.common.database import get_database_admin_url
+
+            admin_url = get_database_admin_url("")
+
+            if admin_url:
+                admin_engine = sa.create_async_engine(admin_url)
+                async with admin_engine.connect() as conn:
+                    row = await conn.execute(
+                        sa.text(
+                            "SELECT w.owner_user_id, w.department_id "
+                            "FROM research_recommendation_batch b "
+                            "JOIN research_workspace w ON w.id = b.workspace_id "
+                            "WHERE b.id = :bid"
+                        ),
+                        {"bid": batch_id},
+                    )
+                    owner_row = row.first()
+                await admin_engine.dispose()
+            else:
+                # Fallback: try with empty RLS (may fail on RLS-protected tables)
+                async with _scoped_session(
+                    factory,
+                    actor_id=resolved_actor,
+                    department_id=resolved_dept,
+                ) as session:
+                    row = await session.execute(
+                        sa.text(
+                            "SELECT w.owner_user_id, w.department_id "
+                            "FROM research_recommendation_batch b "
+                            "JOIN research_workspace w ON w.id = b.workspace_id "
+                            "WHERE b.id = :bid"
+                        ),
+                        {"bid": batch_id},
+                    )
+                    owner_row = row.first()
+
+            if owner_row is None:
+                return {"batch_id": batch_id, "status": "not_found", "item_count": 0}
+            if resolved_actor is None:
+                resolved_actor = owner_row[0]
+            if resolved_dept is None:
+                resolved_dept = owner_row[1]
 
         service = RecommendationService(
             session_factory=factory,

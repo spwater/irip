@@ -51,9 +51,9 @@ export function RecommendationPanel({ workspaceId, snapshotNumber, refreshKey, o
     fetchBatch();
   }, [fetchBatch, refreshKey]);
 
-  // Poll only while batch is generating — stop once succeeded/failed
+  // Poll only while batch is actively generating — stop once succeeded/failed/none
   useEffect(() => {
-    if (!batch || (batch.status !== "queued" && batch.status !== "running" && batch.status !== "none")) {
+    if (!batch || (batch.status !== "queued" && batch.status !== "running")) {
       return;
     }
     const interval = setInterval(() => {
@@ -172,14 +172,27 @@ export function RecommendationPanel({ workspaceId, snapshotNumber, refreshKey, o
     );
   }
 
-  // No batch yet (snapshot just frozen, batch being created) — show generating
+  // No batch yet (snapshot frozen, batch not yet created)
   if (batch && batch.status === "none" && snapshotNumber) {
     return (
-      <div style={{ textAlign: "center", padding: "1rem" }}>
-        <Spin size="small" />
-        <div style={{ marginTop: 8 }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>{"正在生成推荐问题..."}</Text>
-        </div>
+      <div>
+        <Text type="secondary">暂无推荐问题，可以直接提问：</Text>
+        <TextArea
+          value={manualQuestion}
+          onChange={(e) => setManualQuestion(e.target.value)}
+          placeholder="输入研究问题..."
+          autoSize={{ minRows: 2 }}
+          style={{ marginTop: 8 }}
+        />
+        <Button
+          type="primary"
+          size="small"
+          style={{ marginTop: 8 }}
+          disabled={!manualQuestion.trim()}
+          onClick={() => onAdopt(manualQuestion, null)}
+        >
+          提交问题
+        </Button>
       </div>
     );
   }

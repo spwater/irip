@@ -22,14 +22,24 @@ services:
       IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
       # 开启研究分析功能（staging 试用需要）
       RESEARCH_ANALYSIS_ENABLED: "true"
+      # staging 需要访问内网 LLM 网关（10.1.2.1:18881），放开 SSRF 私网限制
+      IRIP_ALLOW_PRIVATE_NETWORK: "1"
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
+    volumes:
+      - ./config:/app/config:ro
+    # api 需要访问外部 LLM 网关（10.1.2.1:18881），但 backend 网络 internal:true
+    # 禁止外网访问。加 frontend 网络让 api 能出网（不暴露端口，仅做出站路由）。
+    networks:
+      - frontend
+      - backend
   worker:
     environment:
       IRIP_STAGING: "1"
       IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
       IRIP_DATABASE_ADMIN_URL_FILE: /run/secrets/database_admin_url
+      IRIP_ALLOW_PRIVATE_NETWORK: "1"
     secrets:
       - source: irip_database_admin_url
         target: database_admin_url
@@ -38,10 +48,18 @@ services:
     networks:
       - backend
       - frontend
+    volumes:
+      - ./config:/app/config:ro
   scheduler:
     environment:
       IRIP_STAGING: "1"
       IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
+      IRIP_ALLOW_PRIVATE_NETWORK: "1"
+    volumes:
+      - ./config:/app/config:ro
+    networks:
+      - backend
+      - frontend
   web:
     environment:
       NGINX_CONF: "nginx-http.conf"
@@ -53,3 +71,6 @@ services:
   # 显式运行：docker compose ... --profile ops up bootstrap
   bootstrap:
     profiles: ["ops"]
+    environment:
+      IRIP_STAGING: "1"
+      IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}

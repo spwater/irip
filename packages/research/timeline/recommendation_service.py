@@ -127,7 +127,7 @@ class RecommendationService(ScopedSessionMixin):
             selected_revision_ids: Explicitly selected conclusion revisions.
             idempotency_key: Client-provided idempotency key.
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             existing = await TimelineRepository.get_batch_by_idempotency(
                 session, workspace_id, idempotency_key
             )
@@ -190,7 +190,7 @@ class RecommendationService(ScopedSessionMixin):
             RECOMMENDATION_USER_TEMPLATE,
         )
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
                 raise AppError(
@@ -421,7 +421,7 @@ class RecommendationService(ScopedSessionMixin):
         Returns:
             Updated RecommendationBatchRef.
         """
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             batch = await TimelineRepository.get_batch(session, batch_id)
             if batch is None:
                 raise AppError(
@@ -448,6 +448,23 @@ class RecommendationService(ScopedSessionMixin):
                 error_code=None,
             )
 
+            # Re-enqueue outbox event so the worker picks up the retry
+            from packages.jobs.outbox import OutboxDispatcher
+
+            await OutboxDispatcher.enqueue(
+                session,
+                aggregate_type="research_recommendation_batch",
+                aggregate_id=batch_id,
+                event_type="research.recommendation.requested",
+                payload={
+                    "batch_id": str(batch_id),
+                    "mode": batch.mode,
+                    "actor_id": str(self._actor_id) if self._actor_id else "",
+                    "department_id": str(self._dept_id) if self._dept_id else "",
+                    "workspace_id": str(batch.workspace_id),
+                },
+            )
+
             await session.commit()
 
             return RecommendationBatchRef(
@@ -472,7 +489,7 @@ class RecommendationService(ScopedSessionMixin):
             ResearchRecommendationItem,
         )
 
-        async with self._factory() as session:
+        async with self._scoped_session() as session:
             result = await session.execute(
                 sa.select(ResearchRecommendationBatch)
                 .where(ResearchRecommendationBatch.workspace_id == workspace_id)
