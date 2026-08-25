@@ -441,7 +441,7 @@ class AskService:
                 sender_display_name=getattr(user, "email", None),
                 sender_avatar_url=None,
             )
-            if len(ctx.history_messages) >= 4:
+            if len(ctx.history_messages) < 6:
                 try:
                     await self._persistence.auto_generate_title(
                         conversation_id=ctx.conversation_id,
@@ -549,7 +549,7 @@ class AskService:
                 sender_display_name=getattr(user, "email", None),
                 sender_avatar_url=None,
             )
-            if len(ctx.history_messages) >= 4:
+            if len(ctx.history_messages) < 6:
                 try:
                     await self._persistence.auto_generate_title(
                         conversation_id=ctx.conversation_id,

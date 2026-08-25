@@ -346,9 +346,9 @@ async def _persist_ask_result(
         sender_avatar_url=None,
     )
 
-    # 第 3 轮对话后自动生成标题（让用户先聊几轮再概括，避免标题太仓促）
-    # history_messages 包含之前的 user+assistant 消息，2 轮 = 4 条
-    if len(ctx.history_messages) >= 4:
+    # 前 3 轮每轮都尝试生成/更新标题（第 3 轮后停止，避免重复调用）
+    # history_messages 包含之前的 user+assistant 消息，2 条 = 1 轮，6 条 = 3 轮
+    if len(ctx.history_messages) < 6:
         try:
             await persistence.auto_generate_title(
                 conversation_id=ctx.conversation_id,
