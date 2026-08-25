@@ -551,6 +551,9 @@ class AskService:
                         content = event.get("content", "")
                         full_text += content
                         yield {"type": "chunk", "content": content}
+                    elif event_type == "reasoning":
+                        # 透传思考过程增量，前端可展示"思考中"状态
+                        yield {"type": "reasoning", "content": event.get("content", "")}
                     elif event_type == "done":
                         streamed_tool_calls = event.get("tool_calls", [])
                         _t2 = time.monotonic()

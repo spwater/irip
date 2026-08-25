@@ -26,6 +26,8 @@ export interface MessageListPropsExtended {
   isSending: boolean;
   /** 流式回答内容 */
   streamingAnswer: string | null;
+  /** AI 正在思考中（收到 reasoning 事件） */
+  isThinking: boolean;
   /** 当前对话 ID */
   selectedConvId: string | null;
   /** 实验数据上下文 */
@@ -51,6 +53,7 @@ export function MessageList(props: MessageListPropsExtended): JSX.Element {
     displayMessages,
     isSending,
     streamingAnswer,
+    isThinking,
     selectedConvId,
     factContext,
     messagesEndRef,
@@ -150,9 +153,14 @@ export function MessageList(props: MessageListPropsExtended): JSX.Element {
               conversationId={selectedConvId}
               systemContext={factContext}
             />
-            {isSending && streamingAnswer === '' && (
+            {isSending && streamingAnswer === '' && !isThinking && (
               <div style={{ padding: '8px 16px' }}>
                 <Text type="secondary">AI 正在回复...</Text>
+              </div>
+            )}
+            {isThinking && (
+              <div style={{ padding: '8px 16px' }}>
+                <Text type="secondary">AI 正在思考...</Text>
               </div>
             )}
             <div ref={messagesEndRef} />

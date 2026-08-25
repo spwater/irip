@@ -269,7 +269,10 @@ async def _build_final_response(
         )
 
         if hasattr(provider, "thinking_enabled"):
-            provider.thinking_enabled = ctx.thinking_enabled and ctx.config_thinking_enabled
+            # 第二轮（工具执行后）关闭思考模式：模型只需格式化工具结果生成回答，
+            # 不需要再消耗 token 预算做推理。否则 Qwen3 等模型的 thinking 会
+            # 耗尽 max_tokens，导致 content 为空、finish_reason="length"。
+            provider.thinking_enabled = False
 
         try:
             _t_r2_start = time.monotonic()

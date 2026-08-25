@@ -229,6 +229,10 @@ class OpenAICompatibleProvider:
                         }
                         return
 
+                    finish_reason: str | None = None
+                    has_content: bool = False
+                    has_reasoning: bool = False
+
                     async for line in resp.aiter_lines():
                         # 取消检查
                         if cancel_event is not None and cancel_event.is_set():
@@ -257,9 +261,18 @@ class OpenAICompatibleProvider:
 
                         delta = choices[0].get("delta") or {}
 
+                        # 思考过程增量（reasoning_content）
+                        # Qwen3 等模型在 enable_thinking=true 时先输出 reasoning_content，
+                        # 再输出 content。需要透传给调用方以展示"思考中"状态。
+                        reasoning_content = delta.get("reasoning_content")
+                        if reasoning_content:
+                            has_reasoning = True
+                            yield {"type": "reasoning", "content": reasoning_content}
+
                         # 文本增量
                         content = delta.get("content")
                         if content:
+                            has_content = True
                             yield {"type": "chunk", "content": content}
 
                         # tool_calls fragments（按 index 累积）
@@ -282,6 +295,11 @@ class OpenAICompatibleProvider:
                                 if func.get("arguments"):
                                     frag["args_str"] += func["arguments"]
 
+                        # 跟踪 finish_reason
+                        fr = choices[0].get("finish_reason")
+                        if fr:
+                            finish_reason = fr
+
         except httpx.TimeoutException:
             yield {"type": "error", "message": "AI 服务请求超时"}
             return
@@ -290,6 +308,21 @@ class OpenAICompatibleProvider:
             return
         except AppError as exc:
             yield {"type": "error", "message": str(exc.message)}
+            return
+
+        # 思考过程耗尽 token 预算：finish_reason=length 且无 content
+        if finish_reason == "length" and not has_content:
+            logger.warning(
+                "LLM stream finished with finish_reason=length, no content generated. "
+                "has_reasoning=%s, tool_calls=%d. Thinking likely exhausted max_tokens.",
+                has_reasoning,
+                len(tool_calls_fragments),
+            )
+            yield {
+                "type": "error",
+                "message": "AI 思考过程过长，耗尽了 token 预算，未生成回答。"
+                " 请尝试关闭思考模式、简化问题或减少数据量后重试。",
+            }
             return
 
         # 组装完整 tool_calls
@@ -420,6 +453,20 @@ class OpenAICompatibleProvider:
 
         message: dict[str, Any] = choices[0].get("message") or {}
         answer: str = str(message.get("content") or "")
+
+        # 思考模式耗尽 token 预算的诊断日志
+        # Qwen3 等模型在 enable_thinking=true 时，reasoning_content 可能消耗全部
+        # max_tokens，导致 content 为空、finish_reason="length"
+        if _finish_reason == "length" and not answer:
+            _has_reasoning = bool(message.get("reasoning_content"))
+            logger.warning(
+                "LLM non-stream response: finish_reason=length, content is empty. "
+                "has_reasoning=%s, has_tool_calls=%s. "
+                "Thinking likely exhausted max_tokens (model=%s).",
+                _has_reasoning,
+                bool(message.get("tool_calls")),
+                self._model,
+            )
 
         # 解析工具调用
         tool_calls: list[dict[str, Any]] = []

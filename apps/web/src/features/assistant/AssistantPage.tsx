@@ -174,6 +174,7 @@ export function AssistantPage(): JSX.Element {
         displayMessages={displayMessages}
         isSending={streaming.isSending}
         streamingAnswer={streaming.streamingAnswer}
+        isThinking={streaming.isThinking}
         selectedConvId={selectedConvId}
         factContext={factContext}
         messagesEndRef={streaming.messagesEndRef}

@@ -498,6 +498,7 @@ async def send_message_stream(
 
     SSE 事件格式：
         - ``data: {"type": "chunk", "content": "文本增量"}\\n\\n`` — 文本块
+        - ``data: {"type": "reasoning", "content": "思考增量"}\\n\\n`` — 思考过程
         - ``data: {"type": "done", "answer": "...", "tool_calls": [...],
           "citations": [...], "uncertainty": ...}\\n\\n`` — 完成
         - ``data: {"type": "error", "message": "错误信息"}\\n\\n`` — 错误
@@ -529,6 +530,12 @@ async def send_message_stream(
                 if event_type == "chunk":
                     data = json.dumps(
                         {"type": "chunk", "content": event.get("content", "")},
+                        ensure_ascii=False,
+                    )
+                    yield f"data: {data}\n\n"
+                elif event_type == "reasoning":
+                    data = json.dumps(
+                        {"type": "reasoning", "content": event.get("content", "")},
                         ensure_ascii=False,
                     )
                     yield f"data: {data}\n\n"

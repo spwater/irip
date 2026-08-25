@@ -66,6 +66,8 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
   const [localMessages, setLocalMessages] = useState<AssistantMessage[]>([]);
   // 流式回答的临时内容
   const [streamingAnswer, setStreamingAnswer] = useState<string | null>(null);
+  // AI 正在思考中（收到 reasoning 事件但尚未收到 content 事件）
+  const [isThinking, setIsThinking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -181,6 +183,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
 
     // 正常 AI 问答模式（私有对话或协作对话中 @AI）
     setStreamingAnswer('');
+    setIsThinking(false);
 
     // 创建 AbortController 用于中断请求
     abortControllerRef.current = new AbortController();
@@ -199,10 +202,16 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
       );
 
       for await (const event of stream) {
-        if (event.type === 'chunk') {
+        if (event.type === 'reasoning') {
+          // 收到思考过程增量，标记为思考中
+          setIsThinking(true);
+        } else if (event.type === 'chunk') {
+          // 收到实际回答内容，取消思考中状态
+          setIsThinking(false);
           setStreamingAnswer((prev) => (prev ?? '') + event.content);
         } else if (event.type === 'done') {
           // 设置最终 answer（含工具调用后的完整回答）
+          setIsThinking(false);
           setStreamingAnswer(event.answer || '(无回答)');
           // invalidate 拉取 DB 消息
           void queryClient.invalidateQueries({ queryKey: ['assistant-messages', convId] });
@@ -214,6 +223,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
             setIsSending(false);
           }, 100);
         } else if (event.type === 'error') {
+          setIsThinking(false);
           setStreamingAnswer(null);
           message.error(event.message);
           setIsSending(false);
@@ -231,6 +241,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
         setStreamingAnswer(null);
         message.error(extractApiError(err));
       }
+      setIsThinking(false);
       setIsSending(false);
       abortControllerRef.current = null;
       // 刷新数据库消息（可能用户消息已保存但 AI 回答失败）
@@ -251,6 +262,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
     }
     // 3. 重置状态
     setStreamingAnswer(null);
+    setIsThinking(false);
     setIsSending(false);
     void queryClient.invalidateQueries({ queryKey: ['assistant-messages', selectedConvId] });
   }, [selectedConvId, queryClient, setIsSending]);
@@ -268,6 +280,7 @@ export function useStreamingAnswer(params: UseStreamingAnswerParams): UseStreami
   return {
     localMessages,
     streamingAnswer,
+    isThinking,
     isSending,
     inputText,
     setInputText,

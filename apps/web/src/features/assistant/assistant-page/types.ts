@@ -60,6 +60,7 @@ export type FactGroups = Record<string, FactProjectGroup>;
 export interface UseStreamingAnswerResult {
   localMessages: AssistantMessage[];
   streamingAnswer: string | null;
+  isThinking: boolean;
   isSending: boolean;
   setInputText: (text: string) => void;
   inputText: string;

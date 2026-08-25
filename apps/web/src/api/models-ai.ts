@@ -14,7 +14,7 @@ export type UploadResponse = { artifact_id: string; filename: string; size: numb
 
 export async function apiBrowseFiles(path?: string): Promise<BrowseResponse> { const res = await http.get<BrowseResponse>('/files/browse', { params: path ? { path } : {} }); return res.data; }
 export async function apiUploadFile(file: File): Promise<UploadResponse> { const formData = new FormData(); formData.append('file', file); const res = await http.post<UploadResponse>('/files/upload', formData); return res.data; }
-export async function apiGetArtifactDownloadUrl(artifactId: string): Promise<string> { const res = await http.get<{ download_url: string }>(`/artifacts/${artifactId}/download`); return res.data.download_url; }
+export async function apiDownloadArtifact(artifactId: string): Promise<Blob> { const res = await http.get(`/artifacts/${artifactId}/download`, { responseType: 'blob' }); return res.data; }
 
 // ============================================================
 // Models API
@@ -167,6 +167,7 @@ export async function apiSendMessage(
 /** SSE 流式事件类型 */
 export type StreamEvent =
   | { type: 'chunk'; content: string }
+  | { type: 'reasoning'; content: string }
   | { type: 'done'; answer: string; tool_calls: ToolCallSummary[]; citations: Citation[]; uncertainty: string | null }
   | { type: 'error'; message: string };
 
