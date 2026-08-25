@@ -298,6 +298,21 @@ async def _build_final_response(
     else:
         final_answer = persistence.redact_credentials(response.answer)
         final_uncertainty = response.uncertainty
+        # 后置校验：回答含数值结果但未调用工具（可能心算）
+        if response.answer and not tool_result_messages:
+            import re
+
+            # 检测回答中是否包含 $...=数字$ 或 =数字 的计算结果模式
+            has_numeric_result = bool(
+                re.search(r"=\s*\d+\.?\d*", response.answer)
+            )
+            if has_numeric_result:
+                logger.warning(
+                    "AI 回答包含数值结果但未调用任何工具（可能心算），"
+                    "answer_len=%d, model=%s",
+                    len(response.answer),
+                    response.provider_mode,
+                )
 
     return AIResponse(
         answer=final_answer,
