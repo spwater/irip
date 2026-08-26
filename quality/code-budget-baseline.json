@@ -48,7 +48,7 @@
       "max_complexity": 15
     },
     "apps/worker/research_timeline_tasks.py": {
-      "lines": 948,
+      "lines": 1091,
       "max_complexity": 15
     },
     "apps/worker/tasks/__init__.py": {
@@ -60,7 +60,7 @@
       "max_complexity": 15
     },
     "packages/ai/yaml_config.py": {
-      "lines": 594,
+      "lines": 636,
       "max_complexity": 15
     },
     "packages/ai/collaboration_service.py": {
@@ -83,6 +83,10 @@
       "lines": 1003,
       "max_complexity": 15
     },
+    "packages/ai/openai_compatible.py": {
+      "lines": 536,
+      "max_complexity": 15
+    },
     "packages/ai/service.py": {
       "lines": 532,
       "max_complexity": 15
@@ -100,7 +104,7 @@
       "max_complexity": 15
     },
     "packages/common/artifacts.py": {
-      "lines": 699,
+      "lines": 703,
       "max_complexity": 15
     },
     "packages/components/flow/definition_service.py": {
@@ -124,7 +128,7 @@
       "max_complexity": 15
     },
     "packages/experiment_project/service.py": {
-      "lines": 657,
+      "lines": 668,
       "max_complexity": 15
     },
     "packages/facts/query_service.py": {
@@ -176,7 +180,7 @@
       "max_complexity": 15
     },
     "packages/research/execution/repository_trusted.py": {
-      "lines": 998,
+      "lines": 1005,
       "max_complexity": 15
     },
     "packages/research/execution/run_service.py": {
@@ -184,11 +188,11 @@
       "max_complexity": 15
     },
     "packages/research/planning/plan_analyzer.py": {
-      "lines": 884,
+      "lines": 920,
       "max_complexity": 15
     },
     "packages/research/planning/plan_generator.py": {
-      "lines": 529,
+      "lines": 542,
       "max_complexity": 15
     },
     "packages/research/products/artifact_link.py": {
@@ -212,7 +216,7 @@
       "max_complexity": 15
     },
     "packages/research/snapshots.py": {
-      "lines": 600,
+      "lines": 606,
       "max_complexity": 15
     },
     "packages/research/timeline/conclusion_bar_service.py": {
@@ -224,7 +228,7 @@
       "max_complexity": 15
     },
     "packages/research/timeline/recommendation_service.py": {
-      "lines": 515,
+      "lines": 527,
       "max_complexity": 15
     },
     "packages/research/timeline/repository.py": {
