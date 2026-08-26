@@ -52,6 +52,38 @@ export async function apiListFacts(params?: {
   return res.data;
 }
 
+/**
+ * 自动翻页获取全部事实数据（用于树形框选等无需分页限制的场景）。
+ *
+ * 通过 cursor 逐页加载直到 next_cursor 为 null，
+ * 合并所有 items 后返回。group_counts 取第一页的结果（全局统计不受分页影响）。
+ */
+export async function apiListAllFacts(params?: {
+  page_size?: number;
+  fact_type?: string;
+  status?: string;
+  object_id?: string;
+}): Promise<FactListResult> {
+  const pageSize = params?.page_size ?? 100;
+  let allItems: FactSummary[] = [];
+  let cursor: string | undefined = undefined;
+  let groupCounts: Record<string, number> = {};
+
+  while (true) {
+    const res = await http.get<FactListResult>('/facts', {
+      params: { ...params, page_size: pageSize, cursor },
+    });
+    allItems = allItems.concat(res.data.items);
+    if (Object.keys(groupCounts).length === 0) {
+      groupCounts = res.data.group_counts;
+    }
+    cursor = res.data.next_cursor ?? undefined;
+    if (!cursor) break;
+  }
+
+  return { items: allItems, next_cursor: null, has_more: false, group_counts: groupCounts };
+}
+
 export async function apiSearchFacts(params: {
   q: string;
   cursor?: string;

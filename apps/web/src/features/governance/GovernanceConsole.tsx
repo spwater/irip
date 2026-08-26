@@ -6,6 +6,7 @@ import { DatabaseBackupPage } from '@/features/governance/DatabaseBackupPage';
 import { JobsPage } from '@/features/jobs/JobsPage';
 import { DataTransferPanel } from '@/features/governance/DataTransferPanel';
 import { RootDataStats } from '@/features/governance/RootDataStats';
+import { PersonalSettings } from '@/features/platform/PersonalSettings';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 
@@ -40,6 +41,8 @@ export function GovernanceConsole(): JSX.Element {
       items.push({ key: 'data-transfer', label: '数据移交' });
       items.push({ key: 'db-backup', label: '数据库备份' });
     }
+    // 个人设置：所有用户可见（从平台应用移入）
+    items.push({ key: 'personal-settings', label: '个人设置' });
     return items;
   }, [isAdmin, isLabDirector, isAuditor]);
 
@@ -77,6 +80,7 @@ export function GovernanceConsole(): JSX.Element {
         </Row>
       )}
       {activeTab === 'db-backup' && isAdmin && <DatabaseBackupPage />}
+      {activeTab === 'personal-settings' && <PersonalSettings />}
     </div>
   );
 }

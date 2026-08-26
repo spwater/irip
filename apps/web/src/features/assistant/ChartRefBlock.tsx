@@ -281,11 +281,21 @@ export function ChartRefBlock({
 
     setError(null);
 
+    // 统一布局：title 在最顶部，legend 紧跟 title 下方，grid 在 legend 下方
+    const hasLegend = echartsSeries.length > 1;
+    const hasTitle = !!spec.title;
+
     return {
-      title: spec.title ? { text: spec.title, left: 'center' } : undefined,
+      title: spec.title ? { text: spec.title, left: 'center', top: 8 } : undefined,
       tooltip: { trigger: chartType === 'scatter' ? 'item' : 'axis' },
-      legend: echartsSeries.length > 1 ? { bottom: 0 } : undefined,
-      grid: { left: '8%', right: '5%', bottom: echartsSeries.length > 1 ? '15%' : '12%', containLabel: true },
+      legend: hasLegend ? { top: 36, left: 'center' } : undefined,
+      grid: {
+        left: '8%',
+        right: '5%',
+        top: hasTitle && hasLegend ? 70 : hasTitle ? 45 : hasLegend ? 50 : '10%',
+        bottom: '8%',
+        containLabel: true,
+      },
       xAxis: {
         type: chartType === 'scatter' ? 'value' : 'category',
         name: xAxisName,

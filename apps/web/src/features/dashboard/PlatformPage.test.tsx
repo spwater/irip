@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { App as AntApp } from 'antd';
 import { PageHeaderProvider, usePageHeader } from '@/app/PageHeaderContext';
 import { PlatformPage } from './PlatformPage';
@@ -12,9 +11,6 @@ vi.mock('@/features/assistant/AssistantPage', () => ({
 }));
 vi.mock('@/features/ai-tools/AIToolsPage', () => ({
   AIToolsPage: () => <div data-testid="ai-tools-page">AIToolsPage</div>,
-}));
-vi.mock('@/features/platform/PersonalSettings', () => ({
-  PersonalSettings: () => <div data-testid="personal-settings-page">PersonalSettings</div>,
 }));
 
 // Mock router
@@ -95,27 +91,5 @@ describe('PlatformPage', () => {
     });
     renderPage();
     expect(screen.queryByTestId('tab-ai-tools')).not.toBeInTheDocument();
-  });
-
-  it('switches to personal-settings tab', async () => {
-    useAuthStore.setState({
-      user: { id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [] },
-    });
-    renderPage();
-    await userEvent.click(screen.getByTestId('tab-personal-settings'));
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: '/platform',
-      search: { tab: 'personal-settings' },
-      replace: true,
-    });
-  });
-
-  it('renders PersonalSettings when tab=personal-settings', () => {
-    mockSearch = { tab: 'personal-settings' };
-    useAuthStore.setState({
-      user: { id: 'u-001', displayName: '研究员', roles: ['researcher'], permissions: [] },
-    });
-    renderPage();
-    expect(screen.getByTestId('personal-settings-page')).toBeInTheDocument();
   });
 });

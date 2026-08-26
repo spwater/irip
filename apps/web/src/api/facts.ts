@@ -21,6 +21,7 @@ export {
   type FactData,
   apiCreateFact,
   apiListFacts,
+  apiListAllFacts,
   apiSearchFacts,
   apiSearchFactsByData,
   apiGetFact,

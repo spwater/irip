@@ -18,7 +18,7 @@ import {
   type EvidenceRef,
   type Snapshot,
 } from '@/api/research';
-import { apiListFacts } from '@/api/facts-provenance';
+import { apiListAllFacts } from '@/api/facts-provenance';
 import { apiSearchPublishedCatalog, type CatalogPublishedSearchResult } from '@/api/researchPublish';
 import type { FactSummary } from '@/api/types';
 // P2-C22: 辅助函数提取到 evidenceUtils.ts
@@ -88,7 +88,7 @@ export function EvidencePanel({ workspaceId, evidenceCount, onEvidenceChanged }:
     setSelectedPublishedIds([]);
     setLoadingFacts(true);
     try {
-      const res = await apiListFacts({ page_size: 100, status: 'active' });
+      const res = await apiListAllFacts({ page_size: 100, status: 'active' });
       setAllFacts(res?.items ?? []);
     } catch {
       message.error('加载数据列表失败');

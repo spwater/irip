@@ -2,18 +2,17 @@ import { useMemo } from 'react';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { AssistantPage } from '@/features/assistant/AssistantPage';
 import { AIToolsPage } from '@/features/ai-tools/AIToolsPage';
-import { PersonalSettings } from '@/features/platform/PersonalSettings';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import { usePageHeaderRegistration } from '@/app/PageHeaderContext';
 
-const VALID_TABS = ['assistant', 'ai-tools', 'personal-settings'] as const;
+const VALID_TABS = ['assistant', 'ai-tools'] as const;
 type PlatformTab = (typeof VALID_TABS)[number];
 
 /**
  * 平台应用页面
  *
- * 三个 Tab：AI助手 / 工具插件 / 个人设置
- * Tab 切换和页面标题注册到 AppShell Header。
+ * 两个 Tab：AI助手 / 工具插件
+ * 个人设置已移至平台治理页面。
  *
  * M-09 整改：使用 usePageHeaderRegistration，unmount 时清空 header。
  */
@@ -40,8 +39,6 @@ export function PlatformPage(): JSX.Element {
     const items = [
       { key: 'assistant', label: 'AI助手' },
       ...(isAdmin ? [{ key: 'ai-tools', label: '工具插件' }] : []),
-      // irip-ai-collab: 个人设置（所有用户可见）
-      { key: 'personal-settings', label: '个人设置' },
     ];
     return items;
   }, [isAdmin]);
@@ -65,7 +62,6 @@ export function PlatformPage(): JSX.Element {
     >
       {activeTab === 'assistant' && <AssistantPage />}
       {activeTab === 'ai-tools' && isAdmin && <AIToolsPage />}
-      {activeTab === 'personal-settings' && <PersonalSettings />}
     </div>
   );
 }

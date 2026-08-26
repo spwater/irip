@@ -24,6 +24,9 @@ vi.mock('@/features/governance/DataTransferPanel', () => ({
 vi.mock('@/features/governance/RootDataStats', () => ({
   RootDataStats: () => <div data-testid="root-data-stats">RootDataStats</div>,
 }));
+vi.mock('@/features/platform/PersonalSettings', () => ({
+  PersonalSettings: () => <div data-testid="personal-settings-page">PersonalSettings</div>,
+}));
 
 /** Helper to read header state inside test */
 function HeaderProbe(): JSX.Element {
@@ -77,7 +80,8 @@ describe('GovernanceConsole', () => {
     expect(screen.getByTestId('tab-jobs')).toHaveTextContent('作业中心');
     expect(screen.getByTestId('tab-data-transfer')).toHaveTextContent('数据移交');
     expect(screen.getByTestId('tab-db-backup')).toHaveTextContent('数据库备份');
-    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('5');
+    expect(screen.getByTestId('tab-personal-settings')).toHaveTextContent('个人设置');
+    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('6');
   });
 
   it('shows only users tab for lab_director', () => {
@@ -94,7 +98,8 @@ describe('GovernanceConsole', () => {
     expect(screen.getByTestId('tab-users')).toBeInTheDocument();
     expect(screen.queryByTestId('tab-audit')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tab-jobs')).not.toBeInTheDocument();
-    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('tab-personal-settings')).toBeInTheDocument();
+    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('2');
   });
 
   it('shows only audit tab for platform_auditor', () => {
@@ -110,7 +115,8 @@ describe('GovernanceConsole', () => {
     expect(screen.queryByTestId('tab-system-config')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tab-users')).not.toBeInTheDocument();
     expect(screen.getByTestId('tab-audit')).toBeInTheDocument();
-    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('tab-personal-settings')).toBeInTheDocument();
+    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('2');
   });
 
   it('renders users content by default for admin', () => {
@@ -140,5 +146,35 @@ describe('GovernanceConsole', () => {
     expect(auditTab).toBeInTheDocument();
     fireEvent.click(auditTab);
     expect(screen.getByTestId('header-title')).toHaveTextContent('平台治理');
+  });
+
+  it('shows only personal-settings tab for regular researcher', () => {
+    useAuthStore.setState({
+      user: {
+        id: 'u-001',
+        displayName: '研究员',
+        roles: ['researcher'],
+        permissions: [],
+      },
+    });
+    renderConsole();
+    expect(screen.queryByTestId('tab-users')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('tab-audit')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tab-personal-settings')).toHaveTextContent('个人设置');
+    expect(screen.getByTestId('header-tab-count')).toHaveTextContent('1');
+  });
+
+  it('renders PersonalSettings when personal-settings tab is active', () => {
+    useAuthStore.setState({
+      user: {
+        id: 'u-001',
+        displayName: '研究员',
+        roles: ['researcher'],
+        permissions: [],
+      },
+    });
+    renderConsole();
+    // 默认选中唯一的 tab（personal-settings）
+    expect(screen.getByTestId('personal-settings-page')).toBeInTheDocument();
   });
 });

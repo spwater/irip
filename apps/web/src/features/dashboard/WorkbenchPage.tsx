@@ -4,7 +4,7 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import type { ColumnsType } from 'antd/es/table';
-import { apiListFacts } from '@/api/facts';
+import { apiListAllFacts } from '@/api/facts';
 import { apiListFlows } from '@/api/flows';
 import { apiListJobs } from '@/api/jobs';
 import type { JobListItem } from '@/api/governance';
@@ -350,7 +350,7 @@ export function WorkbenchPage(): JSX.Element {
   // ---- 查询 1：事实列表（30秒轮询） ----
   const { data: factsData } = useQuery({
     queryKey: ['workbench', 'facts'],
-    queryFn: () => apiListFacts({ page_size: 100 }),
+    queryFn: () => apiListAllFacts({ page_size: 100 }),
     refetchInterval: 30000,
   });
   const factsItems = factsData?.items ?? [];

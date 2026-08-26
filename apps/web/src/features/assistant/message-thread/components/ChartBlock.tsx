@@ -105,16 +105,23 @@ export function ChartBlock({ optionStr }: ChartBlockProps): JSX.Element {
       safeOption.xAxis.nameLocation = 'middle';
       safeOption.xAxis.nameGap = 25;
     }
-    // If both title and legend exist, push legend below title to avoid overlap
-    if (safeOption.title && safeOption.legend) {
-      const legend = { ...safeOption.legend };
-      if (legend.top === undefined) {
-        legend.top = 30;  // below the default title height
+    // 统一布局：title 在最顶部，legend 紧跟 title 下方，grid 在 legend 下方
+    if (safeOption.title) {
+      safeOption.title = { ...safeOption.title, top: 8 };
+    }
+    if (safeOption.legend) {
+      safeOption.legend = { ...safeOption.legend };
+      // 如果 legend 没有明确设 top 或 bottom，默认放 title 下方
+      if (safeOption.legend.top === undefined && safeOption.legend.bottom === undefined) {
+        safeOption.legend.top = 36;
       }
-      safeOption.legend = legend;
-      // Also push grid down so it doesn't overlap with legend
-      if (safeOption.grid.top === undefined) {
-        safeOption.grid.top = 60;
+    }
+    // grid top：有 title 给 70，有 legend 给 70，否则默认
+    if (safeOption.grid.top === undefined) {
+      if (safeOption.title && safeOption.legend) {
+        safeOption.grid.top = 70;
+      } else if (safeOption.title) {
+        safeOption.grid.top = 45;
       }
     }
 

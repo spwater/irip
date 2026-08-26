@@ -14,7 +14,7 @@ import {
   type ConversationSummary,
 } from '@/api/models-ai';
 import { apiListParticipants, apiListMentionableUsers } from '@/api/collaboration';
-import { apiListFacts } from '@/api/facts-provenance';
+import { apiListAllFacts } from '@/api/facts-provenance';
 import { useAuthStore } from '@/features/auth/AuthProvider';
 import type { UseAssistantQueriesParams, UseAssistantQueriesResult } from '../types';
 
@@ -84,7 +84,7 @@ export function useAssistantQueries(params: UseAssistantQueriesParams): UseAssis
   // 查询事实列表（用于插入实验数据）
   const { data: factsData } = useQuery({
     queryKey: ['facts-for-insert'],
-    queryFn: () => apiListFacts({ page_size: 100 }),
+    queryFn: () => apiListAllFacts({ page_size: 100 }),
     enabled: factModalOpen,
   });
 
