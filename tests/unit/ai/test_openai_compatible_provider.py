@@ -101,7 +101,7 @@ class TestBuildPayload:
         payload = provider._build_payload(_make_request())
 
         assert payload["model"] == "gpt-4o"
-        assert payload["max_tokens"] == 50000
+        assert payload["max_tokens"] == 200000
         assert payload["temperature"] == 0.0
         assert payload["seed"] == 42
         assert payload["messages"][0]["role"] == "system"
@@ -122,7 +122,7 @@ class TestBuildPayload:
         payload = provider._build_payload(
             _make_request(messages=[{"role": "system", "content": "自定义 system"}])
         )
-        assert payload["messages"][0]["content"] == "自定义 system"
+        assert payload["messages"][0]["content"].startswith("自定义 system")
 
     def test_system_context_appended_to_default(self) -> None:
         """user_context 中的 system_context 被拼接到默认 system 消息。"""

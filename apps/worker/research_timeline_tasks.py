@@ -110,6 +110,7 @@ async def _build_plan_service(
 
     try:
         from packages.common.s3_repository import build_s3_repo_from_env
+
         s3_repo = build_s3_repo_from_env()
     except Exception:
         s3_repo = None
@@ -139,8 +140,12 @@ async def _build_plan_service(
         def _fact_query_factory(principal: Any) -> Any:
             return FactQueryService(
                 session_factory=factory,
-                department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
-                actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                department_id=(
+                    principal.department_id  # type: ignore[arg-type]
+                    if hasattr(principal, "department_id")
+                    else dept_uuid
+                ),
+                actor_id=(principal.user_id if hasattr(principal, "user_id") else actor_uuid),
                 s3_repo=s3_repo,
             )
 
@@ -219,7 +224,8 @@ def generate_recommendations(
         resolved_actor = actor_uuid
         resolved_dept = dept_uuid
         if resolved_actor is None or resolved_dept is None:
-            import sqlalchemy as sa
+            from sqlalchemy import text as sa_text
+            from sqlalchemy.ext.asyncio import create_async_engine
 
             # Use admin URL to bypass RLS for owner resolution (chicken-and-egg:
             # we need the owner to set RLS context, but RLS blocks the query
@@ -229,10 +235,10 @@ def generate_recommendations(
             admin_url = get_database_admin_url("")
 
             if admin_url:
-                admin_engine = sa.create_async_engine(admin_url)
+                admin_engine = create_async_engine(admin_url)
                 async with admin_engine.connect() as conn:
                     row = await conn.execute(
-                        sa.text(
+                        sa_text(
                             "SELECT w.owner_user_id, w.department_id "
                             "FROM research_recommendation_batch b "
                             "JOIN research_workspace w ON w.id = b.workspace_id "
@@ -250,7 +256,7 @@ def generate_recommendations(
                     department_id=resolved_dept,
                 ) as session:
                     row = await session.execute(
-                        sa.text(
+                        sa_text(
                             "SELECT w.owner_user_id, w.department_id "
                             "FROM research_recommendation_batch b "
                             "JOIN research_workspace w ON w.id = b.workspace_id "
@@ -585,6 +591,7 @@ def execute_analysis_run(
 
         try:
             from packages.common.s3_repository import build_s3_repo_from_env
+
             s3_repo = build_s3_repo_from_env()
         except Exception:
             s3_repo = None
@@ -614,8 +621,12 @@ def execute_analysis_run(
             def _fact_query_factory(principal: Any) -> Any:
                 return FactQueryService(
                     session_factory=factory,
-                    department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
-                    actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                    department_id=(
+                        principal.department_id  # type: ignore[arg-type]
+                        if hasattr(principal, "department_id")
+                        else dept_uuid
+                    ),
+                    actor_id=(principal.user_id if hasattr(principal, "user_id") else actor_uuid),
                     s3_repo=s3_repo,
                 )
 
@@ -860,6 +871,7 @@ def extract_candidates(
 
         try:
             from packages.common.s3_repository import build_s3_repo_from_env
+
             s3_repo = build_s3_repo_from_env()
         except Exception:
             s3_repo = None
@@ -889,8 +901,12 @@ def extract_candidates(
             def _fact_query_factory(principal: Any) -> Any:
                 return FactQueryService(
                     session_factory=factory,
-                    department_id=principal.department_id if hasattr(principal, "department_id") else dept_uuid,
-                    actor_id=principal.user_id if hasattr(principal, "user_id") else actor_uuid,
+                    department_id=(
+                        principal.department_id  # type: ignore[arg-type]
+                        if hasattr(principal, "department_id")
+                        else dept_uuid
+                    ),
+                    actor_id=(principal.user_id if hasattr(principal, "user_id") else actor_uuid),
                     s3_repo=s3_repo,
                 )
 

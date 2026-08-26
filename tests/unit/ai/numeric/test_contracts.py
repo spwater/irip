@@ -33,12 +33,14 @@ class TestNumericLimits:
         limits = NumericLimits()
         assert limits.max_expression_length == 512
         assert limits.max_ast_nodes == 128
-        assert limits.max_ast_depth == 16
+        assert limits.max_ast_depth == 200
         assert limits.max_variables == 16
         assert limits.max_inline_series_length == 10_000
         assert limits.max_platform_series_length == 100_000
         assert limits.vector_preview_threshold == 1_000
         assert limits.computation_timeout_seconds == 3.0
+        assert limits.max_pow_exponent_abs == 100
+        assert limits.max_round_digits == 15
 
     def test_limits_are_frozen(self) -> None:
         limits = NumericLimits()

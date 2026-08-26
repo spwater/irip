@@ -204,6 +204,7 @@ class _FakeSession:
         self.commit = mock.AsyncMock()
         self.flush = mock.AsyncMock()
         self.execute = mock.AsyncMock(return_value=mock.MagicMock())
+        self.add = mock.MagicMock()
 
     def begin(self) -> "_FakeBegin":
         return _FakeBegin()
@@ -849,8 +850,12 @@ class TestRecommendationServiceMethods:
         item2 = SimpleNamespace(id=uuid4(), question="问题2", rationale=None)
         items_result.scalars.return_value = [item1, item2]
 
-        # First execute returns batch_result, second returns items_result
-        session.execute = mock.AsyncMock(side_effect=[batch_result, items_result])
+        # execute calls: 1-4) GUC set_dept_guc + set_user_guc (each: quote_literal + SET LOCAL),
+        # 5) batch query, 6) items query
+        guc_result = mock.MagicMock()
+        session.execute = mock.AsyncMock(
+            side_effect=[guc_result, guc_result, guc_result, guc_result, batch_result, items_result]
+        )
 
         svc = RecommendationService(
             _FakeSessionFactory(session),

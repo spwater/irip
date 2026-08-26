@@ -4,6 +4,7 @@
  * 从 client.ts 拆分，通过 re-export 保持兼容。
  */
 import { http } from './client';
+import type { AxiosResponse } from 'axios';
 import type {
   CursorPage,
   FactSummary,
@@ -70,7 +71,7 @@ export async function apiListAllFacts(params?: {
   let groupCounts: Record<string, number> = {};
 
   while (true) {
-    const res = await http.get<FactListResult>('/facts', {
+    const res: AxiosResponse<FactListResult> = await http.get<FactListResult>('/facts', {
       params: { ...params, page_size: pageSize, cursor },
     });
     allItems = allItems.concat(res.data.items);

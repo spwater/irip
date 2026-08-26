@@ -40,6 +40,8 @@ CVE-2023-2953    # libldap HIGH - IRIP 不用 LDAP
 # ============ 类别 2：IRIP 使用但上游未修（临时豁免，跟踪上游修复）============
 CVE-2023-45853   # zlib1g CRITICAL - zlib zip 函数整型溢出；IRIP 用 zipfile 但该函数路径不触发，上游 will_not_fix（Debian 标记）
 CVE-2025-7458    # libsqlite3-0 CRITICAL - 上游未修
+CVE-2026-11822   # libsqlite3-0 HIGH - FTS5 恶意库文件攻击路径不可达（IRIP 运行时零 SQLite 引用），fix_deferred
+CVE-2026-11824   # libsqlite3-0 HIGH - 同上，fix_deferred
 CVE-2026-14456   # openssl/libssl3 HIGH - QUIC server 内存攻击，IRIP 不做 QUIC server，上游未修
 CVE-2026-12064   # curl/libcurl4 HIGH - 上游未修
 CVE-2026-6276    # curl/libcurl4 HIGH - 上游未修

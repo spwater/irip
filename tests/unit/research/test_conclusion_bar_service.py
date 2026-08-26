@@ -379,7 +379,12 @@ class TestListResults:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         result_repo.list_results_by_workspace = AsyncMock(return_value=[r])
         out = await service.list_results(uuid4())
@@ -400,7 +405,12 @@ class TestGetResultDetail:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         result_repo.get_result = AsyncMock(return_value=r)
@@ -420,7 +430,12 @@ class TestGetResultDetail:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -497,7 +512,8 @@ class TestSummarizeTitle:
             "metadata": {"analysis_questions": ["问题"], "summary": "摘要"},
             "_tracing": [{"title": "区块"}],
         }
-        assert await svc._summarize_title(assembled) == "最终结论"
+        # _summarize_title now extracts from _tracing, not LLM
+        assert await svc._summarize_title(assembled) == "区块"
 
     async def test_success_llm(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from packages.ai.yaml_config import ScenarioConfig
@@ -521,8 +537,9 @@ class TestSummarizeTitle:
             MagicMock(return_value=provider),
         )
         assembled = {"metadata": {"analysis_questions": ["问题"]}}
+        # _summarize_title now extracts from analysis_questions, not LLM
         result = await svc._summarize_title(assembled)
-        assert result == "概栆标题"
+        assert result == "问题"
 
     async def test_exception_returns_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         svc = ConclusionBarService(MagicMock(), uuid4(), uuid4())
@@ -531,7 +548,8 @@ class TestSummarizeTitle:
             MagicMock(side_effect=RuntimeError("x")),
         )
         assembled = {"metadata": {"analysis_questions": ["问题"]}}
-        assert await svc._summarize_title(assembled) == "最终结论"
+        # _summarize_title extracts from analysis_questions, not LLM
+        assert await svc._summarize_title(assembled) == "问题"
 
 
 # ============================================================
@@ -661,7 +679,8 @@ class TestSummarizeTitleTruncation:
         )
         assembled = {"metadata": {"title": "回退标题", "analysis_questions": ["问题"]}}
         result = await svc._summarize_title(assembled)
-        assert result == "回退标题"
+        # analysis_questions takes priority over title fallback
+        assert result == "问题"
 
 
 class TestExtractStructuredTextNonDict:
@@ -764,7 +783,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -802,7 +826,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -836,7 +865,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -864,7 +898,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -895,7 +934,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         version = SimpleNamespace(
@@ -921,7 +965,12 @@ class TestGetResultDetailWithSnapshot:
         service = _make_service(monkeypatch, session)
         _, result_repo, _ = _patch_repos(monkeypatch)
         r = SimpleNamespace(
-            id=uuid4(), name="n", status="published", current_version=1, created_at=None
+            id=uuid4(),
+            name="n",
+            status="published",
+            current_version=1,
+            current_acl_type="private",
+            created_at=None,
         )
         r.workspace_id = uuid4()
         result_repo.get_result = AsyncMock(return_value=r)

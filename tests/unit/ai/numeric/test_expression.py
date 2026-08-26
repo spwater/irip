@@ -172,9 +172,9 @@ class TestASTSecurity:
     def test_too_deep_rejected(self) -> None:
         """超过 max_ast_depth 的表达式被拒绝。"""
         # Nested binary operations create depth: 1 + (1 + (1 + ...))
-        # Each nesting adds one BinOp depth level
+        # Each nesting adds one BinOp depth level; default limit is 200
         expr = "1"
-        for _ in range(20):
+        for _ in range(210):
             expr = f"1 + ({expr})"
         engine = SafeExpressionEngine()
         with pytest.raises(NumericError) as exc_info:

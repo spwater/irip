@@ -642,6 +642,10 @@ jobs:
       - run: pnpm --dir apps/web install --frozen-lockfile
       - run: pnpm --dir apps/web exec playwright install --with-deps chromium
       - name: Start API + Web servers and run E2E tests
+        env:
+          # models.yaml.example 使用 ${IRIP_LLM_HCRDI_API_KEY} 占位符，
+          # API 启动时 fail-fast 校验该变量非空；E2E 不调用 LLM，注入占位值即可。
+          IRIP_LLM_HCRDI_API_KEY: ci-dummy-not-a-real-key
         run: |
           # 启动 API 服务（后台）
           uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 &
@@ -831,6 +835,10 @@ jobs:
       - name: Seed test data
         run: python scripts/seed_users.py
       - name: Start API in background
+        env:
+          # models.yaml.example 使用 ${IRIP_LLM_HCRDI_API_KEY} 占位符，
+          # API 启动时 fail-fast 校验该变量非空；k6 冒烟不调用 LLM，注入占位值即可。
+          IRIP_LLM_HCRDI_API_KEY: ci-dummy-not-a-real-key
         run: |
           uvicorn apps.api.main:create_app --factory --host 0.0.0.0 --port 8000 &
           # 等待 API 服务就绪（最多 60 秒）

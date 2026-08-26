@@ -56,6 +56,7 @@ class TestArtifactRef:
             sha256="a" * 64,
             media_type="text/plain",
             size_bytes=100,
+            filename="test.txt",
         )
         assert ref.size_bytes == 100
         assert ref.media_type == "text/plain"

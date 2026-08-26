@@ -238,8 +238,11 @@ async def download_artifact(
 
     # RFC 5987: 中文文件名需用 filename* 编码（latin-1 无法编码非 ASCII 字符）
     from urllib.parse import quote
+
     encoded_filename = quote(ref.filename)
-    disposition = f"attachment; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}"
+    disposition = (
+        f"attachment; filename=\"{encoded_filename}\"; filename*=UTF-8''{encoded_filename}"
+    )
 
     return StreamingResponse(
         iter([file_data]),
