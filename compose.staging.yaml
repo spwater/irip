@@ -74,3 +74,10 @@ services:
     environment:
       IRIP_STAGING: "1"
       IRIP_LLM_HCRDI_API_KEY: ${IRIP_LLM_HCRDI_API_KEY:?IRIP_LLM_HCRDI_API_KEY is required in .env}
+  # backup/restore 同样需要跳过 Windows secret 权限检查
+  backup:
+    environment:
+      IRIP_STAGING: "1"
+  restore:
+    environment:
+      IRIP_STAGING: "1"
